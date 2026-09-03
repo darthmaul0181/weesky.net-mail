@@ -348,4 +348,21 @@ public sealed class VCardCorpusTests
     private static List<string> Lines(string card) =>
         [.. card.Replace("\r\n", "\n").Replace("\n ", string.Empty).Replace("\n\t", string.Empty)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)];
+
+    // Ce que le composeur ecrit, la projection le relit : c'est elle qui remplit contact_photos.
+    [Theory]
+    [MemberData(nameof(AllClients))]
+    public void Corpus_ARewrittenCard_ProjectsTheNewPhoto(string file)
+    {
+        var card = Card(file, 0);
+        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0x7F };
+        var write = WriteFrom(VCardProjector.Project(card))
+            with { Photo = new PhotoPayload.Replace(bytes, "image/jpeg") };
+
+        var output = VCardComposer.Compose(card, VCardImportMapper.UidOf(card) ?? Uid, write);
+        var reparsed = VCardProjector.Project(output);
+
+        Assert.Equal("image/jpeg", reparsed.Photo!.MediaType);
+        Assert.Equal(bytes, reparsed.Photo.Bytes);
+    }
 }

@@ -225,7 +225,7 @@ internal static class VCardComposer
             write.Website, write.Birthday, write.Phones, write.PostalAddresses);
         card.EMails = Paired(card.EMails, write.Addresses, l => l.Position,
             (ContactWriteEmail l, TextProperty? old) => TextLine(l.Address, l.Type, old, Family.Email, l.Pref));
-        return Emit(source, uid, write.Birthday ?? rawBirthday);
+        return Emit(source, uid, write.Birthday ?? rawBirthday, write.Photo);
     }
 
     /// <summary>
@@ -503,7 +503,8 @@ internal static class VCardComposer
 
     // ---- serialization and the 8.2.0 repairs ----------------------------------------------------
 
-    private static string Emit(SourceCard source, string uid, string? birthday)
+    private static string Emit(
+        SourceCard source, string uid, string? birthday, PhotoPayload? photo = null)
     {
         var card = source.Card;
         var old = card.ContactID;
@@ -511,18 +512,44 @@ internal static class VCardComposer
         if (old != null) id.Parameters.Assign(old.Parameters);
         card.ContactID = id;
 
+        // Cleared before the writer runs: on a Replace as on a Remove the library would spell out
+        // 700 KB PlacePhoto is about to drop.
+        if (photo != null) card.Photos = null;
+
         var lines = LogicalLines(Serialize(card, source.Version));
         if (source.Version == VCdVersion.V3_0)
         {
             RestoreDroppedParameters(lines, card);
             SpliceCollapsedFamilies(lines, card, source);
-            SpliceUnmodelledFamilies(lines, source);
+            SpliceUnmodelledFamilies(lines, source, skipPhoto: photo != null);
         }
 
         StripNamePlaceholders(lines, card);
         EnforceBirthday(lines, card, birthday);
+        PlacePhoto(lines, source.Version, photo);
         RestoreUid(lines, source, uid);
         return Join(lines);
+    }
+
+    /// <summary>
+    /// Décision 5: the whole PHOTO family goes, never just its first occurrence — the projection
+    /// promotes whatever is left, so a partial removal is one the user watches fail and a partial
+    /// replacement leaves an old picture for the next removal to wake up. Décision 6: the line is
+    /// built by hand, in the card's dialect, and never escaped — base64 has nothing to escape, and
+    /// the 4.0 data: URI's ';' and ',' are URI syntax <see cref="EscapeText"/> would corrupt.
+    /// </summary>
+    private static void PlacePhoto(List<string> lines, VCdVersion version, PhotoPayload? photo)
+    {
+        if (photo == null) return;
+
+        var indices = FamilyIndices(lines, "PHOTO");
+        for (var i = indices.Count - 1; i >= 0; i--) lines.RemoveAt(indices[i]);
+        if (photo is not PhotoPayload.Replace replace) return;
+
+        var value = Convert.ToBase64String(replace.Bytes);
+        lines.Insert(EndIndex(lines), Fold(version == VCdVersion.V4_0
+            ? $"PHOTO:data:{replace.MediaType};base64,{value}"
+            : $"PHOTO;ENCODING=b;TYPE={VCardProjector.RasterTypeName(replace.MediaType)}:{value}"));
     }
 
     /// <summary>
@@ -709,7 +736,8 @@ internal static class VCardComposer
     /// CATEGORIES, GEO, the X- families… were not edited, so their input lines replace whatever
     /// the writer made of them — verbatim bytes, groups, X- parameters and occurrences included.
     /// </summary>
-    private static void SpliceUnmodelledFamilies(List<string> lines, SourceCard source)
+    private static void SpliceUnmodelledFamilies(
+        List<string> lines, SourceCard source, bool skipPhoto = false)
     {
         var families = new List<string>();
         var inputLines = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -717,6 +745,9 @@ internal static class VCardComposer
         {
             var name = NameOf(Unfold(chunk));
             if (name.Length == 0 || OwnedNames.Contains(name)) continue;
+            // The input's PHOTO is about to be replaced or removed: splicing it back would only
+            // give PlacePhoto one more line to delete, 700 KB at a time.
+            if (skipPhoto && name.Equals("PHOTO", StringComparison.OrdinalIgnoreCase)) continue;
             if (!inputLines.TryGetValue(name, out var group))
             {
                 inputLines[name] = group = [];
@@ -821,15 +852,23 @@ internal static class VCardComposer
     internal static List<string> LogicalLines(string text)
     {
         var lines = new List<string>();
+        // A buffer rather than lines[^1] += …, which reallocates the whole logical line on every
+        // fold: a 700 KB PHOTO pays that 9 500 times, gigabytes per call (décision 6 bis).
+        var pending = new StringBuilder();
         foreach (var physical in text.Split("\r\n"))
         {
             if (physical.Length == 0) continue;
-            if ((physical[0] == ' ' || physical[0] == '\t') && lines.Count > 0)
-                lines[^1] += "\r\n" + physical;
-            else
-                lines.Add(physical);
+            if ((physical[0] == ' ' || physical[0] == '\t') && pending.Length > 0)
+            {
+                pending.Append("\r\n").Append(physical);
+                continue;
+            }
+
+            if (pending.Length > 0) lines.Add(pending.ToString());
+            pending.Clear().Append(physical);
         }
 
+        if (pending.Length > 0) lines.Add(pending.ToString());
         return lines;
     }
 
@@ -880,9 +919,17 @@ internal static class VCardComposer
         return end < 0 ? string.Empty : line[start..end];
     }
 
-    // Whether an unfolded-or-folded line carries one property name, its group prefix aside.
-    internal static bool IsName(string chunk, string name) =>
-        NameOf(Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
+    // Whether an unfolded-or-folded line carries one property name, its group prefix aside. The
+    // name lives in the first physical line unless the fold cut the name itself, which only a name
+    // past 75 characters can do: unfolding 700 KB of PHOTO to read "PHOTO" is what made every
+    // family scan quadratic (décision 6 bis).
+    internal static bool IsName(string chunk, string name)
+    {
+        var fold = chunk.IndexOf("\r\n", StringComparison.Ordinal);
+        var first = fold < 0 ? chunk : chunk[..fold];
+        var readable = first.AsSpan().IndexOfAny(';', ':') >= 0;
+        return NameOf(readable ? first : Unfold(chunk)).Equals(name, StringComparison.OrdinalIgnoreCase);
+    }
 
     internal static int IndexOutsideQuotes(string text, char target)
     {

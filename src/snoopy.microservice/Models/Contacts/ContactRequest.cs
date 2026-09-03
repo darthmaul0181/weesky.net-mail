@@ -36,6 +36,12 @@ public sealed class ContactRequest
 
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Absent or null: the card keeps its photo. Empty: removed. Otherwise base64 with no data:
+    /// prefix and no media type — the bytes are what say the format (décision 3).
+    /// </summary>
+    public string? Photo { get; set; }
+
     public bool IsFavorite { get; set; }
 
     /// <summary>

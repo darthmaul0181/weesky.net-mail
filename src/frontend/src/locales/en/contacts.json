@@ -139,7 +139,11 @@
       "work": "Work"
     },
     "favourite": "Favourite",
-    "misc": "Other"
+    "misc": "Other",
+    "changePhoto": "Change photo",
+    "removePhoto": "Remove photo",
+    "photoUnreadable": "This file cannot be read. Choose a JPEG, PNG, GIF or WebP image.",
+    "photoTooLarge": "This image is too large, even reduced. Choose another one."
   },
   "transfer": {
     "actions": "Import and export",

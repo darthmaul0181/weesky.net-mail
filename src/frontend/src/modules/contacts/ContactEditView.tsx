@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import DropdownMenu from '../../components/DropdownMenu'
 import CheckIcon from '../../icons/CheckIcon'
@@ -11,6 +11,7 @@ import PhoneIcon from '../../icons/PhoneIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
 import { birthdayToInput, inputToBirthday } from './contactBirthday'
+import { PHOTO_TOO_LARGE, PHOTO_UNREADABLE, reducePhoto, type PhotoErrorKey } from './contactPhoto'
 import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeLabel, typeOptions } from './contactLineTypes'
 import { initialsOf } from './contactName'
 import type {
@@ -115,6 +116,14 @@ const emptyPostal = (): ContactDraftPostal => ({
   locality: null, region: null, postalCode: null, country: null,
 })
 
+/** What the user did to the photo, not what it is worth: the seeded picture arrives asynchronously
+    (the layout resolves it from a query), so a value frozen at mount would read `null` and turn a
+    removal into "unchanged". */
+type PhotoChoice =
+  | { kind: 'kept' }
+  | { kind: 'removed' }
+  | { kind: 'chosen'; base64: string; url: string }
+
 /** The primary is the line the user designated, and the first one until they do. */
 function primaryIndexOf(lines: ContactDraftEmail[]): number {
   const chosen = lines.findIndex(line => line.pref === 1)
@@ -161,6 +170,20 @@ export default function ContactEditView({
           postalCode: line.postalCode, country: line.country,
         }))
       : [])
+
+  const [choice, setChoice] = useState<PhotoChoice>({ kind: 'kept' })
+  const [photoError, setPhotoError] = useState<PhotoErrorKey | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  // Révoqué avec le choix qui l'a créé : trois choix successifs tiendraient sinon trois images
+  // pour la vie de l'onglet.
+  useEffect(() => {
+    if (choice.kind !== 'chosen') return
+    return () => URL.revokeObjectURL(choice.url)
+  }, [choice])
+
+  const shownPhoto = choice.kind === 'chosen' ? choice.url : choice.kind === 'kept' ? photo : null
+  const removable = choice.kind === 'chosen' || (choice.kind === 'kept' && photo != null)
 
   const initials = initialsOf(firstName, lastName, scalars.nickname)
   const revealedIn = (group: 'name' | 'other') =>
@@ -227,6 +250,28 @@ export default function ContactEditView({
     setRevealed(previous => new Set(previous).add(key))
   }
 
+  async function pickPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // Vidé tout de suite : rechoisir le même fichier après une erreur ne lève aucun change sinon.
+    event.target.value = ''
+    if (!file) return
+
+    setPhotoError(null)
+    try {
+      const { base64, blob } = await reducePhoto(file)
+      setChoice({ kind: 'chosen', base64, url: URL.createObjectURL(blob) })
+    } catch (error) {
+      // Narrowed rather than cast : ce que le module ne dit pas explicitement trop lourd est
+      // illisible, qui est aussi la lecture honnete d'un throw inattendu.
+      setPhotoError((error as Error).message === PHOTO_TOO_LARGE ? PHOTO_TOO_LARGE : PHOTO_UNREADABLE)
+    }
+  }
+
+  function removePhoto() {
+    setPhotoError(null)
+    setChoice(choice.kind === 'chosen' ? { kind: 'kept' } : { kind: 'removed' })
+  }
+
   /** The design's fixed table (décision 4): a token the table does not name is shown raw. */
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -239,6 +284,7 @@ export default function ContactEditView({
       birthday: submitted(birthday, seededBirthday) === null ? null : inputToBirthday(birthday),
       firstName: blank(firstName),
       lastName: blank(lastName),
+      photo: choice.kind === 'chosen' ? choice.base64 : choice.kind === 'removed' ? '' : null,
       isFavorite,
       addresses: kept.map(line => ({
         position: line.position,
@@ -283,17 +329,35 @@ export default function ContactEditView({
         {error && <div className="alert alert-error" role="alert">{error}</div>}
 
         {/* The face first, then the names beside it: what identifies the contact, before the ways
-            of reaching them. The photo is shown, never replaced — no PHOTO write door exists. */}
+            of reaching them. The avatar is the file picker — no separate button competing with it. */}
         <div className="contact-editor-hero">
-          {photo && <img className="contact-editor-avatar" src={photo} alt="" data-testid="editor-photo" />}
-          {!photo && initials !== '' && (
-            <span className="contact-editor-avatar is-initials" data-testid="editor-initials">{initials}</span>
-          )}
-          {!photo && initials === '' && (
-            <span className="contact-editor-avatar is-blank" data-testid="editor-avatar-blank">
-              <PersonPlusIcon />
-            </span>
-          )}
+          <div className="contact-editor-face">
+            <button type="button" className="contact-editor-avatar-button"
+              aria-label={t('editor.changePhoto')} onClick={() => fileInput.current?.click()}>
+              {shownPhoto && (
+                <img className="contact-editor-avatar" src={shownPhoto} alt="" data-testid="editor-photo" />
+              )}
+              {!shownPhoto && initials !== '' && (
+                <span className="contact-editor-avatar is-initials" data-testid="editor-initials">{initials}</span>
+              )}
+              {!shownPhoto && initials === '' && (
+                <span className="contact-editor-avatar is-blank" data-testid="editor-avatar-blank">
+                  <PersonPlusIcon />
+                </span>
+              )}
+            </button>
+            <input ref={fileInput} type="file" hidden data-testid="editor-photo-input"
+              accept="image/jpeg,image/png,image/gif,image/webp" onChange={pickPhoto} />
+            {removable && (
+              <button type="button" className="contact-editor-photo-remove" onClick={removePhoto}>
+                {t('editor.removePhoto')}
+              </button>
+            )}
+            {/* Sous l'avatar et non dans le banner : c'est le champ qui a échoué, pas la sauvegarde. */}
+            {photoError && (
+              <p className="contact-editor-photo-error" data-testid="editor-photo-error">{t(photoError)}</p>
+            )}
+          </div>
           <div className="contact-editor-identity">
             <div className="field-v">
               <label htmlFor="contact-first-name">{t('editor.firstName')}</label>

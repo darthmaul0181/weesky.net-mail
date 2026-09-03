@@ -20,6 +20,25 @@ public sealed record ContactWriteAddress(
     int? Pref = null);
 
 /// <summary>
+/// What a validated request says about the photo. Two cases only: null is the third, and it is the
+/// "the request did not name this field, the card keeps its own" that <see cref="ContactWrite"/>
+/// documents for every field the editor does not own. A <c>Keep</c> case could not be an optional
+/// argument's default anyway — that must be a compile-time constant, which no record instance is.
+/// </summary>
+public abstract record PhotoPayload
+{
+    private PhotoPayload() { }
+
+    /// <summary>Every PHOTO line leaves the card, not just the first (decision 5).</summary>
+    public sealed record Remove : PhotoPayload;
+
+    /// <summary>Every PHOTO line leaves the card and this one takes their place.</summary>
+    /// <param name="Bytes">The decoded image.</param>
+    /// <param name="MediaType">What the sniff read of those bytes, never what the client claimed.</param>
+    public sealed record Replace(byte[] Bytes, string MediaType) : PhotoPayload;
+}
+
+/// <summary>
 /// A validated, normalised contact on its way to the store: names trimmed and nulled when blank,
 /// child lines non-blank and in the order they must be stored. Only
 /// <see cref="Services.ContactValidator"/> produces one, so the store never re-checks the rules.
@@ -53,6 +72,10 @@ public sealed record ContactWriteAddress(
 /// field existed — the import, scripts, and any caller that never read the card first. Non-null
 /// and different from the stored hash refuses the write with <see cref="Repositories.ContactStore.CardMoved"/>.
 /// </param>
+/// <param name="Photo">
+/// Null = the request did not name the photo, so the card keeps its own. The validator is the only
+/// producer that ever poses it; the import and <c>WriteOf</c> keep the default.
+/// </param>
 public sealed record ContactWrite(
     string? FirstName,
     string? LastName,
@@ -72,4 +95,5 @@ public sealed record ContactWrite(
     IReadOnlyList<ContactWritePhone>? Phones,
     IReadOnlyList<ContactWriteAddress>? PostalAddresses,
     string Source,
-    string? CardHash = null);
+    string? CardHash = null,
+    PhotoPayload? Photo = null);

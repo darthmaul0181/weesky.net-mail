@@ -190,13 +190,24 @@ internal static class VCardProjector
     // Décision 12: only raster images are served; an SVG is executable XML, not an avatar. The
     // bytes decide the type — neither the TYPE parameter nor the data: URI is trustworthy, and
     // the stored media_type is served as Content-Type later. Unrecognised bytes project nothing.
-    private static string? SniffRasterType(byte[] bytes) =>
+    internal static string? SniffRasterType(byte[] bytes) =>
         bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF ? "image/jpeg"
         : bytes.AsSpan().StartsWith(PngSignature) ? "image/png"
         : bytes.AsSpan().StartsWith("GIF8"u8) ? "image/gif"
         : bytes.Length >= 12 && bytes.AsSpan(0, 4).SequenceEqual("RIFF"u8) && bytes.AsSpan(8, 4).SequenceEqual("WEBP"u8)
             ? "image/webp"
         : null;
+
+    /// <summary>The vCard TYPE word for a media type <see cref="SniffRasterType"/> answered — the
+    /// write side of the same table, kept beside it so the two never drift (décision 3).</summary>
+    internal static string RasterTypeName(string mediaType) => mediaType switch
+    {
+        "image/jpeg" => "JPEG",
+        "image/png" => "PNG",
+        "image/gif" => "GIF",
+        "image/webp" => "WEBP",
+        _ => throw new ArgumentOutOfRangeException(nameof(mediaType), mediaType, null),
+    };
 
     // RFC 9554 corollary of décision 4: when any component beyond the seven of RFC 6350 is
     // present, "street" is a duplicate of their combined value and the projection ignores it.

@@ -39,10 +39,11 @@ public sealed class VCardComposerTests
         string? notes = null,
         IReadOnlyList<ContactWriteEmail>? addresses = null,
         IReadOnlyList<ContactWritePhone>? phones = null,
-        IReadOnlyList<ContactWriteAddress>? postalAddresses = null) =>
+        IReadOnlyList<ContactWriteAddress>? postalAddresses = null,
+        PhotoPayload? photo = null) =>
         new(firstName, lastName, nickname, displayName, middleName, namePrefix, null, organization,
             department, jobTitle, birthday, website, notes, false,
-            addresses ?? [], phones ?? [], postalAddresses ?? [], "manual");
+            addresses ?? [], phones ?? [], postalAddresses ?? [], "manual", null, photo);
 
     private static MergeWrite MergeWith(
         string? firstName = null,
@@ -843,5 +844,146 @@ public sealed class VCardComposerTests
         Assert.Equal("Amis, Famille", VCardProjector.Project(renamed).DisplayName);
         // Octet pour octet : seule la ligne FN a change.
         Assert.Equal(card.Replace("FN:G", @"FN:Amis\, Famille"), renamed);
+    }
+
+    // ---- le cout des lignes logiques (decision 6 bis) ---------------------------------------------
+
+    // Une borne d'allocations, pas un budget de temps : la premiere est deterministe, le second est
+    // un flake par construction.
+    [Fact]
+    public void LogicalLines_OnAFoldedPhoto_DoesNotReallocateTheLinePerFold()
+    {
+        var card = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:X\r\n"
+            + VCardComposer.Fold("PHOTO;ENCODING=b;TYPE=JPEG:" + new string('A', 699_052))
+            + "\r\nEND:VCARD\r\n";
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var lines = VCardComposer.LogicalLines(card);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(5, lines.Count);
+        Assert.StartsWith("PHOTO;ENCODING=b;TYPE=JPEG:", lines[3]);
+        Assert.Equal(card, string.Join("\r\n", lines) + "\r\n");
+        Assert.True(allocated < 20L * card.Length, $"{allocated} octets alloues pour {card.Length} caracteres");
+    }
+
+    [Fact]
+    public void IsName_OnAFoldedPhoto_ReadsTheNameWithoutUnfolding()
+    {
+        var chunk = VCardComposer.Fold("PHOTO;ENCODING=b;TYPE=JPEG:" + new string('A', 699_052));
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var found = VCardComposer.IsName(chunk, "PHOTO");
+        var missed = VCardComposer.IsName(chunk, "NOTE");
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(found);
+        Assert.False(missed);
+        Assert.True(allocated < 4096, $"{allocated} octets alloues");
+    }
+
+    // Le cas que la premiere ligne physique ne suffit pas a trancher : le pli a coupe le nom.
+    [Fact]
+    public void IsName_WhenTheFoldCutsTheNameItself_StillUnfolds()
+    {
+        var name = new string('N', 80);
+
+        Assert.True(VCardComposer.IsName(VCardComposer.Fold(name + ":v"), name));
+    }
+
+    [Fact]
+    public void IsName_WhenTheFoldCutsAGroupPrefix_StillUnfolds()
+    {
+        var chunk = VCardComposer.Fold(new string('g', 74) + ".PHOTO:v");
+
+        Assert.True(VCardComposer.IsName(chunk, "PHOTO"));
+    }
+
+    [Fact]
+    public void LogicalLines_OnALeadingContinuation_StillMakesItItsOwnLine()
+    {
+        Assert.Equal([" orphan", "FN:X"], VCardComposer.LogicalLines(" orphan\r\nFN:X"));
+    }
+
+    // ---- la photo (decisions 5 et 6) -------------------------------------------------------------
+
+    private static readonly byte[] JpegBytes = [0xFF, 0xD8, 0xFF, 0x01, 0x02, 0x03];
+
+    private static readonly PhotoPayload JpegPayload = new PhotoPayload.Replace(JpegBytes, "image/jpeg");
+
+    private static string Card40(params string[] lines) =>
+        "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:X\r\n"
+        + string.Concat(lines.Select(l => l + "\r\n")) + "END:VCARD\r\n";
+
+    private static IEnumerable<string> PhotoLines(string card) =>
+        VCardComposer.LogicalLines(card).Where(l => VCardComposer.IsName(l, "PHOTO"));
+
+    [Fact]
+    public void Compose_WithAReplacedPhoto_WritesOneLineInThe30Dialect()
+    {
+        var card = Card("PHOTO;ENCODING=b;TYPE=PNG:AAAA", "PHOTO;ENCODING=b;TYPE=PNG:BBBB");
+
+        var result = VCardComposer.Compose(card, Uid, WriteWith(photo: JpegPayload));
+
+        // Les deux occurrences partent ensemble : n'en retirer qu'une ferait de la seconde l'avatar
+        // et l'utilisateur verrait son geste echouer (decision 5).
+        var only = Assert.Single(PhotoLines(result));
+        Assert.Equal("PHOTO;ENCODING=b;TYPE=JPEG:" + Convert.ToBase64String(JpegBytes),
+            VCardComposer.Unfold(only));
+    }
+
+    [Fact]
+    public void Compose_WithAReplacedPhoto_WritesADataUriInThe40Dialect()
+    {
+        var result = VCardComposer.Compose(
+            Card40("PHOTO:data:image/png;base64,AAAA"), Uid, WriteWith(photo: JpegPayload));
+
+        // Le ';' et la ',' du data: URI survivent : EscapeText ne touche jamais cette ligne.
+        var only = Assert.Single(PhotoLines(result));
+        Assert.Equal("PHOTO:data:image/jpeg;base64," + Convert.ToBase64String(JpegBytes),
+            VCardComposer.Unfold(only));
+    }
+
+    [Fact]
+    public void Compose_WithARemovedPhoto_DropsEveryOccurrenceAndNothingElse()
+    {
+        var card = Card("PHOTO;ENCODING=b;TYPE=PNG:AAAA", "NOTE:n", "PHOTO;ENCODING=b;TYPE=PNG:BBBB");
+
+        var result = VCardComposer.Compose(card, Uid, WriteWith(photo: new PhotoPayload.Remove()));
+
+        Assert.Empty(PhotoLines(result));
+        Assert.Contains(VCardComposer.LogicalLines(result), l => VCardComposer.IsName(l, "NOTE"));
+    }
+
+    [Fact]
+    public void Compose_WithoutAPhotoPayload_KeepsApplesCropParameterByteForByte()
+    {
+        const string apple =
+            "PHOTO;X-ABCROP-RECTANGLE=ABClipRect_1&0&0&320&320&abc==;ENCODING=b;TYPE=JPEG:AAAA";
+
+        var result = VCardComposer.Compose(Card(apple), Uid, MinimalWrite);
+
+        Assert.Contains(apple, result);
+    }
+
+    [Fact]
+    public void ComposeNew_WithAPhoto_PosesItBeforeEndVCard()
+    {
+        var lines = VCardComposer.LogicalLines(VCardComposer.ComposeNew(Uid, WriteWith(photo: JpegPayload)));
+
+        Assert.Equal("END:VCARD", lines[^1]);
+        Assert.True(VCardComposer.IsName(lines[^2], "PHOTO"));
+    }
+
+    [Fact]
+    public void Compose_WithACeilingSizedPhoto_FoldsTheLine()
+    {
+        var big = new PhotoPayload.Replace([0xFF, 0xD8, 0xFF, .. new byte[512 * 1024 - 3]], "image/jpeg");
+
+        var chunk = Assert.Single(PhotoLines(VCardComposer.Compose(Card(), Uid, WriteWith(photo: big))));
+
+        Assert.Contains("\r\n ", chunk);
+        foreach (var physical in chunk.Split("\r\n"))
+            Assert.True(physical.Length <= 75, $"ligne physique de {physical.Length} caracteres");
     }
 }

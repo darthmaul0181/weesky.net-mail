@@ -134,7 +134,8 @@ export default function ContactsLayout() {
 
   // Resolved here rather than in the form: the editor stays free of queries, so its tests mount
   // it without an auth or a query provider.
-  const editorPhoto = useContactPhotoUrl(routeId ?? null, detail?.hasPhoto ?? false)
+  const editorPhoto = useContactPhotoUrl(
+    routeId ?? null, detail?.hasPhoto ?? false, detail?.cardHash ?? null)
 
   const total = contacts?.length ?? 0
   const favorites = contacts?.filter(contact => contact.isFavorite).length ?? 0

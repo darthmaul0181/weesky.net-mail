@@ -1,4 +1,5 @@
 using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Contacts;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services.CardDav;
@@ -299,5 +300,19 @@ public sealed class VCardVersionConverterTests
         for (var at = text.IndexOf(needle, StringComparison.Ordinal); at >= 0;
              at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal)) count++;
         return count;
+    }
+
+    // Le REPORT d'un client 3.0 sur une carte stockee en 4.0 passe par la : une photo ecrite par
+    // 4f doit en ressortir avec ses octets.
+    [Fact]
+    public void ConvertingFourToThree_KeepsAnEmbeddedPhoto()
+    {
+        var value = Convert.ToBase64String(new byte[] { 0xFF, 0xD8, 0xFF, 0x2A });
+        var card = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:u1\r\nFN:A\r\n"
+            + $"PHOTO:data:image/jpeg;base64,{value}\r\nEND:VCARD\r\n";
+
+        var converted = VCardVersionConverter.To(card, "3.0");
+
+        Assert.Contains(value, VCardComposer.Unfold(converted));
     }
 }
