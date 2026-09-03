@@ -225,7 +225,7 @@ internal static class VCardComposer
             write.Website, write.Birthday, write.Phones, write.PostalAddresses);
         card.EMails = Paired(card.EMails, write.Addresses, l => l.Position,
             (ContactWriteEmail l, TextProperty? old) => TextLine(l.Address, l.Type, old, Family.Email, l.Pref));
-        return Emit(source, uid, write.Birthday ?? rawBirthday);
+        return Emit(source, uid, write.Birthday ?? rawBirthday, write.Photo);
     }
 
     /// <summary>
@@ -503,7 +503,8 @@ internal static class VCardComposer
 
     // ---- serialization and the 8.2.0 repairs ----------------------------------------------------
 
-    private static string Emit(SourceCard source, string uid, string? birthday)
+    private static string Emit(
+        SourceCard source, string uid, string? birthday, PhotoPayload? photo = null)
     {
         var card = source.Card;
         var old = card.ContactID;
@@ -511,18 +512,44 @@ internal static class VCardComposer
         if (old != null) id.Parameters.Assign(old.Parameters);
         card.ContactID = id;
 
+        // Cleared before the writer runs: on a Replace as on a Remove the library would spell out
+        // 700 KB PlacePhoto is about to drop.
+        if (photo != null) card.Photos = null;
+
         var lines = LogicalLines(Serialize(card, source.Version));
         if (source.Version == VCdVersion.V3_0)
         {
             RestoreDroppedParameters(lines, card);
             SpliceCollapsedFamilies(lines, card, source);
-            SpliceUnmodelledFamilies(lines, source);
+            SpliceUnmodelledFamilies(lines, source, skipPhoto: photo != null);
         }
 
         StripNamePlaceholders(lines, card);
         EnforceBirthday(lines, card, birthday);
+        PlacePhoto(lines, source.Version, photo);
         RestoreUid(lines, source, uid);
         return Join(lines);
+    }
+
+    /// <summary>
+    /// Décision 5: the whole PHOTO family goes, never just its first occurrence — the projection
+    /// promotes whatever is left, so a partial removal is one the user watches fail and a partial
+    /// replacement leaves an old picture for the next removal to wake up. Décision 6: the line is
+    /// built by hand, in the card's dialect, and never escaped — base64 has nothing to escape, and
+    /// the 4.0 data: URI's ';' and ',' are URI syntax <see cref="EscapeText"/> would corrupt.
+    /// </summary>
+    private static void PlacePhoto(List<string> lines, VCdVersion version, PhotoPayload? photo)
+    {
+        if (photo == null) return;
+
+        var indices = FamilyIndices(lines, "PHOTO");
+        for (var i = indices.Count - 1; i >= 0; i--) lines.RemoveAt(indices[i]);
+        if (photo is not PhotoPayload.Replace replace) return;
+
+        var value = Convert.ToBase64String(replace.Bytes);
+        lines.Insert(EndIndex(lines), Fold(version == VCdVersion.V4_0
+            ? $"PHOTO:data:{replace.MediaType};base64,{value}"
+            : $"PHOTO;ENCODING=b;TYPE={VCardProjector.RasterTypeName(replace.MediaType)}:{value}"));
     }
 
     /// <summary>
@@ -709,7 +736,8 @@ internal static class VCardComposer
     /// CATEGORIES, GEO, the X- families… were not edited, so their input lines replace whatever
     /// the writer made of them — verbatim bytes, groups, X- parameters and occurrences included.
     /// </summary>
-    private static void SpliceUnmodelledFamilies(List<string> lines, SourceCard source)
+    private static void SpliceUnmodelledFamilies(
+        List<string> lines, SourceCard source, bool skipPhoto = false)
     {
         var families = new List<string>();
         var inputLines = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -717,6 +745,9 @@ internal static class VCardComposer
         {
             var name = NameOf(Unfold(chunk));
             if (name.Length == 0 || OwnedNames.Contains(name)) continue;
+            // The input's PHOTO is about to be replaced or removed: splicing it back would only
+            // give PlacePhoto one more line to delete, 700 KB at a time.
+            if (skipPhoto && name.Equals("PHOTO", StringComparison.OrdinalIgnoreCase)) continue;
             if (!inputLines.TryGetValue(name, out var group))
             {
                 inputLines[name] = group = [];
