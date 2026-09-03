@@ -139,7 +139,11 @@
       "work": "Bureau"
     },
     "favourite": "Favori",
-    "misc": "Divers"
+    "misc": "Divers",
+    "changePhoto": "Modifier la photo",
+    "removePhoto": "Retirer la photo",
+    "photoUnreadable": "Ce fichier ne peut pas être lu. Choisissez une image JPEG, PNG, GIF ou WebP.",
+    "photoTooLarge": "Cette image est trop lourde, même réduite. Choisissez-en une autre."
   },
   "transfer": {
     "actions": "Importer et exporter",

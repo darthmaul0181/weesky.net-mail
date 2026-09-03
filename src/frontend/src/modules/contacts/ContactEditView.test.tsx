@@ -1,10 +1,31 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { reducePhoto } from './contactPhoto'
 import ContactEditView from './ContactEditView'
 import type {
   ContactDetail, ContactDetailEmail, ContactDraft, ContactDraftEmail,
 } from './contactTypes'
+
+// Le reducteur est teste chez lui : ici on veut l'editeur, pas le canvas.
+vi.mock('./contactPhoto', () => ({
+  PHOTO_UNREADABLE: 'editor.photoUnreadable',
+  PHOTO_TOO_LARGE: 'editor.photoTooLarge',
+  reducePhoto: vi.fn(async () => ({ base64: 'QUJD', blob: new Blob(['ABC']) })),
+}))
+
+beforeEach(() => {
+  // jsdom n'implemente pas l'API des URL objet ; l'apercu s'en sert.
+  URL.createObjectURL = vi.fn(() => 'blob:preview')
+  URL.revokeObjectURL = vi.fn()
+  vi.mocked(reducePhoto).mockResolvedValue({ base64: 'QUJD', blob: new Blob(['ABC']) })
+})
+
+/** L'input du fichier est `hidden` — l'utilisateur clique l'avatar, jamais lui — et userEvent
+    refuse d'interagir avec un element invisible. Le fichier est donc pose directement. */
+function choose(file: File) {
+  fireEvent.change(screen.getByTestId('editor-photo-input'), { target: { files: [file] } })
+}
 
 function line(position: number, address: string): ContactDetailEmail {
   return { position, address, type: '', pref: 101, params: '', groupName: '' }
@@ -278,6 +299,7 @@ describe('ContactEditView', () => {
 
     expect(props.onSave).toHaveBeenCalledWith({
       ...noCarriedFields,
+      photo: null,
       firstName: 'Bruno', lastName: null, nickname: null, isFavorite: false,
       addresses: [{ position: null, address: 'bruno@x.be', type: '', pref: 1 }],
       phones: [], postalAddresses: [],
@@ -594,4 +616,81 @@ describe('ContactEditView', () => {
     expect(star.closest('.contact-editor-hero')).not.toBeNull()
   })
 
+  // ---- la photo (decision 9) --------------------------------------------------------------------
+
+  it('opens the picker from the avatar itself', async () => {
+    setup({ contact: bruno })
+    const opened = vi.spyOn(screen.getByTestId('editor-photo-input'), 'click')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change photo' }))
+
+    expect(opened).toHaveBeenCalled()
+  })
+
+  it('submits the chosen photo as base64', async () => {
+    const { onSave } = setup({ contact: bruno })
+
+    choose(new File(['x'], 'p.jpg'))
+    await screen.findByTestId('editor-photo')
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: 'QUJD' }))
+  })
+
+  it('shows the chosen photo at once', async () => {
+    setup({ contact: bruno })
+
+    choose(new File(['x'], 'p.jpg'))
+
+    expect(await screen.findByTestId('editor-photo')).toHaveAttribute('src', 'blob:preview')
+  })
+
+  it('submits an empty string when the seeded photo is removed', async () => {
+    const { onSave } = setup({ contact: bruno, photo: 'blob:seeded' })
+
+    await userEvent.click(screen.getByRole('button', { name: /remove photo/i }))
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: '' }))
+  })
+
+  // Le test qui tient la decision 9 : la prop arrive apres le montage, comme le blob dans la vraie
+  // application. Un seed gele vaudrait null ici, et le retrait partirait en null. `setup` ne rend
+  // qu'une fois, alors ce test-ci tient son propre rerender.
+  it('still removes a photo that arrived after mount', async () => {
+    const onSave = vi.fn<(draft: ContactDraft) => void>()
+    const props = { contact: bruno, saving: false, error: null, onCancel: vi.fn(), onSave }
+    const { rerender } = render(<ContactEditView {...props} photo={null} />)
+
+    rerender(<ContactEditView {...props} photo="blob:late" />)
+    await userEvent.click(screen.getByRole('button', { name: /remove photo/i }))
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: '' }))
+  })
+
+  it('returns to the seeded photo when a local choice is removed', async () => {
+    const { onSave } = setup({ contact: bruno, photo: 'blob:seeded' })
+
+    choose(new File(['x'], 'p.jpg'))
+    await screen.findByTestId('editor-photo')
+    await userEvent.click(screen.getByRole('button', { name: /remove photo/i }))
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(screen.getByTestId('editor-photo')).toHaveAttribute('src', 'blob:seeded')
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: null }))
+  })
+
+  it('reports an unreadable file under the avatar, not in the banner', async () => {
+    vi.mocked(reducePhoto).mockRejectedValueOnce(new Error('editor.photoUnreadable'))
+    const { onSave } = setup({ contact: bruno })
+
+    choose(new File(['x'], 'p.heic'))
+    await screen.findByTestId('editor-photo-error')
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    expect(screen.getByTestId('editor-photo-error')).toHaveTextContent('This file cannot be read. Choose a JPEG, PNG, GIF or WebP image.')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: null }))
+  })
 })

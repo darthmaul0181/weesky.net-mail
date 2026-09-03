@@ -15,6 +15,9 @@ export const PHOTO_UNREADABLE = 'editor.photoUnreadable'
 
 export const PHOTO_TOO_LARGE = 'editor.photoTooLarge'
 
+/** The two keys this module ever throws — narrowed so the editor can hand one straight to `t()`. */
+export type PhotoErrorKey = typeof PHOTO_UNREADABLE | typeof PHOTO_TOO_LARGE
+
 export interface ReducedPhoto {
   /** Bare base64, no data: prefix — the shape `ContactRequest.photo` reads. */
   base64: string

@@ -16,8 +16,10 @@ beforeEach(() => {
 function withCache(seed: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
   seed(client)
-  return ({ children }: { children: ReactNode }) =>
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  function Wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  }
+  return Wrapper
 }
 
 describe('useContactPhotoUrl', () => {

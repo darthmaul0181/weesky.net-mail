@@ -261,7 +261,7 @@ describe('ContactsLayout', () => {
       firstName: 'Bruno', lastName: 'Weiss', nickname: null, isFavorite: false,
       displayName: null, middleName: null, namePrefix: null, nameSuffix: null,
       organization: null, department: null, jobTitle: null, birthday: null,
-      website: null, notes: null,
+      website: null, notes: null, photo: null,
       addresses: [{ position: 0, address: 'bruno@x.be', type: 'INTERNET', pref: 1 }],
       phones: [], postalAddresses: [],
     }))

@@ -122,6 +122,9 @@ export interface ContactDraft {
   birthday: string | null
   website: string | null
   notes: string | null
+  /** `null` = unchanged, `''` = removed, base64 = replaced — the convention of the other optional
+      scalars. Never an object URL: the preview is the editor's business, not the wire's. */
+  photo: string | null
   isFavorite: boolean
   addresses: ContactDraftEmail[]
   /** Omitted by every producer but the editor: absent means the card keeps its own. */

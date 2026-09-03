@@ -12,7 +12,7 @@ function draftFor(candidate: CaptureCandidate): ContactDraft {
     firstName: candidate.firstName, lastName: candidate.lastName, nickname: null,
     displayName: null, middleName: null, namePrefix: null, nameSuffix: null,
     organization: null, department: null, jobTitle: null, birthday: null,
-    website: null, notes: null,
+    website: null, notes: null, photo: null,
     isFavorite: false,
     addresses: [{ position: null, address: candidate.address, type: '', pref: null }],
     // Neither family is named: this only ever creates, and "absent = the card keeps its own"
