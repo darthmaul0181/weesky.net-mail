@@ -67,10 +67,10 @@ public sealed class PlatformBootTests
     [Theory]
     [InlineData(PlatformOptions.Weesky, typeof(WeeskyAliasDirectory), typeof(WeeskyProfileReader), typeof(WeeskyAccountInfoProvider))]
     [InlineData(PlatformOptions.Generic, typeof(FreeIdentityDirectory), typeof(NullProfileReader), typeof(ClaimsAccountInfoProvider))]
-    public void Host_boots_and_resolves_every_port(string platform, Type aliases, Type profile, Type account)
+    public async Task Host_boots_and_resolves_every_port(string platform, Type aliases, Type profile, Type account)
     {
-        using var provider = Compose(platform);
-        using var scope = provider.CreateScope();
+        await using var provider = Compose(platform);
+        await using var scope = provider.CreateAsyncScope();
         var services = scope.ServiceProvider;
 
         Assert.IsType(aliases, services.GetRequiredService<IAliasDirectory>());
@@ -85,18 +85,18 @@ public sealed class PlatformBootTests
     [Theory]
     [InlineData(PlatformOptions.Weesky, true)]
     [InlineData(PlatformOptions.Generic, false)]
-    public void Ownership_enforcement_follows_the_platform(string platform, bool enforces)
+    public async Task Ownership_enforcement_follows_the_platform(string platform, bool enforces)
     {
-        using var provider = Compose(platform);
-        using var scope = provider.CreateScope();
+        await using var provider = Compose(platform);
+        await using var scope = provider.CreateAsyncScope();
 
         Assert.Equal(enforces, scope.ServiceProvider.GetRequiredService<IAliasDirectory>().EnforcesOwnership);
     }
 
     [Fact]
-    public void PlatformOptions_is_bound_from_the_root_key()
+    public async Task PlatformOptions_is_bound_from_the_root_key()
     {
-        using var provider = Compose(PlatformOptions.Weesky);
+        await using var provider = Compose(PlatformOptions.Weesky);
 
         var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PlatformOptions>>().Value;
 

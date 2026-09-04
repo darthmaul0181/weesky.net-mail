@@ -18,9 +18,9 @@ internal readonly record struct MailEndpoint(
     string Protocol, string ConfigurationKey, string Host, int Port, SecureSocketOptions Security, bool IsConfigured);
 
 /// <summary>
-/// Opens one connection per request — no pooling, the Rainloop model: guard on an unconfigured
-/// endpoint, a generic message to the client with the detail logged, and ownership of the client
-/// transferred to the session on success so the finally block is a no-op on the happy path.
+/// Opens one connection per call; reuse, when any, sits above it in ImapConnectionPool: guard on an
+/// unconfigured endpoint, a generic message to the client with the detail logged, and ownership of
+/// the client transferred to the session on success so the finally block is a no-op on the happy path.
 ///
 /// Shared by the IMAP and SMTP factories, which were the same file twice down to a byte-identical
 /// certificate callback — including the rule that matters most here, that an authentication
@@ -45,6 +45,18 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
 
     public async Task<Result<TSession>> OpenAsync(MailAccountConnection connection, CancellationToken cancellationToken)
     {
+        var client = await OpenClientAsync(connection, cancellationToken);
+        return client.IsFailure
+            ? Result.Failure<TSession>(client.Error)
+            : Result.Success(CreateSession(client.Value));
+    }
+
+    /// <summary>
+    /// The connected, authenticated client; the caller owns it on success. The pool builds on
+    /// this rather than on <see cref="OpenAsync"/> because it wraps the client itself.
+    /// </summary>
+    public async Task<Result<TClient>> OpenClientAsync(MailAccountConnection connection, CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(connection);
         if (string.IsNullOrWhiteSpace(connection.Username))
             throw new ArgumentException("Username is required", nameof(connection));
@@ -55,7 +67,7 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
         {
             Logger.LogError("{Protocol} is not configured ({ConfigurationKey} missing)",
                 endpoint.Protocol, endpoint.ConfigurationKey);
-            return Result.Failure<TSession>("Mail service is not configured");
+            return Result.Failure<TClient>("Mail service is not configured");
         }
 
         // The configuration-level notice, independent of whether the server ever answers. What
@@ -77,7 +89,9 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
             using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
                 connectCts.CancelAfter(TimeSpan.FromSeconds(options.CurrentValue.TimeoutSeconds));
+                var stopwatch = Stopwatch.StartNew();
                 await client.ConnectAsync(endpoint.Host, endpoint.Port, endpoint.Security, connectCts.Token);
+                var connectMs = stopwatch.ElapsedMilliseconds;
 
                 // Only the connected client knows whether TLS actually happened: Auto and
                 // StartTlsWhenAvailable negotiate, so a server that drops STARTTLS — or an attacker
@@ -91,7 +105,7 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
                             "Refusing to authenticate over an unencrypted {Protocol} connection to {Host}:{Port}; " +
                             "set Mail:AllowCleartext if the link is genuinely trusted",
                             endpoint.Protocol, endpoint.Host, endpoint.Port);
-                        return Result.Failure<TSession>("Unable to connect to the mail service");
+                        return Result.Failure<TClient>("Unable to connect to the mail service");
                     }
 
                     Logger.LogWarning(
@@ -108,11 +122,15 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
                         connection.Username, password.Password, connectCts.Token),
                     _ => throw new UnreachableException()
                 });
+
+                // TLS sits inside ConnectAsync for StartTls and SslOnConnect alike: MailKit has no seam between them.
+                Logger.LogDebug("{Protocol} opened {Host}:{Port}: connect+tls {ConnectMs} ms, authenticate {AuthMs} ms",
+                    endpoint.Protocol, endpoint.Host, endpoint.Port, connectMs, stopwatch.ElapsedMilliseconds - connectMs);
             }
 
-            var session = CreateSession(client);
-            client = null; // ownership transferred to the session
-            return Result.Success(session);
+            var opened = client;
+            client = null; // ownership transferred to the caller
+            return Result.Success(opened);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -122,13 +140,13 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
         {
             // Never echo the server's message: it can disclose account state.
             Logger.LogWarning("{Protocol} authentication failed for {Username}", endpoint.Protocol, connection.Username);
-            return Result.Failure<TSession>("Mail authentication failed");
+            return Result.Failure<TClient>("Mail authentication failed");
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Unable to connect to {Protocol} at {Host}:{Port}",
                 endpoint.Protocol, endpoint.Host, endpoint.Port);
-            return Result.Failure<TSession>("Unable to connect to the mail service");
+            return Result.Failure<TClient>("Unable to connect to the mail service");
         }
         finally
         {

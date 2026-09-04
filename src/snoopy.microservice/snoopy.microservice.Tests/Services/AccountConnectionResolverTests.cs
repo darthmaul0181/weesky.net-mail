@@ -35,6 +35,7 @@ public sealed class AccountConnectionResolverTests
     private readonly ExternalDomainStore _domains;
     private readonly byte[] _kek = ConnectedAccountCipher.DeriveKek(MainPassword, ConnectedAccountCipher.NewSalt());
     private readonly Mock<IOAuthTokenService> _oauth = new();
+    private readonly RequestIdentity _identity = new();
 
     /// <summary>
     /// A second context over the same database, as production has one per request. The binding
@@ -62,7 +63,7 @@ public sealed class AccountConnectionResolverTests
         return new AccountConnectionResolver(
             _credentials, _accounts, _domains, _users, _oauth.Object, monitor.Object,
             Options.Create(new TokenConstants { ExpiryInMinutes = 2880 }),
-            NullLogger<AccountConnectionResolver>.Instance);
+            _identity, NullLogger<AccountConnectionResolver>.Instance);
     }
 
     private DefaultHttpContext ContextWithCookie(MailCredentialPayload payload)
@@ -185,6 +186,15 @@ public sealed class AccountConnectionResolverTests
 
         Assert.True(result.IsFailure);
         Assert.Equal("credentials_unavailable", result.Error);
+    }
+
+    // The pool indexes by user, and this is the only place on the mail path that holds the user.
+    [Fact]
+    public async Task Resolve_RecordsTheUserForThePool()
+    {
+        await CreateSut().ResolveAsync(_alice, V2Context().Request, CancellationToken.None);
+
+        Assert.Equal(_alice.WebmailUid, _identity.UserUid);
     }
 
     [Fact]
