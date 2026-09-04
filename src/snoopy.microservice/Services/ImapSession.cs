@@ -8,6 +8,12 @@ using weesky.Snoopy.Microservice.Models.Mail;
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
+/// How a session lets go of its client on disposal — close it, or hand it back to a pool.
+/// <c>healthy</c> is false when a command left the protocol in doubt; a pool must not reuse it.
+/// </summary>
+internal delegate ValueTask ImapClientRelease(ImapClient client, bool healthy);
+
+/// <summary>
 /// The session facade: owns the connected client, its lifetime and the shared failure contract
 /// (<see cref="ExecuteAsync{T}"/>, the sentinels and the shared error constants), and delegates
 /// the protocol work to <see cref="ImapFolderCommands"/> and <see cref="ImapMessageCommands"/>.
@@ -15,15 +21,17 @@ namespace weesky.Snoopy.Microservice.Services;
 internal sealed class ImapSession : IImapSession
 {
     private readonly ImapClient _client;
+    private readonly ImapClientRelease _release;
     private readonly ImapFolderCommands _folders;
     private readonly ImapMessageCommands _messages;
     private bool _disposed;
 
-    public ImapSession(ImapClient client, IMailHtmlSanitizer sanitizer, ILogger logger)
+    public ImapSession(ImapClient client, IMailHtmlSanitizer sanitizer, ILogger logger, ImapClientRelease? release = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         ArgumentNullException.ThrowIfNull(sanitizer);
         ArgumentNullException.ThrowIfNull(logger);
+        _release = release ?? new ImapClientRelease(CloseAsync);
 
         DirectorySeparator = client.PersonalNamespaces.Count > 0
             ? client.PersonalNamespaces[0].DirectorySeparator
@@ -34,6 +42,10 @@ internal sealed class ImapSession : IImapSession
     }
 
     public char DirectorySeparator { get; }
+
+    /// <summary>True once a command ended in an unrecognised exception or a cancellation: the
+    /// socket may be out of sync and must be closed, never pooled.</summary>
+    internal bool Tainted { get; private set; }
 
     public bool SupportsQuota => _client.Capabilities.HasFlag(ImapCapabilities.Quota);
 
@@ -67,12 +79,14 @@ internal sealed class ImapSession : IImapSession
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            Tainted = true;
             throw;
         }
         catch (Exception ex)
         {
             if (sentinel?.Invoke(ex) is { } known) return Result.Failure<T>(known);
 
+            Tainted = true;
             logFailure(ex);
             return Result.Failure<T>(failureMessage);
         }
@@ -94,12 +108,14 @@ internal sealed class ImapSession : IImapSession
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            Tainted = true;
             throw;
         }
         catch (Exception ex)
         {
             if (sentinel?.Invoke(ex) is { } known) return Result.Failure(known);
 
+            Tainted = true;
             logFailure(ex);
             return Result.Failure(failureMessage);
         }
@@ -233,15 +249,22 @@ internal sealed class ImapSession : IImapSession
         if (_disposed) return;
         _disposed = true;
 
+        await _release(_client, healthy: !Tainted);
+    }
+
+    /// <summary>
+    /// The release when nobody pools: a polite LOGOUT under its own 2 s cap when the socket is
+    /// believed alive, then Dispose. Teardown runs after the response went out and must not
+    /// inherit the protocol timeout. A tainted socket gets no LOGOUT — nothing is in sync to say it to.
+    /// </summary>
+    internal static async ValueTask CloseAsync(ImapClient client, bool healthy)
+    {
         try
         {
-            if (_client.IsConnected)
+            if (healthy && client.IsConnected)
             {
-                // Teardown runs after the response went out and must not inherit the protocol
-                // timeout: two seconds pays for a polite LOGOUT (quit: true) when the server is
-                // alive, and Dispose below cuts the socket when it is not.
                 using var cap = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                await _client.DisconnectAsync(quit: true, cap.Token);
+                await client.DisconnectAsync(quit: true, cap.Token);
             }
         }
         catch
@@ -249,6 +272,6 @@ internal sealed class ImapSession : IImapSession
             // Best effort — the connection is being torn down anyway.
         }
 
-        _client.Dispose();
+        client.Dispose();
     }
 }

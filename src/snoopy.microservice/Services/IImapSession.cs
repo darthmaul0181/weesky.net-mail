@@ -6,8 +6,8 @@ using weesky.Snoopy.Microservice.Models.Mail;
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
-/// An open, authenticated IMAP session. One session per repository method, disposed at the
-/// end of it — there is no pooling, which is also how Rainloop operates.
+/// An open, authenticated IMAP session, one per request. Disposing it releases the client —
+/// to a pool when the request borrowed one, closing it otherwise.
 /// </summary>
 public interface IImapSession : IAsyncDisposable
 {

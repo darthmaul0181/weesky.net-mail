@@ -4,17 +4,15 @@ using weesky.Snoopy.Microservice.Models.Mail;
 namespace weesky.Snoopy.Microservice.Services;
 
 /// <summary>
-/// Holds one IMAP session for the lifetime of the DI scope — the HTTP request.
-///
-/// Registered scoped, so the container disposes it at the end of the request and the connection
-/// closes with it; no caller owns the session any more, which is why no repository disposes what
-/// it is handed. Kept per request rather than pooled across them on purpose: the connection is
-/// authenticated as one specific account with that account's own password (the Rainloop model),
-/// so it is not reusable by anybody else and must not outlive the request that carried the
-/// credentials.
+/// Holds one IMAP session for the lifetime of the DI scope — the HTTP request — and the container,
+/// not a caller, disposes it. The session is per request, the socket under it need not be: with an
+/// identity the client comes from <see cref="IImapConnectionPool"/>, without one it is single-use.
 /// </summary>
 internal sealed class ScopedImapSessionProvider(
-    IImapConnectionFactory factory, ILogger<ScopedImapSessionProvider> logger)
+    IImapConnectionFactory factory,
+    IImapConnectionPool pool,
+    IRequestIdentity identity,
+    ILogger<ScopedImapSessionProvider> logger)
     : IImapSessionProvider, IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -38,7 +36,9 @@ internal sealed class ScopedImapSessionProvider(
 
             await CloseAsync();
 
-            var opened = await factory.OpenAsync(connection, cancellationToken);
+            var opened = identity.UserUid is { } uid
+                ? await pool.BorrowAsync(connection, uid, cancellationToken)
+                : await factory.OpenAsync(connection, cancellationToken);
             _key = key;
             _session = opened;
             return opened;
@@ -70,7 +70,7 @@ internal sealed class ScopedImapSessionProvider(
         catch (Exception ex)
         {
             // The request is over either way; a failed teardown must not surface as its outcome.
-            logger.LogWarning(ex, "Closing the IMAP session failed");
+            logger.LogWarning(ex, "Releasing the IMAP session failed");
         }
     }
 }

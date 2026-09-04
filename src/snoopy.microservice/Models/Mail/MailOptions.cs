@@ -63,6 +63,26 @@ public sealed class MailOptions
     /// </summary>
     public bool AllowCleartext { get; set; }
 
+    /// <summary>Whether authenticated IMAP connections are kept between requests. Read on every
+    /// borrow and every sweep, so switching it off takes effect without a restart.</summary>
+    public bool PoolEnabled { get; set; } = true;
+
+    /// <summary>Idle time before a pooled connection is closed. Above the frontend's 60 s poll on purpose.</summary>
+    public int PoolIdleSeconds { get; set; } = 70;
+
+    /// <summary>Absolute lifetime of a pooled connection: the bound on how long a revoked credential keeps working.</summary>
+    public int PoolMaxLifetimeMinutes { get; set; } = 15;
+
+    /// <summary>Connections per (host, port, security, user, credential). Keep well under Dovecot's
+    /// mail_max_userip_connections (10): this service is one IP.</summary>
+    public int PoolMaxPerIdentity { get; set; } = 4;
+
+    /// <summary>Pooled connections in this process, all identities together.</summary>
+    public int PoolMaxTotal { get; set; } = 200;
+
+    /// <summary>Bound on the NOOP that checks a pooled connection before reuse, and on a polite LOGOUT.</summary>
+    public int PoolHealthTimeoutSeconds { get; set; } = 3;
+
     /// <summary>Where the callback sends the browser back to, e.g. https://account.mail.weesky.net.
     /// The settings page's path is appended by the controller.</summary>
     public string WebmailBaseUrl { get; set; } = string.Empty;

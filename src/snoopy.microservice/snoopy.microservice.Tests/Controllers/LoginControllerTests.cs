@@ -35,6 +35,7 @@ public sealed class LoginControllerTests
     private readonly Mock<IMailCredentialStore> _credentialStore = new();
     private readonly Mock<IWebmailUserStore> _webmailUsers = new();
     private readonly Mock<ISessionGuard> _sessions = new();
+    private readonly Mock<IImapConnectionPool> _pool = new();
 
     public LoginControllerTests()
         => _webmailUsers.Setup(s => s.GetOrCreateKdfSaltAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -44,7 +45,7 @@ public sealed class LoginControllerTests
     {
         var controller = new LoginController(
             _authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object,
-            _webmailUsers.Object, _sessions.Object, NullLogger<LoginController>.Instance);
+            _webmailUsers.Object, _sessions.Object, _pool.Object, NullLogger<LoginController>.Instance);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext ?? new DefaultHttpContext()
@@ -139,7 +140,7 @@ public sealed class LoginControllerTests
     {
         var controller = new LoginController(
             _authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object,
-            _webmailUsers.Object, _sessions.Object, NullLogger<LoginController>.Instance);
+            _webmailUsers.Object, _sessions.Object, _pool.Object, NullLogger<LoginController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
 
         var result = controller.Logout();
@@ -215,7 +216,7 @@ public sealed class LoginControllerTests
     {
         var controller = new LoginController(
             _authenticator.Object, Options.Create(TestTokenConstants), _credentialStore.Object,
-            _webmailUsers.Object, _sessions.Object, NullLogger<LoginController>.Instance);
+            _webmailUsers.Object, _sessions.Object, _pool.Object, NullLogger<LoginController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com");
 
         controller.Logout();
@@ -237,5 +238,32 @@ public sealed class LoginControllerTests
         _webmailUsers.Verify(s => s.RotateSecurityStampAsync("john@example.com", It.IsAny<CancellationToken>()), Times.Once);
         _sessions.Verify(s => s.Forget("john@example.com"), Times.Once);
         _credentialStore.Verify(c => c.Clear(It.IsAny<HttpResponse>()), Times.Once);
+    }
+
+    // DELETE /Login is housekeeping: the user's idle sockets go, the generation does not turn.
+    [Fact]
+    public void Logout_ClosesTheUsersPooledSockets()
+    {
+        var uid = Guid.NewGuid();
+        var controller = CreateController();
+        controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com", uid);
+
+        controller.Logout();
+
+        _pool.Verify(p => p.Close(uid), Times.Once);
+        _pool.Verify(p => p.Revoke(It.IsAny<Guid>()), Times.Never);
+    }
+
+    // DELETE /Login/All is the revocation: sockets out right now must not come back either.
+    [Fact]
+    public async Task LogoutEverywhere_RevokesTheUsersPooledSockets()
+    {
+        var uid = Guid.NewGuid();
+        var controller = CreateController();
+        controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com", uid);
+
+        await controller.LogoutEverywhere(CancellationToken.None);
+
+        _pool.Verify(p => p.Revoke(uid), Times.Once);
     }
 }

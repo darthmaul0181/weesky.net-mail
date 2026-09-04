@@ -30,7 +30,16 @@ internal static class ApplicationServicesConfiguration
                 "to sign with HMAC-SHA256. Set TokenConstants__Key in the service's EnvironmentFile.")
             .ValidateOnStart();
         services.AddOptions<SieveOptions>().Bind(configuration.GetSection("Sieve"));
-        services.AddOptions<MailOptions>().Bind(configuration.GetSection("Mail"));
+        // A zero or negative budget reaches CancelAfter, which throws: a 500 on the borrow path and,
+        // in the background close, a client nothing ever disposes. Refused where an operator watches.
+        services.AddOptions<MailOptions>()
+            .Bind(configuration.GetSection("Mail"))
+            .Validate(
+                o => o.TimeoutSeconds > 0 && o.PoolHealthTimeoutSeconds > 0 && o.PoolIdleSeconds >= 0
+                     && o.PoolMaxLifetimeMinutes > 0 && o.PoolMaxPerIdentity >= 0 && o.PoolMaxTotal >= 0,
+                "Mail: TimeoutSeconds, PoolHealthTimeoutSeconds and PoolMaxLifetimeMinutes must be positive; " +
+                "PoolIdleSeconds, PoolMaxPerIdentity and PoolMaxTotal must not be negative")
+            .ValidateOnStart();
         services.AddOptions<TrustedSenderOptions>().Bind(configuration.GetSection("TrustedSenders"));
         services.AddOptions<DavOptions>()
             .Bind(configuration.GetSection("Dav"))
@@ -60,7 +69,17 @@ internal static class ApplicationServicesConfiguration
     /// <summary>Everything that talks to the mail server: IMAP, SMTP, ManageSieve, doveadm.</summary>
     public static IServiceCollection AddMailServices(this IServiceCollection services)
     {
-        services.AddSingleton<IImapConnectionFactory, ImapConnectionFactory>();
+        // One factory instance under two faces: the probes see IImapConnectionFactory and always
+        // authenticate for real; only the pool sees IImapClientSource.
+        services.AddSingleton<ImapConnectionFactory>();
+        services.AddSingleton<IImapConnectionFactory>(sp => sp.GetRequiredService<ImapConnectionFactory>());
+        services.AddSingleton<IImapClientSource>(sp => sp.GetRequiredService<ImapConnectionFactory>());
+
+        services.AddSingleton<CredentialFingerprint>();
+        services.AddSingleton<ImapConnectionPool>();
+        services.AddSingleton<IImapConnectionPool>(sp => sp.GetRequiredService<ImapConnectionPool>());
+        services.AddHostedService<ImapPoolSweeper>();
+
         services.AddSingleton<ISmtpConnectionFactory, SmtpConnectionFactory>();
         services.AddSingleton<IManageSieveClient, ManageSieveClient>();
         services.AddSingleton<ISieveAvailabilityProbe, SieveAvailabilityProbe>();
@@ -72,9 +91,11 @@ internal static class ApplicationServicesConfiguration
         // started it.
         services.AddSingleton<IOAuthHandshakeStore, OAuthHandshakeStore>();
 
-        // Scoped, so the whole request shares one authenticated IMAP connection and the container
-        // closes it when the request ends. See ScopedImapSessionProvider.
+        // Scoped, so the whole request shares one IMAP session; the container releases it when the
+        // request ends — back to the pool, or closed. See ScopedImapSessionProvider.
         services.AddScoped<IImapSessionProvider, ScopedImapSessionProvider>();
+        services.AddScoped<RequestIdentity>();
+        services.AddScoped<IRequestIdentity>(sp => sp.GetRequiredService<RequestIdentity>());
         services.AddScoped<IAccountConnectionResolver, AccountConnectionResolver>();
         services.AddScoped<IOutgoingMessageFactory, OutgoingMessageFactory>();
         services.AddScoped<IMailSender, MailSender>();

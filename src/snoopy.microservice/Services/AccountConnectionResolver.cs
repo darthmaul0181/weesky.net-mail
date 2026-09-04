@@ -20,6 +20,7 @@ internal sealed class AccountConnectionResolver(
     IOAuthTokenService oauth,
     IOptionsMonitor<MailOptions> options,
     IOptions<TokenConstants> tokenConstants,
+    RequestIdentity identity,
     ILogger<AccountConnectionResolver> logger) : IAccountConnectionResolver
 {
     public async Task<Result<MailAccountConnection>> ResolveAsync(
@@ -27,6 +28,7 @@ internal sealed class AccountConnectionResolver(
     {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(request);
+        identity.Set(user.WebmailUid);
 
         var retrieved = credentials.Retrieve(request);
         if (retrieved.IsFailure) return Result.Failure<MailAccountConnection>(retrieved.Error);

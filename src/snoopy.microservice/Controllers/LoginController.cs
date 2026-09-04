@@ -20,6 +20,7 @@ public sealed class LoginController(
     IMailCredentialStore credentialStore,
     IWebmailUserStore webmailUsers,
     ISessionGuard sessions,
+    IImapConnectionPool pool,
     ILogger<LoginController> logger) : ApiBaseController
 {
     /// <summary>
@@ -90,6 +91,8 @@ public sealed class LoginController(
 
         credentialStore.Clear(HttpContext.Response);
 
+        pool.Close(AuthenticatedUser.WebmailUid);
+
         return NoContent();
     }
 
@@ -101,6 +104,8 @@ public sealed class LoginController(
     /// it expires, so a copy taken off the machine keeps working. This rotates the account's
     /// security stamp, which leaves every token already issued unable to match — the control to
     /// reach for when a session is believed to be in someone else's hands.
+    /// It also refuses every pooled IMAP socket the account has out, so a session in someone else's
+    /// hands loses the mailbox at once rather than at the socket's own expiry.
     /// </remarks>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Every session was revoked</response>
@@ -115,6 +120,7 @@ public sealed class LoginController(
 
         await webmailUsers.RotateSecurityStampAsync(email, cancellationToken);
         sessions.Forget(email);
+        pool.Revoke(AuthenticatedUser.WebmailUid);
 
         HttpContext.Response.ClearAuthCookie(tokenConstants.Value);
         credentialStore.Clear(HttpContext.Response);

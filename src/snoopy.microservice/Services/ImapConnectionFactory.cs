@@ -14,7 +14,7 @@ internal sealed class ImapConnectionFactory(
     IOptionsMonitor<MailOptions> options,
     IMailHtmlSanitizer sanitizer,
     ILogger<ImapConnectionFactory> logger)
-    : MailConnectionFactory<ImapClient, IImapSession>(options, logger), IImapConnectionFactory
+    : MailConnectionFactory<ImapClient, IImapSession>(options, logger), IImapConnectionFactory, IImapClientSource
 {
     protected override MailEndpoint Endpoint(MailAccountConnection connection) => new(
         Protocol: "IMAP",
@@ -31,4 +31,11 @@ internal sealed class ImapConnectionFactory(
     Task<Result<IImapSession>> IImapConnectionFactory.OpenAsync(
         MailAccountConnection connection, CancellationToken cancellationToken) =>
         OpenAsync(connection, cancellationToken);
+
+    Task<Result<ImapClient>> IImapClientSource.OpenClientAsync(
+        MailAccountConnection connection, CancellationToken cancellationToken) =>
+        OpenClientAsync(connection, cancellationToken);
+
+    IImapSession IImapClientSource.CreateSession(ImapClient client, ImapClientRelease release) =>
+        new ImapSession(client, sanitizer, Logger, release);
 }

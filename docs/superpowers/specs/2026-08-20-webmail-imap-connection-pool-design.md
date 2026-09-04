@@ -79,17 +79,41 @@ l'entrelacement de commandes IMAP impossible plutôt qu'improbable.
 3. à la destruction du scope, il **rend** l'emprunt au lieu de fermer.
 
 `ImapSession.DisposeAsync` ferme aujourd'hui le client. Il reçoit désormais *comment relâcher le
-client* — fermer, ou rendre au pool — plutôt que de le décider. C'est le seul changement de
-signature du chantier, et il est interne au namespace `Services`.
+client* — fermer, ou rendre au pool — plutôt que de le décider. Changement interne au namespace
+`Services`.
+
+**L'identité de l'emprunteur doit arriver au pool, et rien ne la porte aujourd'hui.** L'index
+secondaire et la génération (§ Invalidation) sont indexés sur le `WebmailUid`, mais
+`IImapSessionProvider.GetAsync` ne reçoit qu'un `MailAccountConnection`, qui ne porte pas
+l'utilisateur — à dessein, `StagedScope` est le seul endroit où les deux dimensions se composent.
+Aucun service ne lit `IHttpContextAccessor`, et les vingt appelants de `WithSessionAsync` ne
+doivent pas changer. Le parti : un **porteur d'identité de requête**, scoped, posé par
+`AccountConnectionResolver.ResolveAsync` — qui reçoit déjà le `User` — et lu par
+`ScopedImapSessionProvider` au moment d'emprunter. Sans identité posée, le pool n'est pas
+consulté : connexion à usage unique. Toute route mail est `[Authorize]`, le cas n'arrive pas, et
+le repli est du côté sûr s'il arrive.
 
 Le relâchement part d'un `finally`, et un relâchement qui jette ferme au lieu de pooler. Les
 plafonds ne se décomptent qu'au retour : un emprunt perdu immobilise sa place pour toujours, et
 `ScopedImapSessionProvider.CloseAsync` avale déjà ce que la fermeture jette
 (`ScopedImapSessionProvider.cs:63`). Le pool borne donc aussi la durée d'un emprunt — au-delà, la
 place retourne au quota sans que la socket soit touchée : elle appartient encore à sa requête, qui
-reste seule à en décider, comme pour les deux horloges. L'horizon est large, au-delà de la plus
-longue requête légitime, pour que la reprise reste un filet et non un chemin ordinaire — le temps
-qu'elle court, une identité peut compter une socket de plus que son plafond.
+reste seule à en décider, comme pour les deux horloges. L'horizon est le plafond de vie absolue
+lui-même — 15 min, une horloge que le pool tient déjà, et au-delà de la plus longue requête
+légitime (un téléchargement de 25 Mo sur une liaison lente reste sous cinq minutes) — pour que la
+reprise reste un filet et non un chemin ordinaire, sans septième réglage. Le temps qu'elle court,
+une identité peut compter une socket de plus que son plafond.
+
+**Deux fermetures, pas une.** Une socket qui a échoué au contrôle de santé, ou qu'une session a
+marquée, est **jetée sans `LOGOUT`** : le pair est mort ou le protocole est désynchronisé, et
+un `LOGOUT` poli ajouterait son échéance de 3 s à une requête qui vient déjà d'en payer 3 sur le
+`NOOP` — six secondes là où le chantier promet 200 ms. Le `LOGOUT` est réservé aux sockets
+saines fermées par le balayeur, la purge ou l'arrêt, et il s'exécute hors du chemin de requête.
+
+**L'index se nettoie à la fermeture.** L'entrée fermée sort de l'index secondaire de chaque
+utilisateur qui la référençait, sinon un singleton qui vit des semaines accumule des références
+mortes — et la génération par utilisateur, elle, ne grandit qu'au rythme des purges, ce qui ne
+demande rien.
 
 Rendre la socket à la destruction du scope suppose qu'aucune réponse ne coule encore depuis elle,
 et c'est vérifié : tout est matérialisé avant de sortir de la session, le téléchargement d'une
@@ -162,17 +186,20 @@ emprunt, c'est-à-dire jamais, et le TTL n'aurait aucun effet.
 
 Un `IHostedService` sur `PeriodicTimer`, cadence 15 s, sur le patron des balayeurs existants
 (`StagedAttachmentSweeper`, `TrustedSenderSweeper`). Fermeture propre par `LOGOUT`, sous la même
-échéance courte qu'à l'emprunt : un `LOGOUT` qui pend ne doit pas retarder la fermeture des
-autres. Aucune exception ne remonte : l'échec de fermeture d'une socket n'arrête ni le balayage
-des autres, ni l'hôte.
+échéance courte qu'à l'emprunt, et **en parallèle sous un budget de passe** : séquentiels, cent
+`LOGOUT` sur des sockets trou noir feraient cinq minutes de passe pour un balayeur à 15 s. Ce
+qui dépasse le budget est jeté sans `LOGOUT`. Aucune exception ne remonte : l'échec de fermeture
+d'une socket n'arrête ni le balayage des autres, ni l'hôte.
 
 Deux écarts assumés avec `PeriodicSweeper`, qui ne sert donc pas de classe de base : il journalise
 à chaque tick — c'est son contrat, la ligne est son battement de cœur — ce qui à 15 s ferait
 5 760 lignes par jour et contredirait le parti « compteurs, et non événements » retenu plus bas ;
 et sa passe de démarrage n'a rien à balayer sur un pool vide.
 
-À l'arrêt de l'hôte, le pool est `IAsyncDisposable` et ferme tout par `LOGOUT`, sous la même
-échéance. Sans cela le serveur ne verrait que des sockets coupées à chaque redéploiement.
+À l'arrêt de l'hôte, le pool est `IAsyncDisposable` et ferme tout par `LOGOUT`, sous le même
+budget parallèle — le service n'ajuste pas `HostOptions.ShutdownTimeout`, donc l'arrêt dispose de
+30 s en tout, et deux cents `LOGOUT` en série n'y tiendraient pas. Sans cela le serveur ne
+verrait que des sockets coupées à chaque redéploiement.
 
 Le balayeur ne voit que les sockets **rendues** : une socket empruntée est hors du pool, sa durée
 de vie est celle de sa requête, et c'est la règle de retour (santé, taint, génération) qui décide
@@ -198,7 +225,8 @@ la génération ci-dessous doit tenir compte.
 | `DELETE /Login` | Ferme les sockets rendues de l'utilisateur, via l'index secondaire ; la génération ne tourne pas | Rangement de bonne foi. Le JWT reste valide jusqu'à expiration : ce n'est pas une révocation et ne doit pas être présenté comme telle. Par l'index plutôt que par l'empreinte courante : l'action n'a alors aucun secret à lire — `Logout` n'en lit aucun aujourd'hui — et elle couvre les comptes connectés au lieu du seul compte primaire. Le prix est de refroidir les sockets des autres sessions du même utilisateur ; sur un accélérateur, cela vaut une ré-authentification. |
 | `DELETE /Login/All` | Les mêmes fermetures, **plus** la génération qui tourne | Celui-ci est la révocation : il fait tourner le tampon de sécurité, donc plus aucun emprunt n'est possible, et la génération rattrape les sockets en vol que l'index ne voit pas. Sans purge, les sockets ouvertes survivraient 15 min à un geste dont l'intention est « une session est entre les mains de quelqu'un d'autre ». |
 | Credential d'un compte connecté mis à jour ou compte supprimé | Rien d'immédiat | Auto-guérison par l'empreinte (§ ci-dessus) : les anciennes sockets sont injoignables et meurent au TTL. |
-| Compte désactivé ou supprimé côté fournisseur | Plus aucun emprunt sous 60 s | Rien à écrire : `SessionGuard` revalide compte utilisable et tampon de sécurité à chaque requête, sur une fenêtre de cache de 60 s (`SessionGuard.cs:16`). La socket orpheline meurt ensuite à son TTL d'inactivité, faute d'emprunteur. |
+| Compte **weesky** désactivé ou supprimé | Plus aucun emprunt sous 60 s | Rien à écrire : `SessionGuard` revalide compte utilisable et tampon de sécurité à chaque requête, sur une fenêtre de cache de 60 s (`SessionGuard.cs:16`). La socket orpheline meurt ensuite à son TTL d'inactivité, faute d'emprunteur. |
+| Compte connecté désactivé **chez son fournisseur** | Rien d'immédiat | Rien ne nous le dit : `SessionGuard` ne regarde que le compte weesky. La socket déjà authentifiée continue de servir jusqu'au plafond de vie absolue, où la ré-authentification échoue — le même cas que le mot de passe changé ailleurs, et la même borne. |
 | Mot de passe changé hors de l'application | Rien d'immédiat | Personne ne nous prévient — le microservice n'a d'ailleurs aucun endpoint de changement du mot de passe primaire (`PasswordChange` de `CapabilitiesController` pointe hors de ce service). C'est ce que borne le plafond de vie absolue, et sa seule justification. |
 
 **La course de `LogoutEverywhere`.** Une socket **empruntée** par une requête en vol au moment de
@@ -234,9 +262,15 @@ Six réglages dans `MailOptions`, rechargés à chaud par `IOptionsMonitor` :
 Une limite du rechargement à chaud, acceptée : resserrer la politique de certificats ou couper
 `AllowCleartext` ne s'applique qu'aux connexions **neuves** — les sockets déjà poolées ont été
 établies sous l'ancienne politique et vivent jusqu'à leur mort, 15 min au pire. Couper
-`PoolEnabled` purge tout immédiatement si ce délai est inacceptable — et un emprunt en vol au
-moment de la coupure se ferme à son retour au lieu d'être poolé, comme sous une génération
-périmée.
+`PoolEnabled` purge tout si ce délai est inacceptable — et un emprunt en vol au moment de la
+coupure se ferme à son retour au lieu d'être poolé, comme sous une génération périmée.
+
+Sans abonnement `OnChange`, qu'aucun service n'utilise et qui a ses pièges — il se déclenche sur
+n'importe quelle modification du fichier, et parfois deux fois pour une seule sur Windows ;
+purger le pool à chaque coup serait le vider pour un réglage SMTP. L'emprunt lit
+`CurrentValue.PoolEnabled` et bascule en usage unique quand il est faux ; le balayeur le lit à
+chaque tick et purge quand il est faux, idempotent par construction. La purge arrive donc avec
+15 s de retard au plus, ce qui est le bon prix pour ne dépendre d'aucune notification.
 
 Le `Timeout` du client est en revanche réappliqué à chaque emprunt : il n'a rien d'une politique
 négociée à l'ouverture, et le laisser figé rendrait un réglage de délai sans effet sur les sockets
@@ -294,6 +328,30 @@ tout ce qui compte, sans mock du protocole.
     identités ne se mélangent pas, ici qu'une identité partagée ne perd pas sa révocation.
 12. **`DELETE /Login`** — les sockets de l'utilisateur, comptes connectés compris, sont fermées
     sans qu'aucun secret ait été lu.
+13. **Sans identité posée** — un emprunt sans porteur d'identité de requête n'entre pas au pool :
+    connexion à usage unique, un `AUTHENTICATE` par appel, rien d'indexé.
+14. **Fermeture sans `LOGOUT`** — une socket en échec de santé est jetée : le serveur scripté ne
+    reçoit aucun `LOGOUT`, et la requête tient dans l'échéance de santé plus l'ouverture neuve,
+    sans seconde échéance.
+
+## Préconditions sur MailKit 4.17, à vérifier avant d'écrire le pool
+
+Le code a déjà l'habitude d'épingler ce qu'il tient de MailKit à une version (« Verified on
+MailKit 4.17 », `ImapMessageCommands.cs:654`). Deux faits de cette tranche en relèvent, et aucun
+ne se déduit de la surface publique :
+
+1. **Un `ImapClient` authentifié ne retient aucun credential.** Si le client gardait le
+   `NetworkCredential` ou le mécanisme SASL après `AuthenticateAsync`, pooler le client
+   reviendrait à garder le mot de passe dans un objet qui vit un quart d'heure — la ligne
+   « contenu d'une entrée » serait violée par MailKit plutôt que par nous. Vérifié : on poole tel
+   quel. Retenu : la référence se vide à l'ouverture, avant l'entrée au pool.
+2. **`ImapCommandException` laisse le protocole en phase.** C'est le `NO`/`BAD` tagué d'un
+   serveur qui a répondu — un dossier qui existe déjà, un `APPEND` trop gros. Si MailKit l'émet
+   toujours après avoir lu la réponse taguée entière, la marquer *tainted* fermerait une socket
+   saine à chaque refus métier ordinaire, et un renommage refusé coûterait une ré-authentification.
+   Vérifié : elle ne marque pas ; seules marquent `ImapProtocolException`, les exceptions de
+   transport, l'annulation, et tout ce qui n'est pas reconnu. Non vérifié : tout marque, comme la
+   table le dit — sûr, et le raffinement attend.
 
 ## Hors périmètre
 
