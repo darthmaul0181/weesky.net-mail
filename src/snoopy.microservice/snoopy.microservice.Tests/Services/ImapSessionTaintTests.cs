@@ -43,6 +43,19 @@ public sealed class ImapSessionTaintTests
         Assert.False(session.Tainted);
     }
 
+    // A tagged NO/BAD: MailKit read the whole response before throwing, so the socket is in sync.
+    [Fact]
+    public async Task ExecuteAsync_OnACommandRefusal_DoesNotTaint()
+    {
+        var session = CreateSession();
+
+        await session.ExecuteAsync<string>(CancellationToken.None,
+            () => throw new ImapCommandException(ImapCommandResponse.No, "refused", "The server said no"),
+            "opaque", _ => { });
+
+        Assert.False(session.Tainted);
+    }
+
     [Fact]
     public async Task ExecuteAsync_OnCancellation_TaintsThenRethrows()
     {

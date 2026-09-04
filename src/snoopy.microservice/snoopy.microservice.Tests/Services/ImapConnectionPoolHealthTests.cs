@@ -1,4 +1,9 @@
 using System.Diagnostics;
+using CSharpFunctionalExtensions;
+using MailKit.Net.Imap;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Moq;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -168,10 +173,35 @@ public sealed class ImapConnectionPoolHealthTests
         Assert.Equal(2, server.Logins);
     }
 
-    // The taint rule on its own: a server refusal leaves the socket connected and in sync, so only
-    // the taint can keep it out of the pool — the test above is also satisfied by MailKit hanging up.
+    // The release verdict on its own: the socket stays connected, only healthy: false keeps it out.
     [Fact]
-    public async Task Return_OfASessionTaintedOnALiveSocket_DropsItWithoutLogout()
+    public async Task Return_ReleasedUnhealthyOnALiveSocket_DropsItWithoutLogout()
+    {
+        using var server = new PoolImapServer();
+        server.Start();
+        var options = new MailOptions { TimeoutSeconds = 10, AllowCleartext = true, PoolHealthTimeoutSeconds = 2 };
+        var monitor = new Mock<IOptionsMonitor<MailOptions>>();
+        monitor.Setup(m => m.CurrentValue).Returns(options);
+        var source = new ReleaseCapturingSource(new ImapConnectionFactory(
+            monitor.Object, Mock.Of<IMailHtmlSanitizer>(), NullLogger<ImapConnectionFactory>.Instance));
+        await using var pool = new ImapConnectionPool(
+            source, new CredentialFingerprint(), monitor.Object, new MutableTimeProvider(), NullLogger<ImapConnectionPool>.Instance);
+        var alice = PoolTestHost.Connection(server, "alice@weesky.be", "hunter2");
+
+        Assert.True((await pool.BorrowAsync(alice, Alice, CancellationToken.None)).IsSuccess);
+        Assert.True(source.Client!.IsConnected);
+        await source.Release!(source.Client, healthy: false);
+
+        Assert.Equal(0, pool.Snapshot().Idle);
+        await AssertNoLogoutAsync(server);
+
+        await using (var s = (await pool.BorrowAsync(alice, Alice, CancellationToken.None)).Value) { }
+        Assert.Equal(2, server.Logins);
+    }
+
+    // A tagged NO/BAD leaves the protocol in phase: a refusal costs no reconnection.
+    [Fact]
+    public async Task Return_AfterACommandRefusal_KeepsTheSocket()
     {
         using var server = new PoolImapServer();
         server.Start();
@@ -182,11 +212,24 @@ public sealed class ImapConnectionPoolHealthTests
         await using (var session = (await pool.BorrowAsync(alice, Alice, CancellationToken.None)).Value)
             Assert.True((await session.SetSubscriptionAsync("INBOX", true, CancellationToken.None)).IsFailure);
 
-        Assert.Equal(0, pool.Snapshot().Idle);
-        await AssertNoLogoutAsync(server);
-
+        Assert.Equal(1, pool.Snapshot().Idle);
         await using (var s = (await pool.BorrowAsync(alice, Alice, CancellationToken.None)).Value) { }
-        Assert.Equal(2, server.Logins);
+        Assert.Equal(1, server.Logins);
+    }
+
+    private sealed class ReleaseCapturingSource(IImapClientSource inner) : IImapClientSource
+    {
+        public ImapClient? Client { get; private set; }
+        public ImapClientRelease? Release { get; private set; }
+
+        public Task<Result<ImapClient>> OpenClientAsync(MailAccountConnection connection, CancellationToken cancellationToken) =>
+            inner.OpenClientAsync(connection, cancellationToken);
+
+        public IImapSession CreateSession(ImapClient client, ImapClientRelease release)
+        {
+            (Client, Release) = (client, release);
+            return inner.CreateSession(client, release);
+        }
     }
 
     // The counterpart: a clean sentinel — the server answered, the socket is fine — is reused.

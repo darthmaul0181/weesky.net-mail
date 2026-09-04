@@ -86,7 +86,9 @@ internal sealed class ImapSession : IImapSession
         {
             if (sentinel?.Invoke(ex) is { } known) return Result.Failure<T>(known);
 
-            Tainted = true;
+            // Verified on MailKit 4.17: ImapCommandException is thrown only after the tagged NO/BAD was
+            // read in full (ThrowIfNotOk), so the socket is in sync and a refusal costs no reconnection.
+            if (ex is not ImapCommandException) Tainted = true;
             logFailure(ex);
             return Result.Failure<T>(failureMessage);
         }
@@ -115,7 +117,7 @@ internal sealed class ImapSession : IImapSession
         {
             if (sentinel?.Invoke(ex) is { } known) return Result.Failure(known);
 
-            Tainted = true;
+            if (ex is not ImapCommandException) Tainted = true;
             logFailure(ex);
             return Result.Failure(failureMessage);
         }
