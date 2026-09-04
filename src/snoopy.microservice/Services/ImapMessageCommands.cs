@@ -237,8 +237,8 @@ internal sealed class ImapMessageCommands(
             foreach (var group in wanted.GroupBy(m => m.Folder))
             {
                 await group.Key.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
-                var items = await group.Key.FetchAsync(
-                    group.Select(m => m.Uid).ToList(), SummaryItems, SummaryHeaders, cancellationToken);
+                var items = await FetchSummariesAsync(
+                    group.Key, group.Select(m => m.Uid).ToList(), cancellationToken);
                 foreach (var item in items)
                 {
                     byKey[(group.Key.FullName, item.UniqueId.Id)] = MailMessageMapper.FillSummary(new MailSearchResult
@@ -346,7 +346,7 @@ internal sealed class ImapMessageCommands(
 
                 // One FETCH for every member of the page's threads — expanding a row client-side costs
                 // nothing, and a page of 50 threads stays one round trip like a flat page of 50 rows.
-                var fetched = await folder.FetchAsync(uids, SummaryItems, SummaryHeaders, cancellationToken);
+                var fetched = await FetchSummariesAsync(folder, uids, cancellationToken);
                 var byUid = fetched.ToDictionary(item => item.UniqueId);
 
                 foreach (var thread in wantedThreads)
@@ -370,7 +370,7 @@ internal sealed class ImapMessageCommands(
                 var wanted = MailPaging.PageOf(sorted, page, pageSize).ToList();
                 if (wanted.Count == 0) return Result.Success(result);
 
-                var sortedItems = await folder.FetchAsync(wanted, SummaryItems, SummaryHeaders, cancellationToken);
+                var sortedItems = await FetchSummariesAsync(folder, wanted, cancellationToken);
                 foreach (var item in MailPaging.InOrderOf(sortedItems, wanted, item => item.UniqueId))
                 {
                     result.Messages.Add(ToSummary(item));
@@ -382,7 +382,7 @@ internal sealed class ImapMessageCommands(
             var (start, end) = MailPaging.ComputePageWindow(folder.Count, page, pageSize);
             if (start < 0) return Result.Success(result);
 
-            var items = await folder.FetchAsync(start, end, SummaryItems, SummaryHeaders, cancellationToken);
+            var items = await FetchSummariesAsync(folder, start, end, cancellationToken);
 
             // The fetch runs oldest-first; the list is newest-first.
             foreach (var item in items.Reverse())
@@ -407,6 +407,34 @@ internal sealed class ImapMessageCommands(
     /// same round trip, not a second request, and the price of showing priority in the list at all.
     /// </summary>
     private static readonly string[] SummaryHeaders = MailPriorityReader.Fields;
+
+    private Task<IList<IMessageSummary>> FetchSummariesAsync(
+        IMailFolder folder, IList<UniqueId> uids, CancellationToken cancellationToken) =>
+        WithPreviewFallbackAsync(folder, items => folder.FetchAsync(uids, items, SummaryHeaders, cancellationToken));
+
+    private Task<IList<IMessageSummary>> FetchSummariesAsync(
+        IMailFolder folder, int start, int end, CancellationToken cancellationToken) =>
+        WithPreviewFallbackAsync(folder, items => folder.FetchAsync(start, end, items, SummaryHeaders, cancellationToken));
+
+    /// <summary>
+    /// A server without PREVIEW (RFC 8970) gets its previews emulated by MailKit as partial body
+    /// fetches, which InterMail (Proximus) answers NO to for some messages. The tagged NO leaves the
+    /// protocol in phase, so the page is fetched again without previews rather than not at all.
+    /// </summary>
+    private async Task<IList<IMessageSummary>> WithPreviewFallbackAsync(
+        IMailFolder folder, Func<MessageSummaryItems, Task<IList<IMessageSummary>>> fetch)
+    {
+        try
+        {
+            return await fetch(SummaryItems);
+        }
+        catch (ImapCommandException ex)
+        {
+            logger.LogWarning("Preview fetch refused in {Folder} ({Reason}); listing without previews",
+                folder.FullName, ex.ResponseText);
+            return await fetch(SummaryItems & ~MessageSummaryItems.PreviewText);
+        }
+    }
 
     private static MailMessageSummary ToSummary(IMessageSummary item) =>
         MailMessageMapper.FillSummary(new MailMessageSummary(), item);
