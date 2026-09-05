@@ -398,6 +398,164 @@
             <response code="401">Not authenticated</response>
             <response code="403">Not an administrator</response>
         </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.CalendarEventsController">
+            <summary>The events of every calendar of the user — one route prefix, an explicit
+            <c>[Route]</c> because <c>[controller]</c> would give it "CalendarEvents", not "Calendar/Events"
+            (the same reason the four <c>api/Mail</c> controllers each carry one).</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.#ctor(weesky.Snoopy.Microservice.Repositories.ICalendarEventStore)">
+            <summary>The events of every calendar of the user — one route prefix, an explicit
+            <c>[Route]</c> because <c>[controller]</c> would give it "CalendarEvents", not "Calendar/Events"
+            (the same reason the four <c>api/Mail</c> controllers each carry one).</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.Window(System.DateTimeOffset,System.DateTimeOffset,System.String,System.Threading.CancellationToken)">
+            <summary>Every occurrence across every calendar of the user inside <c>[from, to[</c>.</summary>
+            <param name="from">the window's lower bound, an instant (<c>…Z</c> or with an offset)</param>
+            <param name="to">the window's upper bound, an instant, exclusive</param>
+            <param name="tz">the zone a floating instance is placed in</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The occurrences</response>
+            <response code="400"><c>from</c> not before <c>to</c>, a window over five years, an unknown time zone, or a window holding too many occurrences</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.Search(System.String,System.Threading.CancellationToken)">
+            <summary>Fonctionnalité 5: one result per event, at the occurrence that comes next.</summary>
+            <param name="q">the text to search summary, location and description for</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The occurrences</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.Get(System.Guid,System.Threading.CancellationToken)">
+            <summary>One resource as the editor opens it.</summary>
+            <param name="id">the event's identifier</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The event</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such event for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.Create(weesky.Snoopy.Microservice.Models.Calendar.EventRequest,System.Threading.CancellationToken)">
+            <summary>Creates an event and answers its id.</summary>
+            <param name="request">the event to create</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="201">Created</response>
+            <response code="400">A validation refusal, or the calendar's cap reached</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such calendar for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.Update(System.Guid,weesky.Snoopy.Microservice.Models.Calendar.EventUpdateRequest,System.Threading.CancellationToken)">
+            <summary>
+            Replaces the event — the whole series, one instance, or one instance and every later one —
+            refused when the resource moved since <paramref name="request"/>'s <c>ifHash</c> was read.
+            </summary>
+            <param name="id">the event's identifier</param>
+            <param name="request">the scope, the instance it targets, and the replacement fields</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="400">A validation refusal, a missing <c>ifHash</c>, or a narrow scope without an instance id</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such event for this user</response>
+            <response code="409">The event changed since <c>ifHash</c> was read; reload and retry</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.Delete(System.Guid,weesky.Snoopy.Microservice.Models.Calendar.EditScope,System.String,System.Threading.CancellationToken)">
+            <summary>Deletes the whole series, one instance, or one instance and every later one.</summary>
+            <param name="id">the event's identifier</param>
+            <param name="scope">how much of the series to remove</param>
+            <param name="instanceId">the targeted instance, required for <see cref="F:weesky.Snoopy.Microservice.Models.Calendar.EditScope.This"/> and
+            <see cref="F:weesky.Snoopy.Microservice.Models.Calendar.EditScope.ThisAndFollowing"/></param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Deleted (or nothing changed: the narrow scope named nothing to remove)</response>
+            <response code="400">A narrow scope without an instance id</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such event for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarEventsController.MapFailure(System.String)">
+            <summary>The one mapping every write door of this controller shares: a missing row is 404, a
+            resource that moved under an <c>ifHash</c> is 409, anything else is a rejected body.</summary>
+        </member>
+        <member name="T:weesky.Snoopy.Microservice.Controllers.CalendarsController">
+            <summary>The user's calendars — webmail data, not a DAV collection. No IMAP session and no
+            credentials cookie: every action is a database read or write, the shape ContactsController is.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.#ctor(weesky.Snoopy.Microservice.Repositories.ICalendarStore,weesky.Snoopy.Microservice.Repositories.ICalendarEventStore)">
+            <summary>The user's calendars — webmail data, not a DAV collection. No IMAP session and no
+            credentials cookie: every action is a database read or write, the shape ContactsController is.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.List(System.String,System.Threading.CancellationToken)">
+            <summary>Every calendar of the user, the <c>default</c> one created with <paramref name="tz"/>
+            the first time it is asked for (décision 6).</summary>
+            <param name="tz">the browser's IANA time zone</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The calendars</response>
+            <response code="400">Unknown time zone</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.Create(System.String,weesky.Snoopy.Microservice.Models.Calendar.CalendarRequest,System.Threading.CancellationToken)">
+            <summary>Creates a calendar, its colour the palette's next and its rank the last.</summary>
+            <param name="tz">the new calendar's own time zone</param>
+            <param name="request">the calendar to create</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="201">Created</response>
+            <response code="400">No display name, an unknown time zone, an invalid colour, or the cap reached</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.Update(System.Guid,weesky.Snoopy.Microservice.Models.Calendar.CalendarRequest,System.Threading.CancellationToken)">
+            <summary>Replaces the name, the description, the colour and the rank.</summary>
+            <param name="id">the calendar's identifier</param>
+            <param name="request">the full replacement</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="400">No display name, or an invalid colour</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such calendar for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.SetVisible(System.Guid,weesky.Snoopy.Microservice.Models.Calendar.CalendarVisibleRequest,System.Threading.CancellationToken)">
+            <summary>The sidebar checkbox alone, never projected to DAV (décision 2).</summary>
+            <param name="id">the calendar's identifier</param>
+            <param name="request">the new visibility</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Saved</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such calendar for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.Delete(System.Guid,System.Threading.CancellationToken)">
+            <summary>Removes the calendar and archives every event it held. The <c>default</c> calendar
+            is refused: a user with none has nowhere left to write.</summary>
+            <param name="id">the calendar's identifier</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Deleted</response>
+            <response code="400">The default calendar cannot be deleted</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such calendar for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.Export(System.Guid,System.Threading.CancellationToken)">
+            <summary>The whole collection as one VCALENDAR — its own events, its VTIMEZONEs written once
+            each, and its name and colour.</summary>
+            <param name="id">the calendar's identifier</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The file</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such calendar for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.Import(System.Guid,Microsoft.AspNetCore.Http.IFormFile,System.Threading.CancellationToken)">
+            <summary>
+            Merges a VCALENDAR file into the collection, grouped by UID: an existing one is replaced
+            whole, VTODO and VJOURNAL are counted and never stored (fonctionnalité 6).
+            </summary>
+            <param name="id">the calendar's identifier</param>
+            <param name="file">the .ics file</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The report</response>
+            <response code="400">No file, or a media type no calendar client writes</response>
+            <response code="401">Not authenticated</response>
+            <response code="404">No such calendar for this user</response>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.MapFailure(System.String)">
+            <summary>The one mapping every write door of this controller shares: a missing row is 404,
+            anything else — a bad colour, the default calendar, the cap — is a rejected body.</summary>
+        </member>
+        <member name="M:weesky.Snoopy.Microservice.Controllers.CalendarsController.Slug(System.String)">
+            <summary>Letters, digits and dashes, lowercased; <c>"calendar"</c> when nothing survives.</summary>
+        </member>
         <member name="T:weesky.Snoopy.Microservice.Controllers.CapabilitiesController">
             <summary>
             What the frontend must gate on, in one authenticated call: what the platform wires versus what

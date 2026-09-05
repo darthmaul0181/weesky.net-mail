@@ -211,6 +211,58 @@ export const api = {
 
   exportContacts: () => requestBlob('/api/Contacts/Export'),
 
+  // tz is required: it is the zone the default calendar is created with the first time it is
+  // asked for, and the backend needs it on every call to answer that lazily.
+  getCalendars: (tz) =>
+    request('GET', `/api/Calendars?tz=${encodeURIComponent(tz)}`),
+
+  // tz here is the new calendar's own zone, asked once at creation and never again.
+  createCalendar: (calendar, tz) =>
+    request('POST', `/api/Calendars?tz=${encodeURIComponent(tz)}`, calendar),
+
+  updateCalendar: (id, calendar) =>
+    request('PUT', `/api/Calendars/${id}`, calendar),
+
+  // Its own route: the sidebar checkbox is a display state, never projected through a whole-
+  // calendar PUT.
+  setCalendarVisible: (id, visible) =>
+    request('PUT', `/api/Calendars/${id}/Visible`, { visible }),
+
+  deleteCalendar: (id) =>
+    request('DELETE', `/api/Calendars/${id}`),
+
+  exportCalendar: (id) => requestBlob(`/api/Calendars/${id}/Export`),
+
+  importCalendar: (id, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request('POST', `/api/Calendars/${id}/Import`, form)
+  },
+
+  // from/to are ISO instants (…Z); tz only decides which day a floating instance falls on.
+  getOccurrences: (from, to, tz) =>
+    request('GET',
+      `/api/Calendar/Events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&tz=${encodeURIComponent(tz)}`),
+
+  searchEvents: (q) =>
+    request('GET', `/api/Calendar/Events/Search?q=${encodeURIComponent(q)}`),
+
+  getEvent: (id) =>
+    request('GET', `/api/Calendar/Events/${id}`),
+
+  createEvent: (event) =>
+    request('POST', '/api/Calendar/Events', event),
+
+  updateEvent: (id, event) =>
+    request('PUT', `/api/Calendar/Events/${id}`, event),
+
+  // scope/instanceId travel in the query string, the same rule the PUT of a narrow edit follows.
+  deleteEvent: (id, scope, instanceId) => {
+    const params = new URLSearchParams({ scope })
+    if (instanceId) params.set('instanceId', instanceId)
+    return request('DELETE', `/api/Calendar/Events/${id}?${params}`)
+  },
+
   getContactGroups: () => request('GET', '/api/ContactGroups'),
 
   createContactGroup: (name) => request('POST', '/api/ContactGroups', { name }),

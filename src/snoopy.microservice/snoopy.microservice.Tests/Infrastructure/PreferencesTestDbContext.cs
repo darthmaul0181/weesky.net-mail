@@ -5,7 +5,7 @@ using weesky.Snoopy.Microservice.Data.Preferences;
 
 namespace weesky.Snoopy.Microservice.Tests.Infrastructure;
 
-internal sealed class PreferencesTestDbContext : PreferencesDbContext
+internal class PreferencesTestDbContext : PreferencesDbContext
 {
     // The InMemory provider keys its named databases by internal service provider, not by name
     // alone: two DbContexts built from differently-configured options (here, ConfigureWarnings

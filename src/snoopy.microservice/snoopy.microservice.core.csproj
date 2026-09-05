@@ -59,6 +59,7 @@
     <PackageReference Include="CSharpFunctionalExtensions" Version="2.27.1" />
     <PackageReference Include="FolkerKinzel.VCards" Version="8.2.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.1.949-beta" />
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
