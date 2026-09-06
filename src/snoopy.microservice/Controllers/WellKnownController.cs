@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 

@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
@@ -115,7 +115,7 @@ internal sealed class DavTestServer : IAsyncDisposable
     internal Task<DavTestResponse> SendUnauthenticated(string method, string path, string? body = null) =>
         SendAsync(method, path, body, headers: new Dictionary<string, string>
         {
-            [TestCardDavAuthenticationHandler.NoCredentialsHeader] = "1",
+            [TestDavAuthenticationHandler.NoCredentialsHeader] = "1",
         });
 
     public async ValueTask DisposeAsync()
@@ -144,15 +144,15 @@ internal sealed class DavTestServer : IAsyncDisposable
                 typeof(CardDavController), typeof(WellKnownController)));
         });
 
-        services.AddAuthentication(CardDavAuthenticationDefaults.AuthenticationScheme)
-            .AddScheme<AuthenticationSchemeOptions, TestCardDavAuthenticationHandler>(
-                CardDavAuthenticationDefaults.AuthenticationScheme, _ => { });
+        services.AddAuthentication(DavAuthenticationDefaults.AuthenticationScheme)
+            .AddScheme<AuthenticationSchemeOptions, TestDavAuthenticationHandler>(
+                DavAuthenticationDefaults.AuthenticationScheme, _ => { });
 
         // The same two-line policy SecurityConfiguration registers under this name: the CardDav
         // scheme alone, an authenticated user, nothing else.
         services.AddAuthorization(options => options.AddPolicy(
-            CardDavAuthenticationDefaults.PolicyName, policy => policy
-                .AddAuthenticationSchemes(CardDavAuthenticationDefaults.AuthenticationScheme)
+            DavAuthenticationDefaults.PolicyName, policy => policy
+                .AddAuthenticationSchemes(DavAuthenticationDefaults.AuthenticationScheme)
                 .RequireAuthenticatedUser()));
 
         services.AddSingleton(user);

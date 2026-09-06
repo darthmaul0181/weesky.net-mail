@@ -2,9 +2,10 @@ using System.Text;
 using FolkerKinzel.VCards;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Services.Contacts;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
@@ -25,7 +26,7 @@ internal sealed class DavContactWriter(
         }
         // Before the DbUpdateException arm, which it would otherwise be swallowed by: EF wraps the
         // provider's 1205 inside one, and replaying a lock wait would only wait again.
-        catch (Exception e) when (DavOutcomeTranslator.IsTransient(e))
+        catch (Exception e) when (CardDavOutcomeTranslator.IsTransient(e))
         {
             logger.LogWarning(e,
                 "PUT {DavName} for {UserId} lost a lock race; answering busy", davName, userId);
@@ -109,7 +110,7 @@ internal sealed class DavContactWriter(
                 return new DavWriteOutcome(DavWriteStatus.Deleted, null, null, rank);
             }, outcome => outcome.Status is DavWriteStatus.Deleted, cancellationToken);
         }
-        catch (Exception e) when (DavOutcomeTranslator.IsTransient(e))
+        catch (Exception e) when (CardDavOutcomeTranslator.IsTransient(e))
         {
             logger.LogWarning(e,
                 "DELETE {DavName} for {UserId} lost a lock race; answering busy", davName, userId);
@@ -142,7 +143,7 @@ internal sealed class DavContactWriter(
             logger.LogInformation("DELETE of the book for {UserId} buried {Count} cards", userId, buried);
             return Emptied;
         }
-        catch (Exception e) when (DavOutcomeTranslator.IsTransient(e))
+        catch (Exception e) when (CardDavOutcomeTranslator.IsTransient(e))
         {
             logger.LogWarning(e,
                 "DELETE of the book for {UserId} lost a lock race; answering busy", userId);
@@ -182,7 +183,7 @@ internal sealed class DavContactWriter(
                 ReplacedAt = DateTime.UtcNow
             }, cancellationToken);
         }
-        catch (Exception e) when (DavOutcomeTranslator.IsTransient(e))
+        catch (Exception e) when (CardDavOutcomeTranslator.IsTransient(e))
         {
             // The archive is a courtesy beside a refusal already decided, and this insert is the
             // one write on the 412 path: a lock wait here would turn a correct 412 into the 500 a
@@ -427,7 +428,7 @@ internal sealed class DavContactWriter(
     /// STRONG comparison, shared with the edge through <see cref="EntityTagMatcher"/>.</summary>
     private static bool Holds(string ifMatch, Contact? row) =>
         row is { VCardRaw: not null } && row.CardHash.Length > 0
-        && EntityTagMatcher.Match(ifMatch, DavProperties.EntityTag(row.CardHash));
+        && EntityTagMatcher.Match(ifMatch, CardDavProperties.EntityTag(row.CardHash));
 
     /// <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>
     private async Task<bool> ReloadAsync(Contact row, CancellationToken cancellationToken)
@@ -452,7 +453,7 @@ internal sealed class DavContactWriter(
     /// </summary>
     private static string? EtagOf(string cardHash, string stored, string received) =>
         string.Equals(stored, received, StringComparison.Ordinal)
-            ? DavProperties.EntityTag(cardHash)
+            ? CardDavProperties.EntityTag(cardHash)
             : null;
 
     private static DavWriteOutcome Refused(DavWriteStatus status) => new(status, null, null, 0);

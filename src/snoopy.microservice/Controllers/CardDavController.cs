@@ -4,11 +4,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Primitives;
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
@@ -20,7 +22,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 /// API explorer: Swashbuckle has no OpenAPI operation type for a PROPFIND and throws at scan time.
 /// </summary>
 [Route("dav")]
-[Authorize(Policy = CardDavAuthenticationDefaults.PolicyName)]
+[Authorize(Policy = DavAuthenticationDefaults.PolicyName)]
 [ApiExplorerSettings(IgnoreApi = true)]
 [NoFormBinding]
 public sealed class CardDavController(
@@ -135,9 +137,9 @@ public sealed class CardDavController(
         {
             if (await FindCardOr404Async(davName, cancellationToken) is not { } card) return;
 
-            var entityTag = DavProperties.EntityTag(card);
+            var entityTag = CardDavProperties.EntityTag(card);
             Response.Headers.ETag = entityTag;
-            Response.Headers.LastModified = DavProperties.HttpDate(card.UpdatedAt);
+            Response.Headers.LastModified = CardDavProperties.HttpDate(card.UpdatedAt);
             DavHeaders.ApplyDav(Response);
 
             if (EntityTagMatcher.NoneMatch(Request.Headers.IfNoneMatch, entityTag))
@@ -223,7 +225,7 @@ public sealed class CardDavController(
             var body = await ReadCardBodyAsync(cancellationToken);
 
             var card = await contacts.FindAsync(user.WebmailUid, davName, cancellationToken);
-            var entityTag = card is null ? null : DavProperties.EntityTag(card);
+            var entityTag = card is null ? null : CardDavProperties.EntityTag(card);
 
             if (RefusedByPreconditions(entityTag))
             {
@@ -276,7 +278,7 @@ public sealed class CardDavController(
             // same absence: what the protocol never served, it cannot be asked to delete.
             if (await FindCardOr404Async(davName, cancellationToken) is not { } card) return;
 
-            if (RefusedByPreconditions(DavProperties.EntityTag(card)))
+            if (RefusedByPreconditions(CardDavProperties.EntityTag(card)))
             {
                 Response.StatusCode = StatusCodes.Status412PreconditionFailed;
                 return;
@@ -704,14 +706,14 @@ public sealed class CardDavController(
     /// <summary>
     /// Hands the outcome to the one translator every write answer goes through, and gives back the
     /// condition it named for the log line. Nothing here decides a status: a second mapping beside
-    /// <see cref="DavOutcomeTranslator"/> is exactly how a branch ends up missing and a client ends
+    /// <see cref="CardDavOutcomeTranslator"/> is exactly how a branch ends up missing and a client ends
     /// up retrying a 500 on the same card for ever.
     /// </summary>
     private async Task<string?> AnswerOutcomeAsync(
         DavWriteOutcome outcome, CancellationToken cancellationToken)
     {
-        await DavOutcomeTranslator.WriteAsync(Response, outcome, cancellationToken, logger);
-        return DavOutcomeTranslator.ConditionOf(outcome.Status)?.LocalName;
+        await CardDavOutcomeTranslator.WriteAsync(Response, outcome, cancellationToken, logger);
+        return CardDavOutcomeTranslator.ConditionOf(outcome.Status)?.LocalName;
     }
 
     /// <summary>
@@ -791,7 +793,7 @@ public sealed class CardDavController(
     private static async Task WriteResourceAsync(MultiStatusWriter writer, string href,
         DavPropertyRequest request, DavResourceContext resource, CancellationToken cancellationToken)
     {
-        var (found, missing) = DavProperties.Resolve(request, resource);
+        var (found, missing) = CardDavProperties.Resolve(request, resource);
         await writer.WriteResourceAsync(href, found, missing, cancellationToken);
     }
 

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;

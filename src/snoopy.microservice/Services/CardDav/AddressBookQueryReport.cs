@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Services.CardDav;
 
@@ -65,7 +66,7 @@ internal static class AddressBookQueryReport
 
             var context = new DavResourceContext(
                 DavResourceKind.Card, userId, principalAddress, candidate, null);
-            var (found, missing) = DavProperties.Resolve(request, context);
+            var (found, missing) = CardDavProperties.Resolve(request, context);
             if (addressData is not null)
                 found.Add(AddressDataFilter.Element(candidate.VCardRaw, addressData));
             await writer.WriteResourceAsync(DavPaths.Card(userId, candidate.DavName), found, missing,

@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Moq;
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;

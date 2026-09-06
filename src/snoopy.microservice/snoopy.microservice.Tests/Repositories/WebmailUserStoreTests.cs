@@ -1,4 +1,4 @@
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;

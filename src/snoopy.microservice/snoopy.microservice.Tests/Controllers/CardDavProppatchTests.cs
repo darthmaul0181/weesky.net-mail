@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
