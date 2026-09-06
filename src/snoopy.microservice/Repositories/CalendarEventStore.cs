@@ -117,7 +117,8 @@ internal sealed class CalendarEventStore(
 
         return new EventDetail(
             row.Id, row.CalendarId, row.Uid, row.IcsHash, IcsReader.Read(parsed, row.CalendarId),
-            IcsDocument.MasterOf(parsed)?.RecurrenceRule?.ToString(), attendees, row.Status);
+            IcsDocument.MasterOf(parsed)?.RecurrenceRule?.ToString(), attendees, row.Status,
+            IcsReader.RepeatIsExact(parsed), IcsReader.ForeignAlarms(parsed));
     }
 
     public async Task<Result<Guid>> CreateAsync(

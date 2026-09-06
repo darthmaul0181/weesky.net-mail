@@ -260,6 +260,66 @@ public sealed class CalendarsControllerTests
     }
 
     [Fact]
+    public async Task ImportAsNew_CreatesThenImports()
+    {
+        var id = Guid.NewGuid();
+        _store.Setup(s => s.CreateAsync(Uid, It.IsAny<CalendarWrite>(), Zone, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Result.Success(id));
+        _store.Setup(s => s.ListAsync(Uid, It.IsAny<CancellationToken>()))
+              .ReturnsAsync([View(id: id, name: "Holidays", isDefault: false)]);
+        _events.Setup(e => e.ImportAsync(Uid, id, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new CalendarImportOutcome(3, 0, 0, 0, 0, []));
+
+        var result = await CreateController().ImportAsNew(
+            Zone, "Holidays", "#3b82c4", IcsFile("BEGIN:VCALENDAR"), CancellationToken.None);
+
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(201, obj.StatusCode);
+        var body = Assert.IsType<CalendarImportResponse>(obj.Value);
+        Assert.Equal(id, body.Calendar.Id);
+        Assert.Equal("Holidays", body.Calendar.DisplayName);
+        Assert.Equal(3, body.Report.Created);
+    }
+
+    [Fact]
+    public async Task ImportAsNew_RefusesAtTheCapWithoutReadingTheFile()
+    {
+        _store.Setup(s => s.CreateAsync(Uid, It.IsAny<CalendarWrite>(), Zone, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Result.Failure<Guid>(CalendarStore.CapReached));
+
+        var result = await CreateController().ImportAsNew(
+            Zone, "Holidays", null, IcsFile("BEGIN:VCALENDAR"), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _events.Verify(e => e.ImportAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ImportAsNew_NeedsADisplayName()
+    {
+        var result = await CreateController().ImportAsNew(
+            Zone, "  ", null, IcsFile("BEGIN:VCALENDAR"), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        _store.Verify(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<CalendarWrite>(), It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ImportAsNew_RefusesAnUnknownZoneAndAWrongMediaType()
+    {
+        Assert.IsType<BadRequestObjectResult>((await CreateController().ImportAsNew(
+            "Nowhere/Land", "Holidays", null, IcsFile("BEGIN:VCALENDAR"), CancellationToken.None)).Result);
+
+        Assert.IsType<BadRequestObjectResult>((await CreateController().ImportAsNew(
+            Zone, "Holidays", null, IcsFile("BEGIN:VCALENDAR", "text/plain"), CancellationToken.None)).Result);
+
+        _store.Verify(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<CalendarWrite>(), It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Export_WhenCalendarIsNotOwned_Returns404()
     {
         _store.Setup(s => s.ListAsync(Uid, It.IsAny<CancellationToken>())).ReturnsAsync([]);

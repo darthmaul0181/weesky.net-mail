@@ -22,7 +22,6 @@
     "label": "Navigation",
     "open": "Open navigation"
   },
-  "comingSoon": "This module is coming soon.",
   "deleteConfirm": {
     "title": "Confirm deletion",
     "message": "Delete <name/>? This action cannot be undone."

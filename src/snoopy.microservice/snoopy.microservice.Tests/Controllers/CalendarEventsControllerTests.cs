@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using weesky.Snoopy.Microservice.Controllers;
+using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -57,7 +58,8 @@ public sealed class CalendarEventsControllerTests
     };
 
     private static EventDetail Detail(Guid? id = null, Guid? calendarId = null) =>
-        new(id ?? Guid.NewGuid(), calendarId ?? Guid.NewGuid(), "uid-1", "hash-1", MinimalWrite(), null, [], null);
+        new(id ?? Guid.NewGuid(), calendarId ?? Guid.NewGuid(), "uid-1", "hash-1", MinimalWrite(), null, [], null,
+            true, []);
 
     private static EventWrite MinimalWrite() =>
         new(Guid.NewGuid(), "Standup", null, null, false,
@@ -202,6 +204,51 @@ public sealed class CalendarEventsControllerTests
         var result = await CreateController().Create(ValidRequest(), CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    /// <summary>A creation has no stored rule to leave alone, so the flag can only be a stale one
+    /// carried over from an edit: refused rather than silently making a one-off event.</summary>
+    [Fact]
+    public async Task Create_WithKeepRepeat_Returns400()
+    {
+        var request = ValidRequest();
+        request.KeepRepeat = true;
+        request.Repeat = new RecurrenceRequest { Frequency = "WEEKLY", Interval = 1 };
+
+        var result = await CreateController().Create(request, CancellationToken.None);
+
+        var refused = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(CalendarEventsController.KeepRepeatNeedsAnEvent,
+            Assert.IsAssignableFrom<ResultEnveloppe>(refused.Value).Message);
+        _store.Verify(s => s.CreateAsync(It.IsAny<Guid>(), It.IsAny<EventWrite>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_WithKeepRepeatAndARepeat_Returns400()
+    {
+        var request = ValidUpdateRequest();
+        request.KeepRepeat = true;
+        request.Repeat = new RecurrenceRequest { Frequency = "WEEKLY", Interval = 1 };
+
+        var result = await CreateController().Update(Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _store.Verify(s => s.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<EditScope>(), It.IsAny<string>(),
+            It.IsAny<EventWrite>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>The shape the editor actually sends for a rule it cannot state: the flag alone.</summary>
+    [Fact]
+    public async Task Update_WithKeepRepeatAndNoRepeat_IsAccepted()
+    {
+        _store.Setup(s => s.UpdateAsync(Uid, It.IsAny<Guid>(), EditScope.All, null,
+                  It.Is<EventWrite>(w => w.KeepRepeat && w.Repeat == null), "abc123", It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Result.Success());
+        var request = ValidUpdateRequest();
+        request.KeepRepeat = true;
+
+        Assert.IsType<NoContentResult>(await CreateController().Update(Guid.NewGuid(), request, CancellationToken.None));
     }
 
     [Fact]

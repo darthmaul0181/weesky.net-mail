@@ -64,6 +64,9 @@ export interface EventWrite {
   availability: Availability
   visibility: Visibility
   url?: string
+  /** The editor never showed this event's rule, so it must not decide it: the stored RRULE stays
+      as it is and `repeat` is ignored. Set it whenever `EventDetail.repeatIsExact` is false. */
+  keepRepeat?: boolean
 }
 
 /** One ORGANIZER or ATTENDEE line, carrying the RECURRENCE-ID of the component it was written on
@@ -89,6 +92,21 @@ export interface EventDetail {
   recurrenceText?: string
   attendees: AttendeeProjection[]
   status?: string
+  /** False when the editor's own repeat controls would narrow the stored rule — the screen shows
+      the rule as text and saves with `keepRepeat` rather than letting the picker rewrite it. */
+  repeatIsExact: boolean
+  /** The alarms the bell cannot show, one sentence each ("EMAIL, 1 day before"). Kept through a
+      save; listed so the editor can say they are there. */
+  foreignAlarms: string[]
+}
+
+/** Body of `PUT /api/Calendar/Events/{id}`. `scope` says how far the edit reaches, `instanceId`
+    names the occurrence for `This`/`ThisAndFollowing`, and `ifHash` is the `icsHash` the editor
+    read — a save can never silently overwrite an event that moved since it was opened. */
+export interface EventUpdateBody extends EventWrite {
+  scope: EditScope
+  instanceId?: string
+  ifHash: string
 }
 
 /**
@@ -150,4 +168,11 @@ export interface CalendarImportReport {
   failed: number
   totalErrors: number
   errors: CalendarImportError[]
+}
+
+/** `POST /api/Calendars/Import` — the calendar the file created, so the sidebar can show it
+    without a second round-trip, and what the pouring did. */
+export interface CalendarImportOutcome {
+  calendar: Calendar
+  report: CalendarImportReport
 }

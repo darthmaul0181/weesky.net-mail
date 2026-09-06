@@ -18,6 +18,10 @@ public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBas
 
     internal static readonly string InstanceIdRequired = "instanceId is required for this scope";
 
+    /// <summary>Creation is the one door where <c>keepRepeat</c> cannot mean anything: there is no
+    /// stored RRULE to leave alone, so accepting it would drop the rule the user chose in silence.</summary>
+    internal static readonly string KeepRepeatNeedsAnEvent = "keepRepeat needs an existing event";
+
     /// <summary>Every occurrence across every calendar of the user inside <c>[from, to[</c>.</summary>
     /// <param name="from">the window's lower bound, an instant (<c>…Z</c> or with an offset)</param>
     /// <param name="to">the window's upper bound, an instant, exclusive</param>
@@ -84,7 +88,7 @@ public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBas
     /// <param name="request">the event to create</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="201">Created</response>
-    /// <response code="400">A validation refusal, or the calendar's cap reached</response>
+    /// <response code="400">A validation refusal, a <c>keepRepeat</c> that has no event to keep, or the calendar's cap reached</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">No such calendar for this user</response>
     [HttpPost]
@@ -94,6 +98,8 @@ public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBas
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CreatedId>> Create(EventRequest request, CancellationToken cancellationToken)
     {
+        if (request is { KeepRepeat: true }) return BadRequestEnveloppe(KeepRepeatNeedsAnEvent);
+
         var validated = EventRequestValidator.Validate(request);
         if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 

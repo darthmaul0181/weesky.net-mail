@@ -34,6 +34,10 @@ public class EventRequest
 
     public RecurrenceRequest? Repeat { get; set; }
 
+    /// <summary>The editor could not state this event's rule, so it never showed it: leave the
+    /// stored RRULE alone and ignore <see cref="Repeat"/>.</summary>
+    public bool KeepRepeat { get; set; }
+
     public List<int>? ReminderMinutesBefore { get; set; }
 
     public Availability Availability { get; set; } = Availability.Busy;

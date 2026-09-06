@@ -139,6 +139,34 @@ public sealed class EventRequestValidatorTests
         Assert.True(EventRequestValidator.Validate(request).IsSuccess);
     }
 
+    /// <summary>The two fields say opposite things about whether the editor showed the rule; one of
+    /// them is stale, and guessing which would drop a rule the user chose without saying so.</summary>
+    [Fact]
+    public void Validate_KeepRepeatWithARepeat_IsRefused()
+    {
+        var request = Dated();
+        request.KeepRepeat = true;
+        request.Repeat = new RecurrenceRequest { Frequency = "WEEKLY", Interval = 1 };
+
+        var result = EventRequestValidator.Validate(request);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(EventRequestValidator.KeepRepeatIsExclusive, result.Error);
+    }
+
+    [Fact]
+    public void Validate_KeepRepeatAlone_IsAcceptedAndCarriesNoRule()
+    {
+        var request = Dated();
+        request.KeepRepeat = true;
+
+        var result = EventRequestValidator.Validate(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.KeepRepeat);
+        Assert.Null(result.Value.Repeat);
+    }
+
     private static Func<EventRequest> Case(Action<EventRequest> tweak, bool allDay = false) => () =>
     {
         var request = allDay ? AllDay() : Dated();

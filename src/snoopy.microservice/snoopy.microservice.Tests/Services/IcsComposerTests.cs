@@ -1,3 +1,4 @@
+using Ical.Net;
 using Ical.Net.CalendarComponents;
 using Ical.Net.DataTypes;
 using weesky.Snoopy.Microservice.Models.Calendar;
@@ -353,6 +354,25 @@ public sealed class IcsComposerTests
         Assert.False(IcsComposer.SameContent(a, IcsDocument.TryLoad(Ics.FromPhone().Replace("LOCATION:Room 4", "LOCATION:Room 5"))!));
         Assert.Equal("Standup", IcsDocument.MasterOf(a)!.Summary);
         Assert.Contains("DTSTAMP", IcsDocument.Serialize(a));
+    }
+
+    /// <summary>A rule the editor cannot state stays exactly as the file spells it while the rest
+    /// of the event takes the editor's values.</summary>
+    [Fact]
+    public void KeepRepeat_LeavesARichRuleUntouched()
+    {
+        var parsed = IcsDocument.TryLoad(Ics.Rule("FREQ=YEARLY;BYMONTH=3,9;BYDAY=-1MO"))!;
+        var master = IcsDocument.MasterOf(parsed)!;
+        var write = IcsReader.Read(parsed, Guid.NewGuid()) with { KeepRepeat = true, Summary = "Renamed" };
+
+        IcsComposer.Apply(master, write, withRule: true);
+
+        var rule = master.RecurrenceRule!;
+        Assert.Equal(FrequencyType.Yearly, rule.Frequency);
+        Assert.Equal([3, 9], rule.ByMonth);
+        Assert.Equal(-1, Assert.Single(rule.ByDay).Offset);
+        Assert.Equal(DayOfWeek.Monday, rule.ByDay[0].DayOfWeek);
+        Assert.Equal("Renamed", master.Summary);
     }
 
     private static CalendarEvent Override(string ics) =>

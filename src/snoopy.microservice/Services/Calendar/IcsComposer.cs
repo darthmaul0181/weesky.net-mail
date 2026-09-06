@@ -164,15 +164,15 @@ internal static class IcsComposer
 
     internal static IEnumerable<CalDateTime> Dates(PeriodListWrapperBase? list) => list?.GetAllDates() ?? [];
 
-    /// <summary>The editor's values onto a component. The rule is applied to a master only: an
-    /// override never repeats.</summary>
+    /// <summary>The editor's values onto a component. The rule is applied to a master only — an
+    /// override never repeats — and only when the editor showed it (<c>KeepRepeat</c>).</summary>
     internal static void Apply(CalendarEvent evt, EventWrite w, bool withRule)
     {
         Text(evt, "SUMMARY", w.Summary);
         Text(evt, "LOCATION", w.Location);
         Text(evt, "DESCRIPTION", w.Description);
         PlaceDates(evt, w);
-        if (withRule) PlaceRule(evt, w.Repeat);
+        if (withRule && !w.KeepRepeat) PlaceRule(evt, w.Repeat);
         PlaceReminders(evt, w);
         PlaceAvailability(evt, w);
         PlaceUrl(evt, w.Url);
@@ -247,7 +247,9 @@ internal static class IcsComposer
         else evt.RecurrenceRule = RuleOf(repeat, evt.DtStart!);
     }
 
-    private static RecurrencePattern RuleOf(RecurrenceWrite r, CalDateTime start)
+    /// <summary>Shared with <see cref="IcsReader.RepeatIsExact"/>, which recomposes a stored rule
+    /// through it to see whether the editor's subset says the whole of it.</summary>
+    internal static RecurrencePattern RuleOf(RecurrenceWrite r, CalDateTime start)
     {
         var frequency = r.Frequency.ToUpperInvariant() switch
         {

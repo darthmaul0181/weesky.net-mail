@@ -69,6 +69,14 @@
     `--touch` is declared in shell.css's phone block alone, so above that width the app draws
     36-40px controls for a mouse on purpose. Flagging them would redden this probe at two of the
     four sizes the line above tells you to drive it at, which is how a metric gets ignored.
+    And the floor answers to the WIDTH only; several controls in this app reach 44 through
+    `@media (hover: none)` instead, which answers to the POINTER. A browser driven with a mouse —
+    which is what this page is unless something says otherwise — matches none of those rules and
+    reports the mouse's own 36px or 20px box as undersized. Both readings are real and neither is
+    the whole answer, so drive the file TWICE when a case names a control whose floor lives in
+    that query: once as a mouse, once with CDP's `Emulation.setTouchEmulationEnabled` on, and say
+    which is which when the numbers are quoted. The calendar toolbar's chevrons and the event
+    editor's More options are the two that need it today.
     A third adjustment, also per element and for the same reason the other two are: an element
     whose USED width is fractional reports `scrollWidth` one pixel ahead of `clientWidth` with no
     visible defect behind it, because the two round in opposite directions (CSSOM allows
@@ -130,6 +138,7 @@
   <link rel="stylesheet" href="/src/styles/shell.css" />
   <link rel="stylesheet" href="/src/styles/tooltip.css" />
   <link rel="stylesheet" href="/src/styles/mail.css" />
+  <link rel="stylesheet" href="/src/styles/calendar.css" />
   <style>
     /* No literal here: #out inherits index.css's body colours, and the bar below borrows the
        app's own dark-band tokens rather than inventing a colour of its own. */
@@ -1862,6 +1871,303 @@
                </div>
              </div>`,
       touch: 'input, .btn',
+    })
+
+    // ── Calendar (Task 7) ──────────────────────────────────────────────────────────────────────
+    // The phone tier of the calendar module. Every fixture below restates the component's own
+    // markup with its real classes and attributes: `.calendar-layout > .calendar-main >
+    // .calendar-stage` is the chain the band-stack rules answer to, and dropping any link of it
+    // measures a box the module never draws.
+    const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
+    const hourColumn = () => HOURS.map(
+      hour => `<div class="week-hour">${hour ? '<span>' + String(hour).padStart(2, '0') + ':00</span>' : ''}</div>`).join('')
+    const hourCells = () => HOURS.map(() => '<div class="hour-cell"></div>').join('')
+    const stage = inner => `
+      <div class="calendar-layout" style="height:560px">
+        <div class="calendar-main">${inner}</div>
+      </div>`
+
+    // CalendarToolbar with `phone` true: DrawerToggle, Today, the two chevrons, the heading on
+    // its own first line (`.calendar-heading` is `order: -1; flex-basis: 100%`) and the three-way
+    // `.seg`. No search box — the phone's lives at the head of the list, below.
+    const toolbarPhone = `
+      <div class="calendar-toolbar">
+        <button type="button" class="drawer-toggle" aria-label="Open navigation"><svg width="20" height="20"></svg></button>
+        <button type="button" class="btn calendar-today">Today</button>
+        <button type="button" class="calendar-step" aria-label="Previous period"><svg width="16" height="16"></svg></button>
+        <button type="button" class="calendar-step" aria-label="Next period"><svg width="16" height="16"></svg></button>
+        <div class="calendar-heading">
+          <span class="calendar-title">September 2026</span>
+          <span class="calendar-subtitle">Week 38</span>
+        </div>
+        <div class="seg calendar-views" role="radiogroup" aria-label="View">
+          <label><input type="radio" name="calendar-view" checked />Month</label>
+          <label><input type="radio" name="calendar-view" />Day</label>
+          <label><input type="radio" name="calendar-view" />List</label>
+        </div>
+      </div>`
+
+    for (const name of ['calendar toolbar-360', 'calendar toolbar-320']) {
+      CASES.push({
+        name,
+        html: stage(toolbarPhone),
+        touch: '.seg.calendar-views label, .drawer-toggle, .calendar-step, .calendar-today',
+        height: '.calendar-toolbar',
+      })
+    }
+
+    // PhoneMonth over the selected day's UpcomingList. The cell is the target here: 48px is the
+    // number the stylesheet budgets its 30px disc and 5px dot row against, and it has to clear
+    // the touch floor on its own — nothing reveals a bigger hit area on a calendar grid.
+    const monthCell = (day, dots, extra = '') => `
+      <button type="button" data-day="${day}" class="phone-month-cell${extra}">
+        <span class="phone-month-number">${Number(day.slice(8))}</span>
+        <span class="phone-month-dots">${'<span class="phone-month-dot" style="--cal:#3b82c4"></span>'.repeat(dots)}</span>
+      </button>`
+    const monthWeek = (first, dotted) => `
+      <div class="phone-month-week">${Array.from({ length: 7 }, (_, index) => {
+        const day = `2026-09-${String(first + index).padStart(2, '0')}`
+        return monthCell(day, dotted && index === 2 ? 3 : index % 2, index === 2 ? ' is-selected' : '')
+      }).join('')}</div>`
+
+    CASES.push({
+      name: 'calendar phone month-360',
+      html: stage(toolbarPhone + `
+        <div class="calendar-stage">
+          <div class="phone-month-stage">
+            <div class="phone-month">
+              <div class="phone-month-names">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(
+                one => `<span class="phone-day-name">${one}</span>`).join('')}</div>
+              ${[31, 7, 14, 21, 28, 5].map((first, row) => monthWeek(first, row === 2)).join('')}
+            </div>
+            <div class="upcoming-list">
+              <section class="upcoming-group">
+                <h3 class="upcoming-day">Today · Wednesday 16 September</h3>
+                <button type="button" class="event-row is-busy" style="--cal:#3b82c4">
+                  <span class="event-row-time"><span>09:00</span><span>10:00</span></span>
+                  <span class="event-row-bar"></span>
+                  <span class="event-row-body">
+                    <span class="event-row-title">Réunion de production hebdomadaire</span>
+                    <span class="event-row-sub">Salle Mercure · Personal</span>
+                  </span>
+                </button>
+              </section>
+            </div>
+          </div>
+        </div>`),
+      touch: '.phone-month-cell, .event-row',
+      height: '.phone-month',
+    })
+
+    // DayStrip over WeekView with a single day and the phone's 52px gutter. The chip is half an
+    // hour — 28px at HOUR_PX 56 — which is the shortest block the grid draws with a title in it,
+    // and `MIN_CHIP_PX` (20) is the floor under that.
+    CASES.push({
+      name: 'calendar day column-360',
+      html: stage(toolbarPhone + `
+        <div class="calendar-stage">
+          <div class="week-view">
+            <div class="week-head" style="grid-template-columns: var(--cal-gutter) repeat(1, minmax(0, 1fr))">
+              <div class="week-head-gutter">W38</div>
+              <div class="week-day-head is-today">
+                <span class="week-day-name">Wed</span><span class="week-day-number">16</span>
+              </div>
+            </div>
+            <div class="allday-band">
+              <div class="allday-label">All day</div>
+              <div class="allday-days" style="height:22px">
+                <button type="button" class="event-chip is-band is-busy" style="left:0;width:100%;top:0;--cal:#c47a3b">
+                  <span class="event-chip-title">Congé</span>
+                </button>
+              </div>
+            </div>
+            <div class="week-body" style="grid-template-columns: var(--cal-gutter) repeat(1, minmax(0, 1fr))">
+              <div class="week-hours">${hourColumn()}</div>
+              <div class="day-column is-today" data-day="2026-09-16">
+                ${hourCells()}
+                <button type="button" class="event-chip is-column is-busy" style="top:504px;height:28px;left:calc(0 * 100% / 1);width:calc(100% / 1);--cal:#3b82c4">
+                  <span class="event-chip-title">Point d'équipe</span>
+                  <span class="event-resize-handle" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>`),
+      // No `touch` selector, deliberately: the only targets in this box are the chips, and a
+      // chip's height IS its event's duration — the half-hour one here is 28px by construction,
+      // which a floor would report as a defect on every short event in the module. `clipped` is
+      // what the case turns on, and `height` is that 28px read rather than assumed.
+      height: '.event-chip.is-column',
+    })
+
+    // The strip has a case of its own because it is a SCROLLER by design: one viewport per week
+    // under `scroll-snap-type: x mandatory`, so its `clipped` is a whole multiple of the width
+    // being driven and nothing is wrong with it. Folded into the grid case above it would have
+    // been the maximum there and masked every real clip in the grid.
+    // FIVE weeks, which is what `DayStrip` renders (BEFORE = 2, AFTER = 2) — the count IS the
+    // number this case turns on, so a fixture holding two would calibrate the invariant on half
+    // the component: `clipped` must read four viewports, not one.
+    const STRIP_WEEKS = ['2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28']
+    const stripDay = (week, index) => {
+      const day = new Date(Date.parse(week + 'T00:00:00Z') + index * 86400000)
+      return { iso: day.toISOString().slice(0, 10), date: day.getUTCDate() }
+    }
+    CASES.push({
+      name: 'calendar day strip-360',
+      html: stage(`
+        <div class="calendar-stage">
+          <div class="day-strip" role="group" aria-label="Pick a day">
+            ${STRIP_WEEKS.map(week => `<div class="day-strip-week" data-week="${week}">${
+              Array.from({ length: 7 }, (_, index) => {
+                const { iso, date } = stripDay(week, index)
+                const selected = iso === '2026-09-16' ? ' is-selected' : ''
+                return `
+                <button type="button" data-day="${iso}" class="day-strip-day${selected}">
+                  <span class="day-strip-name">${'MTWTFSS'[index]}</span>
+                  <span class="day-strip-number">${date}</span>
+                </button>`
+              }).join('')}</div>`).join('')}
+          </div>
+        </div>`),
+      touch: '.day-strip-day',
+      height: '.day-strip',
+    })
+
+    // The list view's own search band. `.search-input` carries a `calc(30ch + 26px)` width from
+    // index.css — 296px, which is wider than the 340 a 360px screen leaves once the band's own
+    // margins are taken and wider still at 320 — so `.phone-search` overrides it to `auto`, and
+    // this case is what says the override is live.
+    CASES.push({
+      name: 'calendar list search-360',
+      html: stage(toolbarPhone + `
+        <input type="search" class="search-input phone-search" placeholder="Search events" aria-label="Search events" />
+        <div class="calendar-stage">
+          <div class="upcoming-list">
+            <section class="upcoming-group">
+              <h3 class="upcoming-day">Tomorrow · Thursday 17 September</h3>
+              <button type="button" class="event-row is-busy" style="--cal:#3b82c4">
+                <span class="event-row-time"><span>14:00</span><span>15:30</span></span>
+                <span class="event-row-bar"></span>
+                <span class="event-row-body">
+                  <span class="event-row-title">Comité de pilotage trimestriel</span>
+                  <span class="event-row-sub">Bruxelles · Work</span>
+                </span>
+              </button>
+            </section>
+          </div>
+        </div>`),
+      touch: '.phone-search, .event-row',
+      escape: ['.phone-search', '.calendar-main'],
+      height: '.phone-search',
+    })
+
+    // The full-screen editor. `escape` rather than `clipped` on the Start row: `.field-h` is a
+    // flex row, so a date box and a time box that do not fit spill to the RIGHT of the row but
+    // the row itself does not scroll — and the phone block wraps the label onto its own line
+    // precisely so the two controls have the width. Both are read, at 360 and at 320.
+    const editorRow = (label, id) => `
+      <div class="field-h">
+        <label for="${id}-date">${label}</label>
+        <input id="${id}-date" type="date" required value="2026-09-16" />
+        <input id="${id}-time" type="time" required value="09:00" />
+      </div>`
+    for (const name of ['calendar editor screen-360', 'calendar editor screen-320']) {
+      CASES.push({
+        name,
+        html: `
+          <div class="calendar-layout" style="height:640px">
+            <div class="calendar-editor-screen">
+              <div class="calendar-editor-head">
+                <span class="modal-title">Edit event</span>
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="modal-close" aria-label="Close">✕</button>
+              </div>
+              <form class="calendar-editor-form">
+                <div class="field-h">
+                  <label for="event-title">Title</label>
+                  <input id="event-title" type="text" value="Réunion de production" />
+                </div>
+                <div class="field-h">
+                  <label for="event-calendar">Calendar</label>
+                  <span class="calendar-swatch" style="--cal:#3b82c4"></span>
+                  <select id="event-calendar"><option>Personal</option></select>
+                </div>
+                <div class="field-h">
+                  <label for="event-allday">All day</label>
+                  <span class="toggle-switch"><input id="event-allday" type="checkbox" /><span class="toggle-track"></span></span>
+                </div>
+                ${editorRow('Start', 'event-start')}
+                ${editorRow('End', 'event-end')}
+                <hr class="editor-rule" />
+                <button type="button" class="editor-more" aria-expanded="false">
+                  <svg width="14" height="14"></svg>More options
+                </button>
+                <div class="editor-actions">
+                  <button type="button" class="btn btn-danger">Delete</button>
+                </div>
+              </form>
+            </div>
+          </div>`,
+        touch: '.calendar-editor-head .btn-primary, .calendar-editor-head .modal-close, .calendar-editor-form input:not([type="checkbox"]), .calendar-editor-form select, .toggle-switch, .editor-more, .btn-danger',
+        escape: ['.calendar-editor-form .field-h > *', '.calendar-editor-screen'],
+        height: '.calendar-editor-head',
+      })
+    }
+
+    // The floating + against the tab bar it is anchored 73px above. Both are drawn: the button is
+    // `position: fixed` and the band is the shell's last band, so the two only meet at the foot of
+    // the screen — which is exactly where a 56px disc and a 57px band can collide.
+    CASES.push({
+      name: 'calendar fab vs. bottom nav',
+      html: `
+        <div style="position:fixed;inset:0;display:flex;flex-direction:column">
+          <div style="flex:1"></div>
+          <nav class="app-bottom-nav">
+            <a class="bottom-nav-item"><svg width="22" height="22"></svg><span class="bottom-nav-label">Mail</span></a>
+            <a class="bottom-nav-item is-active"><svg width="22" height="22"></svg><span class="bottom-nav-label">Calendar</span></a>
+            <a class="bottom-nav-item"><svg width="22" height="22"></svg><span class="bottom-nav-label">Contacts</span></a>
+            <a class="bottom-nav-item"><svg width="22" height="22"></svg><span class="bottom-nav-label">Settings</span></a>
+          </nav>
+        </div>
+        <button type="button" class="floating-action" aria-label="New event">+</button>`,
+      overlap: ['.floating-action', '.app-bottom-nav'],
+      touch: '.floating-action',
+    })
+
+    // The bubble, flipped, and a 768 case only: below 640px there IS no bubble — a tap on a chip
+    // opens the editor — so the left below, computed for a tablet window, hangs off a phone by
+    // design and `escape.right` reads 232 at 360. The wrapper is `position: fixed; inset: 0`
+    // rather than a tall stage: `.event-preview` is fixed itself, so measuring it against a
+    // container sitting 12857px down the report reported the whole page offset as an escape.
+    // `usePopoverPosition` hangs it to the RIGHT of the chip and flips it
+    // left when `rect.right + 8 + 300` would pass the window — so the number below is that
+    // arithmetic played out for a chip in the last column of a 768px tablet, not a guess:
+    // a chip at x=600..740 gives 740+8+300 = 1048 > 768, so left = 600 - 300 - 8 = 292.
+    const CHIP_LEFT = 600
+    const POPOVER_WIDTH = 300
+    CASES.push({
+      name: 'calendar preview-768',
+      html: `
+        <div class="calendar-layout" style="position:fixed;inset:0"><div class="calendar-main"></div></div>
+        <div class="event-preview" role="dialog" aria-label="Point d'équipe"
+             style="left:${Math.max(8, CHIP_LEFT - POPOVER_WIDTH - 8)}px;top:120px;--cal:#3b82c4">
+          <div class="event-preview-head">
+            <span class="event-preview-dot"></span>
+            <span class="event-preview-title">Réunion de production hebdomadaire</span>
+            <button type="button" class="modal-close" aria-label="Close">✕</button>
+          </div>
+          <p class="event-preview-when">Wednesday 16 September · 09:00 – 10:00</p>
+          <p class="event-preview-row"><svg width="14" height="14"></svg>Salle Mercure</p>
+          <p class="event-preview-row"><svg width="14" height="14"></svg>Reminder set</p>
+          <p class="event-preview-row"><svg width="14" height="14"></svg>Personal</p>
+          <div class="event-preview-actions">
+            <button type="button" class="btn btn-primary"><svg width="14" height="14"></svg>Edit</button>
+            <button type="button" class="btn btn-ghost"><svg width="14" height="14"></svg>Delete</button>
+          </div>
+        </div>`,
+      touch: '.event-preview .btn, .event-preview .modal-close',
+      escape: ['.event-preview', '.calendar-layout'],
+      contrast: '.event-preview-when, .event-preview-row',
     })
 
     window.addEventListener('resize', measure)

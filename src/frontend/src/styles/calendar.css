@@ -1,0 +1,717 @@
+/* ── Calendar module ───────────────────────────────────────────────────────────
+   Two band-stack columns inside the shell's single content area, the arrangement the mail and
+   contacts modules already use. `min-height: 0` on the scrolling band is the load-bearing part:
+   without it the scroll escapes to the column and the pinned toolbar drifts away.
+
+   Every colour here is a role token but one — a calendar's own, which is data rather than theme
+   and travels as the inline `--cal` custom property the swatch and the row read. */
+
+.calendar-layout {
+  display: flex; height: 100%; min-height: 0; overflow: hidden;
+  /* The containing block the phone editor's `inset: 0` measures, task 5's surface. */
+  position: relative;
+}
+
+/* --folders-bg: the navigation column is neither the dark L nor the content surface, and six
+   palettes tint it differently from both. */
+.calendar-sidebar {
+  width: 240px; flex: none; display: flex; flex-direction: column; min-height: 0;
+  overflow: hidden; background: var(--folders-bg); border-right: 1px solid var(--border);
+}
+.calendar-sidebar-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
+.calendar-sidebar-error { margin: 0; padding: 2px 10px 6px; color: var(--danger); font-size: 12px; }
+
+/* The Calendars heading carries the « + », the road ContactScopes' Groups heading takes: the row
+   above is measured to the pixel for a French label and a second square there would re-open it. */
+.calendar-sidebar-heading {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; padding: 0 10px;
+  color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.calendar-sidebar-heading > h2 { flex: 1; min-width: 0; margin: 0; font: inherit; }
+.calendar-sidebar-add {
+  flex: none; padding: 0 4px; border: 0; background: none; cursor: pointer;
+  color: var(--text-muted); font: inherit; font-size: 17px; font-weight: 400; line-height: 1;
+}
+.calendar-sidebar-add:hover { color: var(--icon-hover-accent); }
+
+.calendar-list { display: flex; flex-direction: column; }
+/* Drawn rather than hover-revealed: on a touch tablet a hover reveal is unreachable. */
+.calendar-row { display: flex; align-items: center; }
+.calendar-row-label {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer;
+  color: var(--text); font-size: 13px;
+}
+.calendar-row-label:hover { background: var(--folders-item-hover); }
+/* Visually hidden, never unmounted: the swatch is what is seen while the box keeps the tab
+   order, the space bar and the accessible name the row's own text gives it. */
+.calendar-row-label > input {
+  position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;
+}
+.calendar-swatch {
+  flex: none; position: relative; width: 16px; height: 16px; border-radius: 3px;
+  box-shadow: inset 0 0 0 2px var(--cal);
+}
+.calendar-row-label:has(input:checked) .calendar-swatch { background: var(--cal); }
+/* --action-primary-fg is the app's one "foreground over a filled colour" token, white in all
+   twelve blocks; a swatch is that surface, painted from data rather than from the accent. */
+.calendar-row-label:has(input:checked) .calendar-swatch::after {
+  content: ''; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px;
+  border: solid var(--action-primary-fg); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.calendar-row-label:has(input:focus-visible) .calendar-swatch {
+  outline: 2px solid var(--action-primary); outline-offset: 2px;
+}
+.calendar-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-row > .dropdown-root { flex: none; }
+
+/* ── Mini month ─────────────────────────────────────────────────────────────── */
+.mini-month { padding: 2px 4px 6px; }
+.mini-month-head {
+  display: flex; align-items: center; gap: 2px; padding: 0 4px 6px;
+  color: var(--text); font-size: 13px; font-weight: 600;
+}
+.mini-month-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-month-step {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: none; color: var(--text-muted); cursor: pointer;
+}
+.mini-month-step:hover { background: var(--folders-item-hover); color: var(--text); }
+
+.mini-month-names,
+.mini-month-week { display: grid; grid-template-columns: repeat(8, 1fr); align-items: center; }
+.mini-month-names { color: var(--text-muted); font-size: 10px; font-weight: 700; }
+.mini-day-name { text-align: center; padding: 2px 0; }
+/* The week number opens every row: the column exists whether or not the view names one. */
+.mini-week-number {
+  color: var(--text-muted); font-size: 10px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.mini-day {
+  aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer;
+  color: var(--text); font: inherit; font-size: 11.5px; font-variant-numeric: tabular-nums;
+}
+.mini-day:hover { background: var(--folders-item-hover); }
+.mini-day.is-outside { color: var(--text-muted); opacity: 0.6; }
+/* Today is a ring, the anchor a fill: one says where the clock is, the other where the grid is,
+   and the two are the same cell often enough that a single treatment would hide one of them. */
+.mini-day.is-today { box-shadow: inset 0 0 0 1.5px var(--action-primary); }
+.mini-day.is-anchor {
+  background: var(--action-primary); color: var(--action-primary-fg); font-weight: 600;
+}
+
+/* ── The grid column ───────────────────────────────────────────────────────── */
+.calendar-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0;
+  overflow: hidden; background: var(--surface);
+}
+.calendar-toolbar {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.calendar-today { flex: none; width: auto; padding: 7px 14px; }
+.calendar-step {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: none; color: var(--text-muted); cursor: pointer;
+}
+.calendar-step:hover { background: var(--folders-item-hover); color: var(--text); }
+/* flex: 1 from a zero base, so the title is what gives way rather than the controls beside it. */
+.calendar-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.calendar-title {
+  font-size: 15px; font-weight: 650; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.calendar-subtitle { font-size: 12px; color: var(--text-muted); }
+.calendar-search { flex: none; }
+.calendar-views { flex: none; }
+
+.calendar-stage { flex: 1; min-height: 0; overflow-y: auto; }
+.calendar-empty {
+  margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center;
+}
+/* The band a refused window leaves: the reason, and the one thing to do about it. */
+.calendar-error {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin: 0; padding: 28px 20px; color: var(--text-muted); font-size: 13px; text-align: center;
+}
+.calendar-error > p { margin: 0; max-width: 48ch; }
+.calendar-error > .btn { width: auto; }
+
+/* The editor is a dialogue over the grid from 640px up and the whole screen below it; task 5
+   fills both. `.calendar-editor` sizes itself the way every other dialog does — the width lives
+   in modal.css and never here. */
+.calendar-editor-screen {
+  position: absolute; inset: 0; z-index: 60; display: flex; flex-direction: column;
+  background: var(--surface);
+}
+
+/* ── The hour grid: week and day ───────────────────────────────────────────────
+   One component draws both — a day is a week one column wide. 56px an hour is the mockup's
+   number and `gridGeometry.HOUR_PX`'s; it is written here once and read there once, and the two
+   must move together. The scroll is the body's alone, the head and the band staying put. */
+/* The gutter is a token because two boxes and one inline grid template all measure it, and the
+   phone narrows it: a number written in WeekView.tsx could not be narrowed by a media query. */
+.week-view {
+  --cal-gutter: 56px;
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+}
+
+.week-head {
+  flex: none; display: grid; align-items: end; border-bottom: 1px solid var(--border);
+}
+.week-head-gutter {
+  padding: 8px 8px 10px; color: var(--text-muted); font-size: 11px; font-weight: 700;
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.week-day-head {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 6px;
+}
+.week-day-name {
+  color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* The 26px disc is drawn on every day so the ring today gains costs no reflow of the row. */
+.week-day-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.week-day-head.is-today .week-day-number {
+  background: var(--action-primary); color: var(--action-primary-fg); font-weight: 600;
+}
+
+/* Sunken, so the strip reads as a different surface from the grid rather than as its first row. */
+.allday-band {
+  flex: none; display: grid; grid-template-columns: var(--cal-gutter) minmax(0, 1fr);
+  background: var(--surface-sunken); border-bottom: 1px solid var(--border);
+}
+.allday-label {
+  padding: 4px 8px; color: var(--text-muted); font-size: 11px; text-align: right;
+}
+.allday-days { position: relative; margin: 2px 0; }
+
+.week-body {
+  flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: start;
+  /* The containing block the current-time line measures; it scrolls with the grid. */
+  position: relative;
+}
+.week-hours { display: flex; flex-direction: column; }
+.week-hour { height: 56px; position: relative; }
+/* Lifted so the label sits astride the rule it names rather than under it. */
+.week-hour > span {
+  position: absolute; top: -8px; right: 8px;
+  color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums;
+}
+
+.day-column {
+  position: relative; height: 1344px; border-left: 1px solid var(--border);
+}
+.day-column.is-today { background: color-mix(in oklab, var(--accent-unread) 4%, transparent); }
+/* The hour rule is the cell's own border; the half-hour is a lighter line painted inside it. */
+.hour-cell {
+  height: 56px; border-top: 1px solid var(--border);
+  background: linear-gradient(to bottom,
+    transparent 0 27px,
+    color-mix(in oklab, var(--border) 55%, transparent) 27px 28px,
+    transparent 28px);
+}
+
+.now-line { position: absolute; left: var(--cal-gutter); right: 0; height: 2px; z-index: 3; }
+/* Everywhere but today the line is a shadow of itself: it says the hour without claiming the
+   column is the one the clock is in. */
+.now-line::before {
+  content: ''; position: absolute; inset: 0; background: var(--accent-unread); opacity: 0.35;
+}
+.now-line-today { position: absolute; top: 0; height: 2px; background: var(--accent-unread); }
+.now-line-today::before {
+  content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--accent-unread);
+}
+
+/* ── The chip ──────────────────────────────────────────────────────────────────
+   One element, four variants. `--cal` is the calendar's own colour, inline on the chip: a
+   calendar's colour is data and has no token to come from. */
+.event-chip {
+  display: flex; flex-direction: column; align-items: stretch; gap: 1px;
+  padding: 3px 6px 3px 8px; border: 0; border-radius: 4px; cursor: pointer;
+  color: var(--text); font: inherit; font-size: 12px; text-align: left; overflow: hidden;
+}
+.event-chip.is-column { position: absolute; z-index: 2; }
+.event-chip-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Not --text-muted: measured on the 18% fill it is 4.19:1 in the light theme and 4.32 in dark,
+   under the 4.5 a 12px line needs. The role loses its margin the moment the surface behind it is
+   tinted, so a chip's second line steps back toward --text. */
+.event-chip-time,
+.event-chip-place {
+  color: color-mix(in oklab, var(--text-muted) 55%, var(--text));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The left bar is the calendar's signature: its own colour in three renderings, and --border on
+   a cancelled one, where the event is no longer that calendar's business. What changes behind it
+   is the fill. */
+.event-chip.is-column,
+.event-chip.is-band { box-shadow: inset 3px 0 0 var(--cal); }
+.event-chip.is-busy { background: color-mix(in oklab, var(--cal) 18%, var(--surface)); }
+.event-chip.is-free { background: var(--surface); }
+.event-chip.is-column.is-free,
+.event-chip.is-band.is-free { box-shadow: inset 3px 0 0 var(--cal), inset 0 0 0 1px var(--cal); }
+.event-chip.is-tentative {
+  background: repeating-linear-gradient(135deg,
+    color-mix(in oklab, var(--cal) 18%, var(--surface)) 0 6px, var(--surface) 6px 10px);
+}
+.event-chip.is-cancelled { background: var(--surface); }
+.event-chip.is-column.is-cancelled,
+.event-chip.is-band.is-cancelled { box-shadow: inset 3px 0 0 var(--border), inset 0 0 0 1px var(--border); }
+.event-chip.is-cancelled .event-chip-title {
+  color: var(--text-muted); text-decoration: line-through;
+}
+/* The two slices of an evening crossing midnight light together (décision 3), so the highlight
+   is a class the view puts on every chip of one key rather than `:hover`, which only ever
+   knows the chip under the pointer. Selection is declared after it and wins. */
+.event-chip.is-hovered { outline: 2px solid var(--cal); outline-offset: -1px; }
+.event-chip.is-selected { outline: 2px solid var(--action-primary); outline-offset: -1px; }
+
+/* ── The pointer gestures ──────────────────────────────────────────────────────
+   A block under the pointer is translucent and over its neighbours, so what is underneath the
+   slot it is heading for stays readable. */
+.event-chip.is-dragging { opacity: 0.7; z-index: 10; }
+/* The whole grid stops selecting while a gesture is live: a drag across chips would otherwise
+   paint their titles blue behind the block being moved. */
+.week-view.is-gesturing .week-body,
+.week-view.is-gesturing .allday-days { user-select: none; }
+
+/* The grip is the chip's own last 6px, and it is drawn only under a pointer that can hover.
+   `touch-action` is deliberately left alone: on a touch screen a vertical drag is a scroll, the
+   browser takes it over and cancels the gesture, which is the arbitration we want. */
+.event-resize-handle {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize;
+}
+.event-resize-handle::after {
+  content: ''; position: absolute; left: 50%; bottom: 2px; width: 20px; height: 2px;
+  margin-left: -10px; border-radius: 1px; background: var(--cal); opacity: 0;
+}
+.event-chip:hover > .event-resize-handle::after,
+.event-chip:focus-within > .event-resize-handle::after { opacity: 0.8; }
+/* A finger needs its 44px, and with no hover there is nothing to reveal the grip: it is drawn. */
+@media (hover: none) {
+  .event-resize-handle { height: 44px; }
+  .event-resize-handle::after { opacity: 0.8; }
+}
+
+/* What a creation drag is tracing: an outline rather than a fill, since nothing has been written
+   yet and a solid block would read as an event that already exists. */
+.event-ghost {
+  position: absolute; left: 0; right: 0; z-index: 4; border-radius: 4px; pointer-events: none;
+  border: 1px dashed var(--action-primary);
+  background: color-mix(in oklab, var(--action-primary) 10%, transparent);
+}
+
+/* In the band and in a month cell a chip is one line: hour then title, side by side. */
+.event-chip.is-band,
+.event-chip.is-month { flex-direction: row; align-items: center; gap: 5px; }
+.event-chip.is-band { height: 20px; padding: 0 6px 0 8px; }
+.allday-days > .event-chip.is-band { position: absolute; }
+.event-chip.is-month {
+  padding: 0 4px; border-radius: 3px; box-shadow: none; background: none; line-height: 16px;
+}
+.month-cell > .event-chip.is-band { height: 18px; }
+.event-chip.is-month .event-chip-title { font-weight: 500; }
+/* A month cell paints no fill, so the whole of the four-way distinction has to live in the dot:
+   solid for busy, a ring for free, a ring cut on the hatching's own 135deg for tentative, and
+   --border for cancelled beside its struck title. The plain ring is free's, which is why
+   tentative is half-filled rather than simply hollow. */
+.event-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--cal);
+}
+.event-chip.is-month.is-free .event-dot {
+  background: var(--surface); box-shadow: inset 0 0 0 2px var(--cal);
+}
+.event-chip.is-month.is-tentative .event-dot {
+  background: linear-gradient(135deg, var(--cal) 0 50%, var(--surface) 50% 100%);
+  box-shadow: inset 0 0 0 1px var(--cal);
+}
+.event-chip.is-month.is-cancelled .event-dot { background: var(--border); }
+
+/* ── The month ─────────────────────────────────────────────────────────────── */
+.month-view {
+  display: grid; grid-template-columns: 36px repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr)); height: 100%; min-height: 0;
+}
+.month-week-number {
+  display: flex; justify-content: center; padding-top: 6px;
+  border-top: 1px solid var(--border); background: var(--surface-sunken);
+  color: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums;
+}
+/* Every length here is budgeted against the shortest row the stage can give: six rows of a
+   93px month must still hold the day, three chips and the count, and the cell is
+   `overflow: hidden`, so what does not fit is not scrolled to — it is gone. */
+.month-cell {
+  display: flex; flex-direction: column; gap: 1px; min-width: 0; min-height: 0;
+  padding: 3px; overflow: hidden;
+  border-top: 1px solid var(--border); border-left: 1px solid var(--border);
+}
+.month-cell.is-outside { background: var(--surface-sunken); }
+/* Drawn as a 20px disc on every day, so the fill today gains moves nothing beside it. */
+.month-day-number {
+  flex: none; align-self: flex-start; display: inline-flex; align-items: center;
+  justify-content: center; min-width: 18px; height: 18px; border-radius: 50%;
+  color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.month-cell.is-outside .month-day-number { color: var(--text-muted); }
+.month-cell.is-today .month-day-number {
+  background: var(--action-primary); color: var(--action-primary-fg); font-weight: 600;
+}
+.month-cell > .event-chip { flex: none; }
+.month-more {
+  flex: none; align-self: flex-start; padding: 0 4px; border: 0; border-radius: 3px;
+  background: none; color: var(--text-muted); font: inherit; font-size: 11px; line-height: 15px;
+  cursor: pointer;
+}
+.month-more:hover { background: var(--folders-item-hover); color: var(--text); }
+
+/* ── The upcoming list and the search results ───────────────────────────────── */
+.upcoming-list { padding: 4px 0 20px; }
+.upcoming-day {
+  margin: 0; padding: 14px 16px 6px; color: var(--text-muted);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+
+.event-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 16px; border: 0; background: none; cursor: pointer;
+  color: var(--text); font: inherit; text-align: left;
+}
+.event-row:hover { background: var(--list-row-hover); }
+/* 44px holds two lines of clock; the row keeps one height whether an event is dated or not. */
+.event-row-time {
+  flex: none; width: 44px; display: flex; flex-direction: column;
+  color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.event-row-bar { flex: none; width: 4px; align-self: stretch; border-radius: 2px; background: var(--cal); }
+.event-row.is-free .event-row-bar { background: none; box-shadow: inset 0 0 0 1px var(--cal); }
+.event-row.is-tentative .event-row-bar {
+  background: repeating-linear-gradient(135deg, var(--cal) 0 3px, transparent 3px 6px);
+}
+.event-row.is-cancelled .event-row-bar { background: var(--border); }
+.event-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.event-row-title {
+  font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.event-row.is-cancelled .event-row-title { color: var(--text-muted); text-decoration: line-through; }
+.event-row-sub {
+  color: var(--text-muted); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.event-row.is-selected { background: var(--list-row-selected-bg); }
+
+.calendar-results { padding-bottom: 20px; }
+.calendar-results-band {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+  border-bottom: 1px solid var(--border); background: var(--surface-sunken);
+}
+.calendar-results-count { flex: 1; min-width: 0; color: var(--text-muted); font-size: 13px; }
+.calendar-results-band > .btn { flex: none; width: auto; padding: 5px 12px; }
+.calendar-results-capped {
+  margin: 0; padding: 8px 16px 0; color: var(--text-muted); font-size: 12px;
+}
+
+/* ── The dialogues ─────────────────────────────────────────────────────────── */
+/* Twelve swatches, six by two. 24px each, so the grid is its own measure and the row needs no
+   --field-w of its own. */
+.color-swatches {
+  display: grid; grid-template-columns: repeat(6, 24px); gap: 6px;
+}
+.color-swatch {
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--cal); cursor: pointer;
+}
+.color-swatch.is-picked { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--cal); }
+.color-swatch.is-picked::after {
+  content: ''; display: block; width: 5px; height: 9px; margin: 4px auto 0;
+  border: solid var(--action-primary-fg); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+/* The row gives its whole height to the control: a swatch grid two rows tall against a
+   centre-aligned label reads as the label having slipped. */
+.field-h.is-swatches { align-items: flex-start; }
+.field-h.is-swatches > label:first-child { padding-top: 6px; }
+.calendar-colour-field { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* A hex code is seven characters: the box is its own measure, so it takes no --field-w either. */
+.calendar-colour-field > input { flex: none; width: 11ch; font-variant-numeric: tabular-nums; }
+.calendar-colour-field > input.is-error,
+.calendar-colour-field > input.is-error:focus { border-color: var(--danger); }
+
+/* Inside a `.field-h`, so the pair lines up with every other row's control without this file
+   restating the label column's width. */
+.import-modes { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.import-modes > label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+/* Six buckets do not fit a row: three by two, the counters keeping their own skin. */
+.import-counters.is-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+
+/* ── The preview bubble ────────────────────────────────────────────────────────
+   `position: fixed`, so the scroller it was opened from is none of its business — it closes on a
+   scroll rather than following one, and `usePopoverPosition` owns the two coordinates. The shadow
+   is the dropdown's, read off shell.css rather than invented here. */
+.event-preview {
+  position: fixed; z-index: 80; width: 300px;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.event-preview-head { display: flex; align-items: flex-start; gap: 8px; }
+.event-preview-dot {
+  flex: none; width: 12px; height: 12px; margin-top: 5px; border-radius: 50%;
+  background: var(--cal);
+}
+.event-preview-title {
+  flex: 1; font-size: 15px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere;
+}
+/* Indented to the title's own column: the dot marks the event, not each line under it. */
+.event-preview-when { margin: 0 0 2px 20px; font-size: 13px; }
+.event-preview-row {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 0 20px;
+  font-size: 13px; color: var(--text-muted);
+}
+.event-preview-row > svg { flex: none; }
+.event-preview-actions { display: flex; gap: 8px; margin-top: 10px; }
+/* Two equal halves rather than one full-width primary and a shrunken ghost beside it. */
+.event-preview-actions > .btn { flex: 1; width: auto; padding: 7px 10px; font-size: 13px; }
+
+/* ── The editor ────────────────────────────────────────────────────────────────
+   No width of its own: modal.css sizes it, exactly as it sizes every other dialog. */
+/* Exactly 44px, the band a phone dialog draws: the title, Save and the ✕. Save sits outside
+   the form and reaches it by `form=`, which is why it can be up here at all. */
+.calendar-editor-head {
+  flex: none; display: flex; align-items: center; gap: 12px;
+  height: 44px; padding: 0 10px; border-bottom: 1px solid var(--border);
+}
+.calendar-editor-head > .modal-title { flex: 1; }
+.calendar-editor-head > .btn-primary { width: auto; padding: 7px 14px; }
+.calendar-editor-screen > .calendar-editor-form {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 16px 14px;
+}
+.calendar-editor-form .calendar-swatch { margin-right: -8px; }
+/* A time box is four characters wide whatever the date beside it holds. */
+.calendar-editor-form input[type="time"] { flex: none; width: 8em; }
+/* Under the row it explains, in that row's own control column. */
+.editor-hint { margin: -6px 0 12px 126px; font-size: 12px; color: var(--text-muted); }
+.editor-kept {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--text-muted);
+}
+.editor-kept > .btn { flex: none; width: auto; padding: 5px 10px; font-size: 13px; }
+.editor-rule { margin: 16px 0; border: none; border-top: 1px solid var(--border); }
+.editor-more {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 12px; padding: 0;
+  border: none; background: none; color: var(--text-muted); font: inherit; font-size: 13px;
+  cursor: pointer;
+}
+.editor-more:hover { color: var(--text); }
+.editor-attendees { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.editor-attendee { display: flex; align-items: center; gap: 8px; }
+.editor-organizer { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.editor-partstat { color: var(--text-muted); font-size: 12px; }
+.editor-error {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px;
+  color: var(--danger); font-size: 13px;
+}
+.editor-error > .btn { width: auto; padding: 5px 10px; font-size: 13px; }
+.editor-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+/* Destructive on the left, away from the primary, whether or not the primary is drawn here. */
+.editor-actions > .btn-danger { margin-right: auto; }
+.editor-actions > .btn-primary { width: auto; }
+
+/* ── The bell ──────────────────────────────────────────────────────────────── */
+.reminder-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.reminder-row { display: flex; align-items: center; gap: 6px; }
+.reminder-row > select { flex: 1; min-width: 0; }
+.reminder-remove {
+  flex: none; border: none; background: none; color: var(--text-muted); cursor: pointer;
+  padding: 2px 6px; border-radius: var(--radius-sm); font-size: 13px;
+}
+.reminder-remove:hover { color: var(--text); }
+.reminder-add { align-self: flex-start; width: auto; padding: 5px 10px; font-size: 13px; }
+.reminder-foreign {
+  display: flex; flex-direction: column; gap: 2px; margin-top: 2px;
+  font-size: 12px; color: var(--text-muted);
+}
+
+/* ── Custom… ──────────────────────────────────────────────────────────────── */
+.recurrence-editor {
+  margin: 0 0 12px 126px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);
+}
+.recurrence-editor .field-h > :is(label, .field-h-label):first-child { width: 84px; }
+.recurrence-editor .field-h:last-child { margin-bottom: 0; }
+/* A counter is not a field: modal.css hands every number box the dialog's 34ch measure, and 34
+   characters of "3" reads as a rendering fault. Equal specificity, later sheet. */
+.modal .recurrence-editor .field-h > input[type="number"] { width: 5em; }
+.recurrence-editor input[type="number"] { flex: none; width: 5em; }
+.recurrence-days,
+.recurrence-monthly,
+.recurrence-end {
+  flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13px;
+}
+.recurrence-days > label,
+.recurrence-monthly > label,
+.recurrence-end > label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* ── The scope question ───────────────────────────────────────────────────── */
+.scope-choices { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+.scope-choices > .btn { width: 100%; }
+
+
+/* The phone's two screens. A 360px screen draws a month as a PICKER — a number and a hint of
+   what the day holds — with the day's own events listed under it, and a day as a scroll-snap
+   strip of whole weeks over the one-column grid. Both are mounted by `useViewport` rather than
+   hidden by a query: a screen that is not drawn must not sit in the tab order either. */
+.phone-month { padding: 4px 6px 8px; }
+.phone-month-names,
+.phone-month-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.phone-day-name {
+  padding: 6px 0; color: var(--text-muted); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em; text-align: center; text-transform: uppercase;
+}
+/* 48px is the cell, and every length inside it is budgeted against that: a 30px disc, a 2px gap
+   and a 5px row of dots. It is also the one number here above the 44px touch floor. */
+.phone-month-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  height: 48px; padding: 0; border: 0; background: none; color: var(--text); cursor: pointer;
+}
+.phone-month-cell.is-outside { color: var(--text-muted); }
+.phone-month-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.phone-month-cell.is-today .phone-month-number {
+  box-shadow: inset 0 0 0 1px var(--action-primary); color: var(--action-primary);
+}
+/* Filled beats the ring: the selected day is the one the list under the picker is showing, and
+   two outlined discs on one row would say the same thing twice. */
+.phone-month-cell.is-selected .phone-month-number {
+  background: var(--action-primary); color: var(--action-primary-fg); font-weight: 600;
+  box-shadow: none;
+}
+.phone-month-dots { display: flex; align-items: center; gap: 3px; height: 5px; }
+.phone-month-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--cal); }
+
+.phone-month-stage { display: flex; flex-direction: column; min-height: 0; }
+.phone-month-stage > .phone-month { border-bottom: 1px solid var(--border); }
+
+/* One week per snap stop, each the full width: the browser's own snapping is the gesture, so
+   nothing here measures a pointer or fights the scroll it is riding. */
+.day-strip {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+  border-bottom: 1px solid var(--border); scrollbar-width: none;
+}
+.day-strip::-webkit-scrollbar { display: none; }
+.day-strip-week {
+  flex: none; width: 100%; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  scroll-snap-align: start;
+}
+.day-strip-day {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 0 8px; border: 0; background: none; color: var(--text); cursor: pointer;
+}
+.day-strip-name {
+  color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.day-strip-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.day-strip-day.is-today .day-strip-number {
+  box-shadow: inset 0 0 0 1px var(--action-primary); color: var(--action-primary);
+}
+.day-strip-day.is-selected .day-strip-number {
+  background: var(--action-primary); color: var(--action-primary-fg); font-weight: 600;
+  box-shadow: none;
+}
+
+/* The list's own search band, outside the scrolling list: typing swaps that list for the results,
+   and a field inside the box being replaced would unmount under the caret. */
+.phone-search { flex: none; width: auto; margin: 8px 10px; padding: 9px 12px; }
+
+@media (max-width: 639px) {
+  .calendar-toolbar { flex-wrap: wrap; padding: 8px 10px; }
+  /* Two rows and not three, measured rather than reasoned: the title on a line of its own put
+     the bar at 170px of a 640px screen, and the month picker under it left the day's list one
+     row. The title shares the first line with the ☰ and the stepper; the segments take the
+     second whole, because three of them cannot fit beside 218px of buttons at any width a phone
+     has. The ☰ leads it, which is why it needs an order of its own rather than the heading's. */
+  .calendar-toolbar .drawer-toggle { order: -2; }
+  /* The heading keeps the base rule's `flex: 1` (a zero base) and only takes an order here: an
+     `auto` base would put its own title in charge of where the line breaks, and a 390px screen
+     then fitted the segments onto line one and crushed them to 35px, `clipped: 20`, where 360 did
+     not. The segments' own 100% basis is what always gives them the second line whole — three of
+     them cannot share a row with 218px of buttons at any width a phone has, so letting them try
+     is the same defect waiting for a shorter month name. */
+  .calendar-heading { order: -1; }
+  .calendar-views { flex: 1 1 100%; justify-content: center; }
+  /* A radio group taking the width divides it evenly rather than by label length: `Month` and
+     `Day` would otherwise draw two different targets for the same kind of choice. */
+  .calendar-views label { flex: 1; justify-content: center; padding: 6px 8px; }
+  .import-counters.is-grid { grid-template-columns: repeat(2, 1fr); }
+  /* A phone draws one day, so the gutter buys nothing that the hour labels do not. */
+  .week-view { --cal-gutter: 52px; }
+  .week-head-gutter,
+  .allday-label { font-size: 10px; padding-left: 4px; padding-right: 4px; }
+  .month-view { grid-template-columns: 20px repeat(7, minmax(0, 1fr)); }
+  .event-row { padding-left: 12px; padding-right: 12px; }
+  .upcoming-day { padding-left: 12px; padding-right: 12px; }
+
+  /* The stage becomes a band stack of its own: the strip and the month picker stay put while
+     exactly one band under them scrolls, which is the column rule the whole app is built on. */
+  .calendar-stage { display: flex; flex-direction: column; overflow: hidden; }
+  .calendar-stage > .day-strip,
+  .phone-month-stage > .phone-month { flex: none; }
+  .calendar-stage > .week-view,
+  .calendar-stage > .upcoming-list,
+  .calendar-stage > .calendar-results,
+  .calendar-stage > .phone-month-stage,
+  .phone-month-stage > .upcoming-list { flex: 1; min-height: 0; }
+  .calendar-stage > .upcoming-list,
+  .calendar-stage > .calendar-results,
+  .phone-month-stage > .upcoming-list { overflow-y: auto; }
+
+  /* The label goes above its control the way index.css's phone block already puts it there, but
+     the ROW comes back — and that direction is the load-bearing half. index.css turns every
+     `.field-h` into a `flex-direction: column`, which is right for a settings row's
+     sentence-length caption and wrong for Start and End: in a column a `flex-basis: 100%`
+     measures the CROSS axis, `flex-wrap` has no main size to break, and the date and the time end
+     up stacked — measured, 332x44 over 332x44, a 116px row where the pair on one line is 68. Two
+     of those rows cost the phone editor 96px of scrolling for nothing. With the direction back,
+     the label's 100% basis takes the first line whole and the date grows beside the 8em time box
+     the base file already fixes. Measured after the fix at 320, 360 and 390: one line, escape 0. */
+  .calendar-editor-screen .field-h {
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  }
+  .calendar-editor-screen .field-h > :is(label, .field-h-label):first-child {
+    flex: 0 0 100%; width: auto;
+  }
+  .editor-hint,
+  .recurrence-editor { margin-left: 0; }
+}
+
+@media (hover: none) {
+  /* The tier where --touch is not declared at all is the 640-1023px touch tablet, hence the
+     number spelled out rather than a second declaration of the token. */
+  .calendar-editor-head > .btn-primary,
+  .calendar-editor-head > .modal-close,
+  .calendar-step,
+  .editor-more,
+  .calendar-sidebar-add,
+  .mini-month-step,
+  .calendar-row > .dropdown-root > button { min-width: 44px; min-height: 44px; }
+  .calendar-row-label { min-height: 44px; }
+  .month-more { min-height: 44px; }
+  .event-row { min-height: 44px; }
+}

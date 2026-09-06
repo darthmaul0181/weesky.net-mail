@@ -172,24 +172,82 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
     public async Task<ActionResult<CalendarImportReport>> Import(
         Guid id, IFormFile? file, CancellationToken cancellationToken)
     {
-        if (file == null || file.Length == 0) return BadRequestEnveloppe("A file is required");
-
-        var mediaType = file.Headers?.ContentType.ToString() ?? string.Empty;
-        if (!VCalendarMediaTypes.Any(t => mediaType.StartsWith(t, StringComparison.OrdinalIgnoreCase)))
-            return BadRequestEnveloppe($"'{mediaType}' is not a calendar file");
+        var accepted = CheckCalendarFile(file);
+        if (accepted.IsFailure) return BadRequestEnveloppe(accepted.Error);
 
         var calendars = await store.ListAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         if (calendars.All(c => c.Id != id)) return NotFoundEnveloppe(CalendarStore.NotFound);
 
-        using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8);
-        var vcalendar = await reader.ReadToEndAsync(cancellationToken);
-
-        var outcome = await events.ImportAsync(AuthenticatedUser.WebmailUid, id, vcalendar, cancellationToken);
-        var reported = outcome.Errors.OrderBy(e => e.Line).Take(MaxReportedErrors).ToList();
-        return Ok(new CalendarImportReport(
-            outcome.Created, outcome.Replaced, outcome.IgnoredTodos, outcome.IgnoredJournals, outcome.Failed,
-            outcome.Errors.Count, reported));
+        var vcalendar = await ReadCalendarFileAsync(file!, cancellationToken);
+        return Ok(Report(await events.ImportAsync(AuthenticatedUser.WebmailUid, id, vcalendar, cancellationToken)));
     }
+
+    /// <summary>
+    /// Creates a calendar and pours the file straight into it, so importing somebody else's agenda
+    /// is one gesture. Nothing is created when the file is not one we accept.
+    /// </summary>
+    /// <param name="tz">the new calendar's own time zone</param>
+    /// <param name="displayName">the new calendar's name</param>
+    /// <param name="color">its colour; the palette's next one when absent</param>
+    /// <param name="file">the .ics file</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="201">The calendar and the report</response>
+    /// <response code="400">No file, a media type no calendar client writes, no display name, an
+    /// unknown time zone, an invalid colour, or the cap reached</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpPost("Import")]
+    [RequestSizeLimit(CalendarEventStore.MaxImportBytes)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<CalendarImportResponse>> ImportAsNew(
+        string tz, [FromForm] string? displayName, [FromForm] string? color, IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (!IcsTimeZones.IsKnownIana(tz)) return BadRequestEnveloppe(IcsTimeZones.UnknownZone);
+        if (string.IsNullOrWhiteSpace(displayName)) return BadRequestEnveloppe(NeedsDisplayName);
+
+        var accepted = CheckCalendarFile(file);
+        if (accepted.IsFailure) return BadRequestEnveloppe(accepted.Error);
+
+        // The cap is answered before the file is read: a refused import must not cost twenty
+        // megabytes of decoding first.
+        var created = await store.CreateAsync(
+            AuthenticatedUser.WebmailUid, new CalendarWrite(displayName.Trim(), null, color, null),
+            tz, cancellationToken);
+        if (created.IsFailure) return BadRequestEnveloppe(created.Error);
+
+        var vcalendar = await ReadCalendarFileAsync(file!, cancellationToken);
+        var outcome = await events.ImportAsync(AuthenticatedUser.WebmailUid, created.Value, vcalendar, cancellationToken);
+
+        var calendars = await store.ListAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+        if (calendars.FirstOrDefault(c => c.Id == created.Value) is not { } view)
+            return NotFoundEnveloppe(CalendarStore.NotFound);
+
+        return StatusCode(StatusCodes.Status201Created, new CalendarImportResponse(view, Report(outcome)));
+    }
+
+    /// <summary>The gate both import doors pass: a body, and a media type a calendar client writes.
+    /// Apart from the reading so that each door may check what it owns where it must.</summary>
+    private static Result CheckCalendarFile(IFormFile? file)
+    {
+        if (file == null || file.Length == 0) return Result.Failure("A file is required");
+
+        var mediaType = file.Headers?.ContentType.ToString() ?? string.Empty;
+        return VCalendarMediaTypes.Any(t => mediaType.StartsWith(t, StringComparison.OrdinalIgnoreCase))
+            ? Result.Success()
+            : Result.Failure($"'{mediaType}' is not a calendar file");
+    }
+
+    private static async Task<string> ReadCalendarFileAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8);
+        return await reader.ReadToEndAsync(cancellationToken);
+    }
+
+    private static CalendarImportReport Report(CalendarImportOutcome outcome) =>
+        new(outcome.Created, outcome.Replaced, outcome.IgnoredTodos, outcome.IgnoredJournals, outcome.Failed,
+            outcome.Errors.Count, outcome.Errors.OrderBy(e => e.Line).Take(MaxReportedErrors).ToList());
 
     /// <summary>The one mapping every write door of this controller shares: a missing row is 404,
     /// anything else — a bad colour, the default calendar, the cap — is a rejected body.</summary>

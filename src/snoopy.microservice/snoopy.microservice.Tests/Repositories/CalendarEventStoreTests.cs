@@ -5,6 +5,7 @@ using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.Calendar;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
+using weesky.Snoopy.Microservice.Tests.Services;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Repositories;
@@ -565,6 +566,27 @@ public sealed class CalendarEventStoreTests
         Assert.Null(await Events(db).GetAsync(Guid.NewGuid(), id, None));
         Assert.Equal(CalendarEventStore.NotFound,
             (await Events(db).DeleteAsync(Guid.NewGuid(), id, EditScope.All, null, None)).Error);
+    }
+
+    /// <summary>Two real files: Outlook's WKST is a part the editor's rule cannot state, and
+    /// Google's EMAIL alarm is one its bell cannot show.</summary>
+    [Fact]
+    public async Task Get_ReportsRepeatIsExactAndForeignAlarms()
+    {
+        var (db, user, cal) = await Seed(nameof(Get_ReportsRepeatIsExactAndForeignAlarms));
+        var outlook = Seeded(user, cal, await File.ReadAllTextAsync(IcsResourcesTests.Corpus("outlook-2003.ics"), None));
+        var google = Seeded(user, cal, await File.ReadAllTextAsync(IcsResourcesTests.Corpus("google-alarm.ics"), None));
+        var seed = new PreferencesTestDbContext(db);
+        seed.CalendarEvents.AddRange(outlook, google);
+        await seed.SaveChangesAsync(None);
+
+        var repeating = (await Events(db).GetAsync(user, outlook.Id, None))!;
+        Assert.False(repeating.RepeatIsExact);
+        Assert.Empty(repeating.ForeignAlarms);
+
+        var alarmed = (await Events(db).GetAsync(user, google.Id, None))!;
+        Assert.True(alarmed.RepeatIsExact);
+        Assert.Equal(["EMAIL, 15 minutes before"], alarmed.ForeignAlarms);
     }
 
     private static int Occurrences(string text, string needle) =>

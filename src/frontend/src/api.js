@@ -239,6 +239,16 @@ export const api = {
     return request('POST', `/api/Calendars/${id}/Import`, form)
   },
 
+  // One gesture rather than two: the calendar is created and the file poured into it. An empty
+  // colour is left out so the backend gives the palette's next one.
+  importCalendarAsNew: (file, displayName, color, tz) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('displayName', displayName)
+    if (color) form.append('color', color)
+    return request('POST', `/api/Calendars/Import?tz=${encodeURIComponent(tz)}`, form)
+  },
+
   // from/to are ISO instants (…Z); tz only decides which day a floating instance falls on.
   getOccurrences: (from, to, tz) =>
     request('GET',

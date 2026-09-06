@@ -13,6 +13,11 @@ internal static class EventRequestValidator
     /// composer's <c>VALARM TRIGGER</c> can always express as whole minutes.</summary>
     internal const int MaxReminderMinutes = 40320;
 
+    /// <summary><c>keepRepeat</c> says the editor never showed the rule; a <c>repeat</c> alongside it
+    /// says it did. One of the two is a stale field the caller forgot to clear, and guessing which
+    /// would silently drop a rule the user chose.</summary>
+    internal const string KeepRepeatIsExclusive = "keepRepeat and repeat are exclusive";
+
     /// <summary>RFC 5545 § 3.3.10's own ranges: a day of the month, the position a BYSETPOS picks
     /// out of a year, and the ordinal a BYDAY code may carry. Bounded here so an out-of-range value
     /// is a refusal in the editor's words rather than a rule the engine silently never fires.</summary>
@@ -27,6 +32,7 @@ internal static class EventRequestValidator
     internal static Result<EventWrite> Validate(EventRequest request)
     {
         if (request == null) return Result.Failure<EventWrite>("Request body is required");
+        if (request.KeepRepeat && request.Repeat is not null) return Result.Failure<EventWrite>(KeepRepeatIsExclusive);
 
         DateTime? start = null, end = null, requestStart = request.Start, requestEnd = request.End;
         string? timeZone = null;
@@ -71,7 +77,7 @@ internal static class EventRequestValidator
         return Result.Success(new EventWrite(
             request.CalendarId, Blank(request.Summary), Blank(request.Location), Blank(request.Description),
             request.IsAllDay, start, end, timeZone, startDate, endDate, repeat, reminders,
-            request.Availability, request.Visibility, Blank(request.Url)));
+            request.Availability, request.Visibility, Blank(request.Url), request.KeepRepeat));
     }
 
     private static Result<RecurrenceWrite> ValidateRecurrence(RecurrenceRequest request)

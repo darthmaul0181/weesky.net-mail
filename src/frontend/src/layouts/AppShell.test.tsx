@@ -22,6 +22,7 @@ describe('AppShell', () => {
     expect(hasTabBar('/mail')).toBe(true)
     expect(hasTabBar('/contacts')).toBe(true)
     expect(hasTabBar('/settings/account')).toBe(true)
+    expect(hasTabBar('/calendar')).toBe(true)
   })
 
   // A writing surface is full-screen and owns the bottom of the phone with its own action bar;
@@ -31,6 +32,8 @@ describe('AppShell', () => {
     expect(hasTabBar('/mail/compose')).toBe(false)
     expect(hasTabBar('/contacts/new')).toBe(false)
     expect(hasTabBar('/contacts/9f1c-b2/edit')).toBe(false)
+    expect(hasTabBar('/calendar/new')).toBe(false)
+    expect(hasTabBar('/calendar/7c2a-11/edit')).toBe(false)
   })
 
   // An open message owns the phone screen, and "Mail" is the tab it would navigate to: the bar

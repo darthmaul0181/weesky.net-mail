@@ -55,6 +55,11 @@ import MenuIcon from './MenuIcon'
 import UploadIcon from './UploadIcon'
 import DownloadIcon from './DownloadIcon'
 import PeopleIcon from './PeopleIcon'
+import BellIcon from './BellIcon'
+import RepeatIcon from './RepeatIcon'
+import ClockIcon from './ClockIcon'
+import PlusIcon from './PlusIcon'
+import CloseIcon from './CloseIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -112,6 +117,11 @@ const icons = [
   { name: 'UploadIcon', Icon: UploadIcon, defaultSize: '16' },
   { name: 'DownloadIcon', Icon: DownloadIcon, defaultSize: '16' },
   { name: 'PeopleIcon', Icon: PeopleIcon, defaultSize: '16' },
+  { name: 'BellIcon', Icon: BellIcon, defaultSize: '16' },
+  { name: 'RepeatIcon', Icon: RepeatIcon, defaultSize: '16' },
+  { name: 'ClockIcon', Icon: ClockIcon, defaultSize: '16' },
+  { name: 'PlusIcon', Icon: PlusIcon, defaultSize: '16' },
+  { name: 'CloseIcon', Icon: CloseIcon, defaultSize: '16' },
 ]
 
 describe('icons', () => {
