@@ -52,9 +52,9 @@ public sealed class DavPathsTests
         Assert.Equal(DavResourceKind.ServiceRoot, DavPaths.Parse("/dav/")!.Kind);
         Assert.Equal(DavResourceKind.Principal,
             DavPaths.Parse("/dav/principals/11111111-1111-1111-1111-111111111111/")!.Kind);
-        Assert.Equal(DavResourceKind.Home,
+        Assert.Equal(DavResourceKind.AddressBookHome,
             DavPaths.Parse("/dav/addressbooks/11111111-1111-1111-1111-111111111111/")!.Kind);
-        Assert.Equal(DavResourceKind.Collection,
+        Assert.Equal(DavResourceKind.AddressBook,
             DavPaths.Parse("/dav/addressbooks/11111111-1111-1111-1111-111111111111/default/")!.Kind);
         Assert.Equal(DavResourceKind.Card,
             DavPaths.Parse("/dav/addressbooks/11111111-1111-1111-1111-111111111111/default/a.vcf")!.Kind);
@@ -214,8 +214,103 @@ public sealed class DavPathsTests
     {
         var userId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
+        // The bound moved to 4864 in 5c, an event carrying TWO escaped 255-character segments; the
+        // name here has to stay longer than any href we can build for the case to mean anything.
         Assert.Null(DavPaths.Parse(
-            $"/dav/addressbooks/{userId}/default/{new string('a', 4096)}"));
+            $"/dav/addressbooks/{userId}/default/{new string('a', DavPaths.MaxPathLength)}"));
+    }
+
+    [Fact]
+    public void TheLongestEventHrefWeCanBuild_StillResolves()
+    {
+        // Two segments of 255 CJK characters, nine escaped characters each: 4643, the worst case
+        // the ceiling of 4864 was raised for. Sized at the address book's 2560 it parsed to null,
+        // and a phone PUTting a long name would have read a 404 where it had earned a 201.
+        var name = new string((char)0x6F22, 255);
+
+        var href = DavPaths.Event(User, name, name);
+
+        Assert.Equal(4643, href.Length);
+        var parsed = DavPaths.Parse(href);
+        Assert.Equal(name, parsed!.CollectionName);
+        Assert.Equal(name, parsed.DavName);
+    }
+
+    [Fact]
+    public void EachCalendarShapeOfPath_ResolvesToItsKind()
+    {
+        const string user = "11111111-1111-1111-1111-111111111111";
+
+        Assert.Equal(DavResourceKind.CalendarCollection, DavPaths.Parse("/dav/calendars/")!.Kind);
+        Assert.Equal(DavResourceKind.CalendarHome, DavPaths.Parse($"/dav/calendars/{user}/")!.Kind);
+        Assert.Equal(DavResourceKind.Calendar, DavPaths.Parse($"/dav/calendars/{user}/default/")!.Kind);
+        Assert.Equal(DavResourceKind.Event, DavPaths.Parse($"/dav/calendars/{user}/default/a.ics")!.Kind);
+    }
+
+    [Fact]
+    public void ACalendarSegment_IsDecodedExactlyOnceAndCarriedAsTheCollectionName()
+    {
+        var resource = DavPaths.Parse($"/dav/calendars/{User}/Mes%20vacances/");
+
+        // The segment is a name the user chose, not the literal "default" of the address book, so
+        // it is decoded like a card's name — and left for DavName.IsValid to judge.
+        Assert.Equal("Mes vacances", resource!.CollectionName);
+        Assert.Null(resource.DavName);
+        Assert.Equal(User, resource.UserId);
+    }
+
+    [Fact]
+    public void AnEventPath_CarriesBothNamesDecodedOnce()
+    {
+        var resource = DavPaths.Parse($"/dav/calendars/{User}/Mes%20vacances/un%20nom.ics");
+
+        Assert.Equal(DavResourceKind.Event, resource!.Kind);
+        Assert.Equal("Mes vacances", resource.CollectionName);
+        Assert.Equal("un nom.ics", resource.DavName);
+    }
+
+    [Fact]
+    public void AnEncodedSlashInACalendarSegment_DecodesToAnInvalidNameRatherThanTraversing()
+    {
+        var resource = DavPaths.Parse($"/dav/calendars/{User}/a%2Fb/");
+
+        Assert.Equal("a/b", resource!.CollectionName);
+        Assert.False(DavName.IsValid(resource.CollectionName));
+    }
+
+    [Theory]
+    [InlineData("/dav/calendars/11111111-1111-1111-1111-111111111111//x")]
+    [InlineData("/dav/calendars/11111111-1111-1111-1111-111111111111//")]
+    [InlineData("/dav/calendars/not-a-guid/default/")]
+    [InlineData("/dav/calendars")]
+    [InlineData("/dav/calendars/11111111-1111-1111-1111-111111111111/a/b/c")]
+    public void ACalendarPathThatIsNotOurs_ResolvesToNothing(string path) =>
+        Assert.Null(DavPaths.Parse(path));
+
+    [Fact]
+    public void BuildingThenParsingAnEvent_RoundTripsBothAwkwardNames()
+    {
+        var userId = Guid.NewGuid();
+        const string calendar = "Été & week-ends #1";
+        const string name = "Ada & Grace ?.ics";
+
+        var parsed = DavPaths.Parse(DavPaths.Event(userId, calendar, name));
+
+        Assert.Equal(DavResourceKind.Event, parsed!.Kind);
+        Assert.Equal(userId, parsed.UserId);
+        Assert.Equal(calendar, parsed.CollectionName);
+        Assert.Equal(name, parsed.DavName);
+    }
+
+    [Fact]
+    public void EachCalendarBuilderNestsInsideTheOneAbove()
+    {
+        Assert.StartsWith(DavPaths.CalendarCollection, DavPaths.CalendarHome(User));
+        Assert.StartsWith(DavPaths.CalendarHome(User), DavPaths.Calendar(User, "default"));
+        Assert.StartsWith(DavPaths.Calendar(User, "default"), DavPaths.Event(User, "default", "a.ics"));
+        Assert.EndsWith("/", DavPaths.Calendar(User, "default"));
+        Assert.DoesNotContain("//dav", DavPaths.Calendar(User, "default"));
+        Assert.False(DavPaths.Event(User, "default", "a.ics").EndsWith('/'));
     }
 
     [Theory]
@@ -286,8 +381,8 @@ public sealed class DavPathsTests
         // on the collection into a fetch of a card named "?x=1".
         Assert.Equal(DavResourceKind.ServiceRoot, DavPaths.Parse("/dav/?x=1")!.Kind);
         Assert.Equal(DavResourceKind.Principal, DavPaths.Parse($"/dav/principals/{userId}/?x=1")!.Kind);
-        Assert.Equal(DavResourceKind.Home, DavPaths.Parse($"/dav/addressbooks/{userId}/?x=1")!.Kind);
-        Assert.Equal(DavResourceKind.Collection,
+        Assert.Equal(DavResourceKind.AddressBookHome, DavPaths.Parse($"/dav/addressbooks/{userId}/?x=1")!.Kind);
+        Assert.Equal(DavResourceKind.AddressBook,
             DavPaths.Parse($"/dav/addressbooks/{userId}/default/?x=1")!.Kind);
 
         var card = DavPaths.Parse($"/dav/addressbooks/{userId}/default/a.vcf?x=1");
@@ -300,7 +395,7 @@ public sealed class DavPathsTests
     {
         var userId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        Assert.Equal(DavResourceKind.Collection,
+        Assert.Equal(DavResourceKind.AddressBook,
             DavPaths.Parse($"/dav/addressbooks/{userId}/default/#frag")!.Kind);
         Assert.Equal("a.vcf",
             DavPaths.Parse($"/dav/addressbooks/{userId}/default/a.vcf#frag")!.DavName);

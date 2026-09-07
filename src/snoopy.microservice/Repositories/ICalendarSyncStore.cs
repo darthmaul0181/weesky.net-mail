@@ -7,7 +7,7 @@ namespace weesky.Snoopy.Microservice.Repositories;
 /// <see cref="IContactSyncStore"/>'s twin, keyed by calendar rather than by user: CalDAV syncs each
 /// collection on its own, so every counter, tombstone and watermark here belongs to one collection.
 /// </summary>
-internal interface ICalendarSyncStore
+public interface ICalendarSyncStore
 {
     /// <summary>
     /// Advances the collection's counter under its own exclusive lock and answers the new rank.

@@ -238,7 +238,7 @@ public sealed class CardDavDeleteTests : IAsyncLifetime
         var response = await Delete(DavPaths.Collection(UserId));
 
         Assert.Equal(204, response.StatusCode);
-        Assert.Equal("1, 3, addressbook", response.Header("DAV"));
+        Assert.Equal(DavHeaders.ComplianceClasses, response.Header("DAV"));
         // Emptied, never gone: the card 404s, the collection still answers.
         Assert.Equal(404, (await server.SendAsync("GET", DavPaths.Card(UserId, "a.vcf"))).StatusCode);
         Writer.Verify(w => w.DeleteAllAsync(UserId, It.IsAny<CancellationToken>()), Times.Once);

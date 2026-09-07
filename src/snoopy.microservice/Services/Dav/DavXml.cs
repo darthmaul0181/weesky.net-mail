@@ -12,6 +12,11 @@ internal static class DavXml
 {
     internal static readonly XNamespace Dav = "DAV:";
     internal static readonly XNamespace CardDav = "urn:ietf:params:xml:ns:carddav";
+    internal static readonly XNamespace CalDav = "urn:ietf:params:xml:ns:caldav";
+
+    /// <summary>Apple's calendar extensions — <c>calendar-color</c> and <c>calendar-order</c>,
+    /// which iOS and Thunderbird both read and write; no RFC defines either.</summary>
+    internal static readonly XNamespace Apple = "http://apple.com/ns/ical/";
 
     /// <summary>
     /// getctag is an extension, not a RFC: no RFC of this slice defines it, and it is served
@@ -32,8 +37,12 @@ internal static class DavXml
     /// An attribute is its local name in no namespace — the unprefixed form RFC 6352's own grammar
     /// spells; a prefix bound to the CardDAV namespace names the very same attribute.
     /// </summary>
-    internal static string? Attribute(XElement element, string name) =>
+    internal static string? Attribute(XElement element, string name) => Attribute(element, name, CardDav);
+
+    /// <summary>The same reading for the other protocol, whose grammar (RFC 4791 § 9.7) spells its
+    /// attributes unprefixed too: a prefix bound to <paramref name="protocol"/> names the same one.</summary>
+    internal static string? Attribute(XElement element, string name, XNamespace protocol) =>
         element.Attributes().FirstOrDefault(a => !a.IsNamespaceDeclaration
             && a.Name.LocalName == name
-            && (a.Name.Namespace == XNamespace.None || a.Name.Namespace == CardDav))?.Value;
+            && (a.Name.Namespace == XNamespace.None || a.Name.Namespace == protocol))?.Value;
 }

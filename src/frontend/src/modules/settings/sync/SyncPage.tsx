@@ -10,6 +10,9 @@ import { relativeFromNow } from '../../../lib/intl'
 import CopyIcon from '../../../icons/CopyIcon'
 import RefreshIcon from '../../../icons/RefreshIcon'
 
+/** Which switch is waiting for its round trip, and on what value. */
+type Pending = { key: 'carddav' | 'caldav'; value: boolean }
+
 /** The copy button is icon-only, so its aria-label has to name the value: three buttons all
     called "Copy" in one region give a screen reader no way to tell them apart. */
 function CopyButton({ label, value, onCopy }: { label: string; value: string; onCopy: (v: string) => void }) {
@@ -36,10 +39,9 @@ function CopyableRow(
 }
 
 /**
- * The one screen of slice 4c-i. Named for what it does rather than for the protocol it speaks:
- * CardDAV is a word the user meets in their client, not in their head, and this tab will host
- * CalDAV — naming it after the first protocol to arrive would force a rename on a route bookmarks
- * have kept.
+ * The one screen of slices 4c-i and 5c. Named for what it does rather than for the protocols it
+ * speaks: CardDAV and CalDAV are words the user meets in their client, not in their head, and
+ * naming the route after the first to arrive would have forced a rename on a bookmark.
  */
 export default function SyncPage() {
   const { t } = useTranslation('settings')
@@ -47,8 +49,9 @@ export default function SyncPage() {
   const [failed, setFailed] = useState<'load' | 'unavailable' | null>(null)
   const [busy, setBusy] = useState(false)
   // The value the switch shows while the round trip is in flight, so it moves at the click and
-  // returns on its own if the write is refused.
-  const [pending, setPending] = useState<boolean | null>(null)
+  // returns on its own if the write is refused. Keyed by switch: a single boolean would paint the
+  // value one switch is waiting for onto the other.
+  const [pending, setPending] = useState<Pending | null>(null)
   const [confirming, setConfirming] = useState(false)
   // Held here and nowhere else, so it dies with the page: it exists in clear in exactly one
   // response, and there is no second way to obtain it.
@@ -62,7 +65,7 @@ export default function SyncPage() {
       setFailed(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'load'))
   }, [])
 
-  async function write(call: () => Promise<DavCredentials>, optimistic: boolean | null = null) {
+  async function write(call: () => Promise<DavCredentials>, optimistic: Pending | null = null) {
     setBusy(true)
     setPending(optimistic)
     try {
@@ -101,9 +104,20 @@ export default function SyncPage() {
             id="sync-carddav"
             label={t('sync.carddav')}
             hint={t('sync.carddavHint')}
-            checked={pending ?? state.cardDavEnabled}
+            checked={pending?.key === 'carddav' ? pending.value : state.cardDavEnabled}
             disabled={busy}
-            onChange={on => write(() => api.setDavCardDav(on), on)}
+            onChange={on => write(() => api.setDavCardDav(on), { key: 'carddav', value: on })}
+          />
+
+          <ToggleRow
+            id="sync-caldav"
+            label={t('sync.caldav')}
+            hint={t('sync.caldavHint')}
+            checked={pending?.key === 'caldav' ? pending.value : state.calDavEnabled}
+            disabled={busy}
+            onChange={on => write(
+              () => api.setDavCalDav(on, Intl.DateTimeFormat().resolvedOptions().timeZone),
+              { key: 'caldav', value: on })}
           />
 
           <div className="account-section">

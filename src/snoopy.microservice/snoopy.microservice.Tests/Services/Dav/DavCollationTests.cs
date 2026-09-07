@@ -55,6 +55,48 @@ public sealed class DavCollationTests
         Assert.NotEqual(0, DavCollation.Resolve(attribute).Compare("É", "é"));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("default")]
+    [InlineData("i;ascii-casemap")]
+    public void OnACalendar_AnAbsentAttributeAndTheLiteralDefault_MeanAsciiCasemap(string? attribute)
+    {
+        // RFC 4791 § 9.7.5's default, not the book's: « É » and « é » differ under it.
+        Assert.NotEqual(0, DavCollation.Resolve(attribute, DavCollationSet.CalDav).Compare("É", "é"));
+        Assert.Equal(0, DavCollation.Resolve(attribute, DavCollationSet.CalDav).Compare("ADA", "ada"));
+    }
+
+    [Fact]
+    public void OnACalendar_OctetComparesBytes()
+    {
+        var comparer = DavCollation.Resolve("I;OCTET", DavCollationSet.CalDav);
+
+        Assert.NotEqual(0, comparer.Compare("ADA", "ada"));
+        Assert.Equal(0, comparer.Compare("ada", "ada"));
+        Assert.True(comparer.Contains("Standup", "and"));
+        Assert.False(comparer.Contains("Standup", "AND"));
+    }
+
+    [Fact]
+    public void OnACalendar_UnicodeCasemap_IsRefusedWithTheCalendarsOwnCondition()
+    {
+        var thrown = Assert.Throws<DavPreconditionException>(() =>
+            DavCollation.Resolve(DavCollation.UnicodeCasemap, DavCollationSet.CalDav));
+
+        Assert.Equal(DavXml.CalDav + "supported-collation", thrown.Condition);
+    }
+
+    [Fact]
+    public void TheBooksSet_IsWhatTheOldResolutionAnswers()
+    {
+        Assert.Same(DavCollation.Resolve(null), DavCollation.Resolve(null, DavCollationSet.CardDav));
+        Assert.Same(DavCollation.Resolve(DavCollation.AsciiCasemap),
+            DavCollation.Resolve(DavCollation.AsciiCasemap, DavCollationSet.CardDav));
+        Assert.Equal(DavXml.CardDav + "supported-collation",
+            Assert.Throws<DavPreconditionException>(() =>
+                DavCollation.Resolve(DavCollation.Octet, DavCollationSet.CardDav)).Condition);
+    }
+
     [Fact]
     public void UnicodeCasemap_EquatesComposedAndDecomposedSpellings()
     {

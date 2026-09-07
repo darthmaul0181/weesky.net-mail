@@ -4,14 +4,15 @@ using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.Dav;
+using static weesky.Snoopy.Microservice.Services.Dav.DavPropertyTables;
 
 namespace weesky.Snoopy.Microservice.Services.CardDav;
 
 /// <summary>
-/// The closed property set the server serves, one table per <see cref="DavResourceKind"/>. A client
-/// does not ask for the properties a server finds interesting; it asks for the ones its screen needs
-/// and reads an absence as a broken book — so the list is written here once, rather than discovered
-/// slice by slice through bug reports.
+/// The closed property set the server serves on the address-book tree, one table per
+/// <see cref="DavResourceKind"/>. A client does not ask for the properties a server finds
+/// interesting; it asks for the ones its screen needs and reads an absence as a broken book — so
+/// the list is written here once, rather than discovered slice by slice through bug reports.
 /// </summary>
 internal static class CardDavProperties
 {
@@ -22,66 +23,15 @@ internal static class CardDavProperties
 
     private const string CollectionDisplayName = "Contacts";
 
-    // Trap 4. Once served, this set must ALWAYS carry write and write-content. DAVx5 only asks for
-    // it in CalDAV and Thunderbird writes by default when the property is absent — but a set that is
-    // PRESENT and INCOMPLETE puts Thunderbird in read-only mode. The book has one owner and no
-    // sharing, so there is no ACL model to consult: this is the honest statement that a user may do
-    // everything on their own book.
-    private static readonly string[] Privileges =
-    [
-        "read", "write", "write-content", "write-properties", "bind", "unbind",
-        "read-current-user-privilege-set"
-    ];
-
     /// <summary>The two RFC 6352 § 8.3 makes mandatory, and no more.</summary>
     private static readonly string[] Collations =
         [DavCollation.AsciiCasemap, DavCollation.UnicodeCasemap];
 
-    /// <summary>
-    /// Both cost, and a client that wants either names it — in a <c>prop</c>, or in the
-    /// <c>include</c> of its <c>allprop</c>. Everything else of the closed set is poured into an
-    /// allprop even where its own RFC marks it "SHOULD NOT": a stable set makes approximate clients
-    /// predictable, and that divergence is deliberate.
-    /// </summary>
-    private static readonly XName[] AllPropExclusions =
-        [DavXml.Dav + "sync-token", DavXml.Dav + "current-user-privilege-set"];
-
     private static readonly Dictionary<DavResourceKind, PropertySet> Tables = new()
     {
-        [DavResourceKind.ServiceRoot] = Set(
-            (DavXml.Dav + "current-user-principal", CurrentUserPrincipal),
-            (DavXml.Dav + "principal-URL", PrincipalUrl),
-            // RFC 3253 § 3.1.5 makes this a live property of every resource serving REPORT, and
-            // this one does: its Allow names the verb and expand-property genuinely resolves here.
-            // Absent, a client asking for it reads a 404 propstat on the shape it opens discovery
-            // on — the same Allow-says-one-thing, answer-says-another that made DAVx5 loop.
-            (DavXml.Dav + "supported-report-set", _ => ReportSet(DavXml.Dav + "expand-property")),
-            (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype"))),
+        [DavResourceKind.AddressBookCollection] = IntermediateCollection("Address Book Homes"),
 
-        [DavResourceKind.PrincipalCollection] = IntermediateCollection("Principals"),
-        [DavResourceKind.BookCollection] = IntermediateCollection("Address Book Homes"),
-
-        [DavResourceKind.Principal] = Set(
-            (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
-                new XElement(DavXml.Dav + "principal"))),
-            (DavXml.Dav + "current-user-principal", CurrentUserPrincipal),
-            (DavXml.Dav + "principal-URL", PrincipalUrl),
-            (DavXml.Dav + "displayname", r => new XElement(DavXml.Dav + "displayname", r.PrincipalAddress)),
-            (DavXml.CardDav + "addressbook-home-set",
-                r => Href(DavXml.CardDav + "addressbook-home-set", DavPaths.Home(r.UserId))),
-            // RFC 3744 § 5.8: the collections that CONTAIN principals, not the principal itself.
-            (DavXml.Dav + "principal-collection-set",
-                _ => Href(DavXml.Dav + "principal-collection-set", DavPaths.PrincipalCollection)),
-            // Trap 7. supported-report-set is served on the principal AND on the cards, not only on
-            // the book: RFC 6352 § 8 asks for it on address resources as much as on collections.
-            (DavXml.Dav + "supported-report-set", _ => ReportSet(DavXml.Dav + "expand-property")),
-            // Trap 5. Both are EMPTY elements, and both are written. RFC 3744 § 4 makes them
-            // mandatory on any principal; omitting them lets a client conclude the principal is not
-            // one.
-            (DavXml.Dav + "alternate-URI-set", _ => new XElement(DavXml.Dav + "alternate-URI-set")),
-            (DavXml.Dav + "group-membership", _ => new XElement(DavXml.Dav + "group-membership"))),
-
-        [DavResourceKind.Home] = Set(
+        [DavResourceKind.AddressBookHome] = Set(
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
                 new XElement(DavXml.Dav + "collection"))),
             (DavXml.Dav + "displayname", _ => new XElement(DavXml.Dav + "displayname", HomeDisplayName)),
@@ -90,7 +40,7 @@ internal static class CardDavProperties
             (DavXml.Dav + "supported-report-set", _ => ReportSet(DavXml.Dav + "expand-property")),
             (DavXml.Dav + "current-user-principal", CurrentUserPrincipal)),
 
-        [DavResourceKind.Collection] = Set(
+        [DavResourceKind.AddressBook] = Set(
             (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
                 new XElement(DavXml.Dav + "collection"), new XElement(DavXml.CardDav + "addressbook"))),
             (DavXml.Dav + "displayname",
@@ -154,75 +104,18 @@ internal static class CardDavProperties
     };
 
     /// <summary>
-    /// The closed set for one resource, as elements, plus the names this resource does not carry —
-    /// which the caller turns into the 404 propstat. A property we do not serve must come back
-    /// there rather than be omitted: pure omission is what makes a client wait for ever for a value
-    /// it believes is on its way.
+    /// The book's own shapes, and above them the principal's: an expand-property on the book nests
+    /// into <c>owner</c> and <c>current-user-principal</c>, so the tables it resolves against must
+    /// reach the shapes those hrefs designate.
     /// </summary>
     internal static (List<XElement> Found, List<XName> Missing) Resolve(
-        DavPropertyRequest request, DavResourceContext resource)
-    {
-        var set = Tables[resource.Kind];
-        List<XElement> found = [];
-        List<XName> missing = [];
+        DavPropertyRequest request, DavResourceContext resource) =>
+        Tables.TryGetValue(resource.Kind, out var set)
+            ? DavPropertyTables.Resolve(request, set, resource)
+            : DavPrincipalProperties.Resolve(request, resource);
 
-        if (request.Mode is DavPropertyMode.PropName)
-        {
-            found.AddRange(set.Names.Select(name => new XElement(name)));
-            return (found, missing);
-        }
-
-        foreach (var name in Asked(request, set))
-        {
-            if (set.Factories.TryGetValue(name, out var factory) && factory(resource) is { } element)
-                found.Add(element);
-            else
-                missing.Add(name);
-        }
-
-        return (found, missing);
-    }
-
-    private static IEnumerable<XName> Asked(DavPropertyRequest request, PropertySet set)
-    {
-        if (request.Mode is not DavPropertyMode.AllProp) return request.Names;
-
-        var poured = set.Names.Where(name => !AllPropExclusions.Contains(name)).ToList();
-        return poured.Concat(request.Names.Where(name => !poured.Contains(name)));
-    }
-
-    /// <summary>
-    /// The two collections that merely CONTAIN one shape each — <c>/dav/principals/</c> and
-    /// <c>/dav/addressbooks/</c>. Nothing of the sync model reaches here: no ctag, no sync-token,
-    /// and an EMPTY <c>supported-report-set</c>, since REPORT is bound only so the <c>Allow</c>
-    /// stays honest and answers the standard refusal. The 404 propstat a client then reads on
-    /// sync-token is the answer, not an omission.
-    /// </summary>
-    private static PropertySet IntermediateCollection(string displayName) => Set(
-        (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
-            new XElement(DavXml.Dav + "collection"))),
-        (DavXml.Dav + "displayname", _ => new XElement(DavXml.Dav + "displayname", displayName)),
-        (DavXml.Dav + "current-user-principal", CurrentUserPrincipal),
-        (DavXml.Dav + "principal-collection-set",
-            _ => Href(DavXml.Dav + "principal-collection-set", DavPaths.PrincipalCollection)),
-        (DavXml.Dav + "supported-report-set", _ => ReportSet()));
-
-    private static XElement CurrentUserPrincipal(DavResourceContext r) =>
-        Href(DavXml.Dav + "current-user-principal", DavPaths.Principal(r.UserId));
-
-    private static XElement PrincipalUrl(DavResourceContext r) =>
-        Href(DavXml.Dav + "principal-URL", DavPaths.Principal(r.UserId));
-
-    /// <summary>An absolute path, never a full URL: the service sits behind a reverse proxy.</summary>
-    private static XElement Href(XName name, string path) => new(name, new XElement(DavXml.Href, path));
-
-    private static XElement PrivilegeSet() => new(DavXml.Dav + "current-user-privilege-set",
-        Privileges.Select(p => new XElement(DavXml.Dav + "privilege", new XElement(DavXml.Dav + p))));
-
-    private static XElement ReportSet(params XName[] reports) =>
-        new(DavXml.Dav + "supported-report-set",
-            reports.Select(report => new XElement(DavXml.Dav + "supported-report",
-                new XElement(DavXml.Dav + "report", new XElement(report)))));
+    /// <summary>The quoted entity tag, shared with the <c>ETag</c> header a GET answers.</summary>
+    internal static string EntityTag(DavCard card) => DavPropertyTables.EntityTag(card.CardHash);
 
     private static XElement AddressDataType(string version) =>
         new(DavXml.CardDav + "address-data-type",
@@ -230,39 +123,4 @@ internal static class CardDavProperties
 
     private static XElement? FromCard(DavResourceContext resource, XName name, Func<DavCard, string> value) =>
         resource.Card is { } card ? new XElement(name, value(card)) : null;
-
-    /// <summary>
-    /// The quoted entity tag, shared with the <c>ETag</c> header a GET answers: written twice, a
-    /// conditional request would file a value no property ever advertised.
-    /// </summary>
-    internal static string EntityTag(DavCard card) => EntityTag(card.CardHash);
-
-    /// <summary>The same tag from a bare hash — what a PUT answers before any DavCard exists.</summary>
-    internal static string EntityTag(string cardHash) => $"\"{cardHash}\"";
-
-    /// <summary>
-    /// "R" appends "GMT" whatever the kind carries, so the conversion has to happen first; an
-    /// unspecified stamp is read as UTC, which is what the store writes. Internal because the
-    /// <c>Last-Modified</c> header of a GET must come from the same source as getlastmodified.
-    /// </summary>
-    internal static string HttpDate(DateTime value) => (value.Kind switch
-    {
-        DateTimeKind.Utc => value,
-        DateTimeKind.Local => value.ToUniversalTime(),
-        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
-    }).ToString("R", CultureInfo.InvariantCulture);
-
-    private static PropertySet Set(
-        params (XName Name, Func<DavResourceContext, XElement?> Factory)[] entries) =>
-        new([.. entries.Select(e => e.Name)], entries.ToDictionary(e => e.Name, e => e.Factory));
-
-    /// <summary>
-    /// The names in the order allprop and propname pour them, and the factories keyed for a named
-    /// request. Two views of one array rather than a dictionary alone: a dictionary's enumeration
-    /// order is an implementation detail, and a response whose property order drifts between builds
-    /// is a diff nobody can read.
-    /// </summary>
-    private sealed record PropertySet(
-        IReadOnlyList<XName> Names,
-        IReadOnlyDictionary<XName, Func<DavResourceContext, XElement?>> Factories);
 }

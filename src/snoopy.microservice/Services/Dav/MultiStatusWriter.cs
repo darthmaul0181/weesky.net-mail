@@ -64,23 +64,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (response.HasStarted)
-            throw new InvalidOperationException(
-                "MultiStatusWriter.BeginAsync was called after the response body had already " +
-                "started; the status code, the content type and the DAV header can no longer be set.");
-
-        response.StatusCode = StatusCodes.Status207MultiStatus;
-        response.ContentType = DavHeaders.XmlContentType;
-        DavHeaders.ApplyDav(response);
-
-        var settings = new XmlWriterSettings
-        {
-            Async = true,
-            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            CloseOutput = false, // Response.Body belongs to ASP.NET Core, never to this writer.
-        };
-
-        var xmlWriter = XmlWriter.Create(response.Body, settings);
+        var xmlWriter = Open(response);
         await xmlWriter.WriteStartDocumentAsync().ConfigureAwait(false);
         await xmlWriter.WriteStartElementAsync("D", "multistatus", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await xmlWriter.WriteAttributeStringAsync("xmlns", "C", null, DavXml.CardDav.NamespaceName)
@@ -89,6 +73,43 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
             .ConfigureAwait(false);
 
         return new MultiStatusWriter(xmlWriter);
+    }
+
+    /// <summary>
+    /// The whole failure body of a creation verb, root included: RFC 4791 § 5.3.1 wants
+    /// <c>CALDAV:mkcalendar-response</c> for MKCALENDAR and RFC 5689 § 3
+    /// <c>DAV:mkcol-response</c> for the extended MKCOL — never <c>DAV:multistatus</c>, which is
+    /// why this cannot be a call on a writer <see cref="BeginAsync"/> already opened. Neither
+    /// carries an <c>href</c>: the resource this answers about does not exist.
+    /// </summary>
+    /// <param name="response">the response to write the document into</param>
+    /// <param name="root">the verb's own root element</param>
+    /// <param name="ok">the properties that would have been set</param>
+    /// <param name="refused">those the creation was refused for</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    internal static async Task WriteCreationRefusalAsync(HttpResponse response, XName root,
+        IReadOnlyList<XName> ok, IReadOnlyList<XName> refused, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // The two verbs do NOT share their status line. RFC 4791 § 5.3.1.1 names 207 for
+        // MKCALENDAR; RFC 5689 § 3 answers 403 for the extended MKCOL — and 207 there would be a
+        // 2xx, read as "created" by a client judging on the class. DAVx5 takes this very branch.
+        var xmlWriter = Open(response, root == DavXml.Dav + "mkcol-response"
+            ? StatusCodes.Status403Forbidden
+            : StatusCodes.Status207MultiStatus);
+        await xmlWriter.WriteStartDocumentAsync().ConfigureAwait(false);
+
+        // Both namespaces on the root, whichever owns it: the propstat below is DAV: and the
+        // property names inside it are the client's, most often CalDAV's.
+        var calDav = root.Namespace == DavXml.CalDav;
+        await xmlWriter.WriteStartElementAsync(calDav ? "C" : "D", root.LocalName, root.NamespaceName)
+            .ConfigureAwait(false);
+        await xmlWriter.WriteAttributeStringAsync("xmlns", calDav ? "D" : "C", null,
+            (calDav ? DavXml.Dav : DavXml.CalDav).NamespaceName).ConfigureAwait(false);
+
+        await using var writer = new MultiStatusWriter(xmlWriter);
+        await writer.WritePropstatsAsync(ok, refused, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -138,6 +159,23 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     }
 
     /// <summary>
+    /// One member refused on its own, RFC 4918 § 14.24's <c>error</c> beside a 403 <c>status</c>:
+    /// the shape a member the resolver cannot serve as asked takes once the document is open —
+    /// an expansion past <c>max-instances</c> — where a global refusal could only truncate it.
+    /// </summary>
+    internal async Task WriteRefusedAsync(string href, XName condition, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await writer.WriteStartElementAsync(null, "response", DavXml.Dav.NamespaceName).ConfigureAwait(false);
+        await WriteHrefAsync(href).ConfigureAwait(false);
+        await WriteStatusElementAsync(StatusCodes.Status403Forbidden).ConfigureAwait(false);
+        await WriteErrorAsync(condition, null).ConfigureAwait(false);
+        await writer.WriteEndElementAsync().ConfigureAwait(false); // response
+        responseCount++;
+    }
+
+    /// <summary>
     /// The truncation shape of RFC 6352 § 8.6.2: a <c>response</c> on the Request-URI carrying 507
     /// and <c>number-of-matches-within-limits</c> inside <c>error</c> — not a bare 403, which rests
     /// on no text a client can act on.
@@ -149,16 +187,19 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         await writer.WriteStartElementAsync(null, "response", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await WriteHrefAsync(href).ConfigureAwait(false);
         await WriteStatusElementAsync(507).ConfigureAwait(false);
-
-        await writer.WriteStartElementAsync(null, "error", DavXml.Dav.NamespaceName).ConfigureAwait(false);
-        await writer.WriteStartElementAsync(null, NumberOfMatchesWithinLimits.LocalName,
-            NumberOfMatchesWithinLimits.NamespaceName).ConfigureAwait(false);
-        await writer.WriteEndElementAsync().ConfigureAwait(false); // number-of-matches-within-limits
-        if (extra is not null) await writer.WriteElementAsync(extra).ConfigureAwait(false);
-        await writer.WriteEndElementAsync().ConfigureAwait(false); // error
-
+        await WriteErrorAsync(NumberOfMatchesWithinLimits, extra).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
         responseCount++;
+    }
+
+    private async Task WriteErrorAsync(XName condition, XElement? extra)
+    {
+        await writer.WriteStartElementAsync(null, "error", DavXml.Dav.NamespaceName).ConfigureAwait(false);
+        await writer.WriteStartElementAsync(null, condition.LocalName, condition.NamespaceName)
+            .ConfigureAwait(false);
+        await writer.WriteEndElementAsync().ConfigureAwait(false); // condition
+        if (extra is not null) await writer.WriteElementAsync(extra).ConfigureAwait(false);
+        await writer.WriteEndElementAsync().ConfigureAwait(false); // error
     }
 
     /// <summary>
@@ -170,23 +211,21 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     /// <see cref="WriteResourceAsync"/> does: nothing was refused when nothing was asked, but an
     /// href on its own is still a response no conforming client can read.
     /// </summary>
-    internal async Task WriteRefusalAsync(string href, IReadOnlyList<XName> names,
-        CancellationToken cancellationToken)
+    internal Task WriteRefusalAsync(string href, IReadOnlyList<XName> names,
+        CancellationToken cancellationToken) => WriteMixedAsync(href, [], names, cancellationToken);
+
+    /// <summary>
+    /// One <c>response</c> carrying both statuses of a PROPPATCH that stored some of what it was
+    /// handed: § 9.2's answer when a property is refused on its own and the others are written.
+    /// </summary>
+    internal async Task WriteMixedAsync(string href, IReadOnlyList<XName> ok,
+        IReadOnlyList<XName> refused, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         await writer.WriteStartElementAsync(null, "response", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await WriteHrefAsync(href).ConfigureAwait(false);
-        if (names.Count > 0)
-        {
-            await WritePropstatAsync(403, names.Select(name => new XElement(name)), cancellationToken)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            await WriteStatusElementAsync(200).ConfigureAwait(false);
-        }
-
+        await WritePropstatsAsync(ok, refused, cancellationToken).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
         responseCount++;
     }
@@ -248,6 +287,49 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
 
     private Task WriteHrefAsync(string href) =>
         writer.WriteElementStringAsync(null, "href", DavXml.Dav.NamespaceName, href);
+
+    /// <summary>
+    /// The 200 propstat BEFORE the 403 one — the same literal invariant
+    /// <see cref="WriteResourceAsync"/> keeps: Thunderbird reads the FIRST descendant
+    /// <c>status</c>, so a refusal written first makes the whole answer read as a failure. Both
+    /// lists empty falls back on the bare status of § 14.24.
+    /// </summary>
+    private async Task WritePropstatsAsync(IReadOnlyList<XName> ok, IReadOnlyList<XName> refused,
+        CancellationToken cancellationToken)
+    {
+        if (ok.Count > 0)
+            await WritePropstatAsync(200, ok.Select(name => new XElement(name)), cancellationToken)
+                .ConfigureAwait(false);
+        if (refused.Count > 0)
+            await WritePropstatAsync(403, refused.Select(name => new XElement(name)), cancellationToken)
+                .ConfigureAwait(false);
+        if (ok.Count == 0 && refused.Count == 0)
+            await WriteStatusElementAsync(200).ConfigureAwait(false);
+    }
+
+    /// <summary>Sets the status, the content type and the <c>DAV:</c> header, then opens the
+    /// stream — everything the two roots above share. Throws rather than silently losing them when
+    /// the body has already started.</summary>
+    private static XmlWriter Open(HttpResponse response, int statusCode = StatusCodes.Status207MultiStatus)
+    {
+        if (response.HasStarted)
+            throw new InvalidOperationException(
+                "MultiStatusWriter.BeginAsync was called after the response body had already " +
+                "started; the status code, the content type and the DAV header can no longer be set.");
+
+        response.StatusCode = statusCode;
+        response.ContentType = DavHeaders.XmlContentType;
+        DavHeaders.ApplyDav(response);
+
+        var settings = new XmlWriterSettings
+        {
+            Async = true,
+            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            CloseOutput = false, // Response.Body belongs to ASP.NET Core, never to this writer.
+        };
+
+        return XmlWriter.Create(response.Body, settings);
+    }
 
     private async Task WritePropstatAsync(int statusCode, IEnumerable<XElement> properties,
         CancellationToken cancellationToken)

@@ -1,7 +1,7 @@
 namespace weesky.Snoopy.Microservice.Authentication.Dav;
 
 /// <summary>An authenticated synchronisation caller, as one lookup resolved them.</summary>
-public readonly record struct DavIdentity(Guid UserId, bool CardDavEnabled);
+public readonly record struct DavIdentity(Guid UserId, bool CardDavEnabled, bool CalDavEnabled);
 
 /// <summary>
 /// What one instance already knows about a synchronisation authentication: the burst cache, and
@@ -43,7 +43,7 @@ public interface IDavAuthenticationCache
     /// to invalidate. On the others the window is the ceiling — the same trade sessions make.
     ///
     /// <para>The synchronisation switch must call this too, on enable as much as on disable, and
-    /// account deletion with it. The entry carries <see cref="DavIdentity.CardDavEnabled"/> and the
+    /// account deletion with it. The entry carries both switches and the
     /// cache never consults the database, so one that outlives a switch movement answers with the
     /// state from before it for the rest of the window: a disabled account still served 200, and a
     /// re-enabled one still refused 403 while the screen says "on".</para>

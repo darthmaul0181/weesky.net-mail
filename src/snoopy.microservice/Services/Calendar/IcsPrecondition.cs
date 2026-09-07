@@ -1,7 +1,8 @@
 namespace weesky.Snoopy.Microservice.Services.Calendar;
 
-/// <summary>The RFC 4791 § 5.3.2.1 preconditions a PUT can break, in the order they are judged.</summary>
-internal enum IcsPrecondition
+/// <summary>The RFC 4791 § 5.3.2.1 preconditions a PUT can break, in the order they are judged.
+/// Public because <see cref="Models.Dav.DavWriteOutcome"/>, which is, carries one.</summary>
+public enum IcsPrecondition
 {
     SupportedCalendarData,
     ValidCalendarData,

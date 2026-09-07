@@ -15,6 +15,8 @@ internal static class IcsGuards
     internal const int MaxIcsBytes = 1024 * 1024;
     internal const int MaxInstancesPerYear = 10_000;
 
+    internal const string NoStart = "The event carries no start";
+
     private const string SupportedVersion = "2.0";
     private const int MaxUidLength = 255;
     private const int MaxEmailLength = 320;
@@ -33,6 +35,21 @@ internal static class IcsGuards
         return bytes > MaxIcsBytes
             ? new IcsProblem(IcsPrecondition.MaxResourceSize, $"The resource is {bytes} bytes, over the {MaxIcsBytes} allowed.")
             : null;
+    }
+
+    /// <summary>
+    /// The whole judgement of one resource, in the order the store applies it: size — before the
+    /// parse, which is the work an oversized body is trying to make us do — then syntax, version
+    /// and shape, then density, then expansion, then the DTSTART every VEVENT owes (RFC 5545
+    /// § 3.6.1). Null when the file is accepted, <paramref name="parsed"/> then being its model.
+    /// </summary>
+    internal static IcsProblem? CheckAll(string ics, out IcsCalendar? parsed)
+    {
+        parsed = null;
+        if (CheckSize(ics) is { } tooLarge) return tooLarge;
+
+        parsed = IcsDocument.TryLoad(ics);
+        return Check(ics, parsed) ?? CheckDensity(parsed!) ?? CheckExpansion(parsed!) ?? CheckStart(parsed!);
     }
 
     internal static IcsProblem? Check(string ics, IcsCalendar? parsed)
@@ -100,6 +117,17 @@ internal static class IcsGuards
             return new IcsProblem(IcsPrecondition.ValidCalendarData, "The recurrence cannot be expanded");
         }
     }
+
+    /// <summary>
+    /// Nothing above reads DTSTART: <see cref="Check"/> judges shape and identity,
+    /// <see cref="CheckExpansion"/> answers null when there is no start to walk from. Called last,
+    /// on a resource already known well-formed — without it a VEVENT with no start would be stored
+    /// at <c>NoInstant</c>, visible from no window, no query and no screen.
+    /// </summary>
+    internal static IcsProblem? CheckStart(IcsCalendar parsed) =>
+        (IcsDocument.MasterOf(parsed) ?? IcsDocument.Components(parsed).First()).DtStart is null
+            ? new IcsProblem(IcsPrecondition.ValidCalendarData, NoStart)
+            : null;
 
     /// <summary>
     /// Décision 4: the ceiling is a density, not a total — ten thousand instances inside the year

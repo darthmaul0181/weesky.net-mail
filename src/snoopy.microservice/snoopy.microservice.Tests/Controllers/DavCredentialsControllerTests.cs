@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -6,7 +7,10 @@ using System.Text.Json;
 using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Calendar;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -20,14 +24,16 @@ public sealed class DavCredentialsControllerTests
     private readonly Mock<IDavCredentialStore> store = new();
     private readonly Mock<IDavAuthenticationCache> cache = new();
     private readonly Mock<IAuthAttemptThrottle> throttle = new();
+    private readonly Mock<ICalendarStore> calendars = new();
 
     private DavCredentialsController CreateController(
-        string? publicUrl = "https://api.mail.weesky.net", string username = "alice", string domain = "weesky.be")
+        string? publicUrl = "https://api.mail.weesky.net", string username = "alice",
+        string domain = "weesky.be", ILogger<DavCredentialsController>? logger = null)
     {
         var controller = new DavCredentialsController(
             store.Object, cache.Object, throttle.Object,
             Options.Create(new DavOptions { PublicUrl = publicUrl }),
-            NullLogger<DavCredentialsController>.Instance)
+            logger ?? NullLogger<DavCredentialsController>.Instance)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(username, domain, Uid)
         };
@@ -40,9 +46,10 @@ public sealed class DavCredentialsControllerTests
     private static string NotFoundMessage(ActionResult<DavCredentialsView> result) =>
         Assert.IsType<ResultEnveloppe>(Assert.IsType<NotFoundObjectResult>(result.Result).Value).Message!;
 
-    private void ArrangeState(bool configured = true, bool enabled = true, DateTime? lastUsedAt = null) =>
+    private void ArrangeState(bool configured = true, bool enabled = true,
+        DateTime? lastUsedAt = null, bool calDav = false) =>
         store.Setup(s => s.GetStateAsync(Uid, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DavCredentialState(configured, enabled, lastUsedAt));
+            .ReturnsAsync(new DavCredentialState(configured, enabled, calDav, lastUsedAt));
 
     [Fact]
     public async Task Get_AnswersTheAddressFromConfigurationAndTheFullEmail()
@@ -97,11 +104,85 @@ public sealed class DavCredentialsControllerTests
     }
 
     [Fact]
+    public async Task SetCalDav_TurningOn_CreatesTheDefaultCalendarInsideTheSwitchesOwnTransaction()
+    {
+        Func<Task>? shared = null;
+        store.Setup(s => s.EnableAsync(Uid, DavProtocol.CalDav, It.IsAny<Func<Task>?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback((Guid _, DavProtocol _, Func<Task>? alongside, CancellationToken _) => shared = alongside)
+            .ReturnsAsync("ABCDEFGHIJKLMNOPQRST");
+        ArrangeState(calDav: true);
+
+        var view = Body(await CreateController().SetCalDav(
+            new DavCalDavToggle { Enabled = true, TimeZone = "Europe/Brussels" }, calendars.Object,
+            CancellationToken.None));
+
+        // The callback is what the store runs after writing its row: the controller opens no
+        // transaction of its own, and the calendar is created inside the switch's.
+        Assert.NotNull(shared);
+        await shared!();
+        calendars.Verify(c => c.EnsureDefaultAsync(Uid, "Europe/Brussels", It.IsAny<CancellationToken>()),
+            Times.Once);
+        Assert.Equal("ABCDEFGHIJKLMNOPQRST", view.Password);
+        Assert.True(view.CalDavEnabled);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Mars/Olympus")]
+    public async Task SetCalDav_TurningOnWithoutAKnownZone_Is400AndWritesNothing(string? zone)
+    {
+        // A calendar born in the wrong zone shows every event an hour out, and no later screen asks
+        // the question again — so the refusal comes before the row, not after it.
+        var result = await CreateController().SetCalDav(
+            new DavCalDavToggle { Enabled = true, TimeZone = zone }, calendars.Object,
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        store.VerifyNoOtherCalls();
+        calendars.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task SetCalDav_TurningOff_NeedsNoZoneAndCreatesNoCalendar()
+    {
+        ArrangeState(calDav: false);
+
+        var view = Body(await CreateController().SetCalDav(
+            new DavCalDavToggle { Enabled = false }, calendars.Object, CancellationToken.None));
+
+        store.Verify(s => s.DisableAsync(Uid, DavProtocol.CalDav, It.IsAny<CancellationToken>()), Times.Once);
+        calendars.VerifyNoOtherCalls();
+        Assert.False(view.CalDavEnabled);
+        cache.Verify(c => c.Forget("alice@weesky.be"), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetCalDav_LogsItsOwnAuditLineAndNotTheAddressBooks()
+    {
+        store.Setup(s => s.EnableAsync(Uid, DavProtocol.CalDav, It.IsAny<Func<Task>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync("ABCDEFGHIJKLMNOPQRST");
+        ArrangeState(calDav: true);
+        var logger = new Mock<ILogger<DavCredentialsController>>();
+        var controller = CreateController(logger: logger.Object);
+
+        await controller.SetCalDav(new DavCalDavToggle { Enabled = true, TimeZone = "Europe/Brussels" },
+            calendars.Object, CancellationToken.None);
+
+        logger.Verify(l => l.Log(LogLevel.Information, It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("caldav_sync")
+                && v.ToString()!.Contains("created=True")),
+            null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+    }
+
+    [Fact]
     public void View_ToStringNeverPrintsTheSecret()
     {
         // The synthesised one would, and a debug log line on the view is how it reaches a file.
         var rendered = new DavCredentialsView(
-            "https://api.mail.weesky.net", "alice@weesky.be", true, true, null, "ABCDEFGHIJKLMNOPQRST")
+            "https://api.mail.weesky.net", "alice@weesky.be", true, true, true, null,
+            "ABCDEFGHIJKLMNOPQRST")
             .ToString();
 
         Assert.DoesNotContain("ABCDEFGHIJKLMNOPQRST", rendered);
@@ -112,7 +193,7 @@ public sealed class DavCredentialsControllerTests
     [Fact]
     public async Task SetCardDav_TurningOnForTheFirstTime_AnswersTheSecretInTheSameResponse()
     {
-        store.Setup(s => s.EnableAsync(Uid, It.IsAny<CancellationToken>())).ReturnsAsync("ABCDEFGHIJKLMNOPQRST");
+        store.Setup(s => s.EnableAsync(Uid, DavProtocol.CardDav, null, It.IsAny<CancellationToken>())).ReturnsAsync("ABCDEFGHIJKLMNOPQRST");
         ArrangeState();
 
         var view = Body(await CreateController().SetCardDav(new DavSyncToggle { Enabled = true }, CancellationToken.None));
@@ -126,7 +207,7 @@ public sealed class DavCredentialsControllerTests
     {
         // Including the concurrent-first-enable race, which the store answers as a re-enable:
         // never a 500 on the primary key, and never a second secret handed out.
-        store.Setup(s => s.EnableAsync(Uid, It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        store.Setup(s => s.EnableAsync(Uid, DavProtocol.CardDav, null, It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         ArrangeState();
 
         var view = Body(await CreateController().SetCardDav(new DavSyncToggle { Enabled = true }, CancellationToken.None));
@@ -141,8 +222,8 @@ public sealed class DavCredentialsControllerTests
 
         var view = Body(await CreateController().SetCardDav(new DavSyncToggle { Enabled = false }, CancellationToken.None));
 
-        store.Verify(s => s.DisableAsync(Uid, It.IsAny<CancellationToken>()), Times.Once);
-        store.Verify(s => s.EnableAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(s => s.DisableAsync(Uid, DavProtocol.CardDav, It.IsAny<CancellationToken>()), Times.Once);
+        store.Verify(s => s.EnableAsync(It.IsAny<Guid>(), It.IsAny<DavProtocol>(), It.IsAny<Func<Task>?>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.True(view.Configured);
         Assert.False(view.CardDavEnabled);
         Assert.Null(view.Password);
@@ -158,7 +239,7 @@ public sealed class DavCredentialsControllerTests
 
         Assert.False(view.Configured);
         Assert.Null(view.Password);
-        store.Verify(s => s.EnableAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(s => s.EnableAsync(It.IsAny<Guid>(), It.IsAny<DavProtocol>(), It.IsAny<Func<Task>?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -247,8 +328,11 @@ public sealed class DavCredentialsControllerTests
         Assert.Equal(NotServed, NotFoundMessage(await controller.Get(CancellationToken.None)));
         Assert.Equal(NotServed, NotFoundMessage(
             await controller.SetCardDav(new DavSyncToggle { Enabled = true }, CancellationToken.None)));
+        Assert.Equal(NotServed, NotFoundMessage(await controller.SetCalDav(
+            new DavCalDavToggle { Enabled = true, TimeZone = "Europe/Brussels" }, calendars.Object,
+            CancellationToken.None)));
         Assert.Equal(NotServed, NotFoundMessage(await controller.Regenerate(CancellationToken.None)));
-        store.Verify(s => s.EnableAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(s => s.EnableAsync(It.IsAny<Guid>(), It.IsAny<DavProtocol>(), It.IsAny<Func<Task>?>(), It.IsAny<CancellationToken>()), Times.Never);
         store.VerifyNoOtherCalls();
     }
 }

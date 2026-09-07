@@ -412,6 +412,8 @@
   "sync": {
     "carddav": "Contacts (CardDAV)",
     "carddavHint": "Synchronisez votre carnet d’adresses avec votre téléphone ou Thunderbird. Désactiver arrête tous les appareils ; votre mot de passe est conservé.",
+    "caldav": "Agenda (CalDAV)",
+    "caldavHint": "Synchronisez vos agendas avec votre téléphone ou Thunderbird. Désactiver arrête tous les appareils ; votre mot de passe est conservé.",
     "connection": "Connexion",
     "serverUrl": "Adresse du serveur",
     "username": "Identifiant",
@@ -425,7 +427,7 @@
     "regenerateTitle": "Régénérer le mot de passe de synchronisation ?",
     "regenerateWarning": "Tous les appareils cesseront de se synchroniser jusqu’à la saisie du nouveau mot de passe. Désactivez d’abord la synchronisation sur vos appareils, puis saisissez le nouveau : des échecs répétés bloquent le compte un quart d’heure.",
     "hidden": "Masqué — régénérez pour en obtenir un nouveau",
-    "notConfigured": "Activez Contacts (CardDAV) pour obtenir un mot de passe",
+    "notConfigured": "Activez Contacts (CardDAV) ou Agenda (CalDAV) pour obtenir un mot de passe",
     "loadFailed": "Impossible de charger les réglages de synchronisation",
     "unavailable": "Ce serveur ne propose pas de synchronisation.",
     "saveFailed": "Impossible d’enregistrer la modification"

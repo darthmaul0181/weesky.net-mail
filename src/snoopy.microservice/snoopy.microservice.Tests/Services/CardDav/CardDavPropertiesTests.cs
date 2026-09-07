@@ -38,27 +38,29 @@ public sealed class CardDavPropertiesTests
         (DavResourceKind.Principal, DavXml.Dav + "principal-URL"),
         (DavResourceKind.Principal, DavXml.Dav + "displayname"),
         (DavResourceKind.Principal, DavXml.CardDav + "addressbook-home-set"),
+        (DavResourceKind.Principal, DavXml.CalDav + "calendar-home-set"),
+        (DavResourceKind.Principal, DavXml.CalDav + "calendar-user-address-set"),
         (DavResourceKind.Principal, DavXml.Dav + "principal-collection-set"),
         (DavResourceKind.Principal, DavXml.Dav + "supported-report-set"),
         (DavResourceKind.Principal, DavXml.Dav + "alternate-URI-set"),
         (DavResourceKind.Principal, DavXml.Dav + "group-membership"),
 
-        (DavResourceKind.Home, DavXml.Dav + "resourcetype"),
-        (DavResourceKind.Home, DavXml.Dav + "displayname"),
-        (DavResourceKind.Home, DavXml.Dav + "supported-report-set"),
-        (DavResourceKind.Home, DavXml.Dav + "current-user-principal"),
+        (DavResourceKind.AddressBookHome, DavXml.Dav + "resourcetype"),
+        (DavResourceKind.AddressBookHome, DavXml.Dav + "displayname"),
+        (DavResourceKind.AddressBookHome, DavXml.Dav + "supported-report-set"),
+        (DavResourceKind.AddressBookHome, DavXml.Dav + "current-user-principal"),
 
-        (DavResourceKind.Collection, DavXml.Dav + "resourcetype"),
-        (DavResourceKind.Collection, DavXml.Dav + "displayname"),
-        (DavResourceKind.Collection, DavXml.CalendarServer + "getctag"),
-        (DavResourceKind.Collection, DavXml.Dav + "sync-token"),
-        (DavResourceKind.Collection, DavXml.Dav + "supported-report-set"),
-        (DavResourceKind.Collection, DavXml.CardDav + "supported-address-data"),
-        (DavResourceKind.Collection, DavXml.CardDav + "supported-collation-set"),
-        (DavResourceKind.Collection, DavXml.CardDav + "max-resource-size"),
-        (DavResourceKind.Collection, DavXml.Dav + "current-user-principal"),
-        (DavResourceKind.Collection, DavXml.Dav + "current-user-privilege-set"),
-        (DavResourceKind.Collection, DavXml.Dav + "owner"),
+        (DavResourceKind.AddressBook, DavXml.Dav + "resourcetype"),
+        (DavResourceKind.AddressBook, DavXml.Dav + "displayname"),
+        (DavResourceKind.AddressBook, DavXml.CalendarServer + "getctag"),
+        (DavResourceKind.AddressBook, DavXml.Dav + "sync-token"),
+        (DavResourceKind.AddressBook, DavXml.Dav + "supported-report-set"),
+        (DavResourceKind.AddressBook, DavXml.CardDav + "supported-address-data"),
+        (DavResourceKind.AddressBook, DavXml.CardDav + "supported-collation-set"),
+        (DavResourceKind.AddressBook, DavXml.CardDav + "max-resource-size"),
+        (DavResourceKind.AddressBook, DavXml.Dav + "current-user-principal"),
+        (DavResourceKind.AddressBook, DavXml.Dav + "current-user-privilege-set"),
+        (DavResourceKind.AddressBook, DavXml.Dav + "owner"),
 
         (DavResourceKind.Card, DavXml.Dav + "getetag"),
         (DavResourceKind.Card, DavXml.Dav + "getcontenttype"),
@@ -98,8 +100,8 @@ public sealed class CardDavPropertiesTests
     [Theory]
     [InlineData(nameof(DavResourceKind.ServiceRoot))]
     [InlineData(nameof(DavResourceKind.Principal))]
-    [InlineData(nameof(DavResourceKind.Home))]
-    [InlineData(nameof(DavResourceKind.Collection))]
+    [InlineData(nameof(DavResourceKind.AddressBookHome))]
+    [InlineData(nameof(DavResourceKind.AddressBook))]
     [InlineData(nameof(DavResourceKind.Card))]
     public void EachTable_DeclaresTheClosedSetAndNothingElse(string kind)
     {
@@ -270,7 +272,7 @@ public sealed class CardDavPropertiesTests
 
     [Theory]
     [InlineData(nameof(DavResourceKind.ServiceRoot))]
-    [InlineData(nameof(DavResourceKind.Home))]
+    [InlineData(nameof(DavResourceKind.AddressBookHome))]
     public void TheTwoShapesWhoseAllowNamesReport_AnnounceTheReportTheyAnswer(string kind)
     {
         var resolved = CardDavProperties.Resolve(
@@ -445,7 +447,7 @@ public sealed class CardDavPropertiesTests
             HrefIn(ResolvePrincipalElement(DavXml.Dav + "principal-collection-set")));
 
         foreach (var kind in (DavResourceKind[])[DavResourceKind.ServiceRoot, DavResourceKind.Principal,
-            DavResourceKind.Home, DavResourceKind.Collection])
+            DavResourceKind.AddressBookHome, DavResourceKind.AddressBook])
         {
             Assert.Equal(DavPaths.Principal(UserId), HrefIn(Single(CardDavProperties.Resolve(
                 Named(DavXml.Dav + "current-user-principal"), ContextFor(kind)))));
@@ -475,7 +477,7 @@ public sealed class CardDavPropertiesTests
     [Fact]
     public void TheHome_IsACollectionTheUserCanRead()
     {
-        var home = new DavResourceContext(DavResourceKind.Home, UserId, PrincipalAddress, null, null);
+        var home = new DavResourceContext(DavResourceKind.AddressBookHome, UserId, PrincipalAddress, null, null);
 
         Assert.Equal([DavXml.Dav + "collection"],
             Single(CardDavProperties.Resolve(Named(DavXml.Dav + "resourcetype"), home)).Elements()
@@ -640,13 +642,16 @@ public sealed class CardDavPropertiesTests
         new(DavResourceKind.Card, UserId, PrincipalAddress, card, State);
 
     private static DavResourceContext CollectionContext() =>
-        new(DavResourceKind.Collection, UserId, PrincipalAddress, null, State);
+        new(DavResourceKind.AddressBook, UserId, PrincipalAddress, null, State);
 
     private static DavResourceContext PrincipalContext() =>
         new(DavResourceKind.Principal, UserId, PrincipalAddress, null, null);
 
     private static DavResourceContext ContextFor(DavResourceKind kind) => new(
-        kind, UserId, PrincipalAddress, kind is DavResourceKind.Card ? DefaultCard() : null, State);
+        kind, UserId, PrincipalAddress, kind is DavResourceKind.Card ? DefaultCard() : null, State,
+        // The principal's calendar-user-address-set is served only where the controller gathered
+        // the list; without one it is a 404 propstat, which is not what these two theories judge.
+        Addresses: [PrincipalAddress]);
 
     private static DavResourceKind Kind(string name) => Enum.Parse<DavResourceKind>(name);
 

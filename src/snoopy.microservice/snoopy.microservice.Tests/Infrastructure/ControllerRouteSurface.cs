@@ -32,16 +32,22 @@ internal static class ControllerRouteSurface
         var surface = new List<Action>();
         foreach (var type in controllers)
         {
-            var prefix = type.GetCustomAttribute<RouteAttribute>()?.Template?
-                .Replace("[controller]", type.Name[..^"Controller".Length]);
-            if (prefix is null) continue;
+            // Every template, not the first: a class may carry two — the well-known carries one per
+            // protocol — and GetCustomAttribute throws outright when it finds a second.
+            var prefixes = type.GetCustomAttributes<RouteAttribute>()
+                .Select(r => r.Template?.Replace("[controller]", type.Name[..^"Controller".Length]))
+                .Where(template => template is not null)
+                .ToList();
 
             foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
             {
                 foreach (var http in method.GetCustomAttributes<HttpMethodAttribute>())
                 {
-                    var route = string.IsNullOrEmpty(http.Template) ? prefix : $"{prefix}/{http.Template}";
-                    surface.Add(new Action(type, method, http.HttpMethods.Single(), prefix, route));
+                    foreach (var prefix in prefixes)
+                    {
+                        var route = string.IsNullOrEmpty(http.Template) ? prefix! : $"{prefix}/{http.Template}";
+                        surface.Add(new Action(type, method, http.HttpMethods.Single(), prefix!, route));
+                    }
                 }
             }
         }

@@ -14,6 +14,26 @@ public sealed class CalendarEventStoreTests
 {
     private static readonly CancellationToken None = CancellationToken.None;
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheGate_ConsultsItsCommitPredicate_WithWhatTheBodyAnswered(bool commit)
+    {
+        var (db, _, _) = await Seed(nameof(TheGate_ConsultsItsCommitPredicate_WithWhatTheBodyAnswered));
+        var asked = new List<string>();
+
+        var answer = await Events(db).InTransactionAsync(
+            () => Task.FromResult("outcome"),
+            outcome => { asked.Add(outcome); return commit; },
+            None);
+
+        // InMemory has neither transaction nor rollback, so a refused rank cannot be observed from
+        // here. What this pins is that the predicate is consulted at all: the guarantee dies by the
+        // line going inert, and the whole suite stayed green when it was.
+        Assert.Equal("outcome", answer);
+        Assert.Equal(["outcome"], asked);
+    }
+
     [Fact]
     public async Task Create_ProjectsColumns_HashesAndRanks_UidIsId()
     {

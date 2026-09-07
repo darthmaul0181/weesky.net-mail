@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -19,7 +21,8 @@ public sealed class DavCredentialStoreTests
     {
         var db = nameof(Enable_WhenAbsent_CreatesTheRowAndAnswersTheSecret);
 
-        var secret = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        var secret = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
 
         Assert.NotNull(secret);
         Assert.Equal(DavSecret.Length, secret!.Length);
@@ -35,10 +38,12 @@ public sealed class DavCredentialStoreTests
     public async Task Enable_WhenAlreadyConfigured_TurnsItBackOnWithoutANewSecret()
     {
         var db = nameof(Enable_WhenAlreadyConfigured_TurnsItBackOnWithoutANewSecret);
-        var first = await CreateStore(db).EnableAsync(User, CancellationToken.None);
-        await CreateStore(db).DisableAsync(User, CancellationToken.None);
+        var first = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
+        await CreateStore(db).DisableAsync(User, DavProtocol.CardDav, CancellationToken.None);
 
-        var again = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        var again = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
 
         Assert.Null(again);
         using var ctx = new PreferencesTestDbContext(db);
@@ -60,10 +65,12 @@ public sealed class DavCredentialStoreTests
         string? winner = null;
         var context = new DuplicateKeyOnFirstSaveDbContext(db, async () =>
         {
-            winner = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+            winner = await CreateStore(db)
+                .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
         });
 
-        var loser = await new DavCredentialStore(context).EnableAsync(User, CancellationToken.None);
+        var loser = await new DavCredentialStore(context)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
 
         Assert.NotNull(winner);
         // The loser answers as a re-enable does: the state, and no second secret.
@@ -78,9 +85,10 @@ public sealed class DavCredentialStoreTests
     public async Task Disable_KeepsTheSecret()
     {
         var db = nameof(Disable_KeepsTheSecret);
-        var secret = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        var secret = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
 
-        await CreateStore(db).DisableAsync(User, CancellationToken.None);
+        await CreateStore(db).DisableAsync(User, DavProtocol.CardDav, CancellationToken.None);
 
         using var ctx = new PreferencesTestDbContext(db);
         var row = Assert.Single(ctx.DavCredentials);
@@ -93,7 +101,7 @@ public sealed class DavCredentialStoreTests
     {
         var db = nameof(Disable_OnAnAccountThatNeverEnabled_DoesNothing);
 
-        await CreateStore(db).DisableAsync(User, CancellationToken.None);
+        await CreateStore(db).DisableAsync(User, DavProtocol.CardDav, CancellationToken.None);
 
         using var ctx = new PreferencesTestDbContext(db);
         Assert.Empty(ctx.DavCredentials);
@@ -103,7 +111,8 @@ public sealed class DavCredentialStoreTests
     public async Task Regenerate_ReplacesTheSecretAndTheSaltOnTheSameRow()
     {
         var db = nameof(Regenerate_ReplacesTheSecretAndTheSaltOnTheSameRow);
-        var first = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        var first = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
         byte[] firstSalt;
         using (var before = new PreferencesTestDbContext(db)) firstSalt = before.DavCredentials.Single().Salt;
 
@@ -135,7 +144,8 @@ public sealed class DavCredentialStoreTests
     public async Task GetState_ReportsAConfiguredAccountAndCarriesNoSecret()
     {
         var db = nameof(GetState_ReportsAConfiguredAccountAndCarriesNoSecret);
-        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
 
         var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
 
@@ -147,9 +157,9 @@ public sealed class DavCredentialStoreTests
     [Fact]
     public void DavCredentialState_HasNowhereToPutASecret()
     {
-        // The assertion that keeps the "reveal it again" door shut: a fourth property would have
+        // The assertion that keeps the "reveal it again" door shut: a fifth property would have
         // to be added here first, deliberately, rather than slipped in beside a screen field.
-        Assert.Equal(3, typeof(DavCredentialState).GetProperties().Length);
+        Assert.Equal(4, typeof(DavCredentialState).GetProperties().Length);
     }
 
     [Fact]
@@ -159,13 +169,14 @@ public sealed class DavCredentialStoreTests
         // exactly how a digest reaches a log file. The synthesised ToString prints all three.
         var digest = string.Concat(Enumerable.Repeat("0123456789abcdef", 4));
 
-        var rendered = new DavCredentialRecord(true, digest, [9, 8, 7]).ToString();
+        var rendered = new DavCredentialRecord(true, false, digest, [9, 8, 7]).ToString();
 
         Assert.DoesNotContain(digest, rendered, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(digest[..8], rendered, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(nameof(DavCredentialRecord.SecretHash), rendered, StringComparison.Ordinal);
         Assert.DoesNotContain(nameof(DavCredentialRecord.Salt), rendered, StringComparison.Ordinal);
         Assert.Contains(nameof(DavCredentialRecord.CardDavEnabled), rendered, StringComparison.Ordinal);
+        Assert.Contains(nameof(DavCredentialRecord.CalDavEnabled), rendered, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -175,7 +186,8 @@ public sealed class DavCredentialStoreTests
         // other GetState test reads that field as null, so the projection answered to nobody.
         var db = nameof(GetState_ReportsTheLastUseTheAuthenticationPathStamped);
         var used = new DateTime(2026, 8, 23, 10, 0, 0, DateTimeKind.Utc);
-        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
         await CreateStore(db).TouchAsync(User, used, CancellationToken.None);
 
         var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
@@ -191,7 +203,8 @@ public sealed class DavCredentialStoreTests
         // the row is written Unspecified here to stand in for what the real provider returns.
         var db = nameof(GetState_StampsTheLastUseAsUtcWhateverKindTheProviderReadBack);
         var used = new DateTime(2026, 8, 23, 8, 0, 0, DateTimeKind.Unspecified);
-        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
         await CreateStore(db).TouchAsync(User, used, CancellationToken.None);
 
         var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
@@ -215,8 +228,9 @@ public sealed class DavCredentialStoreTests
     public async Task GetState_OnASwitchedOffRow_StaysConfigured()
     {
         var db = nameof(GetState_OnASwitchedOffRow_StaysConfigured);
-        await CreateStore(db).EnableAsync(User, CancellationToken.None);
-        await CreateStore(db).DisableAsync(User, CancellationToken.None);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
+        await CreateStore(db).DisableAsync(User, DavProtocol.CardDav, CancellationToken.None);
 
         var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
 
@@ -230,7 +244,8 @@ public sealed class DavCredentialStoreTests
     public async Task Find_AnswersTheRowTheHandlerCompares()
     {
         var db = nameof(Find_AnswersTheRowTheHandlerCompares);
-        var secret = await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        var secret = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
 
         var record = await CreateStore(db).FindAsync(User, CancellationToken.None);
 
@@ -251,8 +266,9 @@ public sealed class DavCredentialStoreTests
     public async Task Find_OnASwitchedOffRow_AnswersItWithTheFlagOff()
     {
         var db = nameof(Find_OnASwitchedOffRow_AnswersItWithTheFlagOff);
-        var secret = await CreateStore(db).EnableAsync(User, CancellationToken.None);
-        await CreateStore(db).DisableAsync(User, CancellationToken.None);
+        var secret = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
+        await CreateStore(db).DisableAsync(User, DavProtocol.CardDav, CancellationToken.None);
 
         var record = await CreateStore(db).FindAsync(User, CancellationToken.None);
 
@@ -272,7 +288,8 @@ public sealed class DavCredentialStoreTests
         await CreateStore(db).TouchAsync(User, used, CancellationToken.None);
         using (var empty = new PreferencesTestDbContext(db)) Assert.Empty(empty.DavCredentials);
 
-        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
         await CreateStore(db).TouchAsync(User, used, CancellationToken.None);
 
         using var ctx = new PreferencesTestDbContext(db);
@@ -283,13 +300,136 @@ public sealed class DavCredentialStoreTests
     public async Task Delete_RemovesTheRowAndIsSilentOnAnAbsentOne()
     {
         var db = nameof(Delete_RemovesTheRowAndIsSilentOnAnAbsentOne);
-        await CreateStore(db).EnableAsync(User, CancellationToken.None);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
 
         await CreateStore(db).DeleteAsync(User, CancellationToken.None);
         await CreateStore(db).DeleteAsync(User, CancellationToken.None);
 
         using var ctx = new PreferencesTestDbContext(db);
         Assert.Empty(ctx.DavCredentials);
+    }
+
+    [Fact]
+    public async Task Enable_OfOneProtocol_LeavesTheOtherExplicitlyOff()
+    {
+        var db = nameof(Enable_OfOneProtocol_LeavesTheOtherExplicitlyOff);
+
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CalDav, alongside: null, CancellationToken.None);
+
+        // Both columns are posed at the insert: a row born of the calendar switch must not claim an
+        // address book the account never asked for.
+        using var ctx = new PreferencesTestDbContext(db);
+        var row = Assert.Single(ctx.DavCredentials);
+        Assert.False(row.CardDavEnabled);
+        Assert.True(row.CalDavEnabled);
+    }
+
+    [Fact]
+    public async Task Enable_OfTheSecondProtocol_TurnsItOnWithoutTouchingTheFirstOrTheSecret()
+    {
+        var db = nameof(Enable_OfTheSecondProtocol_TurnsItOnWithoutTouchingTheFirstOrTheSecret);
+        var secret = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
+
+        var again = await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CalDav, alongside: null, CancellationToken.None);
+
+        // One secret for the two services: the second switch draws none.
+        Assert.Null(again);
+        using var ctx = new PreferencesTestDbContext(db);
+        var row = Assert.Single(ctx.DavCredentials);
+        Assert.True(row.CardDavEnabled);
+        Assert.True(row.CalDavEnabled);
+        Assert.True(DavSecret.Matches(row.Salt, row.SecretHash, secret!));
+    }
+
+    [Fact]
+    public async Task Disable_OfOneProtocol_LeavesTheOtherOn()
+    {
+        var db = nameof(Disable_OfOneProtocol_LeavesTheOtherOn);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CalDav, alongside: null, CancellationToken.None);
+
+        await CreateStore(db).DisableAsync(User, DavProtocol.CalDav, CancellationToken.None);
+
+        using var ctx = new PreferencesTestDbContext(db);
+        var row = Assert.Single(ctx.DavCredentials);
+        Assert.True(row.CardDavEnabled);
+        Assert.False(row.CalDavEnabled);
+    }
+
+    [Fact]
+    public async Task Enable_RunsAlongsideOnceAndAfterTheRowIsWritten()
+    {
+        // What the InMemory provider CAN prove of the shared transaction: the callback runs, once,
+        // and sees the row. That it commits with it is verified by hand on snoopy_webmail_dev,
+        // there being no transaction here to observe.
+        var db = nameof(Enable_RunsAlongsideOnceAndAfterTheRowIsWritten);
+        var calls = 0;
+        var sawTheRow = false;
+
+        await CreateStore(db).EnableAsync(User, DavProtocol.CalDav, alongside: () =>
+        {
+            calls++;
+            using var inside = new PreferencesTestDbContext(db);
+            sawTheRow = inside.DavCredentials.Any(c => c.UserId == User);
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+
+        Assert.Equal(1, calls);
+        Assert.True(sawTheRow);
+    }
+
+    [Fact]
+    public async Task Enable_OnAnAlreadyConfiguredAccount_StillRunsAlongside()
+    {
+        // Turning the calendar back on must still make sure a default calendar exists: the row
+        // surviving says nothing about the collection, which a deletion may have taken.
+        var db = nameof(Enable_OnAnAlreadyConfiguredAccount_StillRunsAlongside);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CardDav, alongside: null, CancellationToken.None);
+        var calls = 0;
+
+        await CreateStore(db).EnableAsync(User, DavProtocol.CalDav, alongside: () =>
+        {
+            calls++;
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task GetState_ReportsBothSwitches()
+    {
+        var db = nameof(GetState_ReportsBothSwitches);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CalDav, alongside: null, CancellationToken.None);
+
+        var state = await CreateStore(db).GetStateAsync(User, CancellationToken.None);
+
+        Assert.True(state.Configured);
+        Assert.False(state.CardDavEnabled);
+        Assert.True(state.CalDavEnabled);
+    }
+
+    [Fact]
+    public async Task Find_AnswersBothSwitchesTheHandlerJudgesOn()
+    {
+        var db = nameof(Find_AnswersBothSwitchesTheHandlerJudgesOn);
+        await CreateStore(db)
+            .EnableAsync(User, DavProtocol.CalDav, alongside: null, CancellationToken.None);
+
+        var record = await CreateStore(db).FindAsync(User, CancellationToken.None);
+
+        // Both, because the scheme refuses only when the two are off; one asleep is the resource's
+        // own 403.
+        Assert.False(record!.Value.CardDavEnabled);
+        Assert.True(record.Value.CalDavEnabled);
     }
 
     /// <summary>
@@ -306,7 +446,11 @@ public sealed class DavCredentialStoreTests
             // The shared root PreferencesTestDbContext uses: without it, this context's own
             // options make the InMemory provider open a second store under the same name, and the
             // rival's insert below becomes invisible to it.
-            .UseInMemoryDatabase(databaseName, PreferencesTestDbContext.Root).Options)
+            .UseInMemoryDatabase(databaseName, PreferencesTestDbContext.Root)
+            // EnableAsync opens a transaction the InMemory provider cannot honour; left fatal it
+            // would throw before the duplicate key this context exists to inject.
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options)
     {
         private bool _rejected;
 

@@ -388,13 +388,13 @@ public sealed class DavContactWriterTests : IDisposable
     }
 
     [Fact]
-    public async Task AFullBook_IsRefusedAsBookFull()
+    public async Task AFullBook_IsRefusedAsCollectionFull()
     {
         await GivenTheBookIsFull();
 
         var outcome = await Writer.PutAsync(UserId, "new.vcf", ValidCard("u1"), CancellationToken.None);
 
-        Assert.Equal(DavWriteStatus.BookFull, outcome.Status);
+        Assert.Equal(DavWriteStatus.CollectionFull, outcome.Status);
     }
 
     [Fact]

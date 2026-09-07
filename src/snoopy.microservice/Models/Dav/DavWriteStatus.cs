@@ -12,20 +12,29 @@ public enum DavWriteStatus
     Replaced,
     Deleted,
 
-    /// <summary>Unreadable body, or a body carrying more than one card — <c>valid-address-data</c>.</summary>
+    /// <summary>Unreadable body, or a body that is not one resource — <c>valid-address-data</c> on
+    /// the book; on a calendar, the precondition the outcome carries.</summary>
     InvalidCard,
 
-    /// <summary>A VERSION outside 3.0/4.0 — <c>supported-address-data</c>. Readable, yet refusable.</summary>
+    /// <summary>A VERSION outside what the collection announces — <c>supported-address-data</c>,
+    /// <c>supported-calendar-data</c>. Readable, yet refusable.</summary>
     UnsupportedVersion,
+
+    /// <summary>A VTODO, VJOURNAL or VFREEBUSY alone — <c>supported-calendar-component</c>.</summary>
+    UnsupportedComponent,
+
+    /// <summary>Over <c>IcsGuards.MaxInstancesPerYear</c> — <c>max-instances</c>.</summary>
+    TooManyInstances,
 
     /// <summary>The UID is held by another resource — <c>no-uid-conflict</c>, with that resource's href.</summary>
     UidConflict,
 
-    /// <summary>Beyond <c>ContactStore.MaxCardBytes</c> — <c>max-resource-size</c>.</summary>
+    /// <summary>Beyond <c>ContactStore.MaxCardBytes</c> or <c>IcsGuards.MaxIcsBytes</c> — <c>max-resource-size</c>.</summary>
     TooLarge,
 
-    /// <summary>The book is at <c>ContactStore.MaxPerUser</c> — 507.</summary>
-    BookFull,
+    /// <summary>The collection is at its ceiling — <c>ContactStore.MaxPerUser</c>,
+    /// <c>CalendarEventStore.MaxPerCalendar</c> — 507.</summary>
+    CollectionFull,
 
     /// <summary>
     /// A create-only PUT found the name already holding a visible resource — the creation race's

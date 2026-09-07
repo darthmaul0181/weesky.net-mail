@@ -28,6 +28,29 @@ public sealed class WellKnownControllerTests : IAsyncLifetime
         Assert.Equal("/dav/", response.Header("Location"));
     }
 
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("PROPFIND")]
+    [InlineData("OPTIONS")]
+    public async Task TheCalendarWellKnown_RedirectsToTheSameAddress(string method)
+    {
+        // The same action under a second template: a client that only knows the CalDAV well-known
+        // must find the service, and both trees hang off the one /dav/.
+        var response = await server.SendAsync(method, "/.well-known/caldav");
+
+        Assert.Equal(301, response.StatusCode);
+        Assert.Equal("/dav/", response.Header("Location"));
+        Assert.Contains("max-age", response.Header("Cache-Control")!);
+    }
+
+    [Fact]
+    public async Task TheCalendarWellKnown_IsAnonymousToo()
+    {
+        var response = await server.SendUnauthenticated("PROPFIND", "/.well-known/caldav");
+
+        Assert.Equal(301, response.StatusCode);
+    }
+
     [Fact]
     public async Task TheWellKnown_IsAnonymous()
     {

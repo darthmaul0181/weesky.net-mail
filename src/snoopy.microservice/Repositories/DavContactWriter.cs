@@ -228,7 +228,7 @@ internal sealed class DavContactWriter(
         if (row is null)
         {
             var stored = await context.Contacts.CountAsync(c => c.UserId == userId, cancellationToken);
-            if (stored >= ContactStore.MaxPerUser) return Refused(DavWriteStatus.BookFull);
+            if (stored >= ContactStore.MaxPerUser) return Refused(DavWriteStatus.CollectionFull);
         }
 
         // The invariant of 4a: every stored card carries a UID. Stamping one into a card that
@@ -428,7 +428,7 @@ internal sealed class DavContactWriter(
     /// STRONG comparison, shared with the edge through <see cref="EntityTagMatcher"/>.</summary>
     private static bool Holds(string ifMatch, Contact? row) =>
         row is { VCardRaw: not null } && row.CardHash.Length > 0
-        && EntityTagMatcher.Match(ifMatch, CardDavProperties.EntityTag(row.CardHash));
+        && EntityTagMatcher.Match(ifMatch, DavPropertyTables.EntityTag(row.CardHash));
 
     /// <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>
     private async Task<bool> ReloadAsync(Contact row, CancellationToken cancellationToken)
@@ -453,7 +453,7 @@ internal sealed class DavContactWriter(
     /// </summary>
     private static string? EtagOf(string cardHash, string stored, string received) =>
         string.Equals(stored, received, StringComparison.Ordinal)
-            ? CardDavProperties.EntityTag(cardHash)
+            ? DavPropertyTables.EntityTag(cardHash)
             : null;
 
     private static DavWriteOutcome Refused(DavWriteStatus status) => new(status, null, null, 0);

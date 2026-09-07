@@ -45,7 +45,7 @@ public sealed class DavAuthenticationGenerationSeamTests
             .ReturnsAsync(new WebmailAccount(UserId, Guid.NewGuid()));
         accounts.Setup(s => s.IsUsableAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         credentials.Setup(s => s.FindAsync(UserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DavCredentialRecord(true, DavSecret.Hash(Salt, Secret), Salt));
+            .ReturnsAsync(new DavCredentialRecord(true, false, DavSecret.Hash(Salt, Secret), Salt));
     }
 
     private static string Fingerprint => DavSecret.Fingerprint(Secret);

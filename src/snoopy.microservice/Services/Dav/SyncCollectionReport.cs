@@ -1,106 +1,82 @@
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
-using Microsoft.EntityFrameworkCore;
-using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
-using weesky.Snoopy.Microservice.Repositories;
-using weesky.Snoopy.Microservice.Services.CardDav;
 
 namespace weesky.Snoopy.Microservice.Services.Dav;
 
 /// <summary>
 /// The <c>DAV:sync-collection</c> report (RFC 6578): what moved since the token, deletions as
 /// <c>404</c> responses whose <c>status</c> is a direct child, and the new token last. The order of
-/// <see cref="WriteAsync"/> IS the decision: the counter is read BEFORE the rows, and the window is
-/// bounded above by it. Read the other way round, a write committing in between would be covered by
-/// the returned token without appearing in the response — the client believes it seen, never asks
-/// again, and the card is missing for ever, with no error and no trace. In this order the same
-/// write is simply served next round, where at worst an unchanged ETag makes the client ignore it.
+/// the reads IS the decision: the counter is read BEFORE the rows, and the window is bounded above
+/// by it. Read the other way round, a write committing in between would be covered by the returned
+/// token without appearing in the response — the client believes it seen, never asks again, and the
+/// member is missing for ever, with no error and no trace. In this order the same write is simply
+/// served next round, where at worst an unchanged ETag makes the client ignore it.
 /// </summary>
 internal static class SyncCollectionReport
 {
     private static readonly XName ValidSyncToken = DavXml.Dav + "valid-sync-token";
 
+    /// <summary>
+    /// Called by the caller INSIDE its transaction, after it read the state with its own key: reads
+    /// the presented token against that state, then the tombstones through the source — only on a
+    /// Sequence token, none on an initial or refused one.
+    /// </summary>
+    internal static async Task<SyncWindow> ReadWindowAsync<T>(XElement root, SyncState state,
+        IDavMemberSource<T> source, CancellationToken cancellationToken)
+    {
+        var presented = DavSyncToken.Read(root.Element(DavXml.Dav + "sync-token"), state);
+
+        // An initial sync serves the whole collection and NO tombstone: the answer is authoritative
+        // on what it holds, and anything absent from it is what the client must forget. A refused
+        // token reads none either — the refusal in WriteAsync is the whole answer.
+        IReadOnlyList<DavTombstone> tombstones = presented.Kind is SyncTokenKind.Sequence
+            ? await source.TombstonesAsync(presented.Sequence, state.Seq, cancellationToken)
+            : [];
+
+        return new SyncWindow(state, presented, tombstones);
+    }
+
+    /// <summary>The window was read by the caller in ITS snapshot, with ITS key (user or calendar).</summary>
     /// <returns>the response count and the token minted, both for the request log</returns>
     /// <remarks>
-    /// The snapshot spans the counter and the tombstones, and STOPS there. Those two together is
-    /// what <see cref="IContactSyncStore.ReadStateAsync"/>'s contract demands: on MySQL's
-    /// REPEATABLE READ the first SELECT pins one InnoDB read view, so a prune committing between
-    /// them cannot delete deletions this response still owes under a watermark it read as lower —
-    /// the client would then keep those cards for ever, with no error and nothing to signal it,
-    /// since the token it files next is above the new watermark and is accepted.
-    /// <para>
-    /// The CARDS are read outside it, deliberately. A prune touches tombstones and revisions and
-    /// never <c>contacts</c>, so no card read needs that view; and a read held open while the body
-    /// drains makes whoever is draining the socket the reason an InnoDB read view stays open —
-    /// blocking purge and growing the undo log for as long as a client cares to read slowly. A card
-    /// written between the two reads simply takes a rank above this answer's bound and is served
-    /// next round, which is the same tolerance the ordering of this method already rests on.
-    /// </para>
-    /// Opened through the execution strategy the way ContactStore.InTransactionAsync is. Nothing is
-    /// written to the response inside it, so a retrying strategy, were one ever configured, replays
-    /// reads alone and can never write the document twice.
+    /// The members are read outside the caller's snapshot, deliberately. A prune touches tombstones
+    /// and revisions and never the members, so no member read needs that view; and a read held open
+    /// while the body drains makes whoever is draining the socket the reason an InnoDB read view
+    /// stays open — blocking purge and growing the undo log for as long as a client cares to read
+    /// slowly. A member written between the two reads simply takes a rank above this answer's
+    /// bound and is served next round, which is the same tolerance the ordering rests on.
     /// </remarks>
-    internal static async Task<SyncReportOutcome> WriteAsync(HttpResponse response, XDocument body,
-        string collectionHref, Guid userId, string principalAddress, string? depthHeader,
-        IDavContactReader contacts, IContactSyncStore syncStore, PreferencesDbContext preferences,
-        CancellationToken cancellationToken)
+    internal static async Task<SyncReportOutcome> WriteAsync<T>(HttpResponse response, XDocument body,
+        string collectionHref, string? depthHeader, SyncWindow window, IDavMemberSource<T> source,
+        CancellationToken cancellationToken) where T : class
     {
-        var root = body.Root!;
-
-        Func<CancellationToken, Task<SyncWindow>> read = async token =>
-        {
-            await using var transaction = await preferences.Database.BeginTransactionAsync(token);
-            // The counter first — an empty book needs an epoch to form its token, hence the create.
-            var state = await syncStore.ReadOrCreateStateAsync(userId, token);
-            var presented = DavSyncToken.Read(root.Element(DavXml.Dav + "sync-token"), state);
-
-            // An initial sync serves the whole book and NO tombstone: the answer is authoritative
-            // on what the book holds, and anything absent from it is what the client must forget.
-            // A refused token reads none either — the refusal below is the whole answer.
-            IReadOnlyList<ContactTombstone> tombstones = presented.Kind is SyncTokenKind.Sequence
-                ? await contacts.TombstonesAsync(userId, presented.Sequence, state.Seq, token)
-                : [];
-
-            await transaction.CommitAsync(token);
-            return new SyncWindow(state, presented, tombstones);
-        };
-
-        var window = await preferences.Database.CreateExecutionStrategy()
-            .ExecuteAsync(read, cancellationToken);
-
-        // After the commit, not inside it: an epoch drawn for a book that had none is worth keeping
-        // even when this request is refused, or every refused token redraws one.
+        // Before Prepare, and not after: RFC 6578 § 3.2 owes an invalid token its own precondition,
+        // and a body that also carries a malformed calendar-data would otherwise answer that one
+        // instead — the loop 4c put out. After the caller's commit, not inside it: an epoch drawn
+        // for a collection that had none is worth keeping even when this request is refused, or
+        // every refused token redraws one.
         if (window.Token.Kind is SyncTokenKind.Invalid)
         {
-            // RFC 6578 § 3.2 names it, and nothing has been written yet: the error document still
-            // owns the whole response.
             throw new DavPreconditionException(ValidSyncToken);
         }
 
-        return await WriteWindowAsync(response, body, collectionHref, userId, principalAddress,
-            depthHeader, window, contacts, cancellationToken);
-    }
+        var (request, resolver) = source.Prepare(body); // may refuse — before anything is written
 
-    private static async Task<SyncReportOutcome> WriteWindowAsync(HttpResponse response, XDocument body,
-        string collectionHref, Guid userId, string principalAddress, string? depthHeader,
-        SyncWindow window, IDavContactReader contacts, CancellationToken cancellationToken)
-    {
         var root = body.Root!;
         var (state, token, tombstones) = window;
 
         EnsureSyncLevel(root, depthHeader);
         var limit = DavLimit.Read(root, DavXml.Dav);
-        var request = DavPropertyRequest.Parse(body);
 
-        var cards = contacts.ChangedAsync(userId, token.Sequence, state.Seq, cancellationToken);
+        var members = source.ChangedAsync(token.Sequence, state.Seq, cancellationToken);
 
         await using var writer = await MultiStatusWriter.BeginAsync(response, cancellationToken);
 
         var written = 0;
         var truncated = false;
         ulong lastComplete = 0;
-        List<SyncChange> rank = [];
+        List<SyncChange<T>> rank = [];
 
         // Whole ranks while the count stays under the bound. A batch write puts several rows at one
         // sequence, and a cut inside rank n followed by token n would abandon the rest for ever —
@@ -117,8 +93,7 @@ internal static class SyncCollectionReport
                 return false;
 
             foreach (var change in rank)
-                await WriteChangeAsync(writer, change, request, userId, principalAddress,
-                    cancellationToken);
+                await WriteChangeAsync(writer, change, request, source, resolver, cancellationToken);
             written += rank.Count;
             lastComplete = rank[0].Rank;
             rank.Clear();
@@ -130,7 +105,7 @@ internal static class SyncCollectionReport
             return true;
         }
 
-        await foreach (var change in MergedByRankAsync(cards, tombstones, cancellationToken))
+        await foreach (var change in MergedByRankAsync(members, tombstones, source, cancellationToken))
         {
             if (rank.Count > 0 && change.Rank != rank[0].Rank && !await FlushRankAsync())
             {
@@ -156,19 +131,14 @@ internal static class SyncCollectionReport
         return new SyncReportOutcome(writer.ResponseCount, minted);
     }
 
-    private static async Task WriteChangeAsync(MultiStatusWriter writer, SyncChange change,
-        DavPropertyRequest request, Guid userId, string principalAddress,
-        CancellationToken cancellationToken)
+    private static async Task WriteChangeAsync<T>(MultiStatusWriter writer, SyncChange<T> change,
+        DavPropertyRequest request, IDavMemberSource<T> source, IDavMemberResolver<T> resolver,
+        CancellationToken cancellationToken) where T : class
     {
-        var href = DavPaths.Card(userId, change.DavName);
-        if (change.Card is { } card)
+        var href = source.HrefOf(change.DavName);
+        if (change.Member is { } member)
         {
-            var context = new DavResourceContext(
-                DavResourceKind.Card, userId, principalAddress, card, null);
-            // address-data is deliberately NOT served here: RFC 6352 § 10.4 defines it only in
-            // query and multiget, and the tables leave it in the 404 propstat, where Thunderbird
-            // reads the absence and chains a multiget.
-            var (found, missing) = CardDavProperties.Resolve(request, context);
+            var (found, missing) = resolver.Resolve(request, member);
             await writer.WriteResourceAsync(href, found, missing, cancellationToken);
         }
         else
@@ -179,33 +149,34 @@ internal static class SyncCollectionReport
 
     /// <summary>Both inputs arrive ordered by rank; one pass merges them, tombstones first within
     /// a shared rank so the order is deterministic.</summary>
-    private static async IAsyncEnumerable<SyncChange> MergedByRankAsync(
-        IAsyncEnumerable<DavCard> cards, IReadOnlyList<ContactTombstone> tombstones,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+    private static async IAsyncEnumerable<SyncChange<T>> MergedByRankAsync<T>(
+        IAsyncEnumerable<T> members, IReadOnlyList<DavTombstone> tombstones, IDavMemberSource<T> source,
+        [EnumeratorCancellation] CancellationToken cancellationToken) where T : class
     {
         var next = 0;
-        await foreach (var card in cards.WithCancellation(cancellationToken))
+        await foreach (var member in members.WithCancellation(cancellationToken))
         {
-            while (next < tombstones.Count && tombstones[next].SyncSequence <= card.SyncSequence)
+            var memberRank = source.RankOf(member);
+            while (next < tombstones.Count && tombstones[next].Rank <= memberRank)
             {
                 var tombstone = tombstones[next++];
-                yield return new SyncChange(tombstone.SyncSequence, tombstone.DavName, null);
+                yield return new SyncChange<T>(tombstone.Rank, tombstone.DavName, null);
             }
 
-            yield return new SyncChange(card.SyncSequence, card.DavName, card);
+            yield return new SyncChange<T>(memberRank, source.DavNameOf(member), member);
         }
 
         while (next < tombstones.Count)
         {
             var tombstone = tombstones[next++];
-            yield return new SyncChange(tombstone.SyncSequence, tombstone.DavName, null);
+            yield return new SyncChange<T>(tombstone.Rank, tombstone.DavName, null);
         }
     }
 
     /// <summary>
-    /// RFC 6578 § 3 wants <c>sync-level</c>, at <c>1</c> or <c>infinite</c> — one flat book makes
-    /// them the same answer. Absent, ANY <c>Depth</c> header converts (appendix A read wider than
-    /// the letter: refusing the conforming header a pre-RFC client set would punish the client
+    /// RFC 6578 § 3 wants <c>sync-level</c>, at <c>1</c> or <c>infinite</c> — one flat collection
+    /// makes them the same answer. Absent, ANY <c>Depth</c> header converts (appendix A read wider
+    /// than the letter: refusing the conforming header a pre-RFC client set would punish the client
     /// closest to the norm on its very first request); absent both, nothing is left to convert.
     /// </summary>
     private static void EnsureSyncLevel(XElement root, string? depthHeader)
@@ -224,15 +195,15 @@ internal static class SyncCollectionReport
         }
     }
 
-    /// <summary>One row of the window: a card to serve, or a tombstone when <see cref="Card"/> is
-    /// null.</summary>
-    private sealed record SyncChange(ulong Rank, string DavName, DavCard? Card);
+    /// <summary>One row of the window: a member to serve, or a tombstone when <see cref="Member"/>
+    /// is null.</summary>
+    private sealed record SyncChange<T>(ulong Rank, string DavName, T? Member) where T : class;
 
     /// <summary>
-    /// Everything the snapshot had to answer, carried out of it so the response can be written with
-    /// the read view already closed. The tombstones are materialised — that is the point; the cards
-    /// are not here at all, and are streamed afterwards.
+    /// Everything the caller's snapshot had to answer, carried out of it so the response can be
+    /// written with the read view already closed. The tombstones are materialised — that is the
+    /// point; the members are not here at all, and are streamed afterwards.
     /// </summary>
-    private sealed record SyncWindow(
-        SyncState State, SyncTokenRead Token, IReadOnlyList<ContactTombstone> Tombstones);
+    internal sealed record SyncWindow(
+        SyncState State, SyncTokenRead Token, IReadOnlyList<DavTombstone> Tombstones);
 }

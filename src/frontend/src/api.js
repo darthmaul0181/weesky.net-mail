@@ -297,6 +297,11 @@ export const api = {
   setDavCardDav: (enabled) =>
     request('PUT', '/api/DavCredentials/CardDav', { enabled }),
 
+  // The zone travels with the switch: turning it on creates the default calendar, and that
+  // calendar is born in the zone of the browser that asked for it.
+  setDavCalDav: (enabled, timeZone) =>
+    request('PUT', '/api/DavCredentials/CalDav', { enabled, timeZone }),
+
   regenerateDavSecret: () =>
     request('POST', '/api/DavCredentials/Regenerate'),
 

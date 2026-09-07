@@ -32,7 +32,7 @@ internal static class AddressDataFilter
             throw Refused();
 
         var contentType = DavXml.Attribute(addressData, "content-type");
-        if (contentType is not null && !MediaTypeOf(contentType)
+        if (contentType is not null && !DavHeaders.MediaTypeOf(contentType)
                 .Equals(VCardMediaType, StringComparison.OrdinalIgnoreCase))
             throw Refused();
 
@@ -106,12 +106,6 @@ internal static class AddressDataFilter
 
     // A verbatim .vcf may arrive with bare LF, which no split on CRLF would ever see as a line.
     private static string Normalized(string card) => VCardComposer.CanonicalLineBreaks(card);
-
-    private static string MediaTypeOf(string contentType)
-    {
-        var end = contentType.IndexOf(';');
-        return (end < 0 ? contentType : contentType[..end]).Trim();
-    }
 
     private static DavPreconditionException Refused() =>
         new(DavXml.CardDav + "supported-address-data");

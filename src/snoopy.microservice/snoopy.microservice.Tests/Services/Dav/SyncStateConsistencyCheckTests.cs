@@ -1,12 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
-namespace weesky.Snoopy.Microservice.Tests.Services;
+namespace weesky.Snoopy.Microservice.Tests.Services.Dav;
 
 public sealed class SyncStateConsistencyCheckTests
 {
@@ -34,9 +34,39 @@ public sealed class SyncStateConsistencyCheckTests
         return context;
     }
 
+    private static PreferencesTestDbContext NewCalendarContextWith(ulong seq, ulong highestEventRank)
+    {
+        var context = new PreferencesTestDbContext(Guid.NewGuid().ToString());
+        var calendarId = Guid.NewGuid();
+
+        context.CalendarSyncStates.Add(new CalendarSyncState
+        {
+            CalendarId = calendarId, Epoch = Guid.NewGuid(), Seq = seq, PrunedBelow = 0
+        });
+        context.CalendarEvents.Add(NewEvent(calendarId, highestEventRank));
+        context.SaveChanges();
+
+        return context;
+    }
+
+    private static PreferencesTestDbContext NewContextWithEventsOnly(ulong highestEventRank)
+    {
+        var context = new PreferencesTestDbContext(Guid.NewGuid().ToString());
+        context.CalendarEvents.Add(NewEvent(Guid.NewGuid(), highestEventRank));
+        context.SaveChanges();
+
+        return context;
+    }
+
     private static Contact NewContact(Guid userId, ulong syncSequence) => new()
     {
         Id = Guid.NewGuid(), UserId = userId, Uid = Guid.NewGuid().ToString(), SyncSequence = syncSequence
+    };
+
+    private static CalendarEvent NewEvent(Guid calendarId, ulong syncSequence) => new()
+    {
+        Id = Guid.NewGuid(), CalendarId = calendarId, UserId = Guid.NewGuid(),
+        Uid = Guid.NewGuid().ToString(), DavName = Guid.NewGuid().ToString(), SyncSequence = syncSequence
     };
 
     [Fact]
@@ -91,6 +121,57 @@ public sealed class SyncStateConsistencyCheckTests
     {
         // Every account created after the deployment is in this shape until its first write.
         using var context = NewContextWithContactsOnly(highestContactRank: 0);
+        var logger = new Mock<ILogger<SyncStateConsistencyCheck>>();
+        var check = new SyncStateConsistencyCheck(context, logger.Object);
+
+        await check.RunAsync(CancellationToken.None);
+
+        logger.VerifyNoErrorLogged();
+    }
+
+    [Fact]
+    public async Task ACalendarInStep_SaysNothing()
+    {
+        using var context = NewCalendarContextWith(seq: 10, highestEventRank: 10);
+        var logger = new Mock<ILogger<SyncStateConsistencyCheck>>();
+        var check = new SyncStateConsistencyCheck(context, logger.Object);
+
+        await check.RunAsync(CancellationToken.None);
+
+        logger.VerifyNoErrorLogged();
+    }
+
+    [Fact]
+    public async Task AnEventAheadOfItsCalendarsState_IsLoggedAsAnError()
+    {
+        using var context = NewCalendarContextWith(seq: 3, highestEventRank: 11);
+        var logger = new Mock<ILogger<SyncStateConsistencyCheck>>();
+        var check = new SyncStateConsistencyCheck(context, logger.Object);
+
+        await check.RunAsync(CancellationToken.None);
+
+        // Named, with the calendar's own remedy file and its own id — not the address book's.
+        logger.VerifyErrorLoggedContaining("calendar-sync-epoch-rotate.sql");
+        logger.VerifyErrorLoggedContaining("single-calendar form");
+    }
+
+    [Fact]
+    public async Task ACalendarsConsistentRestore_IsInvisibleToIt()
+    {
+        using var context = NewCalendarContextWith(seq: 5, highestEventRank: 5);
+        var logger = new Mock<ILogger<SyncStateConsistencyCheck>>();
+        var check = new SyncStateConsistencyCheck(context, logger.Object);
+
+        await check.RunAsync(CancellationToken.None);
+
+        logger.VerifyNoErrorLogged();
+    }
+
+    [Fact]
+    public async Task ACalendarWithNoStateRow_IsNotAnError()
+    {
+        // A calendar born after the deployment is in this shape until its first write.
+        using var context = NewContextWithEventsOnly(highestEventRank: 0);
         var logger = new Mock<ILogger<SyncStateConsistencyCheck>>();
         var check = new SyncStateConsistencyCheck(context, logger.Object);
 

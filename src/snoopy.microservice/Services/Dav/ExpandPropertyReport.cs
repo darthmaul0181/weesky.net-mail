@@ -1,6 +1,5 @@
 using System.Xml;
 using System.Xml.Linq;
-using weesky.Snoopy.Microservice.Services.CardDav;
 
 namespace weesky.Snoopy.Microservice.Services.Dav;
 
@@ -13,14 +12,16 @@ namespace weesky.Snoopy.Microservice.Services.Dav;
 /// </summary>
 internal static class ExpandPropertyReport
 {
+    /// <summary>Resolves through the caller's tables — the socle owns none.</summary>
     /// <returns>how many <c>response</c> elements the document carries, for the request log</returns>
     internal static async Task<int> WriteAsync(HttpResponse response, XDocument body,
         DavResourceContext target, string targetHref,
-        Func<DavResource, DavResourceContext?> nestedContext, CancellationToken cancellationToken)
+        Func<DavResource, DavResourceContext?> nestedContext, DavPropertyResolver resolve,
+        CancellationToken cancellationToken)
     {
         List<XElement> found = [];
         List<XName> missing = [];
-        ResolveAll(PropertiesOf(body.Root!), target, nestedContext, found, missing);
+        ResolveAll(PropertiesOf(body.Root!), target, nestedContext, resolve, found, missing);
 
         await using var writer = await MultiStatusWriter.BeginAsync(response, cancellationToken);
         await writer.WriteResourceAsync(targetHref, found, missing, cancellationToken);
@@ -28,19 +29,20 @@ internal static class ExpandPropertyReport
     }
 
     private static void ResolveAll(IReadOnlyList<Property> properties, DavResourceContext resource,
-        Func<DavResource, DavResourceContext?> nestedContext, List<XElement> found, List<XName> missing)
+        Func<DavResource, DavResourceContext?> nestedContext, DavPropertyResolver resolve,
+        List<XElement> found, List<XName> missing)
     {
         foreach (var property in properties)
         {
-            if (Resolve(property, resource, nestedContext) is { } element) found.Add(element);
+            if (Resolve(property, resource, nestedContext, resolve) is { } element) found.Add(element);
             else missing.Add(property.Name);
         }
     }
 
     private static XElement? Resolve(Property property, DavResourceContext resource,
-        Func<DavResource, DavResourceContext?> nestedContext)
+        Func<DavResource, DavResourceContext?> nestedContext, DavPropertyResolver resolve)
     {
-        var (found, _) = CardDavProperties.Resolve(
+        var (found, _) = resolve(
             new DavPropertyRequest(DavPropertyMode.Named, [property.Name]), resource);
         if (found.Count == 0) return null;
 
@@ -55,18 +57,19 @@ internal static class ExpandPropertyReport
             var context = DavPaths.Parse(href) is { } aimed ? nestedContext(aimed) : null;
             expanded.Add(context is null
                 ? NotFound(href)
-                : Nested(href, context, property.Children, nestedContext));
+                : Nested(href, context, property.Children, nestedContext, resolve));
         }
 
         return expanded;
     }
 
     private static XElement Nested(string href, DavResourceContext resource,
-        IReadOnlyList<Property> children, Func<DavResource, DavResourceContext?> nestedContext)
+        IReadOnlyList<Property> children, Func<DavResource, DavResourceContext?> nestedContext,
+        DavPropertyResolver resolve)
     {
         List<XElement> found = [];
         List<XName> missing = [];
-        ResolveAll(children, resource, nestedContext, found, missing);
+        ResolveAll(children, resource, nestedContext, resolve, found, missing);
 
         var response = new XElement(DavXml.Response, new XElement(DavXml.Href, href));
         if (found.Count > 0) response.Add(PropStat(found, StatusCodes.Status200OK));

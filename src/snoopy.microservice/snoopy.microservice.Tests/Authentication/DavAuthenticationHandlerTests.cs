@@ -51,7 +51,7 @@ public sealed class DavAuthenticationHandlerTests
             .ReturnsAsync(new WebmailAccount(UserId, Guid.NewGuid()));
         accounts.Setup(s => s.IsUsableAsync(Email, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         credentials.Setup(s => s.FindAsync(UserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DavCredentialRecord(true, DavSecretHash(Secret), Salt));
+            .ReturnsAsync(new DavCredentialRecord(true, false, DavSecretHash(Secret), Salt));
         jwt.Setup(s => s.AuthenticateAsync(It.IsAny<HttpContext>(), It.IsAny<string>()))
             .ReturnsAsync(AuthenticateResult.NoResult());
     }
@@ -177,7 +177,7 @@ public sealed class DavAuthenticationHandlerTests
         var otherSalt = new byte[16];
         Array.Fill(otherSalt, (byte)9);
         credentials.Setup(s => s.FindAsync(UserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DavCredentialRecord(true, DavSecret.Hash(otherSalt, Secret), Salt));
+            .ReturnsAsync(new DavCredentialRecord(true, false, DavSecret.Hash(otherSalt, Secret), Salt));
 
         var (result, context) = await AuthenticateAsync(Basic(Email, Secret));
 
@@ -195,7 +195,7 @@ public sealed class DavAuthenticationHandlerTests
         cache.Forget(Email);
         credentials.Setup(s => s.FindAsync(UserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DavCredentialRecord(
-                true, DavSecret.Hash(Salt, "TSRQPONMLKJIHGFEDCBA"), Salt));
+                true, false, DavSecret.Hash(Salt, "TSRQPONMLKJIHGFEDCBA"), Salt));
 
         var (result, context) = await AuthenticateAsync(Basic(Email, Secret));
 
@@ -234,7 +234,7 @@ public sealed class DavAuthenticationHandlerTests
         // constraint. The answer stays 401; the log line is what tells an operator it is a
         // storage fault, and it names the GUID and nothing else.
         credentials.Setup(s => s.FindAsync(UserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DavCredentialRecord(true, "deadbeef", Salt));
+            .ReturnsAsync(new DavCredentialRecord(true, false, "deadbeef", Salt));
 
         var (_, context) = await AuthenticateAsync(Basic(Email, Secret));
 
@@ -248,8 +248,9 @@ public sealed class DavAuthenticationHandlerTests
     {
         // The pair, because it is the pair that attests the order of décision 2 and closes the
         // account-enumeration oracle: 403 is only ever visible to whoever already holds the secret.
+        // Both switches off, since either one on is an authenticated caller.
         credentials.Setup(s => s.FindAsync(UserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DavCredentialRecord(false, DavSecretHash(Secret), Salt));
+            .ReturnsAsync(new DavCredentialRecord(false, false, DavSecretHash(Secret), Salt));
 
         var (_, good) = await AuthenticateAsync(Basic(Email, Secret));
         Assert.Equal(StatusCodes.Status403Forbidden, good.Response.StatusCode);
@@ -257,6 +258,25 @@ public sealed class DavAuthenticationHandlerTests
 
         var (_, bad) = await AuthenticateAsync(Basic(Email, "WRONGWRONGWRONGWRONG"));
         Assert.Equal(StatusCodes.Status401Unauthorized, bad.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task OneServiceOnAndTheOtherOff_Authenticates(bool cardDav, bool calDav)
+    {
+        // The scheme refuses only when BOTH are off: one service asleep is the resource's own 403,
+        // and refusing here would take the other down with it.
+        credentials.Setup(s => s.FindAsync(UserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DavCredentialRecord(cardDav, calDav, DavSecretHash(Secret), Salt));
+
+        var (result, _) = await AuthenticateAsync(Basic(Email, Secret));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(cardDav ? "1" : "0",
+            result.Principal!.FindFirst(WebmailClaimTypes.CardDav)?.Value);
+        Assert.Equal(calDav ? "1" : "0",
+            result.Principal.FindFirst(WebmailClaimTypes.CalDav)?.Value);
     }
 
     [Fact]

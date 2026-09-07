@@ -347,7 +347,7 @@ public sealed class CardDavPutTests : IAsyncLifetime
     [Fact]
     public async Task AFullBook_Answers507()
     {
-        GivenTheWriterAnswers(DavWriteStatus.BookFull);
+        GivenTheWriterAnswers(DavWriteStatus.CollectionFull);
 
         // RFC 4918 § 11.5 — no CardDAV precondition names the cap, so the status carries it alone.
         Assert.Equal(507, (await Put(DavPaths.Card(UserId, "a.vcf"), ValidCard("u1"))).StatusCode);

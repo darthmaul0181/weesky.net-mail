@@ -10,12 +10,35 @@ namespace weesky.Snoopy.Microservice.Services.Calendar;
 /// One resource, one window, a flat list of instances. Pure, static and total: a series the engine
 /// refuses to walk yields the master alone and a rule it cannot evaluate yields nothing — the store
 /// is the layer that has a logger.
+///
+/// <c>RECURRENCE-ID;RANGE=THISANDFUTURE</c> (5a residual, assumed and documented rather than
+/// fixed): Ical.Net 5.2.3 parses the parameter but never applies it — an override with RANGE
+/// replaces the one instance its RECURRENCE-ID names, exactly as a plain override would, and
+/// every later instance walks as the master describes it. sabre does not apply it either, and no
+/// client this tranche targets (iOS, DAVx⁵, Thunderbird) writes it — they split the series into
+/// two resources instead. A stored PUT carrying RANGE is kept verbatim and served back unchanged;
+/// only the *effect* of "this and every future instance" is what neither engine computes.
 /// </summary>
 internal static class OccurrenceExpander
 {
     /// <summary>The span an API window may cover. The controller enforces it; the walk below stays
     /// finite for any input on its own.</summary>
     internal const int MaxYears = 5;
+
+    /// <summary>The same span as a duration, for the windows a client writes itself — an
+    /// <c>expand</c>, a <c>time-range</c>: the cap grows with the window, so nothing but this
+    /// bounds what one member can produce.</summary>
+    internal static readonly TimeSpan MaxSpan = TimeSpan.FromDays(366d * MaxYears);
+
+    private const string EndAnchor = "END";
+    private static readonly TimeSpan Margin = TimeSpan.FromDays(1);
+
+    /// <summary>10 000 instances per year of window, the density the PUT gate admits, plus the
+    /// one that proves the ceiling was reached. The walk stops there; the expanded report refuses
+    /// there — the same number, so nothing can be cut by one and served whole by the other.</summary>
+    internal static int CapFor(DateTime fromUtc, DateTime toUtc) =>
+        IcsGuards.MaxInstancesPerYear
+        * Math.Max(1, (int)Math.Ceiling((toUtc - fromUtc).TotalDays / 365.2425)) + 1;
 
     /// <summary>
     /// The window is <c>[fromUtc, toUtc[</c>. <paramref name="calendarTimeZone"/> poses what the
@@ -26,7 +49,58 @@ internal static class OccurrenceExpander
     internal static IReadOnlyList<EventOccurrence> Expand(
         Guid eventId, Guid calendarId, IcsCalendar parsed, DateTime fromUtc, DateTime toUtc,
         string calendarTimeZone, string viewTimeZone) =>
-        new Expansion(
+        Over(eventId, calendarId, parsed, fromUtc, toUtc, calendarTimeZone, viewTimeZone).Run();
+
+    /// <summary>Whether one instance at least overlaps <c>[fromUtc, toUtc[</c> — the very walk of
+    /// <see cref="Expand"/>, stopped at the first one found (RFC 4791 § 9.9 on a VEVENT).</summary>
+    internal static bool Overlaps(IcsCalendar parsed, DateTime fromUtc, DateTime toUtc, string calendarTimeZone) =>
+        Over(Guid.Empty, Guid.Empty, parsed, fromUtc, toUtc, calendarTimeZone, calendarTimeZone)
+            .Run(firstOnly: true).Count > 0;
+
+    /// <summary>
+    /// Whether an alarm of one instance fires inside <c>[fromUtc, toUtc[</c> (RFC 4791 § 9.9 on a
+    /// VALARM). The instances of <c>[fromUtc − 1 day, toUtc + 1 day[</c> are walked and each
+    /// trigger read as the instant it pins, or as its distance from the instance's start — or its
+    /// end, which RELATED=END names. A day of slack and no more: a TRIGGER:-P1W before an instance
+    /// past the window is missed, an incomplete answer rather than a false one, and the bound is
+    /// assumed — a week of slack would have every query reread the whole calendar.
+    /// <paramref name="component"/> narrows the instances to those one component of the file
+    /// sources — the one a filter is being judged on — and null takes them all.
+    /// </summary>
+    internal static bool AlarmFires(IcsCalendar parsed, DateTime fromUtc, DateTime toUtc, string calendarTimeZone,
+        CalendarEvent? component = null)
+    {
+        var zone = IcsTimeZones.ResolveIana(calendarTimeZone) ?? IcsTimeZones.Utc;
+        var components = IcsDocument.Components(parsed).ToList();
+        var occurrences = Expand(Guid.Empty, Guid.Empty, parsed, Shift(fromUtc, -Margin), Shift(toUtc, Margin),
+            zone, zone);
+        foreach (var occurrence in occurrences)
+        {
+            if (SourceOf(occurrence, components) is not { } source) continue;
+            if (component is not null && !ReferenceEquals(source, component)) continue;
+            var (start, end) = Anchors(occurrence, zone);
+            foreach (var alarm in source.Alarms)
+            {
+                if (FiresAt(alarm.Trigger, start, end, parsed, zone) is { } at && at >= fromUtc && at < toUtc)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The component an occurrence came from: the override it names, found by the id the
+    /// walk read off it and never guessed from a time; else the master, else the first.</summary>
+    internal static CalendarEvent? SourceOf(EventOccurrence occurrence, IReadOnlyList<CalendarEvent> components) =>
+        (occurrence.IsOverride
+            ? components.FirstOrDefault(c => IcsDocument.InstanceIdOf(c) == occurrence.InstanceId)
+            : null)
+        ?? components.FirstOrDefault(c => c.RecurrenceIdentifier is null)
+        ?? components.FirstOrDefault();
+
+    private static Expansion Over(Guid eventId, Guid calendarId, IcsCalendar parsed, DateTime fromUtc,
+        DateTime toUtc, string calendarTimeZone, string viewTimeZone) =>
+        new(
             eventId,
             calendarId,
             parsed,
@@ -34,26 +108,74 @@ internal static class OccurrenceExpander
             IcsTimeZones.ResolveIana(calendarTimeZone) ?? IcsTimeZones.Utc,
             IcsTimeZones.ResolveIana(viewTimeZone) ?? IcsTimeZones.Utc,
             fromUtc,
-            toUtc).Run();
+            toUtc);
+
+    /// <summary>
+    /// The instants the window is judged on: a dated instance as it stands, an all-day one as the
+    /// UTC midnights of the dates it names (RFC 4791 § 9.9's reading of a DATE value — the same
+    /// day everywhere, never a local one), a floating one posed in <paramref name="zone"/>. This is
+    /// also what a <c>free-busy-query</c> reads a busy period's own bounds from.
+    /// </summary>
+    internal static (DateTime StartUtc, DateTime EndUtc) Span(EventOccurrence occurrence, string zone) => occurrence switch
+    {
+        { IsAllDay: true } => (Midnight(occurrence.StartDate!.Value), Midnight(occurrence.EndDateExclusive!.Value)),
+        { IsFloating: true } => (IcsTimeZones.ToUtc(occurrence.LocalStart!.Value, zone),
+                                 IcsTimeZones.ToUtc(occurrence.LocalEnd!.Value, zone)),
+        _ => (occurrence.StartUtc!.Value, occurrence.EndUtc!.Value),
+    };
+
+    /// <summary>The instants a trigger is measured from: an all-day or floating instance starts at
+    /// its wall-clock reading in the calendar's zone, which is where its reminder rings.</summary>
+    private static (DateTime Start, DateTime End) Anchors(EventOccurrence occurrence, string zone) => occurrence switch
+    {
+        { IsAllDay: true } => (IcsTimeZones.ToUtc(Midnight(occurrence.StartDate!.Value), zone),
+                               IcsTimeZones.ToUtc(Midnight(occurrence.EndDateExclusive!.Value), zone)),
+        { IsFloating: true } => (IcsTimeZones.ToUtc(occurrence.LocalStart!.Value, zone),
+                                 IcsTimeZones.ToUtc(occurrence.LocalEnd!.Value, zone)),
+        _ => (occurrence.StartUtc!.Value, occurrence.EndUtc!.Value),
+    };
+
+    /// <summary>Null for a trigger the engine cannot read — one without a distance, or one whose
+    /// distance no TimeSpan holds: an alarm that never fires, never a 500.</summary>
+    private static DateTime? FiresAt(Trigger? trigger, DateTime start, DateTime end, IcsCalendar parsed, string zone)
+    {
+        if (trigger is null) return null;
+        if (trigger is { IsRelative: false, DateTime: { } at }) return IcsTimeZones.Place(at, zone, parsed).Utc;
+        if (trigger.Duration is not { } distance) return null;
+        try
+        {
+            var anchor = trigger.Related?.Equals(EndAnchor, StringComparison.OrdinalIgnoreCase) == true ? end : start;
+            return Shift(anchor, distance.ToTimeSpanUnspecified());
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static DateTime Midnight(DateOnly date) => date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+    /// <summary>An instant moved by a margin and held inside the DateTime range: a bound at either
+    /// edge widens to the edge, never to an exception.</summary>
+    internal static DateTime Shift(DateTime at, TimeSpan margin) =>
+        new(Math.Clamp(at.Ticks + margin.Ticks, DateTime.MinValue.Ticks, DateTime.MaxValue.Ticks), DateTimeKind.Utc);
 
     private sealed class Expansion(
         Guid eventId, Guid calendarId, IcsCalendar parsed, CalendarEvent? master, string calendarZone,
         string viewZone, DateTime fromUtc, DateTime toUtc)
     {
         private const string Opaque = "OPAQUE";
-        private static readonly TimeSpan Margin = TimeSpan.FromDays(1);
 
         private readonly bool recurring =
             master?.RecurrenceRule is not null || master?.RecurrenceDates?.GetAllDates().Any() == true;
 
         private readonly string? recurrenceText = master?.RecurrenceRule?.ToString();
 
-        /// <summary>10 000 instances per year of window, the density the PUT gate admits, plus the
-        /// one that proves the ceiling was reached.</summary>
-        private int Cap => IcsGuards.MaxInstancesPerYear
-                           * Math.Max(1, (int)Math.Ceiling((toUtc - fromUtc).TotalDays / 365.2425)) + 1;
+        private int Cap => CapFor(fromUtc, toUtc);
 
-        internal IReadOnlyList<EventOccurrence> Run()
+        /// <param name="firstOnly">stop at the first instance overlapping the window — a query
+        /// asks whether one exists, never how many</param>
+        internal IReadOnlyList<EventOccurrence> Run(bool firstOnly = false)
         {
             var found = new List<(DateTime At, EventOccurrence Occurrence)>();
             try
@@ -62,7 +184,11 @@ internal static class OccurrenceExpander
                 {
                     var occurrence = Build(start, end, source);
                     var (at, until) = Span(occurrence);
-                    if (at < toUtc && (until > at ? until : at.AddTicks(1)) > fromUtc) found.Add((at, occurrence));
+                    if (at < toUtc && (until > at ? until : at.AddTicks(1)) > fromUtc)
+                    {
+                        found.Add((at, occurrence));
+                        if (firstOnly) break;
+                    }
                 }
             }
             catch (Exception)
@@ -96,8 +222,8 @@ internal static class OccurrenceExpander
             var walked = detached?.Calendar ?? parsed;
             var zones = detached?.Zones;
 
-            var from = new CalDateTime(Widen(fromUtc, -Margin), IcsTimeZones.Utc);
-            var to = new CalDateTime(Widen(toUtc, Margin), IcsTimeZones.Utc);
+            var from = new CalDateTime(Shift(fromUtc, -Margin), IcsTimeZones.Utc);
+            var to = new CalDateTime(Shift(toUtc, Margin), IcsTimeZones.Utc);
             foreach (var occurrence in walked.GetOccurrences(from).TakeWhileBefore(to).Take(Cap))
                 if (occurrence.Period.StartTime is { } start && occurrence.Source is CalendarEvent source)
                     yield return (Posed(start, source, zones)!, Posed(occurrence.Period.EffectiveEndTime, source, zones), source);
@@ -142,15 +268,8 @@ internal static class OccurrenceExpander
                 recurrenceText);
         }
 
-        /// <summary>The instants the window is judged on: a dated instance as it stands, an all-day
-        /// one as the dates it names, a floating one posed in the reader's zone.</summary>
-        private (DateTime At, DateTime Until) Span(EventOccurrence occurrence) => occurrence switch
-        {
-            { IsAllDay: true } => (Midnight(occurrence.StartDate!.Value), Midnight(occurrence.EndDateExclusive!.Value)),
-            { IsFloating: true } => (IcsTimeZones.ToUtc(occurrence.LocalStart!.Value, viewZone),
-                                     IcsTimeZones.ToUtc(occurrence.LocalEnd!.Value, viewZone)),
-            _ => (occurrence.StartUtc!.Value, occurrence.EndUtc!.Value),
-        };
+        private (DateTime At, DateTime Until) Span(EventOccurrence occurrence) =>
+            OccurrenceExpander.Span(occurrence, viewZone);
 
         // A DTEND that does not outlive its DTSTART would name no day at all, and fall out of every
         // window; RFC 5545 § 3.6.1 makes an all-day event last at least the day it starts on.
@@ -160,11 +279,6 @@ internal static class OccurrenceExpander
             var after = DateOnly.FromDateTime(end.Value);
             return after > first ? after : first.AddDays(1);
         }
-
-        private static DateTime Midnight(DateOnly date) => date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-
-        private static DateTime Widen(DateTime at, TimeSpan margin) =>
-            new(Math.Clamp(at.Ticks + margin.Ticks, DateTime.MinValue.Ticks, DateTime.MaxValue.Ticks), DateTimeKind.Utc);
 
         private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }

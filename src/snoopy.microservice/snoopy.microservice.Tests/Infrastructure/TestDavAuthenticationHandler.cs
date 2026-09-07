@@ -8,9 +8,9 @@ using weesky.Snoopy.Microservice.Authentication;
 namespace weesky.Snoopy.Microservice.Tests.Infrastructure;
 
 /// <summary>
-/// Stands in for the real CardDav handler under the real scheme name, issuing exactly the three
-/// claims the real one issues (see DavAuthenticationHandler.FinishAsync): Upn, Dns and the
-/// webmail uid. Everything downstream — the policy, AuthenticatedUser, the ownership check — runs
+/// Stands in for the real Dav handler under the real scheme name, issuing exactly the five claims
+/// the real one issues (see DavAuthenticationHandler.FinishAsync): Upn, Dns, the webmail uid and
+/// the two protocol switches. Everything downstream — the policy, AuthenticatedUser, the ownership check — runs
 /// unchanged.
 /// </summary>
 internal sealed class TestDavAuthenticationHandler(
@@ -34,6 +34,8 @@ internal sealed class TestDavAuthenticationHandler(
             new(ClaimTypes.Upn, user.Email[..separator]),
             new(ClaimTypes.Dns, user.Email[(separator + 1)..]),
             new(WebmailClaimTypes.Uid, user.Uid.ToString()),
+            new(WebmailClaimTypes.CardDav, user.CardDav ? "1" : "0"),
+            new(WebmailClaimTypes.CalDav, user.CalDav ? "1" : "0"),
         ];
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme.Name));

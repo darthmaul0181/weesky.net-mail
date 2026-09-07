@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Calendar;
+using weesky.Snoopy.Microservice.Services.Calendar;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 
@@ -39,6 +40,11 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
 
     internal const string NotDeletable = "The default calendar cannot be deleted";
 
+    /// <summary>The unique index on (user_id, dav_name) refusing a URL segment a client chose:
+    /// only <see cref="CreateNamedAsync"/> can meet it, the webmail naming a calendar by its own
+    /// id.</summary>
+    internal const string NameTaken = "This URL is already taken by another calendar";
+
     internal const string NotFound = "Calendar not found";
 
     /// <summary>
@@ -49,7 +55,7 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
 
     /// <summary>#RRGGBB, or Apple's #RRGGBBAA whose alpha channel is dropped on write.</summary>
     [GeneratedRegex("^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")]
-    private static partial Regex ColourShape();
+    internal static partial Regex ColourShape();
 
     public async Task<IReadOnlyList<CalendarView>> ListAsync(
         Guid userId, CancellationToken cancellationToken)
@@ -99,45 +105,21 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
         }
     }
 
-    public async Task<Result<Guid>> CreateAsync(
-        Guid userId, CalendarWrite write, string browserTimeZone, CancellationToken cancellationToken)
+    public Task<Result<Guid>> CreateAsync(
+        Guid userId, CalendarWrite write, string browserTimeZone, CancellationToken cancellationToken) =>
+        // The id and not a slug of the name: a client syncs on this segment and it is never
+        // renamed, so it must not be derived from anything the user can change.
+        CreateRowAsync(userId, null, write, browserTimeZone, cancellationToken);
+
+    public async Task<Result<Guid>> CreateNamedAsync(
+        Guid userId, string davName, CalendarWrite write, CancellationToken cancellationToken)
     {
-        var colour = Colour(write.Color);
-        if (write.Color is not null && colour is null) return Result.Failure<Guid>(BadColour);
+        // The zone of `default`, and UTC when the account holds none at all — a hand-restored base
+        // (§ 6), where a MKCALENDAR carries no browser to ask and inventing a zone would be worse.
+        var fallback = (await FindByNameAsync(userId, DefaultDavName, cancellationToken))?.TimeZone
+            ?? IcsTimeZones.Utc;
 
-        // The cap counted INSIDE the transaction, like CalendarEventStore counts its own: a refusal
-        // and a creation must not be decided from two different reads of the same table.
-        return await InTransactionAsync<Result<Guid>>(async () =>
-        {
-            var held = await context.Calendars.AsNoTracking()
-                .Where(c => c.UserId == userId)
-                .Select(c => c.Order)
-                .ToListAsync(cancellationToken);
-            if (held.Count >= MaxPerUser) return Result.Failure<Guid>(CapReached);
-
-            var id = Guid.NewGuid();
-            var row = new Calendar
-            {
-                Id = id,
-                UserId = userId,
-                // The id and not a slug of the name: a client syncs on this segment and it is never
-                // renamed, so it must not be derived from anything the user can change.
-                DavName = id.ToString(),
-                DisplayName = write.DisplayName,
-                Description = write.Description ?? string.Empty,
-                Color = colour ?? CalendarPalette.Next(held.Count),
-                Order = write.Order ?? (held.Count == 0 ? 0 : held.Max() + 1),
-                TimeZone = browserTimeZone,
-                IsVisible = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            context.Calendars.Add(row);
-            await context.SaveChangesAsync(cancellationToken);
-            await sync.CreateStateAsync(row.Id, cancellationToken);
-            return Result.Success(id);
-        }, cancellationToken);
+        return await CreateRowAsync(userId, davName, write, fallback, cancellationToken);
     }
 
     public async Task<Result> UpdateAsync(
@@ -155,6 +137,7 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
         row.DisplayName = write.DisplayName;
         if (write.Description is not null) row.Description = write.Description;
         if (write.Order is { } order) row.Order = order;
+        if (write.TimeZone is not null) row.TimeZone = write.TimeZone;
         row.UpdatedAt = DateTime.UtcNow;
 
         // No rank and no transaction: a colour is not a resource, and advancing the counter here
@@ -198,40 +181,12 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
             // span-based Contains, which C#'s extension resolution now prefers.
             var ids = chunk.ToList();
 
-            await InTransactionAsync(async () =>
-            {
-                // The state row's lock FIRST, as every other transaction of these two stores takes
-                // it, so no door of theirs can deadlock against another. The rank itself is spent
-                // on a collection about to disappear, which is why nothing here reads it back.
-                await sync.NextSequenceAsync(calendarId, cancellationToken);
-
-                // Read under the lock, so what is archived is what is being removed.
-                var batch = await context.CalendarEvents
-                    .Where(e => e.CalendarId == calendarId && ids.Contains(e.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var stored in batch)
-                {
-                    // EventId NULL: a delete revision outlives the row it describes, and CalendarId
-                    // survives on purpose — calendar_revisions carries no FK, so the archive is not
-                    // cascaded away by the very deletion that wrote it (décision 2).
-                    await sync.ArchiveAsync(
-                        userId, calendarId, null, stored.Uid, stored.DavName, stored.IcsRaw,
-                        RevisionCause.Delete, cancellationToken);
-                }
-
-                // The InMemory provider enforces no foreign key, so the children go by hand: this is
-                // what makes it behave like the cascade MariaDB actually runs.
-                context.CalendarAttendees.RemoveRange(
-                    await context.CalendarAttendees.Where(a => ids.Contains(a.EventId))
-                        .ToListAsync(cancellationToken));
-                context.CalendarEvents.RemoveRange(batch);
-                await context.SaveChangesAsync(cancellationToken);
-
-                // No tombstone per event: the whole collection goes, and a client that loses the
-                // collection loses everything under it without being told name by name.
-                return batch.Count;
-            }, cancellationToken);
+            // No tombstone per event: the whole collection goes, and a client that loses the
+            // collection loses everything under it without being told name by name.
+            await InTransactionAsync(
+                () => CalendarBatchDelete.RunAsync(context, sync, userId, calendarId, ids,
+                    tombstones: false, cancellationToken),
+                cancellationToken);
         }
 
         return await InTransactionAsync<Result>(async () =>
@@ -254,8 +209,70 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
     }
 
     /// <summary>
-    /// The creation both doors share: the row and its sync state in one transaction (décision 2),
-    /// so a collection can never be visible without the counter its ctag is cut from.
+    /// The creation both façades share (décision 2): the cap counted INSIDE the transaction, like
+    /// <see cref="CalendarEventStore"/> counts its own — a refusal and a creation must not be
+    /// decided from two different reads of the same table — the palette's next colour, the last
+    /// rank, and the state row, so a collection can never be visible without the counter its ctag
+    /// is cut from.
+    /// </summary>
+    /// <param name="userId">the owner</param>
+    /// <param name="davName">null when the collection is named by its own id, as the webmail's is</param>
+    /// <param name="write">what the caller asks of the row</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <param name="fallbackZone">the zone to store when <c>write.TimeZone</c> names none</param>
+    private async Task<Result<Guid>> CreateRowAsync(Guid userId, string? davName, CalendarWrite write,
+        string fallbackZone, CancellationToken cancellationToken)
+    {
+        var colour = Colour(write.Color);
+        if (write.Color is not null && colour is null) return Result.Failure<Guid>(BadColour);
+
+        return await InTransactionAsync<Result<Guid>>(async () =>
+        {
+            var held = await context.Calendars.AsNoTracking()
+                .Where(c => c.UserId == userId)
+                .Select(c => new { c.Order, c.DavName })
+                .ToListAsync(cancellationToken);
+            if (held.Count >= MaxPerUser) return Result.Failure<Guid>(CapReached);
+            if (davName is not null && held.Any(c => c.DavName == davName))
+                return Result.Failure<Guid>(NameTaken);
+
+            var id = Guid.NewGuid();
+            var row = new Calendar
+            {
+                Id = id,
+                UserId = userId,
+                DavName = davName ?? id.ToString(),
+                DisplayName = write.DisplayName,
+                Description = write.Description ?? string.Empty,
+                Color = colour ?? CalendarPalette.Next(held.Count),
+                Order = write.Order ?? (held.Count == 0 ? 0 : held.Max(c => c.Order) + 1),
+                TimeZone = write.TimeZone ?? fallbackZone,
+                IsVisible = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            try
+            {
+                context.Calendars.Add(row);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+            // Only the DAV door can lose that race: the webmail's POST names by a fresh GUID and
+            // cannot collide, so a write failure there is a real one and must not read as a taken URL.
+            catch (DbUpdateException) when (davName is not null)
+            {
+                context.ChangeTracker.Clear();
+                return Result.Failure<Guid>(NameTaken);
+            }
+
+            await sync.CreateStateAsync(row.Id, cancellationToken);
+            return Result.Success(id);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// The default collection's own creation: no cap to count and no colour to choose, so it takes
+    /// the row it was handed straight into the transaction its state row shares (décision 2).
     /// </summary>
     private Task<Calendar> AddAsync(Calendar row, CancellationToken cancellationToken) =>
         InTransactionAsync(async () =>
@@ -267,8 +284,10 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
         }, cancellationToken);
 
     /// <summary>The colour as it will be stored, or null when the text is not one. Apple's alpha
-    /// channel is dropped and the digits are folded, so one colour has one spelling.</summary>
-    private static string? Colour(string? value) =>
+    /// channel is dropped and the digits are folded, so one colour has one spelling. Internal
+    /// because the CalDAV readers judge a client's colour through it: written twice, the two
+    /// spellings of one value would drift.</summary>
+    internal static string? Colour(string? value) =>
         value is not null && ColourShape().IsMatch(value.Trim())
             ? value.Trim()[..7].ToLowerInvariant()
             : null;
@@ -297,8 +316,27 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
     /// uncommitted, so a refusal decided after a rank was taken rolls that rank back rather than
     /// waking every client for nothing.
     /// </summary>
-    private Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
+    private async Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
     {
+        // Reentrant: DavCredentialStore.EnableAsync runs EnsureDefaultAsync inside its own
+        // transaction on this very context, and opening a second one throws on MariaDB. Whoever
+        // opened commits, and an exception rolls the whole of it back.
+        if (context.Database.CurrentTransaction is not null)
+        {
+            var nested = await body();
+
+            // The commit rule cannot hold here: the ambient transaction is not ours to withhold.
+            // Rather than commit a refusal in silence, refuse to be the trap — no reentrant caller
+            // answers a Result today, and the one that tries will say so instead of drifting.
+            if (nested is CSharpFunctionalExtensions.IResult { IsFailure: true })
+            {
+                throw new InvalidOperationException(
+                    "A reentrant CalendarStore call answered a failed Result; the ambient transaction cannot roll it back.");
+            }
+
+            return nested;
+        }
+
         Func<CancellationToken, Task<T>> operation = async token =>
         {
             await using var transaction = await context.Database.BeginTransactionAsync(token);
@@ -308,6 +346,6 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
             await transaction.CommitAsync(token);
             return outcome;
         };
-        return context.Database.CreateExecutionStrategy().ExecuteAsync(operation, cancellationToken);
+        return await context.Database.CreateExecutionStrategy().ExecuteAsync(operation, cancellationToken);
     }
 }

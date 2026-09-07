@@ -217,6 +217,61 @@ public sealed class IcsGuardsTests
     }
 
     [Fact]
+    public void CheckAll_RefusesAVeventWithoutDtstart_AsValidCalendarData()
+    {
+        // RFC 5545 § 3.6.1: DTSTART is required of a VEVENT without METHOD. None of the four other
+        // guards reads it, and a resource admitted without one would be projected at NoInstant —
+        // visible from no window, no query and no screen.
+        var problem = IcsGuards.CheckAll(NoStart(), out var parsed);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
+        Assert.Equal(IcsGuards.NoStart, problem.Message);
+        Assert.NotNull(parsed);
+    }
+
+    [Fact]
+    public void CheckStart_IsTheFifthGuardAndTheOnlyOneReadingDtstart()
+    {
+        Assert.Equal(IcsPrecondition.ValidCalendarData,
+            IcsGuards.CheckStart(IcsDocument.TryLoad(NoStart())!)!.Precondition);
+        Assert.Null(IcsGuards.CheckStart(IcsDocument.TryLoad(Ics.Events(("a", null)))!));
+        // The four guards before it let the same resource through: the fifth is not redundant.
+        Assert.Null(Check(NoStart()));
+        Assert.Null(IcsGuards.CheckDensity(IcsDocument.TryLoad(NoStart())!));
+        Assert.Null(IcsGuards.CheckExpansion(IcsDocument.TryLoad(NoStart())!));
+    }
+
+    [Fact]
+    public void CheckAll_JudgesTheSizeBeforeParsing()
+    {
+        var problem = IcsGuards.CheckAll(Ics.Padded(IcsGuards.MaxIcsBytes + 1), out var parsed);
+
+        // Parsing is the work an oversized body is trying to make us do: no model comes back.
+        Assert.Equal(IcsPrecondition.MaxResourceSize, problem!.Precondition);
+        Assert.Null(parsed);
+    }
+
+    [Theory]
+    [InlineData("VERSION:1.0", IcsPrecondition.SupportedCalendarData)]
+    [InlineData("VERSION:2.0", null)]
+    public void CheckAll_RunsTheFourGuardsBeforeTheStart(string version, IcsPrecondition? expected)
+    {
+        var problem = IcsGuards.CheckAll(Ics.Events(("a", null)).Replace("VERSION:2.0", version), out var parsed);
+
+        Assert.Equal(expected, problem?.Precondition);
+        Assert.NotNull(parsed);
+    }
+
+    [Fact]
+    public void CheckAll_RefusesADensityBomb_AsMaxInstances() =>
+        Assert.Equal(IcsPrecondition.MaxInstances, IcsGuards.CheckAll(Ics.DensityBomb(), out _)!.Precondition);
+
+    private static string NoStart() =>
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//weesky//tests//EN\r\n"
+        + "BEGIN:VEVENT\r\nUID:nostart\r\nDTSTAMP:20260901T080000Z\r\nSUMMARY:No start\r\nEND:VEVENT\r\n"
+        + "END:VCALENDAR\r\n";
+
+    [Fact]
     public void Problem_NamesWhatItRefused() =>
         Assert.Contains("VTODO", Check(Ics.Todo())!.Message, StringComparison.Ordinal);
 

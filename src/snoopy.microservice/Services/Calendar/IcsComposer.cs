@@ -31,7 +31,7 @@ internal static class IcsComposer
 
     internal static string ComposeNew(EventWrite w, string uid, DateTime nowUtc)
     {
-        var calendar = new IcsCalendar { ProductId = ProductId, Version = IcsVersion };
+        var calendar = Envelope();
         var evt = new CalendarEvent { Uid = uid, Created = Utc(nowUtc), Sequence = 0 };
         Apply(evt, w, withRule: true);
         Stamp(evt, nowUtc, bump: false);
@@ -78,6 +78,55 @@ internal static class IcsComposer
         calendar.Events.Add(over);
         EnsureTimeZones(calendar, IcsDocument.Components(calendar));
         return IcsDocument.Serialize(calendar);
+    }
+
+    /// <summary>A VCALENDAR of ours holding nothing yet.</summary>
+    internal static IcsCalendar Envelope() => new() { ProductId = ProductId, Version = IcsVersion };
+
+    /// <summary>
+    /// One instance as an expanded report serves it (RFC 4791 § 9.6.5): the source component as
+    /// it stands — alarms, attendees, X- lines — minus the series lines, its RECURRENCE-ID and its
+    /// times in UTC. A date stays a date, having no instant to convert; a floating reading is
+    /// posed in the calendar's zone; an event that repeats not at all carries no RECURRENCE-ID,
+    /// which would make it an override without a master to a client keying on the pair.
+    /// </summary>
+    internal static CalendarEvent Instance(IcsCalendar parsed, EventOccurrence occurrence,
+        CalendarEvent source, string calendarTimeZone)
+    {
+        var instance = source.Copy<CalendarEvent>()!;
+        foreach (var name in SeriesOnly) instance.Properties.Remove(name);
+        instance.Properties.Remove("DURATION");
+        if (occurrence.InstanceId.Length > 0)
+            instance.RecurrenceIdentifier = new RecurrenceIdentifier(
+                RecurrenceIdOf(parsed, occurrence, source, calendarTimeZone), null);
+
+        var (start, end) = Bounds(occurrence, calendarTimeZone);
+        instance.DtStart = start;
+        if (end is { } last) instance.DtEnd = last;
+        else instance.Properties.Remove("DTEND");
+        return instance;
+    }
+
+    /// <summary>An override names the slot it replaces — the RFC's own example — never the time
+    /// it moved to; a generated instance names its own start.</summary>
+    private static CalDateTime RecurrenceIdOf(IcsCalendar parsed, EventOccurrence occurrence,
+        CalendarEvent source, string calendarTimeZone)
+    {
+        if (source.RecurrenceIdentifier?.StartTime is not { } slot) return Bounds(occurrence, calendarTimeZone).Start;
+        return slot.HasTime
+            ? Utc(IcsTimeZones.Place(slot, calendarTimeZone, parsed).Utc)
+            : new CalDateTime(slot.Date);
+    }
+
+    /// <summary>The instance's own bounds in the form the report writes; no end when the source
+    /// had none, an end equal to the start being a DTEND RFC 5545 § 3.8.2.2 forbids.</summary>
+    private static (CalDateTime Start, CalDateTime? End) Bounds(EventOccurrence o, string calendarTimeZone)
+    {
+        if (o.IsAllDay) return (new CalDateTime(o.StartDate!.Value), new CalDateTime(o.EndDateExclusive!.Value));
+        var (start, end) = o.IsFloating
+            ? (IcsTimeZones.ToUtc(o.LocalStart!.Value, calendarTimeZone), IcsTimeZones.ToUtc(o.LocalEnd!.Value, calendarTimeZone))
+            : (o.StartUtc!.Value, o.EndUtc!.Value);
+        return (Utc(start), end > start ? Utc(end) : null);
     }
 
     internal static SplitOutcome Split(IcsCalendar existing, string instanceId, EventWrite w, string newUid, DateTime nowUtc) =>

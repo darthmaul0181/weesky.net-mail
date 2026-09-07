@@ -191,6 +191,22 @@ weeks. Three of those numbers were defects a probe found. The toolbar was 170px 
 a line of its own; at 390px — where the segments just fitted beside the buttons — they were
 crushed to 35px and clipped by 20; both are fixed by flex bases of `0` and `100%` respectively.
 
+**What CalDAV sees (5c).** `/dav/calendars/` serves exactly the rows this page writes and reads —
+the webmail is not one client among others, it is the same table read through a second door.
+Three consequences for anyone touching this module:
+
+- **A DAV `PUT` stores the file verbatim**, never through `IcsComposer`: a phone or Thunderbird
+  writing a series `RecurrenceEditor` cannot draw (the `keepRepeat` note above) leaves it exactly
+  as sent, and the webmail must keep reading and merging it without touching it — the same lock,
+  seen from the other end of the wire.
+- **`ifHash` is the DAV ETag.** The hash the editor freezes at seed time for its own optimistic
+  concurrency (`updateBodyOf`, above) is the very value a CalDAV client reads and sends back as
+  `If-Match`: both worlds share one notion of "the version I read", never two.
+- **No participant is composed by this screen, still.** `editor.attendeesReadOnly` stays true past
+  5c: the protocol can now read and write `ATTENDEE`/`ORGANIZER` (RFC 4791 schedules nothing
+  beyond that), but no screen of this module writes one — scheduling remains an open residual, not
+  a guarantee this module would silently break.
+
 **And the editor's Start and End rows were stacked when they were meant to be on one line.**
 `index.css`'s phone block turns *every* `.field-h` into a `flex-direction: column`, which is right
 for a settings row's sentence-length caption and wrong here — and in a column a `flex-basis: 100%`

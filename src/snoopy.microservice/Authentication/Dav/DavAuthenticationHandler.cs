@@ -105,7 +105,8 @@ internal sealed class DavAuthenticationHandler(
             return await RefuseWithDelayAsync(canonical, address);
         }
 
-        var identity = new DavIdentity(account.Value.Id, row.Value.CardDavEnabled);
+        var identity = new DavIdentity(
+            account.Value.Id, row.Value.CardDavEnabled, row.Value.CalDavEnabled);
         return await FinishAsync(canonical, fingerprint, identity, generation);
     }
 
@@ -224,8 +225,9 @@ internal sealed class DavAuthenticationHandler(
         throttle.RecordSuccess(identifier);
 
         // After the digest matched and never before: a 403 answered earlier would say "this
-        // account exists and its DAV is asleep" to anyone asking.
-        if (!identity.CardDavEnabled) return Refuse(Outcome.Forbidden);
+        // account exists and its DAV is asleep" to anyone asking. Both switches off is the only
+        // refusal here — one service asleep is the resource's own 403, not the scheme's.
+        if (!identity.CardDavEnabled && !identity.CalDavEnabled) return Refuse(Outcome.Forbidden);
 
         if (cache.ShouldTouch(identity.UserId))
             await credentials.TouchAsync(identity.UserId, clock.GetUtcNow().UtcDateTime, Context.RequestAborted);
@@ -234,7 +236,9 @@ internal sealed class DavAuthenticationHandler(
         {
             new(ClaimTypes.Upn, identifier[..separator]),
             new(ClaimTypes.Dns, identifier[(separator + 1)..]),
-            new(WebmailClaimTypes.Uid, identity.UserId.ToString())
+            new(WebmailClaimTypes.Uid, identity.UserId.ToString()),
+            new(WebmailClaimTypes.CardDav, identity.CardDavEnabled ? "1" : "0"),
+            new(WebmailClaimTypes.CalDav, identity.CalDavEnabled ? "1" : "0")
         };
 
         var principal = new ClaimsPrincipal(

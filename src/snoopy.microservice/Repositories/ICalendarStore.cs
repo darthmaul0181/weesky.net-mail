@@ -30,8 +30,20 @@ public interface ICalendarStore
         Guid userId, CalendarWrite write, string browserTimeZone, CancellationToken cancellationToken);
 
     /// <summary>
-    /// The name, the description, the colour and the rank. Advances neither ctag nor sequence: none
-    /// of them is an event, and waking every phone for a colour is one sync per rename.
+    /// The same collection created from a DAV client: décision 2 of the overview makes the URL
+    /// segment the client chose its <c>dav_name</c>. Colour next of the palette, rank last, the
+    /// state row in the same transaction. When <c>write.TimeZone</c> is null: the zone of
+    /// <c>default</c>, and UTC when the account holds no calendar at all — a hand-restored base
+    /// (§ 6), where a MKCALENDAR carries no browser to ask.
+    /// Refused with <see cref="CalendarStore.CapReached"/> or <see cref="CalendarStore.NameTaken"/>.
+    /// </summary>
+    Task<Result<Guid>> CreateNamedAsync(
+        Guid userId, string davName, CalendarWrite write, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The name, the description, the colour, the rank and — from a DAV client alone — the zone,
+    /// which the caller has already resolved to an IANA id. Advances neither ctag nor sequence:
+    /// none of them is an event, and waking every phone for a colour is one sync per rename.
     /// </summary>
     Task<Result> UpdateAsync(
         Guid userId, Guid calendarId, CalendarWrite write, CancellationToken cancellationToken);

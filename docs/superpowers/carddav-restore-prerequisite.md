@@ -1,13 +1,16 @@
-# Prérequis de restauration — la rotation d'epoch CardDAV
+# Prérequis de restauration — la rotation d'epoch CardDAV et CalDAV
 
 **À jouer après toute restauration d'une sauvegarde de la base du webmail**, avant de rouvrir le
 service aux clients. Sans cela, un incident de sauvegarde/restauration ne se manifeste par aucune
 erreur visible pendant que la synchronisation d'un ou plusieurs téléphones diverge en silence.
 
-Ce fichier n'est pas versionné dans une spec : le geste est livré comme un script,
-`assets/contacts-sync-epoch-rotate.sql`, précisément parce qu'une consigne qu'il faut retrouver
-dans un document de conception au moment d'une restauration est une consigne qui ne sera pas
-jouée.
+Ce fichier n'est pas versionné dans une spec : le geste est livré comme deux scripts,
+`assets/contacts-sync-epoch-rotate.sql` (le carnet) et `assets/calendar-sync-epoch-rotate.sql`
+(l'agenda, 5c), précisément parce qu'une consigne qu'il faut retrouver dans un document de
+conception au moment d'une restauration est une consigne qui ne sera pas jouée. Les deux ont la
+même forme, une table et une clé de plus près — `contact_sync_state`/`user_id` contre
+`calendar_sync_state`/`calendar_id` : ce qui suit décrit le carnet, et vaut identiquement pour
+l'agenda par cette seule substitution.
 
 ## Quoi et pourquoi
 
@@ -29,31 +32,36 @@ la dit entièrement : ce carnet n'est plus celui qui a émis vos jetons.
 
 ```bash
 mariadb -u <user> -p snoopy_webmail < assets/contacts-sync-epoch-rotate.sql
+mariadb -u <user> -p snoopy_webmail < assets/calendar-sync-epoch-rotate.sql
 ```
 
 Répéter pour `snoopy_webmail_dev` si la restauration l'a aussi touchée.
 
-Le fichier porte aussi, en commentaire, une forme mono-utilisateur (`WHERE user_id = …`) qui n'est
-**pas** le geste d'une restauration — elle sert les incidents qui nomment un seul `user_id`, comme
-le contrôle de démarrage ci-dessous. Après une restauration, c'est la forme « base entière »
-ci-dessus qu'il faut jouer, et le `<` la joue déjà.
+Chaque fichier porte aussi, en commentaire, une forme mono-ligne (`WHERE user_id = …` ou
+`WHERE calendar_id = …`) qui n'est **pas** le geste d'une restauration — elle sert les incidents
+qui nomment un seul `user_id` ou `calendar_id`, comme le contrôle de démarrage ci-dessous. Après
+une restauration, c'est la forme « base entière » ci-dessus qu'il faut jouer, et le `<` la joue
+déjà.
 
 ## La reprise n'est pas uniforme côté client
 
 Il faut le savoir avant de prévenir les utilisateurs :
 
-- **DAVx5** lit le `403 valid-sync-token` et repart d'une synchronisation complète tout seul.
+- **DAVx5 et iOS** lisent le `403 valid-sync-token` et repartent d'une synchronisation complète
+  tout seuls, carnet comme agenda.
 - **Thunderbird** ne retombe en synchronisation complète que sur un `400` : son code rejoue
-  un jeton refusé en `403` à chaque cycle, indéfiniment. Après cette rotation, un carnet
-  Thunderbird est à **ré-appairer à la main** — supprimer le carnet et le recréer.
+  un jeton refusé en `403` à chaque cycle, indéfiniment. Après cette rotation, un carnet ou un
+  agenda Thunderbird est à **ré-appairer à la main** — le supprimer et le recréer.
 
 ## Ce que le contrôle de démarrage ne voit pas
 
-Le contrôle de démarrage compare `MAX(contacts.sync_sequence)` à `contact_sync_state.seq` :
-il détecte une restauration qui a rembobiné l'une des deux tables sans l'autre. Une restauration
-*cohérente* — les deux tables rembobinées ensemble, dans la même sauvegarde — le laisse muet,
-l'inégalité restant vraie. C'est le seul endroit de cette tranche où un incident n'a aucun symptôme
-côté client au moment de la restauration, et le contrôle n'en attrape que la moitié détectable.
+Le contrôle de démarrage (`SyncStateConsistencyCheck`) compare `MAX(contacts.sync_sequence)` à
+`contact_sync_state.seq`, puis, depuis 5c, `MAX(calendar_events.sync_sequence)` à
+`calendar_sync_state.seq` par agenda : il détecte une restauration qui a rembobiné l'une des
+deux tables d'une paire sans l'autre. Une restauration *cohérente* — les deux tables
+rembobinées ensemble, dans la même sauvegarde — le laisse muet, l'inégalité restant vraie.
+C'est le seul endroit de cette tranche où un incident n'a aucun symptôme côté client au moment
+de la restauration, et le contrôle n'en attrape que la moitié détectable.
 
 Ne pas s'y fier pour décider si la rotation est nécessaire : elle l'est après **toute**
 restauration, que le contrôle se soit tu ou non.

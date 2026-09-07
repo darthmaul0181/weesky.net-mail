@@ -1,0 +1,549 @@
+using System.Xml.Linq;
+using weesky.Snoopy.Microservice.Models.Calendar;
+using weesky.Snoopy.Microservice.Services.CalDav;
+using weesky.Snoopy.Microservice.Services.Calendar;
+using weesky.Snoopy.Microservice.Services.Dav;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
+using Xunit;
+using IcsCalendar = Ical.Net.Calendar;
+
+namespace weesky.Snoopy.Microservice.Tests.Services.CalDav;
+
+/// <summary>The calendar-query filter: every line of the refusal grid of spec § 8, the closing of
+/// an open bound, and the evaluation on the file's own model — instances, alarms, properties,
+/// parameters and collations.</summary>
+public sealed class CalendarQueryFilterTests
+{
+    private const string Auckland = "Pacific/Auckland";
+
+    // ---- the grid of refusals ----------------------------------------------------------------
+
+    [Fact]
+    public void AFilterWithoutACompFilter_IsMalformed() =>
+        AssertRefused(CalDavError.ValidFilter, Filter());
+
+    [Fact]
+    public void TwoRootCompFilters_AreMalformed() =>
+        AssertRefused(CalDavError.ValidFilter, Filter(Comp("VCALENDAR"), Comp("VCALENDAR")));
+
+    [Fact]
+    public void ARootThatIsNotVCalendar_IsMalformed() =>
+        AssertRefused(CalDavError.ValidFilter, Filter(Comp("VEVENT")));
+
+    [Fact]
+    public void AVCalendarAlone_IsTheWholeCalendar()
+    {
+        var spec = CalendarQueryFilter.Parse(Filter(Comp("VCALENDAR")));
+
+        Assert.True(spec.AllEvents);
+        Assert.False(spec.NoneMatch);
+        Assert.True(CalendarQueryFilter.Matches(Load(Ics.Rule("FREQ=WEEKLY")), spec, Ics.Zone));
+    }
+
+    [Fact]
+    public void ABareVEventCompFilter_IsEveryEvent_TheThunderbirdShape()
+    {
+        var spec = CalendarQueryFilter.Parse(VEvent());
+
+        Assert.False(spec.AllEvents);
+        Assert.Null(spec.TimeRange);
+        Assert.True(CalendarQueryFilter.Matches(Load(Ics.Rule("FREQ=WEEKLY")), spec, Ics.Zone));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void IsNotDefined_OnTheVEventOrTheVCalendar_MatchesNothing(bool onEvent)
+    {
+        var filter = onEvent ? VEvent(IsNotDefined()) : Filter(Comp("VCALENDAR", IsNotDefined()));
+
+        var spec = CalendarQueryFilter.Parse(filter);
+
+        Assert.True(spec.NoneMatch);
+        Assert.False(CalendarQueryFilter.Matches(Load(Ics.Rule("FREQ=WEEKLY")), spec, Ics.Zone));
+    }
+
+    [Fact]
+    public void ACompFilterOnAnotherComponent_IsUnsupported() =>
+        AssertRefused(CalDavError.SupportedFilter, Filter(Comp("VCALENDAR", Comp("VTODO"))));
+
+    [Fact]
+    public void AVEventNestedInAVEvent_IsUnsupported() =>
+        AssertRefused(CalDavError.SupportedFilter, VEvent(Comp("VEVENT")));
+
+    [Fact]
+    public void TwoVEventCompFilters_AreUnsupported() =>
+        AssertRefused(CalDavError.SupportedFilter, Filter(Comp("VCALENDAR", Comp("VEVENT"), Comp("VEVENT"))));
+
+    [Fact]
+    public void ATestAnyOf_IsUnsupported_ItIsCardDavsAttribute()
+    {
+        var filter = VEvent(Prop("SUMMARY", Text("x")));
+        filter.SetAttributeValue("test", "anyof");
+
+        // Served as the conjunction it cannot be, the client would file a false result set.
+        AssertRefused(CalDavError.SupportedFilter, filter);
+    }
+
+    [Fact]
+    public void ATestAllOf_IsTheSemanticItAlreadyHas()
+    {
+        var filter = VEvent(Prop("SUMMARY", Text("Standup")));
+        filter.SetAttributeValue("test", "allof");
+
+        Assert.True(CalendarQueryFilter.Matches(Load(Ics.FromPhone()), CalendarQueryFilter.Parse(filter), Ics.Zone));
+    }
+
+    [Fact]
+    public void APropFilterOnTheVCalendar_IsUnsupported() =>
+        AssertRefused(CalDavError.SupportedFilter, Filter(Comp("VCALENDAR", Prop("PRODID", Text("x")))));
+
+    [Fact]
+    public void ATimeRangeWithNoBoundAtAll_IsMalformed_NeverAWindowAroundNow() =>
+        AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange(null, null)));
+
+    [Theory]
+    [InlineData("20260907T100000Z", "20260907T090000Z")]
+    [InlineData("20260907T090000Z", "20260907T090000Z")]
+    public void ATimeRangeEndingAtOrBeforeItsStart_IsMalformed(string start, string end) =>
+        AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange(start, end)));
+
+    [Theory]
+    [InlineData("2026-09-07T09:00:00Z")]
+    [InlineData("20260907T090000")]
+    [InlineData("20260907")]
+    [InlineData("20260907T090000+0200")]
+    public void ATimeRangeBoundOutsideTheUtcForm_IsMalformed(string start) =>
+        AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange(start, null)));
+
+    [Fact]
+    public void AMissingEnd_IsClosedAtTheEnginesSpanFromTheStart()
+    {
+        var spec = CalendarQueryFilter.Parse(VEvent(TimeRange("20260907T090000Z", null)));
+
+        var from = new DateTime(2026, 9, 7, 9, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(new TimeRangeSpec(from, from + OccurrenceExpander.MaxSpan), spec.TimeRange);
+    }
+
+    [Fact]
+    public void AMissingStart_IsClosedAtTheEnginesSpanFromTheEnd()
+    {
+        var spec = CalendarQueryFilter.Parse(VEvent(TimeRange(null, "20260907T090000Z")));
+
+        var to = new DateTime(2026, 9, 7, 9, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(new TimeRangeSpec(to - OccurrenceExpander.MaxSpan, to), spec.TimeRange);
+    }
+
+    [Fact]
+    public void AWindowWiderThanTheEnginesSpan_IsMalformed()
+    {
+        // The cap grows with the window, so the window itself is the only bound on what one
+        // candidate can make the walk produce — the expand's rule, applied to the time-range.
+        AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange("20260101T000000Z", "20320101T000000Z")));
+        Assert.NotNull(CalendarQueryFilter.Parse(VEvent(TimeRange("20260101T000000Z", "20301231T000000Z"))).TimeRange);
+    }
+
+    [Fact]
+    public void ABoundAtTheEdgeOfTime_IsClosedAtTheEdge_NeverAnException()
+    {
+        var spec = CalendarQueryFilter.Parse(VEvent(TimeRange("99991231T000000Z", null)));
+
+        Assert.Equal(DateTime.MaxValue.Ticks, spec.TimeRange!.ToUtc.Ticks);
+        AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange(null, "00010101T000000Z")));
+    }
+
+    [Fact]
+    public void TwoTimeRanges_AreMalformed() =>
+        AssertRefused(CalDavError.ValidFilter,
+            VEvent(TimeRange("20260907T090000Z", null), TimeRange("20260908T090000Z", null)));
+
+    [Fact]
+    public void ParseTimeRange_DemandsBothBounds_WhenTold_AndAnswersA400WithoutACondition()
+    {
+        // FreeBusyReport's contract: both bounds, and a bare 400 rather than valid-filter.
+        Assert.Throws<DavBadRequestException>(() =>
+            CalendarQueryFilter.ParseTimeRange(TimeRange("20260907T090000Z", null), true, null));
+        Assert.Throws<DavBadRequestException>(() =>
+            CalendarQueryFilter.ParseTimeRange(TimeRange(null, null), false, null));
+
+        var both = CalendarQueryFilter.ParseTimeRange(TimeRange("20260907T090000Z", "20260908T090000Z"), true, null);
+        Assert.Equal(TimeSpan.FromDays(1), both.ToUtc - both.FromUtc);
+    }
+
+    [Fact]
+    public void UnicodeCasemap_IsRefusedWithTheCalendarsOwnCondition()
+    {
+        // Not announced on a calendar (RFC 4791 § 7.5.1 imposes the two others) — and the XName is
+        // CalDAV's, not the book's.
+        AssertRefused(CalDavError.SupportedCollation,
+            VEvent(Prop("SUMMARY", Text("x", collation: DavCollation.UnicodeCasemap))));
+    }
+
+    [Fact]
+    public void AnUnknownMatchType_IsUnsupported() =>
+        AssertRefused(CalDavError.SupportedFilter, VEvent(Prop("SUMMARY", Text("x", matchType: "regex"))));
+
+    [Fact]
+    public void ANegateConditionOutsideYesNo_IsMalformed()
+    {
+        var text = Text("x");
+        text.SetAttributeValue("negate-condition", "maybe");
+
+        AssertRefused(CalDavError.ValidFilter, VEvent(Prop("SUMMARY", text)));
+    }
+
+    [Fact]
+    public void AnAlarmFilterCarryingBothIsNotDefinedAndATimeRange_IsMalformed() =>
+        AssertRefused(CalDavError.ValidFilter,
+            VEvent(Comp("VALARM", IsNotDefined(), TimeRange("20260907T000000Z", null))));
+
+    [Fact]
+    public void APropFilterInsideAVAlarm_IsUnsupported() =>
+        AssertRefused(CalDavError.SupportedFilter, VEvent(Comp("VALARM", Prop("ACTION", Text("DISPLAY")))));
+
+    [Fact]
+    public void ATimeRangeOnAProperty_IsUnsupported() =>
+        AssertRefused(CalDavError.SupportedFilter, VEvent(Prop("DTSTART", TimeRange("20260907T000000Z", null))));
+
+    [Fact]
+    public void TwoTextMatchesOnOneProperty_AreMalformed() =>
+        AssertRefused(CalDavError.ValidFilter, VEvent(Prop("SUMMARY", Text("a"), Text("b"))));
+
+    [Fact]
+    public void IsNotDefinedBesideATextMatch_IsMalformed() =>
+        AssertRefused(CalDavError.ValidFilter, VEvent(Prop("SUMMARY", IsNotDefined(), Text("a"))));
+
+    [Fact]
+    public void APropFilterWithoutAName_IsMalformed()
+    {
+        var prop = Prop("SUMMARY", Text("a"));
+        prop.Attribute("name")!.Remove();
+
+        AssertRefused(CalDavError.ValidFilter, VEvent(prop));
+    }
+
+    [Fact]
+    public void AParamFilterWithTwoChildren_IsMalformed_AndOneWithAnUnknownChild_IsUnsupported()
+    {
+        AssertRefused(CalDavError.ValidFilter,
+            VEvent(Prop("ATTENDEE", Param("PARTSTAT", IsNotDefined(), Text("x")))));
+        AssertRefused(CalDavError.SupportedFilter,
+            VEvent(Prop("ATTENDEE", Param("PARTSTAT", Comp("VALARM")))));
+    }
+
+    // ---- the time-range, on instances ------------------------------------------------------
+
+    [Fact]
+    public void AWeeklySeries_MatchesOnTheOneInstanceTheWindowCovers()
+    {
+        var parsed = Load(Ics.Rule("FREQ=WEEKLY;COUNT=3"));   // the 7th, 14th, 21st at 07:00Z
+
+        Assert.True(Matches(parsed, VEvent(TimeRange("20260921T000000Z", "20260922T000000Z"))));
+        Assert.False(Matches(parsed, VEvent(TimeRange("20260922T000000Z", "20260923T000000Z"))));
+        Assert.False(Matches(parsed, VEvent(TimeRange("20260908T000000Z", "20260909T000000Z"))));
+    }
+
+    [Fact]
+    public void AFloatingEvent_IsJudgedInTheCalendarsZone_SoTwoCalendarsDisagree()
+    {
+        // 09:00 with no zone at all: 07:00Z in Brussels, 21:00Z the day before in Auckland.
+        var parsed = Load(Ics.Single("DTSTART:20260907T090000", "DTEND:20260907T100000"));
+        var spec = CalendarQueryFilter.Parse(VEvent(TimeRange("20260907T060000Z", "20260907T080000Z")));
+
+        Assert.True(CalendarQueryFilter.Matches(parsed, spec, Ics.Zone));
+        Assert.False(CalendarQueryFilter.Matches(parsed, spec, Auckland));
+    }
+
+    [Fact]
+    public void AnExdateRemovingTheOnlyInstanceOfTheWindow_LeavesNoMatch() =>
+        Assert.False(Matches(Load(Ics.WeeklyWithExdateAndOverride()),
+            VEvent(TimeRange("20260921T000000Z", "20260922T000000Z"))));
+
+    [Fact]
+    public void AnOverrideMovedIntoTheWindow_Matches_AndTheSlotItLeft_DoesNot()
+    {
+        var parsed = Load(Ics.WeeklyWithExdateAndOverride());   // the 14th moved 07:00Z → 09:00Z
+
+        Assert.True(Matches(parsed, VEvent(TimeRange("20260914T083000Z", "20260914T100000Z"))));
+        Assert.False(Matches(parsed, VEvent(TimeRange("20260914T070000Z", "20260914T080000Z"))));
+    }
+
+    // ---- the VALARM time-range ---------------------------------------------------------------
+
+    [Fact]
+    public void ARelativeTrigger_FiresBeforeTheInstance()
+    {
+        var parsed = Load(Ics.FromPhone());   // TRIGGER:-PT15M on a 07:00Z instance
+
+        Assert.True(Matches(parsed, Alarm("20260907T064000Z", "20260907T065000Z")));
+        Assert.False(Matches(parsed, Alarm("20260907T060000Z", "20260907T063000Z")));
+    }
+
+    [Fact]
+    public void ATriggerRelatedToTheEnd_IsMeasuredFromTheEnd() =>
+        // TRIGGER;RELATED=END:-PT5M on an instance ending 08:00Z: 07:55Z.
+        Assert.True(Matches(Load(Ics.FromPhone()), Alarm("20260907T075000Z", "20260907T080000Z")));
+
+    [Fact]
+    public void AnAbsoluteTrigger_FiresAtTheInstantItPins()
+    {
+        var parsed = Load(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z",
+            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER;VALUE=DATE-TIME:20260906T120000Z\r\n"
+                   + "DESCRIPTION:x\r\nEND:VALARM"));
+
+        Assert.True(Matches(parsed, Alarm("20260906T110000Z", "20260906T130000Z")));
+        Assert.False(Matches(parsed, Alarm("20260906T130000Z", "20260906T140000Z")));
+    }
+
+    [Fact]
+    public void ATriggerAWeekBeforeItsInstance_IsPastTheDayOfSlack_TheAssumedBound()
+    {
+        // -P1W on the 7th 09:00Z fires on August 31st: the instance sits outside the walked
+        // [from − 1 day, to + 1 day[, so the query answers incomplete rather than reread everything.
+        var parsed = Load(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z",
+            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-P1W\r\nDESCRIPTION:x\r\nEND:VALARM"));
+
+        Assert.False(Matches(parsed, Alarm("20260831T080000Z", "20260831T100000Z")));
+        Assert.True(Matches(parsed, VEvent(TimeRange("20260907T080000Z", "20260907T100000Z"))));
+    }
+
+    [Fact]
+    public void AnAlarmOnAnAllDayInstance_RingsAtTheCalendarsMidnight()
+    {
+        // -PT15M before the 7th: 23:45 Brussels on the 6th is 21:45Z.
+        var parsed = Load(Ics.Single("DTSTART;VALUE=DATE:20260907", "DTEND;VALUE=DATE:20260908",
+            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:x\r\nEND:VALARM"));
+
+        Assert.True(Matches(parsed, Alarm("20260906T214000Z", "20260906T215000Z")));
+        Assert.False(Matches(parsed, Alarm("20260906T234000Z", "20260906T235000Z")));
+    }
+
+    [Fact]
+    public void AVAlarmFilter_NamesAnAlarmOrItsAbsence()
+    {
+        var alarmed = Load(Ics.Single("DTSTART:20260907T090000Z", null,
+            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:x\r\nEND:VALARM"));
+
+        Assert.True(Matches(alarmed, VEvent(Comp("VALARM"))));
+        Assert.False(Matches(Load(Ics.Rule("FREQ=WEEKLY")), VEvent(Comp("VALARM"))));
+        Assert.True(Matches(Load(Ics.Rule("FREQ=WEEKLY")), VEvent(Comp("VALARM", IsNotDefined()))));
+        Assert.False(Matches(alarmed, VEvent(Comp("VALARM", IsNotDefined()))));
+    }
+
+    // ---- prop-filter, text-match and the collations ------------------------------------------
+
+    [Fact]
+    public void Octet_IsCaseSensitive_AsciiCasemap_IsNot_AndAsciiIsTheDefault()
+    {
+        var parsed = Load(Ics.FromPhone());   // SUMMARY:Standup
+
+        Assert.False(Matches(parsed, VEvent(Prop("SUMMARY", Text("standup", collation: DavCollation.Octet)))));
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("standup", collation: DavCollation.AsciiCasemap)))));
+        // The calendar's default, not the book's.
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("standup")))));
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("standup", collation: "default")))));
+    }
+
+    [Fact]
+    public void AsciiCasemap_LeavesAccentsAlone()
+    {
+        var parsed = Load(Ics.Single("DTSTART:20260907T090000Z", null, extra: "SUMMARY:Réunion"));
+
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("RéUNION")))));
+        Assert.False(Matches(parsed, VEvent(Prop("SUMMARY", Text("RÉUNION")))));
+    }
+
+    [Fact]
+    public void NegateCondition_InvertsSomeInstanceMatches()
+    {
+        var parsed = Load(Ics.FromPhone());
+
+        Assert.False(Matches(parsed, VEvent(Prop("SUMMARY", Text("Standup", negate: true)))));
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("Retro", negate: true)))));
+    }
+
+    [Fact]
+    public void AMatchType_IsHonoured_WhenAClientWritesTheCardDavAttribute()
+    {
+        var parsed = Load(Ics.FromPhone());
+
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("Standup", matchType: "equals")))));
+        Assert.False(Matches(parsed, VEvent(Prop("SUMMARY", Text("Stand", matchType: "equals")))));
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("Stand", matchType: "starts-with")))));
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("dup", matchType: "ends-with")))));
+    }
+
+    [Fact]
+    public void AParamFilter_IsSatisfiedByTheOneComponentThatCarriesIt()
+    {
+        // The master has no ATTENDEE at all; the override has one with PARTSTAT=ACCEPTED.
+        var parsed = Load(Ics.WithAttendees());
+
+        Assert.True(Matches(parsed, VEvent(Prop("ATTENDEE", Param("PARTSTAT", Text("ACCEPTED"))))));
+        Assert.False(Matches(parsed, VEvent(Prop("ATTENDEE", Param("PARTSTAT", Text("DECLINED"))))));
+        Assert.True(Matches(parsed, VEvent(Prop("ATTENDEE", Param("PARTSTAT")))));
+        Assert.False(Matches(parsed, VEvent(Prop("ATTENDEE", Param("PARTSTAT", IsNotDefined())))));
+        Assert.True(Matches(parsed, VEvent(Prop("ATTENDEE", Param("DELEGATED-TO", IsNotDefined())))));
+    }
+
+    [Fact]
+    public void AParticipant_MatchesOnItsAddress() =>
+        Assert.True(Matches(Load(Ics.WithAttendees()), VEvent(Prop("ATTENDEE", Text("lea@example.org")))));
+
+    [Fact]
+    public void IsNotDefined_OnAProperty()
+    {
+        Assert.True(Matches(Load(Ics.Rule("FREQ=WEEKLY")), VEvent(Prop("LOCATION", IsNotDefined()))));
+        Assert.False(Matches(Load(Ics.Single("DTSTART:20260907T090000Z", null, extra: "LOCATION:Room 4")),
+            VEvent(Prop("LOCATION", IsNotDefined()))));
+        // The master names a LOCATION, the override does not: one component satisfies it.
+        Assert.True(Matches(Load(Ics.FromPhone()), VEvent(Prop("LOCATION", IsNotDefined()))));
+    }
+
+    [Fact]
+    public void EveryClause_MustHoldOnTheSameComponent()
+    {
+        // FromPhone: the master carries LOCATION and the alarms, the moved override neither.
+        var parsed = Load(Ics.FromPhone());
+        var ringing = Comp("VALARM", TimeRange("20260907T064000Z", "20260907T065000Z"));
+
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("Standup")), Prop("LOCATION", Text("Room")))));
+        Assert.False(Matches(parsed, VEvent(Prop("SUMMARY", Text("(moved)")), Prop("LOCATION", Text("Room")))));
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("Standup")), ringing)));
+        Assert.False(Matches(parsed, VEvent(Prop("SUMMARY", Text("(moved)")), ringing)));
+        Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("(moved)")), Comp("VALARM", IsNotDefined()))));
+    }
+
+    [Fact]
+    public void APropertyAbsentFromTheFile_FailsWithoutAnError() =>
+        Assert.False(Matches(Load(Ics.Rule("FREQ=WEEKLY")), VEvent(Prop("LOCATION", Text("Room")))));
+
+    [Fact]
+    public void ADateTime_ComparesAsTheTextTheFileSpells()
+    {
+        Assert.True(Matches(Load(Ics.Rule("FREQ=WEEKLY")), VEvent(Prop("DTSTART", Text("20260907T090000")))));
+        Assert.True(Matches(Load(Ics.RuleInUtc("FREQ=WEEKLY")),
+            VEvent(Prop("DTSTART", Text("20260907T090000Z", matchType: "equals")))));
+        Assert.True(Matches(Load(Ics.AllDayWeekly()), VEvent(Prop("DTSTART", Text("20260907", matchType: "equals")))));
+    }
+
+    [Fact]
+    public void EveryClauseIsConjunctive()
+    {
+        var parsed = Load(Ics.FromPhone());
+        var window = TimeRange("20260907T000000Z", "20260908T000000Z");
+
+        Assert.True(Matches(parsed, VEvent(window, Prop("SUMMARY", Text("Standup")), Comp("VALARM"))));
+        Assert.False(Matches(parsed, VEvent(window, Prop("SUMMARY", Text("Retro")), Comp("VALARM"))));
+        Assert.False(Matches(parsed, VEvent(TimeRange("20260908T000000Z", "20260909T000000Z"),
+            Prop("SUMMARY", Text("Standup")))));
+    }
+
+    // ---- the column preselection -------------------------------------------------------------
+
+    [Fact]
+    public void Columns_APlainEquals_OnTheThreeColumns()
+    {
+        var spec = CalendarQueryFilter.Parse(VEvent(
+            Prop("STATUS", Text("confirmed", matchType: "equals")),
+            Prop("TRANSP", Text("TRANSPARENT", matchType: "equals")),
+            Prop("CLASS", Text(" private ", matchType: "equals"))));
+
+        // Spelled as the projection spells the column: trimmed and upper-cased.
+        Assert.Equal(new EventColumnFilter("CONFIRMED", "TRANSPARENT", "PRIVATE"), CalendarQueryFilter.Columns(spec));
+    }
+
+    [Fact]
+    public void Columns_NothingElseReachesTheStore()
+    {
+        Assert.Equal(EventColumnFilter.None, Columns(Prop("STATUS", Text("CONFIRMED"))));
+        Assert.Equal(EventColumnFilter.None, Columns(Prop("STATUS", Text("CONFIRMED", matchType: "equals", negate: true))));
+        Assert.Equal(EventColumnFilter.None, Columns(Prop("STATUS", IsNotDefined())));
+        Assert.Equal(EventColumnFilter.None,
+            Columns(Prop("STATUS", Text("CONFIRMED", matchType: "equals"), Param("X-REASON"))));
+        Assert.Equal(EventColumnFilter.None, Columns(Prop("SUMMARY", Text("CONFIRMED", matchType: "equals"))));
+        // A value the column could not hold whole: the file alone can answer it.
+        Assert.Equal(EventColumnFilter.None,
+            Columns(Prop("STATUS", Text(new string('X', IcsProjector.MaxCodeLength + 1), matchType: "equals"))));
+    }
+
+    // ---- helpers -------------------------------------------------------------------------------
+
+    private static void AssertRefused(XName condition, XElement filter)
+    {
+        var thrown = Assert.Throws<DavPreconditionException>(() => CalendarQueryFilter.Parse(filter));
+        Assert.Equal(condition, thrown.Condition);
+    }
+
+    private static bool Matches(IcsCalendar parsed, XElement filter) =>
+        CalendarQueryFilter.Matches(parsed, CalendarQueryFilter.Parse(filter), Ics.Zone);
+
+    private static EventColumnFilter Columns(XElement propFilter) =>
+        CalendarQueryFilter.Columns(CalendarQueryFilter.Parse(VEvent(propFilter)));
+
+    private static IcsCalendar Load(string ics) => IcsDocument.TryLoad(ics)!;
+
+    private static XElement Filter(params object[] children) => new(DavXml.CalDav + "filter", children);
+
+    [Fact]
+    public void AnAlarmWindowAlone_StillNarrowsThePreselection()
+    {
+        var spec = CalendarQueryFilter.Parse(
+            Filter(Comp("VCALENDAR", Comp("VEVENT",
+                Comp("VALARM", TimeRange("20260201T000000Z", "20260301T000000Z")),
+                Comp("VALARM", TimeRange("20260115T000000Z", "20260210T000000Z"))))));
+
+        // iOS sends exactly this shape. Left unnarrowed, every row of the calendar is read, parsed
+        // and re-expanded once per alarmed component, inside the snapshot transaction — minutes of
+        // CPU for a few hundred bytes. An alarm only fires from an instance, so the union of the
+        // alarm windows bounds the rows worth looking at; CandidatesAsync widens by the same day
+        // AlarmFires does.
+        Assert.Null(spec.TimeRange);
+        Assert.Equal(new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc), spec.Preselection!.FromUtc);
+        Assert.Equal(new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), spec.Preselection.ToUtc);
+    }
+
+    [Fact]
+    public void ThePreselection_IsTheEventsOwnWindowWhenItHasOne_AndNothingWithoutEither()
+    {
+        var scoped = CalendarQueryFilter.Parse(
+            Filter(Comp("VCALENDAR", Comp("VEVENT",
+                TimeRange("20260601T000000Z", "20260701T000000Z"),
+                Comp("VALARM", TimeRange("20260101T000000Z", "20261231T000000Z"))))));
+
+        Assert.Equal(scoped.TimeRange, scoped.Preselection);
+        Assert.Null(CalendarQueryFilter.Parse(VEvent()).Preselection);
+    }
+
+    private static XElement VEvent(params object[] children) => Filter(Comp("VCALENDAR", Comp("VEVENT", children)));
+
+    private static XElement Alarm(string start, string end) => VEvent(Comp("VALARM", TimeRange(start, end)));
+
+    private static XElement Comp(string name, params object[] children) =>
+        new(DavXml.CalDav + "comp-filter", new XAttribute("name", name), children);
+
+    private static XElement Prop(string name, params object[] children) =>
+        new(DavXml.CalDav + "prop-filter", new XAttribute("name", name), children);
+
+    private static XElement Param(string name, params object[] children) =>
+        new(DavXml.CalDav + "param-filter", new XAttribute("name", name), children);
+
+    private static XElement IsNotDefined() => new(DavXml.CalDav + "is-not-defined");
+
+    private static XElement Text(string value, string? collation = null, string? matchType = null, bool negate = false)
+    {
+        var element = new XElement(DavXml.CalDav + "text-match", value);
+        if (collation is not null) element.SetAttributeValue("collation", collation);
+        if (matchType is not null) element.SetAttributeValue("match-type", matchType);
+        if (negate) element.SetAttributeValue("negate-condition", "yes");
+        return element;
+    }
+
+    private static XElement TimeRange(string? start, string? end)
+    {
+        var element = new XElement(DavXml.CalDav + "time-range");
+        if (start is not null) element.SetAttributeValue("start", start);
+        if (end is not null) element.SetAttributeValue("end", end);
+        return element;
+    }
+}

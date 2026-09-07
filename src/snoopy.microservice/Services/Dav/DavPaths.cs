@@ -1,7 +1,7 @@
 namespace weesky.Snoopy.Microservice.Services.Dav;
 
 /// <summary>
-/// The CardDAV URL space, in both directions: the hrefs a response advertises, and the resource an
+/// The /dav URL space, in both directions: the hrefs a response advertises, and the resource an
 /// href in a request body designates. Nothing else builds or reads these paths — an encoder and a
 /// decoder written apart drift, and here that drift is a directory traversal.
 /// </summary>
@@ -13,16 +13,18 @@ internal static class DavPaths
     private const string RootSegment = "dav";
     private const string PrincipalsSegment = "principals";
     private const string BooksSegment = "addressbooks";
+    private const string CalendarsSegment = "calendars";
 
     /// <summary>
-    /// The round number just above the longest href we can build. 63 characters of prefix
-    /// ("/dav/addressbooks/" + a 36-character GUID + "/default/") and an escaped name of at most
-    /// 255 characters, at up to <em>nine</em> characters each: three UTF-8 bytes written "%XX",
-    /// which is every BMP character above Latin-1 — most of Asia. (Six is the surrogate-pair
-    /// figure, four bytes spread over two characters, and it is not the worst case.)
-    /// 63 + 255 * 9 = 2358. Anything longer is refused before a single character is decoded.
+    /// The round number just above the longest href we can build. An escaped name is at most 255
+    /// characters at up to <em>nine</em> characters each: three UTF-8 bytes written "%XX", which is
+    /// every BMP character above Latin-1 — most of Asia. (Six is the surrogate-pair figure, four
+    /// bytes spread over two characters, and it is not the worst case.) The longest shape is an
+    /// event, whose 53 characters of fixed text ("/dav/calendars/" + a 36-character GUID and two
+    /// slashes) carry TWO such segments: 53 + 2 * 255 * 9 = 4643. Anything longer is refused
+    /// before a single character is decoded.
     /// </summary>
-    private const int MaxPathLength = 2560;
+    internal const int MaxPathLength = 4864;
 
     /// <summary>
     /// "/dav/principals/" — the collection that CONTAINS principals, which is what RFC 3744 § 5.8
@@ -49,6 +51,23 @@ internal static class DavPaths
     /// </summary>
     internal static string Card(Guid userId, string davName) =>
         $"{Collection(userId)}{Uri.EscapeDataString(davName)}";
+
+    /// <summary>"/dav/calendars/" — the collection that CONTAINS the calendar homes.</summary>
+    internal const string CalendarCollection = Root + "/" + CalendarsSegment + "/";
+
+    /// <summary>"/dav/calendars/{userId}/" — the calendar home.</summary>
+    internal static string CalendarHome(Guid userId) => $"{CalendarCollection}{userId}/";
+
+    /// <summary>
+    /// "/dav/calendars/{userId}/{escaped name}/" — one calendar. Unlike the address book's single
+    /// "default", this segment is a name the user chose, so it is escaped exactly as a card's is.
+    /// </summary>
+    internal static string Calendar(Guid userId, string calendarName) =>
+        $"{CalendarHome(userId)}{Uri.EscapeDataString(calendarName)}/";
+
+    /// <summary>"/dav/calendars/{userId}/{calendar}/{escaped name}" — never a trailing slash.</summary>
+    internal static string Event(Guid userId, string calendarName, string davName) =>
+        $"{Calendar(userId, calendarName)}{Uri.EscapeDataString(davName)}";
 
     /// <summary>
     /// The resource an href from a request body designates, or null when it is not one of ours.
@@ -99,11 +118,22 @@ internal static class DavPaths
             [_, _, PrincipalsSegment, var user, ""] when TryUser(user, out var id) =>
                 new DavResource(DavResourceKind.Principal, id, null),
             [_, _, BooksSegment, var user, ""] when TryUser(user, out var id) =>
-                new DavResource(DavResourceKind.Home, id, null),
+                new DavResource(DavResourceKind.AddressBookHome, id, null),
             [_, _, BooksSegment, var user, BookName, ""] when TryUser(user, out var id) =>
-                new DavResource(DavResourceKind.Collection, id, null),
+                new DavResource(DavResourceKind.AddressBook, id, null),
             [_, _, BooksSegment, var user, BookName, var name] when TryUser(user, out var id) =>
                 new DavResource(DavResourceKind.Card, id, Uri.UnescapeDataString(name)),
+            [_, _, CalendarsSegment, ""] => new DavResource(DavResourceKind.CalendarCollection, Guid.Empty, null),
+            [_, _, CalendarsSegment, var user, ""] when TryUser(user, out var id) =>
+                new DavResource(DavResourceKind.CalendarHome, id, null),
+            // The calendar segment is a name and not a literal, so it is decoded here — once, like
+            // a card's — and left unjudged: DavName.IsValid is the caller's, along with the 404.
+            [_, _, CalendarsSegment, var user, var calendar, ""] when TryUser(user, out var id) && calendar.Length > 0 =>
+                new DavResource(DavResourceKind.Calendar, id, null, Uri.UnescapeDataString(calendar)),
+            [_, _, CalendarsSegment, var user, var calendar, var name]
+                when TryUser(user, out var id) && calendar.Length > 0 =>
+                new DavResource(DavResourceKind.Event, id, Uri.UnescapeDataString(name),
+                    Uri.UnescapeDataString(calendar)),
             _ => null
         };
     }

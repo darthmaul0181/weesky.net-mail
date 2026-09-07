@@ -10,6 +10,7 @@ public sealed record DavCredentialsView(
     string Username,
     bool Configured,
     bool CardDavEnabled,
+    bool CalDavEnabled,
     DateTime? LastUsedAt,
     string? Password)
 {
@@ -19,5 +20,6 @@ public sealed record DavCredentialsView(
     /// </summary>
     public override string ToString() =>
         $"DavCredentialsView {{ ServerUrl = {ServerUrl}, Username = {Username}, " +
-        $"Configured = {Configured}, CardDavEnabled = {CardDavEnabled}, LastUsedAt = {LastUsedAt} }}";
+        $"Configured = {Configured}, CardDavEnabled = {CardDavEnabled}, " +
+        $"CalDavEnabled = {CalDavEnabled}, LastUsedAt = {LastUsedAt} }}";
 }

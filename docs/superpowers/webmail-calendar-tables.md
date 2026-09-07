@@ -203,7 +203,7 @@ SELECT CONSTRAINT_NAME, TABLE_NAME, REFERENCED_TABLE_NAME
 --           calendar_tombstones->calendars. Aucune depuis calendar_revisions sauf ->users.
 ```
 
-### Prérequis avant d'ouvrir toute route `/caldav` — l'atomicité du compteur
+### Prérequis avant d'ouvrir toute route `/dav/calendars/` — l'atomicité du compteur
 
 Même propriété, même vérification manuelle que pour CardDAV : `seq` avance par un
 `INSERT ... ON DUPLICATE KEY UPDATE seq = seq + 1` que ni le fournisseur InMemory ni SQLite ne

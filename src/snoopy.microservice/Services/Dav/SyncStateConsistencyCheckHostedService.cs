@@ -1,6 +1,6 @@
 using weesky.Snoopy.Microservice.Data.Preferences;
 
-namespace weesky.Snoopy.Microservice.Services.CardDav;
+namespace weesky.Snoopy.Microservice.Services.Dav;
 
 /// <summary>
 /// Runs <see cref="SyncStateConsistencyCheck"/> once at startup. There is no <c>IStartupValidator</c>
@@ -16,8 +16,9 @@ namespace weesky.Snoopy.Microservice.Services.CardDav;
 /// A <see cref="BackgroundService"/> and not a bare <c>IHostedService</c>, and the
 /// <see cref="Task.Yield"/> below is what makes the difference real: the host AWAITS
 /// <c>StartAsync</c> before it listens, so run inline this diagnostic — a GROUP BY over the whole
-/// <c>contacts</c> table — would hold the service out of rotation for as long as it takes. Nothing
-/// downstream waits on its answer: it writes a log line an operator reads afterwards.
+/// <c>contacts</c> table, then over the whole <c>calendar_events</c> table — would hold the service
+/// out of rotation for as long as it takes. Nothing downstream waits on its answer: it writes a log
+/// line an operator reads afterwards.
 /// </summary>
 internal sealed class SyncStateConsistencyCheckHostedService(
     IServiceScopeFactory scopes, ILogger<SyncStateConsistencyCheckHostedService> logger)

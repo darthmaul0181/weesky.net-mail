@@ -112,20 +112,28 @@ en XML, `RDATE;VALUE=PERIOD`, `RANGE=THISANDFUTURE`, l'`instanceId` orphelin) :
 - **Le webmail écrit désormais des ressources qu'un client tiers va relire.** Tout ce que
   l'éditeur compose — la coupure de série de `ThisAndFollowing`, les `EXDATE` d'une suppression
   d'occurrence, le bloc `VTIMEZONE` — est ce que DAVx⁵ et Thunderbird liront en 5d. Le
-  « cinquième cas » que 5a renvoie à 5d se vérifie contre **ces** écritures-là.
+  « cinquième cas » que 5a renvoie à 5d se vérifie contre **ces** écritures-là. **5c : les routes
+  sont ouvertes, la vérification à la main reste renvoyée à 5d** (voir `calendar-5c-residuals.md`).
 - **Le verrou `keepRepeat` est le contrat entre les deux mondes.** Une règle que l'éditeur ne sait
   pas dessiner revient au serveur inchangée, et c'est ce qui garantit qu'un aller-retour par le
   webmail ne dégrade pas une récurrence écrite par un téléphone. Une route DAV qui réécrirait la
   ressource entière au lieu de la fusionner casserait cette garantie sans qu'aucun test d'écran ne
-  rougisse.
+  rougisse. **5c : tenu** — le `PUT` DAV stocke le fichier verbatim (§ 10 de la spec), il ne passe
+  jamais par `IcsComposer`/`keepRepeat`, donc ne peut pas la casser par construction.
 - **Le `ifHash` figé au semis est la brique d'optimistic concurrency côté client.** 5c doit
   l'exposer en ETag DAV sur la même valeur, sinon deux clients auront deux notions de « la version
-  que j'ai lue » pour une même ressource.
+  que j'ai lue » pour une même ressource. **5c : fait** — l'ETag DAV est `"ics_hash"` des deux
+  côtés (§ 6 et § 10 de la spec), toujours renvoyé sur un `PUT` DAV puisqu'il stocke verbatim.
 - **La fenêtre demandée est plus large que la fenêtre dessinée** (un jour de rab de chaque côté,
   `SLACK_DAYS`). Un `calendar-query` DAV qui prendrait les bornes de l'écran au pied de la lettre
   perdrait les instances qu'un fuseau lointain fait basculer d'un jour — c'est le même piège que
-  la note 5a sur les minuits UTC, vu depuis l'autre bout.
+  la note 5a sur les minuits UTC, vu depuis l'autre bout. **5c : la même marge existe côté serveur**
+  — `CalendarEventStore.Margin`, un jour, lue par `DavCalendarReader.CandidatesAsync` — mais c'est
+  une présélection distincte de celle de l'écran ; voir `calendar-5c-residuals.md` pour ce qu'elle
+  laisse passer.
 - **Le module ne connaît aucun participant en écriture.** Les participants sont affichés en lecture
   seule (`editor.attendeesReadOnly`) et aucun `ATTENDEE`/`ORGANIZER` n'est composé par cet écran :
   la planification (invitations, `SCHEDULE-STATUS`, la boîte aux lettres iTIP) n'a pas de client
-  et n'est donc pas encore contrainte par un écran existant.
+  et n'est donc pas encore contrainte par un écran existant. **5c : toujours vrai** — le protocole
+  lit et écrit `ATTENDEE`/`ORGANIZER` verbatim dans le fichier stocké, mais ne planifie rien ; voir
+  `src/frontend/docs/architecture-calendar.md`, « Ce que CalDAV voit ».

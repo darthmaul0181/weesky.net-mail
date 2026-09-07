@@ -45,7 +45,7 @@ internal sealed class CalendarEventStore(
     internal const string EventMoved =
         "The event changed since it was read. Reload it and try again.";
 
-    internal const string NoStart = "The event carries no start";
+    internal const string NoStart = IcsGuards.NoStart;
 
     /// <summary>A collection is a property of the whole resource, not of one instance: moving a
     /// single occurrence would have to split the series, which is not what the gesture says.</summary>
@@ -64,7 +64,7 @@ internal sealed class CalendarEventStore(
     /// <summary>The window query's slack on both sides. All-day membership is decided by the
     /// expander, on dates; the columns hold instants placed in the calendar's zone, and the two
     /// readings differ by less than a day.</summary>
-    private static readonly TimeSpan Margin = TimeSpan.FromDays(1);
+    internal static readonly TimeSpan Margin = TimeSpan.FromDays(1);
 
     public async Task<Result<IReadOnlyList<EventOccurrence>>> WindowAsync(
         Guid userId, DateTime fromUtc, DateTime toUtc, string viewTimeZone,
@@ -426,7 +426,7 @@ internal sealed class CalendarEventStore(
         }
     }
 
-    private async Task ClearAttendeesAsync(Guid eventId, CancellationToken cancellationToken) =>
+    internal async Task ClearAttendeesAsync(Guid eventId, CancellationToken cancellationToken) =>
         context.CalendarAttendees.RemoveRange(
             await context.CalendarAttendees.Where(a => a.EventId == eventId)
                 .ToListAsync(cancellationToken));
@@ -436,18 +436,10 @@ internal sealed class CalendarEventStore(
     /// cannot exceed the density the composer offers, so running the two costs nothing and is what
     /// makes the invariant hold whatever the door.
     /// </summary>
-    internal static Result<IcsCalendar> Parse(string ics)
-    {
-        if (IcsGuards.CheckSize(ics) is { } tooLarge) return Result.Failure<IcsCalendar>(tooLarge.Message);
-
-        var parsed = IcsDocument.TryLoad(ics);
-        if (IcsGuards.Check(ics, parsed) is { } invalid) return Result.Failure<IcsCalendar>(invalid.Message);
-        if (IcsGuards.CheckDensity(parsed!) is { } dense) return Result.Failure<IcsCalendar>(dense.Message);
-        if (IcsGuards.CheckExpansion(parsed!) is { } opaque) return Result.Failure<IcsCalendar>(opaque.Message);
-
-        var master = IcsDocument.MasterOf(parsed!) ?? IcsDocument.Components(parsed!).First();
-        return master.DtStart is null ? Result.Failure<IcsCalendar>(NoStart) : Result.Success(parsed!);
-    }
+    internal static Result<IcsCalendar> Parse(string ics) =>
+        IcsGuards.CheckAll(ics, out var parsed) is { } refused
+            ? Result.Failure<IcsCalendar>(refused.Message)
+            : Result.Success(parsed!);
 
     /// <summary>An invalid <see cref="EventWrite"/> throws out of the composer; here it is one
     /// refusal among the others, carrying the composer's own words.</summary>
@@ -666,22 +658,28 @@ internal sealed class CalendarEventStore(
 
     private static DateTime Earlier(DateTime left, DateTime right) => left <= right ? left : right;
 
-    private static DateTime Shift(DateTime at, TimeSpan margin) =>
-        new(Math.Clamp(at.Ticks + margin.Ticks, DateTime.MinValue.Ticks, DateTime.MaxValue.Ticks),
-            DateTimeKind.Utc);
+    internal static DateTime Shift(DateTime at, TimeSpan margin) => OccurrenceExpander.Shift(at, margin);
 
     /// <summary>
     /// One transaction, opened THROUGH the context's execution strategy, with
     /// <see cref="ContactStore"/>'s commit rule: a body answering a failed <c>Result</c> leaves it
     /// uncommitted, so a refusal decided after a rank was taken rolls that rank back.
     /// </summary>
-    internal Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken)
+    internal Task<T> InTransactionAsync<T>(Func<Task<T>> body, CancellationToken cancellationToken) =>
+        InTransactionAsync(
+            body, outcome => outcome is not CSharpFunctionalExtensions.IResult { IsFailure: true },
+            cancellationToken);
+
+    /// <summary>The same transaction with the commit decision left to the caller: the DAV writer's
+    /// outcomes are no <c>Result</c>, and its refusals must roll their rank back all the same.</summary>
+    internal Task<T> InTransactionAsync<T>(
+        Func<Task<T>> body, Func<T, bool> commit, CancellationToken cancellationToken)
     {
         Func<CancellationToken, Task<T>> operation = async token =>
         {
             await using var transaction = await context.Database.BeginTransactionAsync(token);
             var outcome = await body();
-            if (outcome is CSharpFunctionalExtensions.IResult { IsFailure: true }) return outcome;
+            if (!commit(outcome)) return outcome;
 
             await transaction.CommitAsync(token);
             return outcome;

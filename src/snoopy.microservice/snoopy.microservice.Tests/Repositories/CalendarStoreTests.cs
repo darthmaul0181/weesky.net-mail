@@ -48,6 +48,105 @@ public sealed class CalendarStoreTests
     }
 
     [Fact]
+    public async Task CreateNamed_TakesTheClientsSegment_NextColour_LastRank_AndDefaultsZone()
+    {
+        var db = nameof(CreateNamed_TakesTheClientsSegment_NextColour_LastRank_AndDefaultsZone);
+        var user = Guid.NewGuid();
+        await Store(db).EnsureDefaultAsync(user, "Europe/Brussels", None);
+
+        var id = (await Store(db).CreateNamedAsync(
+            user, "Mes vacances", new CalendarWrite("Mes vacances", null, null, null), None)).Value;
+
+        var view = (await Store(db).ListAsync(user, None)).Single(c => c.Id == id);
+        // Décision 2 of the overview: the URL segment the client chose IS the dav_name, never a
+        // slug of the label — a client syncs on this segment and it is never renamed.
+        Assert.Equal("Mes vacances", view.DavName);
+        Assert.Equal(CalendarPalette.Colours[1], view.Color);
+        Assert.Equal(1, view.Order);
+        // The zone of `default`: a MKCALENDAR carries no browser to ask.
+        Assert.Equal("Europe/Brussels", view.TimeZone);
+        Assert.NotNull(await new PreferencesTestDbContext(db).CalendarSyncStates.FindAsync(id));
+    }
+
+    [Fact]
+    public async Task CreateNamed_OnAnAccountWithNoCalendarAtAll_FallsBackToUtc()
+    {
+        var db = nameof(CreateNamed_OnAnAccountWithNoCalendarAtAll_FallsBackToUtc);
+        var user = Guid.NewGuid();
+
+        // The hand-restored base of § 6: no `default` to read a zone from, and inventing one would
+        // move every floating event the client is about to write.
+        var id = (await Store(db).CreateNamedAsync(
+            user, "work", new CalendarWrite("Work", null, null, null), None)).Value;
+
+        Assert.Equal("UTC", (await Store(db).ListAsync(user, None)).Single(c => c.Id == id).TimeZone);
+    }
+
+    [Fact]
+    public async Task CreateNamed_HonoursTheZoneTheClientSent()
+    {
+        var db = nameof(CreateNamed_HonoursTheZoneTheClientSent);
+        var user = Guid.NewGuid();
+        await Store(db).EnsureDefaultAsync(user, "Europe/Brussels", None);
+
+        var id = (await Store(db).CreateNamedAsync(user, "trips",
+            new CalendarWrite("Trips", null, null, null, "Pacific/Auckland"), None)).Value;
+
+        Assert.Equal("Pacific/Auckland",
+            (await Store(db).ListAsync(user, None)).Single(c => c.Id == id).TimeZone);
+    }
+
+    [Fact]
+    public async Task CreateNamed_RefusesASegmentAnotherCalendarAlreadyHolds()
+    {
+        var db = nameof(CreateNamed_RefusesASegmentAnotherCalendarAlreadyHolds);
+        var user = Guid.NewGuid();
+        await Store(db).EnsureDefaultAsync(user, "Europe/Brussels", None);
+
+        var refused = await Store(db).CreateNamedAsync(
+            user, CalendarStore.DefaultDavName, new CalendarWrite("Again", null, null, null), None);
+
+        Assert.Equal(CalendarStore.NameTaken, refused.Error);
+        Assert.Single(await Store(db).ListAsync(user, None));
+    }
+
+    [Fact]
+    public async Task CreateNamed_RefusesTheTwentyFirst()
+    {
+        var db = nameof(CreateNamed_RefusesTheTwentyFirst);
+        var user = Guid.NewGuid();
+        await Store(db).EnsureDefaultAsync(user, "Europe/Brussels", None);
+        for (var i = 1; i < CalendarStore.MaxPerUser; i++)
+        {
+            Assert.True((await Store(db).CreateNamedAsync(
+                user, $"c{i}", new CalendarWrite($"c{i}", null, null, null), None)).IsSuccess);
+        }
+
+        var refused = await Store(db).CreateNamedAsync(
+            user, "one-too-many", new CalendarWrite("one too many", null, null, null), None);
+
+        Assert.Equal(CalendarStore.CapReached, refused.Error);
+        Assert.Equal(CalendarStore.MaxPerUser, (await Store(db).ListAsync(user, None)).Count);
+    }
+
+    [Fact]
+    public async Task Update_WritesTheZoneOnlyWhenOneIsSent()
+    {
+        var db = nameof(Update_WritesTheZoneOnlyWhenOneIsSent);
+        var user = Guid.NewGuid();
+        var created = await Store(db).EnsureDefaultAsync(user, "Europe/Brussels", None);
+
+        Assert.True((await Store(db).UpdateAsync(
+            user, created.Id, new CalendarWrite("Perso", null, null, null), None)).IsSuccess);
+        Assert.Equal("Europe/Brussels",
+            (await Store(db).ListAsync(user, None)).Single().TimeZone);
+
+        Assert.True((await Store(db).UpdateAsync(user, created.Id,
+            new CalendarWrite("Perso", null, null, null, "Pacific/Auckland"), None)).IsSuccess);
+        Assert.Equal("Pacific/Auckland", (await Store(db).ListAsync(user, None)).Single().TimeZone);
+    }
+
+    [Fact]
     public async Task Create_RefusesTheTwentyFirst()
     {
         var db = nameof(Create_RefusesTheTwentyFirst);

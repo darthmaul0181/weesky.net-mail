@@ -22,11 +22,13 @@ public sealed class CardDavOutcomeTranslatorTests
     [InlineData(DavWriteStatus.NotFound, 404)]
     [InlineData(DavWriteStatus.InvalidCard, 403)]
     [InlineData(DavWriteStatus.UnsupportedVersion, 403)]
+    [InlineData(DavWriteStatus.UnsupportedComponent, 403)]
+    [InlineData(DavWriteStatus.TooManyInstances, 403)]
     [InlineData(DavWriteStatus.UidConflict, 403)]
     [InlineData(DavWriteStatus.TooLarge, 403)]
     [InlineData(DavWriteStatus.AlreadyExists, 412)]
     [InlineData(DavWriteStatus.PreconditionFailed, 412)]
-    [InlineData(DavWriteStatus.BookFull, 507)]
+    [InlineData(DavWriteStatus.CollectionFull, 507)]
     [InlineData(DavWriteStatus.Busy, 503)]
     public async Task EveryStatus_HasItsCode(DavWriteStatus status, int expected)
     {
@@ -62,7 +64,7 @@ public sealed class CardDavOutcomeTranslatorTests
     [InlineData(DavWriteStatus.NotFound)]
     [InlineData(DavWriteStatus.AlreadyExists)]
     [InlineData(DavWriteStatus.PreconditionFailed)]
-    [InlineData(DavWriteStatus.BookFull)]
+    [InlineData(DavWriteStatus.CollectionFull)]
     [InlineData(DavWriteStatus.Busy)]
     public async Task WhatNamesNoCondition_WritesNoBodyAtAll(DavWriteStatus status)
     {
@@ -74,6 +76,22 @@ public sealed class CardDavOutcomeTranslatorTests
         // name a precondition the RFC does not define there, and DAVx5 reads it anyway.
         Assert.Equal(string.Empty, ReadBody(context.Response));
         Assert.Null(CardDavOutcomeTranslator.ConditionOf(status));
+    }
+
+    [Theory]
+    [InlineData(DavWriteStatus.UnsupportedComponent, "supported-calendar-component")]
+    [InlineData(DavWriteStatus.TooManyInstances, "max-instances")]
+    public async Task AStatusOnlyTheCalendarAnswers_KeepsItsOwnElementHere(
+        DavWriteStatus status, string condition)
+    {
+        var context = NewContext();
+
+        await CardDavOutcomeTranslator.WriteAsync(context.Response, Outcome(status), CancellationToken.None);
+
+        // No address book ever answers these; were one to, borrowing a CardDAV element would say
+        // something else about the card than what was judged.
+        Assert.Equal(403, context.Response.StatusCode);
+        Assert.Equal(DavXml.CalDav + condition, ConditionOf(context.Response));
     }
 
     [Fact]
@@ -107,7 +125,7 @@ public sealed class CardDavOutcomeTranslatorTests
     }
 
     [Theory]
-    [InlineData(DavWriteStatus.BookFull)]
+    [InlineData(DavWriteStatus.CollectionFull)]
     [InlineData(DavWriteStatus.NotFound)]
     [InlineData(DavWriteStatus.InvalidCard)]
     [InlineData(DavWriteStatus.Created)]

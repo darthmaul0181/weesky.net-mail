@@ -22,7 +22,7 @@ internal static class IcsProjector
     // VARCHAR(255), status/transparency/class VARCHAR(16), an attendee's role and partstat
     // VARCHAR(32). A value over them is cut here rather than refused: none of them is an identity.
     private const int MaxTextLength = 255;
-    private const int MaxCodeLength = 16;
+    internal const int MaxCodeLength = 16;
     private const int MaxRoleLength = 32;
     private const int MaxDescriptionBytes = 65_535;
     private const int MaxOccurrences = 50_000;
