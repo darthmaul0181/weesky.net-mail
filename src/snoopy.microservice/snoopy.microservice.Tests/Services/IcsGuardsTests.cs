@@ -148,7 +148,44 @@ public sealed class IcsGuardsTests
     public void ExceptionsWithoutMaster_Pass() => Assert.Null(Check(Ics.Events(("a", "20260914"), ("a", "20260921"))));
 
     [Fact]
-    public void MissingVtimezone_Passes() => Assert.Null(Check(Ics.WeeklyWithoutZone()));
+    public void ATzidWithNoVtimezoneInTheFile_IsNotACalendarObjectResource()
+    {
+        // RFC 5545 § 3.2.19: "An individual 'VTIMEZONE' calendar component MUST be specified for each
+        // unique 'TZID' parameter value specified in the iCalendar object." 5a accepted this, before
+        // the server announced calendar-access; announcing it is what promises RFC 5545's MUSTs.
+        var problem = IcsGuards.CheckAll(Ics.WeeklyWithoutZone(), out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarObjectResource, problem!.Precondition);
+        // An import refused without naming the zone it lacks is a refusal nobody can act on.
+        Assert.Contains(Ics.Zone, problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ATzidThatTheFileDefines_IsAccepted()
+    {
+        // What Thunderbird, DAVx5 and iOS all send. A false refusal here breaks every one of them.
+        var ics = Ics.Single("DTSTART;TZID=US/Eastern:20260101T100000", "DTEND;TZID=US/Eastern:20260101T110000",
+            zone: Ics.SeasonalZone("US/Eastern"));
+
+        Assert.Null(IcsGuards.CheckAll(ics, out _));
+    }
+
+    /// <summary>An Outlook file names its zone in quotes, and the quotes are not part of the id.</summary>
+    [Fact]
+    public void AQuotedTzidTheFileDefines_IsAccepted()
+    {
+        var ics = Ics.Single("DTSTART;TZID=\"Canberra, Melbourne, Sydney\":20260101T100000", null,
+            zone: Ics.FixedZone("Canberra, Melbourne, Sydney", "+1000"));
+
+        Assert.Null(IcsGuards.CheckAll(ics, out _));
+    }
+
+    [Fact]
+    public void AUtcOrFloatingStart_NeedsNoVtimezone()
+    {
+        Assert.Null(IcsGuards.CheckAll(Ics.Single("DTSTART:20260101T100000Z", null), out _));
+        Assert.Null(IcsGuards.CheckAll(Ics.Single("DTSTART:20260101T100000", null), out _));
+    }
 
     [Fact]
     public void OverOneMegabyte_IsMaxResourceSize() =>
@@ -360,7 +397,7 @@ public sealed class IcsGuardsTests
     {
         // A guard that has to walk in order to refuse never refuses what it could not walk: in
         // Ical.Net 5.2.3 this series is a stack overflow, which no catch block sees.
-        var problem = IcsGuards.CheckAll(Ics.RuleWithOverride("FREQ=HOURLY", "20260914T110000"), out _);
+        var problem = IcsGuards.CheckAll(Ics.ZonedRuleWithOverride("FREQ=HOURLY", "20260914T110000"), out _);
 
         Assert.Equal(IcsPrecondition.MaxInstances, problem!.Precondition);
     }

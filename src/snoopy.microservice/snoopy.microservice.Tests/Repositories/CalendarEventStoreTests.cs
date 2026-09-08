@@ -382,7 +382,8 @@ public sealed class CalendarEventStoreTests
         var row = Seeded(user, cal, Ics.Single(
             start: "DTSTART;TZID=Europe/Brussels:20260907T090000",
             end: "DTEND;TZID=Europe/Brussels:20260907T100000",
-            extra: "RRULE:FREQ=WEEKLY;COUNT=2\r\nRDATE;TZID=Europe/Brussels:20260920T090000"));
+            extra: "RRULE:FREQ=WEEKLY;COUNT=2\r\nRDATE;TZID=Europe/Brussels:20260920T090000",
+            zone: Ics.SeasonalZone(Ics.Zone)));
         var seed = new PreferencesTestDbContext(db);
         seed.CalendarEvents.Add(row);
         await seed.SaveChangesAsync(None);

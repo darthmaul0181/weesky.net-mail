@@ -67,6 +67,10 @@ internal static class Ics
             "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + "RECURRENCE-ID:" + recurrenceId + "\r\n"
             + "DTSTART:" + recurrenceId + "\r\nSUMMARY:Moved\r\nEND:VEVENT\r\n" + Tail);
 
+    /// <summary>The same series as <see cref="RuleWithOverride"/>, its zone defined in the file.</summary>
+    internal static string ZonedRuleWithOverride(string rrule, string overrideStart) =>
+        Head + SeasonalZone(Zone) + RuleWithOverride(rrule, overrideStart)[Head.Length..];
+
     /// <summary>Le 7, le 14 déplacé à 11:00, le 21 retiré par EXDATE, le 28.</summary>
     internal static string WeeklyWithExdateAndOverride() =>
         RuleWithOverride("FREQ=WEEKLY", "20260914T110000",
@@ -100,7 +104,7 @@ internal static class Ics
         + "SUMMARY:Standup (moved)\r\nEND:VEVENT\r\n" + Tail;
 
     internal static string WithAttendees() =>
-        Head + "BEGIN:VEVENT\r\nUID:meeting\r\n" + Stamp
+        Head + SeasonalZone(Zone) + "BEGIN:VEVENT\r\nUID:meeting\r\n" + Stamp
         + "DTSTART;TZID=" + Zone + ":20260907T090000\r\nDTEND;TZID=" + Zone + ":20260907T100000\r\n"
         + "RRULE:FREQ=WEEKLY;COUNT=3\r\nORGANIZER;CN=Michel:mailto:michel@weesky.be\r\nEND:VEVENT\r\n"
         + "BEGIN:VEVENT\r\nUID:meeting\r\n" + Stamp

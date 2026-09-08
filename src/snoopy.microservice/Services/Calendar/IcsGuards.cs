@@ -18,6 +18,7 @@ internal static class IcsGuards
     internal const string NoStart = "The event carries no start";
 
     private const string SupportedVersion = "2.0";
+    private const string TzIdParameter = "TZID=";
     private const int MaxUidLength = 255;
     private const int MaxEmailLength = 320;
 
@@ -51,9 +52,9 @@ internal static class IcsGuards
     /// <summary>
     /// The whole judgement of one resource, in the order the store applies it: size — before the
     /// parse, which is the work an oversized body is trying to make us do — then syntax, version
-    /// and shape, then density, then expansion, then the overrides the rule has to generate, then
-    /// the DTSTART every VEVENT owes (RFC 5545 § 3.6.1). Null when the file is accepted,
-    /// <paramref name="parsed"/> then being its model.
+    /// and shape, then the zones and the escapes the text owes, then density, then expansion, then
+    /// the overrides the rule has to generate, then the DTSTART every VEVENT owes (RFC 5545
+    /// § 3.6.1). Null when the file is accepted, <paramref name="parsed"/> then being its model.
     /// </summary>
     internal static IcsProblem? CheckAll(string ics, out IcsCalendar? parsed)
     {
@@ -104,7 +105,50 @@ internal static class IcsGuards
             return new IcsProblem(IcsPrecondition.ValidCalendarObjectResource, "A component carries no UID.");
         if (components.Any(TooLong))
             return new IcsProblem(IcsPrecondition.ValidCalendarData, "A UID or attendee address is too long");
+        if (CheckZones(ics, parsed) is { } zone) return zone;
         return CheckTextEscapes(ics);
+    }
+
+    /// <summary>
+    /// RFC 5545 § 3.2.19: an individual VTIMEZONE component MUST be specified for each unique
+    /// TZID the object names. We announce neither RFC 7809's timezone service nor
+    /// timezones-by-reference, so the file is everything a reader gets — one whose zone lives
+    /// elsewhere cannot be resolved by anyone. Read off the text, not the model: Ical.Net resolves
+    /// a known id against tzdb, and the parsed object then no longer remembers it was missing.
+    /// </summary>
+    private static IcsProblem? CheckZones(string ics, IcsCalendar parsed)
+    {
+        var defined = parsed.TimeZones.Select(zone => zone?.TzId).OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var referenced in ReferencedTzIds(ics))
+        {
+            if (!defined.Contains(referenced))
+                return new IcsProblem(IcsPrecondition.ValidCalendarObjectResource,
+                    $"TZID '{referenced}' is used but no VTIMEZONE in the object defines it.");
+        }
+
+        return null;
+    }
+
+    /// <summary>Every TZID parameter the text carries, VTIMEZONE blocks excepted — their own TZID
+    /// is the definition, not a reference.</summary>
+    private static IEnumerable<string> ReferencedTzIds(string ics)
+    {
+        var inZone = false;
+        foreach (var line in Unfolded(ics))
+        {
+            if (line.StartsWith("BEGIN:VTIMEZONE", StringComparison.OrdinalIgnoreCase)) inZone = true;
+            else if (line.StartsWith("END:VTIMEZONE", StringComparison.OrdinalIgnoreCase)) inZone = false;
+            if (inZone) continue;
+
+            var colon = line.IndexOf(':');
+            if (colon <= 0) continue;
+            foreach (var parameter in line[..colon].Split(';').Skip(1))
+            {
+                if (parameter.StartsWith(TzIdParameter, StringComparison.OrdinalIgnoreCase))
+                    yield return parameter[TzIdParameter.Length..].Trim('"');
+            }
+        }
     }
 
     /// <summary>
