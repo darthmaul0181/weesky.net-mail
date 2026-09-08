@@ -192,10 +192,13 @@ internal static class IcsGuards
         if (IcsDocument.MasterOf(parsed) is not { DtStart: not null } master) return null;
         if (master.RecurrenceRule is null && master.RecurrenceDates?.GetAllDates().Any() != true) return null;
         if (!IcsDocument.Components(parsed).Any(HasInstanceId)) return null;
+        // A zone only the file's own VTIMEZONE defines is walked floating, so the walk's instants
+        // are not in the frame the file wrote and no comparison between them means anything.
+        if (!IcsDocument.Components(parsed).All(IcsTimeZones.Expandable)) return null;
 
         // The clone is walked without its overrides: attached, the library answers each of them as
         // an occurrence of its own and the identifier under judgement would always be in the set.
-        var series = IcsTimeZones.Detach(parsed)?.Calendar ?? IcsComposer.Clone(parsed);
+        var series = IcsComposer.Clone(parsed);
         var overrides = IcsDocument.Components(series).Where(HasInstanceId).ToList();
         var latest = overrides.Max(c => IcsComposer.Instant(series, c.RecurrenceIdentifier!.StartTime!));
         foreach (var component in overrides) IcsComposer.Detach(series, component);
@@ -235,7 +238,7 @@ internal static class IcsGuards
         {
             var instants = new HashSet<DateTime>();
             var walked = 0;
-            foreach (var occurrence in series.GetOccurrences(IcsTimeZones.Detached(start)).Take(MaxInstancesPerYear))
+            foreach (var occurrence in series.GetOccurrences(start).Take(MaxInstancesPerYear))
             {
                 walked++;
                 if (occurrence.Period.StartTime is not { } at) continue;

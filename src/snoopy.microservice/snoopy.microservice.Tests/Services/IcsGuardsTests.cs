@@ -442,6 +442,24 @@ public sealed class IcsGuardsTests
         Assert.Equal(IcsPrecondition.MaxInstances, problem!.Precondition);
     }
 
+    /// <summary>A TZID only the file's own VTIMEZONE defines is walked floating: the instants the
+    /// walk yields are not in the frame the file wrote, and a guard that must walk in order to
+    /// refuse does not judge what it cannot compare.</summary>
+    [Fact]
+    public void AnOverrideOfASeriesInAZoneOnlyTheFileDefines_IsAccepted()
+    {
+        // 23:00Z on the 13th is 09:00 on the 14th at +1000 — a slot the weekly rule really fires.
+        const string tz = "Canberra, Melbourne, Sydney";
+        var ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//weesky//tests//EN\r\n"
+            + Ics.FixedZone(tz, "+1000")
+            + "BEGIN:VEVENT\r\nUID:t\r\nDTSTAMP:20260901T080000Z\r\n"
+            + "DTSTART;TZID=\"" + tz + "\":20260907T090000\r\nRRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\n"
+            + "BEGIN:VEVENT\r\nUID:t\r\nDTSTAMP:20260901T080000Z\r\n"
+            + "RECURRENCE-ID:20260913T230000Z\r\nDTSTART:20260914T020000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        Assert.Null(IcsGuards.CheckAll(ics, out _));
+    }
+
     [Fact]
     public void Problem_NamesWhatItRefused() =>
         Assert.Contains("VTODO", Check(Ics.Todo())!.Message, StringComparison.Ordinal);
