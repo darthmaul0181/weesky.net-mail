@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Xml.Linq;
 using Ical.Net.CalendarComponents;
 using Ical.Net.DataTypes;
@@ -91,6 +91,10 @@ internal static class FreeBusyReport
         return IcsDocument.Serialize(calendar);
     }
 
+    /// <summary>The instances one query may weigh. MultigetReport.MaxHrefs bounds a multiget's
+    /// members; this bounds what a single free-busy holds in memory before it writes.</summary>
+    internal const int MaxInstances = 50_000;
+
     /// <summary>
     /// The window is bounded by <see cref="CalendarQueryFilter.ParseTimeRange"/> itself
     /// (<see cref="OccurrenceExpander.MaxSpan"/>), so a candidate's own walk stays inside
@@ -98,10 +102,6 @@ internal static class FreeBusyReport
     /// <c>expand</c> answers to. <paramref name="upTo"/> is the counter read in the caller's own
     /// snapshot, as for <c>calendar-query</c>.
     /// </summary>
-    /// <summary>The instances one query may weigh. MultigetReport.MaxHrefs bounds a multiget's
-    /// members; this bounds what a single free-busy holds in memory before it writes.</summary>
-    internal const int MaxInstances = 50_000;
-
     internal static async Task WriteAsync(HttpResponse response, XDocument body, DavCalendar calendar,
         IDavCalendarReader reader, ulong upTo, TimeProvider clock, CancellationToken ct)
     {
