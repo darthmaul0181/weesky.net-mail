@@ -1783,7 +1783,10 @@ EOF
 
 ### Task 10 : une borne de `time-range` absente est servie ouverte
 
-> **À exécuter à l'étape 4, avec la vague de correctifs — jamais avant le passage initial.**
+> **Reprise en tâche 7 de [la vague de correctifs](2026-09-08-webmail-calendar-5d-fix-wave.md),
+> qui la réécrit sur ce que la mesure a appris — trois tests inversés et non deux, et deux échecs
+> mesurés là où la décision 5 n'en prévoyait aucun. Ne pas l'exécuter d'ici ; le texte reste pour
+> l'histoire.**
 
 **Files:**
 - Modify: `src/snoopy.microservice/Services/CalDav/TimeRangeSpec.cs`
@@ -2058,9 +2061,11 @@ Spec, « Ordre d'exécution ». Rien ici ne s'automatise ; tout se consigne.
   RFC qui le justifie. Trier aussi ce qui est sorti en « ignoré » là où la décision 5 attendait un
   échec — l'écart est lui-même un constat.
 
-- [ ] **Étape 4 — une seule vague, puis le passage final.** Exécuter la tâche 10 (elle en fait
-  partie d'office, quel que soit le triage), plus un correctif par verdict « défaut du serveur » et
-  un correctif par verdict « harnais », chacun avec son test. Pousser, attendre le déploiement, puis
+- [ ] **Étape 4 — une seule vague, puis le passage final.** Le triage l'a écrite dans son propre
+  plan : [la vague de correctifs](2026-09-08-webmail-calendar-5d-fix-wave.md), onze tâches. **La
+  tâche 10 ci-dessus y est reprise en tâche 7**, réécrite sur ce que la mesure a appris — elle ne
+  s'exécute pas d'ici. Le reste de cette ligne est tenu par ce plan-là : un correctif par verdict
+  « défaut du serveur » et un par verdict « harnais », chacun avec son test. Pousser, attendre le déploiement, puis
   `-Protocol Both` **après quinze minutes pleines** : ce passage-là est exactement au plafond
   d'authentification. Le rapport porte les deux chiffres et dit, à chaque comparaison, lequel des
   deux repères CardDAV il commente.
