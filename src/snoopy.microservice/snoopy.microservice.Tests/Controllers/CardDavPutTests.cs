@@ -225,6 +225,18 @@ public sealed class CardDavPutTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ABodyOpeningOnAUtf8Signature_IsStored()
+    {
+        // The one place a Windows exporter's vCard proves the fix serves the address book too:
+        // refused until now with "the body is not vCard text", on a file that is exactly that.
+        var body = "\uFEFF" + ValidCard("u1");
+
+        var response = await Put(DavPaths.Card(UserId, "bom.vcf"), body);
+
+        Assert.Equal(201, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ABodyThatIsNoCard_Answers403ValidAddressData()
     {
         var response = await Put(DavPaths.Card(UserId, "a.vcf"), "this is no card at all");

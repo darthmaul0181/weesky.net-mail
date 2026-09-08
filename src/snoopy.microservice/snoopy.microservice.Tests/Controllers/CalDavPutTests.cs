@@ -178,6 +178,18 @@ public sealed class CalDavPutTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ABodyOpeningOnAUtf8Signature_IsStored()
+    {
+        // The shape every Windows exporter writes. Refused until now with "the body is not
+        // iCalendar text", on a file that is exactly that.
+        var body = "\uFEFF" + Event("u1", "conseil d'administration");
+
+        var response = await Put(Href("bom.ics"), body);
+
+        Assert.Equal(201, response.StatusCode);
+    }
+
+    [Fact]
     public async Task APutDirectlyUnderTheHome_Answers403LocationOk()
     {
         var response = await Put($"{DavPaths.CalendarHome(UserId)}x", Event("u1"));
