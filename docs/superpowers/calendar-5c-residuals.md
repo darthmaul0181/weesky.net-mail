@@ -15,7 +15,7 @@ adressaient ; ils ne sont pas répétés ici sauf quand une revue en a précisé
 
 | Point | Où | Ce que ça donne, et pourquoi c'est resté |
 |---|---|---|
-| **`REPORT` sur une ressource inexistante répond `404` là où 4c rendait un `207`/`403`** | `DavControllerBase.ReportAsync` | La base résout la ressource avant `ServeReportAsync` (T1) : un `addressbook-multiget` adressé à une carte disparue mais dont le corps liste des cartes existantes ne rend plus rien du tout, là où 4c servait les cartes trouvées. Plus juste au sens de RFC 9110 § 15.5.5 (REPORT porte sur *la* ressource de la Request-URI), mais c'est un changement de comportement du carnet que la suite ne couvrait pas et qu'aucun client réel (multiget/sync-collection adressés à la collection) ne rencontre. |
+| **`REPORT` sur une ressource inexistante répond `404` là où 4c rendait un `207`/`403`** | `DavControllerBase.ReportAsync` | La base résout la ressource avant `ServeReportAsync` (T1) : un `addressbook-multiget` adressé à une carte disparue mais dont le corps liste des cartes existantes ne rend plus rien du tout, là où 4c servait les cartes trouvées. Plus juste au sens de RFC 3253 § 3.6 (REPORT porte sur *la* ressource de la Request-URI) et de RFC 9110 § 15.5.5 (le 404 sur une ressource absente) — référence corrigée en 5d —, mais c'est un changement de comportement du carnet que la suite ne couvrait pas et qu'aucun client réel (multiget/sync-collection adressés à la collection) ne rencontre. |
 | **La lecture d'état de synchro que `ContextOrNotFoundAsync` fait uniformément, alors que seul `expand-property` s'en sert** | `CardDavController`/`CalDavController.ContextOrNotFoundAsync` | Un `SELECT` par clé primaire de plus sur `PROPPATCH`/`REPORT`, deux sur `sync-collection` (qui relit l'état dans sa propre transaction). Construire le contexte paresseusement remettrait « quel verbe sers-je » dans le crochet qu'on vient d'en sortir (T1), pour un aller-retour supplémentaire sur une table à une ligne par utilisateur/agenda, toujours en buffer pool. Non corrigé, des deux côtés du protocole. |
 | **Trois actions de forme d'URL échappent à `SwitchedOn()`** | `CardDavController.GetCollection` et les fourre-tout `405`, leurs équivalents agenda | Un appelant dont CalDAV (ou CardDAV) est éteint lit encore `405 + Allow + DAV:` sur ces formes précises. Aucune lecture de store, la réponse ne dépend que de la forme de l'URL et de l'uid du demandeur : pas de fuite, juste une incohérence de principe avec le reste de la surface. |
 | **Les deux branches mortes de `CardDavOutcomeTranslator`** (`UnsupportedComponent`, `TooManyInstances`) | `Services/CardDav/CardDavOutcomeTranslator.cs` | `DavContactWriter` ne produit jamais ces deux statuts ; les deux `case` existent pour que le `switch` reste exhaustif (`EveryEnumValue_IsPinnedToItsOwnCodeByName`, `NoTwoStatuses_ShareTheirWholeAnswer`) et rendent un élément **CalDAV** depuis un traducteur **CardDAV**. Elles laissent une arête de dépendance `Services/CardDav → Services/CalDav` que la règle « le carnet ne connaît pas l'agenda » aurait préférée absente. Sortie propre le jour où c'est possible : porter l'élément par l'`outcome` des deux côtés, comme `Precondition` le fait déjà côté agenda, ou déplacer les deux `XName` vers `Services/Dav`. |
@@ -30,21 +30,29 @@ adressaient ; ils ne sont pas répétés ici sauf quand une revue en a précisé
 | **`match-type` est honoré alors que RFC 4791 § 9.7.5 ne le définit pas** (c'est RFC 6352/CardDAV) | `CalendarQueryFilter.ParseTextMatch` | sabre l'ignore silencieusement ; le servir sert exactement ce qu'un client qui l'écrit demande (une égalité plutôt qu'un `contains`), et l'ignorer aurait rendu plus que demandé sans le dire. Choix retenu et distinct de `test="anyof"` (refusé, lui) : l'un est évaluable exactement, l'autre ne l'est pas par ce moteur. **Corollaire mesuré** : la présélection par colonnes `STATUS`/`TRANSP`/`CLASS` du § 8 (`CalendarQueryFilter.Columns`) n'accepte une colonne que sur un `text-match` en égalité *stricte*, laquelle n'existe qu'avec l'attribut `match-type` — qu'aucun client RFC-pur n'écrit. La présélection par colonnes ne se déclenche donc pour **aucun** client conforme visé ; ce qui filtre réellement pour eux est la fenêtre `FirstOccurrence`/`LastOccurrence`. |
 | **Un `param-filter` négatif correspond sur un paramètre absent** | `CalendarQueryFilter.MatchesParam` | `<param-filter><text-match negate-condition="yes">…</text-match></param-filter>` sur un paramètre que l'instance ne porte pas rend `true` — sabre dit non (`validateParamFilters` refuse avant même de lire le `text-match`), et le `prop-filter` du même fichier lit l'absence différemment (`instances.Count == 0 → false`, sans regarder la négation). RFC 4791 § 9.7.3 est muet sur ce croisement précis. La réponse actuelle est un surensemble défendable (`PARTSTAT` omis vaut `NEEDS-ACTION`, donc « les participants qui n'ont pas décliné » est plutôt ce qu'un client veut) ; alignement sur sabre en une ligne (`if (named.Count == 0) return false;`) si l'équipe le préfère. |
 | **Une ressource non récurrente à plusieurs composants « cette occurrence seulement » reste présélectionnée sur le premier composant** | `DavCalendarReader.CandidatesAsync` (garde `IsRecurring`) | Plusieurs surcharges sans maître, même UID (une forme que le `PUT` n'interdit pas explicitement mais qu'aucun client visé n'écrit) : la garde `IsRecurring` protège une série avec maître, pas ce cas limite. Un `STATUS equals` que seule la seconde surcharge porte ferait tomber la ressource avant que le fichier ne soit lu. Refermer demanderait de ne plus jamais présélectionner sur les colonnes, ce que le carnet a fini par faire mais que l'agenda ne fait pas encore. |
-| **La récupération partielle de `calendar-data` (`comp`/`prop` dans le corps), `RANGE=THISANDFUTURE`, les bornes ouvertes fermées à cinq ans, `limit-*`** | `CalendarDataRequest`, `OccurrenceExpander` | Assumés et documentés par la spec § 14 dès le cadrage : § 9.6.1 n'est servi par aucun client visé (comp/prop sont lus puis ignorés, la ressource entière sort — spec § 7) ; `RANGE=THISANDFUTURE` est lu par Ical.Net mais jamais appliqué à l'expansion (résidu 5a, commentaire sur `OccurrenceExpander`) ; une borne de `time-range`/`expand` absente se ferme à `OccurrenceExpander.MaxSpan` (cinq ans) plutôt que de refuser ; `limit-freebusy-set`/`limit-recurrence-set` (RFC 4791 § 9.6.6/9.6.7) ne sont lus nulle part. |
+| **La récupération partielle de `calendar-data` (`comp`/`prop` dans le corps), `RANGE=THISANDFUTURE`, les bornes ouvertes fermées à cinq ans, `limit-*`** | `CalendarDataRequest`, `OccurrenceExpander` | Assumés et documentés par la spec § 14 dès le cadrage : § 9.6.1 n'est servi par aucun client visé (comp/prop sont lus puis ignorés, la ressource entière sort — spec § 7) ; `RANGE=THISANDFUTURE` est lu par Ical.Net mais jamais appliqué à l'expansion (résidu 5a, commentaire sur `OccurrenceExpander`) ; une borne de **`time-range`** absente se ferme à `OccurrenceExpander.MaxSpan` (cinq ans) plutôt que de refuser — **rouvert en 5d, décision 11** : DAVx⁵ pose cette question à chaque synchro avec son réglage par défaut, la borne sera servie ouverte pour le `calendar-query` ; le `time-range` d'un `VALARM` reste fermé et `free-busy-query` continue de refuser une borne absente, résidu 5d — ; l'`expand`, lui, **refuse** en `valid-filter` une borne manquante, ce que § 9.6.5 demande (`CalendarDataRequest.Parse`), et n'est donc pas une divergence : ligne corrigée en 5d, qui l'avait d'abord recopiée ; `limit-freebusy-set`/`limit-recurrence-set` (RFC 4791 § 9.6.6/9.6.7) ne sont lus nulle part. |
 | **`calendar-data` est servie aussi dans un `PROPFIND`**, alors que RFC 4791 § 9.6 la réserve aux `REPORT` | `Services/CalDav/CalDavProperties.CalendarTable` (l'événement) | Divergence héritée de 4c, qui sert `address-data` de même. Un client qui ne la nomme pas ne la reçoit pas (hors `allprop`, via `Excluding`) ; celui qui la nomme reçoit ce qu'il a demandé — plus généreux que le RFC, jamais moins. |
-| **`calendar-user-address-set` est annoncée alors qu'elle est définie par RFC 6638**, dont la tranche ne sert rien d'autre | `DavPrincipalProperties` | C'est par elle qu'un client se reconnaît participant d'une invitation ; l'absence de `calendar-auto-schedule` dans l'en-tête `DAV:` dit assez qu'on n'ordonnance rien. Servie quand même parce que DAVx⁵ la lit pour construire ses propres invitations sortantes même sans planification serveur. |
+| **`calendar-user-address-set` est annoncée alors qu'elle est définie par RFC 6638**, dont la tranche ne sert rien d'autre | `DavPrincipalProperties` | C'est par elle qu'un client se reconnaît participant d'une invitation ; l'absence de `calendar-auto-schedule` dans l'en-tête `DAV:` dit qu'on n'ordonnance rien. Nuance relevée en 5d : RFC 6638 § 2.4.1 dit de la propriété seule « If not present, then the associated calendar user is not enabled for scheduling on the server » — sa présence, lue à la lettre, dit l'inverse du jeton absent ; un client qui lit les deux suit le jeton. Servie quand même parce que DAVx⁵ la lit (`queryEmailAddress`) pour construire ses propres invitations sortantes même sans planification serveur. |
 | **Les adresses du principal sont aussi construites sur un `PROPFIND Depth: 0` de `/dav/principals/`**, où aucune table ne les sert | `DavPrincipalController.AddressesOrNullAsync` | La porte s'ouvre sur `kind is Principal or PrincipalCollection` pour garantir « une construction par requête » (l'enfant du `Depth: 1` est un `with` du parent) ; sur la collection en `allprop`, aucune table ne sert `calendar-user-address-set`, donc l'appel à `IAccountInfoProvider` et le `SELECT` sur `sending_identities` sont faits pour rien. Invisible avec `ClaimsAccountInfoProvider` (aucune sortie de processus) ; à mesurer si un fournisseur d'un futur déploiement en coûte une vraie. |
 | **Aucun cache d'`AccountInfo` sur `calendar-user-address-set`** | `DavPrincipalController` | Un appel plateforme par cycle de synchro et par appareil (le principal est relu à chaque poll DAVx⁵/Thunderbird). Sans conséquence mesurable avec le fournisseur actuel ; à mesurer en 5d si un fournisseur futur en fait un vrai aller-retour réseau. |
-| **`SyncState` (le record `Epoch`/`Seq`/`PrunedBelow`) vit encore sous `Models/Contacts`** alors que trois fichiers de `Services/Dav` (le socle générique, partagé par les deux protocoles) l'importent, et que `Services/Dav/SyncStateConsistencyCheck` (5c) compare la même forme pour un agenda | `Models/Contacts/SyncState.cs` | Relevé par la revue de la tâche 1 dès le déplacement du socle ; ni le plan ni la spec ne demandaient ce déplacement précis, donc pas un manquement de 5c — mais le nom du fichier ment maintenant sur ce qu'il sert. Un déplacement vers `Models/Dav/` (à côté de `DavWriteStatus`/`DavWriteOutcome`, déjà migrés) est mécanique quand une tâche future y touchera de toute façon. |
+| ~~**`SyncState` (le record `Epoch`/`Seq`/`PrunedBelow`) vit encore sous `Models/Contacts`** alors que trois fichiers de `Services/Dav` (le socle générique, partagé par les deux protocoles) l'importent, et que `Services/Dav/SyncStateConsistencyCheck` (5c) compare la même forme pour un agenda~~ | `Models/Dav/SyncState.cs` | Relevé par la revue de la tâche 1 dès le déplacement du socle ; ni le plan ni la spec ne demandaient ce déplacement précis, donc pas un manquement de 5c — mais le nom du fichier mentait sur ce qu'il sert. **Refermé par la tâche zéro de 5d** : le record est passé sous `Models/Dav/`, à côté de `DavWriteStatus`/`DavWriteOutcome`. |
 
 ## Dette de forme mineure
 
-- **Deux constantes `Margin` d'un jour**, désormais solidaires sans être unifiées :
+- ~~**Deux constantes `Margin` d'un jour**, désormais solidaires sans être unifiées :
   `OccurrenceExpander.Margin` (privée) et `CalendarEventStore.Margin` (`internal`) valent toutes
   deux `TimeSpan.FromDays(1)`. `AlarmFires` déroule sur la première, `CandidatesAsync`
   présélectionne sur la seconde, et la justesse d'une réponse dépend de leur égalité — comme
   `Shift`/`CapFor`/`Span`, qui ont chacun été unifiés en un seul point durant la tranche, ces deux-là
-  ne l'ont pas été. Deux lignes suffiraient à n'en garder qu'une.
+  ne l'ont pas été. Deux lignes suffiraient à n'en garder qu'une. Relevé en 5d, la même paire
+  existe pour la borne de cinq ans : `OccurrenceExpander.MaxSpan` (366 × 5 jours) et le
+  `365 × MaxYears` de `CalendarEventStore` — même dette, même remède.~~ **Refermé par la tâche zéro
+  de 5d** : une seule marge, un seul empan, tous deux portés par
+  `OccurrenceExpander`. Une troisième écriture,
+  relevée en 5d, n'en fait **pas** partie : `CalendarEventsController.MaxWindow`
+  (365,2425 × `MaxYears`) borne la fenêtre de l'API du webmail et non une réponse DAV ; l'aligner
+  élargirait cette borne de quatre jours et retournerait
+  `CalendarEventsControllerTests.Window_RefusesMoreThanFiveYears`.
 - **`CalDavController.ReadSyncWindowAsync` et son jumeau `CardDavController.ReadSyncWindowAsync`**
   se ressemblent à dix lignes près (ouverture de transaction, lecture de l'état, `ReadWindowAsync`,
   commit) mais divergent sur le point qui compte — `ReadOrCreateStateAsync` contre `ReadStateAsync`
@@ -68,8 +76,11 @@ adressaient ; ils ne sont pas répétés ici sauf quand une revue en a précisé
   conséquence visible, mais c'est un doublon que la règle interdit ailleurs.
 - **`DavContactReader.TombstonesAsync` n'a pas d'`AsNoTracking()`** là où ses voisines en ont un.
   Fidèle à son jumeau, donc hors du périmètre de 5c ; une lecture suivie qui n'a rien à suivre.
-- **L'ordre des `propstat` d'un `PROPPATCH` mixte (200 avant 403) n'est asserté que par leur
-  compte**, pas par leur rang : inverser les deux blocs laisserait la suite verte.
+- ~~**L'ordre des `propstat` d'un `PROPPATCH` mixte (200 avant 403) n'est asserté que par leur
+  compte**, pas par leur rang : inverser les deux blocs laisserait la suite verte.~~ **Constat
+  faux, relevé en 5d** : `CalDavProppatchTests.TheFiveWritableOnes_Answer200AndTheRest403_InThatOrder`
+  compare la séquence `["HTTP/1.1 200 OK", "HTTP/1.1 403 Forbidden"]`, qu'une inversion rougit.
+  Rien à faire.
 - **`Request.Method == "MKCOL"` est comparé sensiblement à la casse** là où le routeur ASP.NET Core
   ne l'est pas. Aucun client n'écrit `Mkcol`, mais la comparaison ne dit pas la même chose que la
   route qui l'a amenée là.
@@ -80,9 +91,10 @@ adressaient ; ils ne sont pas répétés ici sauf quand une revue en a précisé
 - **Cinq formes de la surface HTTP n'ont pas de test** : `PROPFIND Depth: 0` sur `/dav/calendars/`
   et sur le home, le `405 + Allow` de la forme événement, le `308` éprouvé sur `PROPFIND` seul, et
   le `supported-report-set` de l'événement, qu'aucune assertion ne ferme.
-- **`SyncState` habite toujours `Models/Contacts`** alors que le socle partagé l'importe — et,
+- ~~**`SyncState` habite toujours `Models/Contacts`** alors que le socle partagé l'importe — et,
   depuis que 5c a rendu `ICalendarSyncStore` publique, il traverse une **API publique** sous un nom
-  qui ment. À déplacer en tête de 5d, dans un commit mécanique isolé.
+  qui ment. À déplacer en tête de 5d, dans un commit mécanique isolé.~~ **Fait** : commit
+  la tâche zéro de 5d, la même dette que la ligne barrée du tableau ci-dessus.
 
 ## Ce que les tests n'ont pas couvert
 
@@ -110,7 +122,10 @@ adressaient ; ils ne sont pas répétés ici sauf quand une revue en a précisé
 
 - **La procédure du « cinquième cas »**, renvoyée par 5a puis par 5b : un événement récurrent écrit
   par le webmail, relu par Thunderbird et par DAVx⁵ sur un téléphone — mêmes heures, mêmes
-  exceptions, même bloc de fuseau. 5c ouvre les routes qui la rendent possible pour la première
+  exceptions. **L'attente « même bloc de fuseau » est fausse, et retirée en 5d** : Thunderbird
+  comme DAVx⁵ régénèrent le `VTIMEZONE` — le premier ignore explicitement ceux qu'il reçoit et
+  réémet sa propre définition, le second passe par ical4j. Ce qui se compare est l'instant et
+  l'identifiant de fuseau, jamais le bloc. 5c ouvre les routes qui la rendent possible pour la première
   fois (`/dav/calendars/`, un `PUT` qui stocke verbatim, un `GET`/`REPORT` qui sert le fichier
   stocké) mais ne la joue pas elle-même : elle appartient à 5d, avec le reste des vérifications
   faites contre de vrais clients.
@@ -124,7 +139,10 @@ adressaient ; ils ne sont pas répétés ici sauf quand une revue en a précisé
   `DAV:mkcol-response` nommant la propriété refusée. Le statut est le bon dans les deux cas (corrigé
   en revue de T5 pour le refus de `supported-calendar-component-set`, § « `AsksUnsupportedComponent` »
   ci-dessus) ; c'est la **forme du corps** de ces deux refus-là que la spec § 11 a tranchée
-  autrement, sciemment. À revisiter seulement si `ccs-caldavtester` s'en plaint.
+  autrement, sciemment. **Requalifié en 5d** : `DavHeaders.ComplianceClasses` annonce
+  `extended-mkcol`, et RFC 5689 § 3 fait du `mkcol-response` à `propstat` un MUST — non-conformité
+  sous jeton annoncé, refermée par la tâche zéro de 5d (point 7), pas laissée à l'outil, qui ne
+  l'aurait jamais mesurée (aucun de ses `MKCOL` ne porte de corps).
 - **L'inventaire de résidus 5a/5b que 5c referme ou assume** est marqué directement dans
   `calendar-5a-residuals.md` et `calendar-5b-residuals.md`, section par section, plutôt que
   recopié ici — voir ces deux fichiers pour le détail marqué « 5c ».

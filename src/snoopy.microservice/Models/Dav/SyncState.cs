@@ -1,4 +1,4 @@
-namespace weesky.Snoopy.Microservice.Models.Contacts;
+namespace weesky.Snoopy.Microservice.Models.Dav;
 
 /// <summary>
 /// The three numbers every token and ctag is cut from, read together. The watermark and the

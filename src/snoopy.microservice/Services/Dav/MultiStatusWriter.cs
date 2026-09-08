@@ -86,9 +86,11 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     /// <param name="root">the verb's own root element</param>
     /// <param name="ok">the properties that would have been set</param>
     /// <param name="refused">those the creation was refused for</param>
+    /// <param name="condition">the precondition the refusal names, inside the refusing propstat</param>
     /// <param name="cancellationToken">cancellation token</param>
     internal static async Task WriteCreationRefusalAsync(HttpResponse response, XName root,
-        IReadOnlyList<XName> ok, IReadOnlyList<XName> refused, CancellationToken cancellationToken)
+        IReadOnlyList<XName> ok, IReadOnlyList<XName> refused, XName? condition,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -109,7 +111,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
             (calDav ? DavXml.Dav : DavXml.CalDav).NamespaceName).ConfigureAwait(false);
 
         await using var writer = new MultiStatusWriter(xmlWriter);
-        await writer.WritePropstatsAsync(ok, refused, cancellationToken).ConfigureAwait(false);
+        await writer.WritePropstatsAsync(ok, refused, condition, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -131,10 +133,10 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
         await WriteHrefAsync(href).ConfigureAwait(false);
 
         if (found.Count > 0)
-            await WritePropstatAsync(200, found, cancellationToken).ConfigureAwait(false);
+            await WritePropstatAsync(200, found, null, cancellationToken).ConfigureAwait(false);
         if (missing.Count > 0)
-            await WritePropstatAsync(404, missing.Select(name => new XElement(name)), cancellationToken)
-                .ConfigureAwait(false);
+            await WritePropstatAsync(404, missing.Select(name => new XElement(name)), null,
+                cancellationToken).ConfigureAwait(false);
         if (found.Count == 0 && missing.Count == 0)
             await WriteStatusElementAsync(200).ConfigureAwait(false);
 
@@ -225,7 +227,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
 
         await writer.WriteStartElementAsync(null, "response", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await WriteHrefAsync(href).ConfigureAwait(false);
-        await WritePropstatsAsync(ok, refused, cancellationToken).ConfigureAwait(false);
+        await WritePropstatsAsync(ok, refused, null, cancellationToken).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // response
         responseCount++;
     }
@@ -295,14 +297,14 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     /// lists empty falls back on the bare status of § 14.24.
     /// </summary>
     private async Task WritePropstatsAsync(IReadOnlyList<XName> ok, IReadOnlyList<XName> refused,
-        CancellationToken cancellationToken)
+        XName? condition, CancellationToken cancellationToken)
     {
         if (ok.Count > 0)
-            await WritePropstatAsync(200, ok.Select(name => new XElement(name)), cancellationToken)
+            await WritePropstatAsync(200, ok.Select(name => new XElement(name)), null, cancellationToken)
                 .ConfigureAwait(false);
         if (refused.Count > 0)
-            await WritePropstatAsync(403, refused.Select(name => new XElement(name)), cancellationToken)
-                .ConfigureAwait(false);
+            await WritePropstatAsync(403, refused.Select(name => new XElement(name)), condition,
+                cancellationToken).ConfigureAwait(false);
         if (ok.Count == 0 && refused.Count == 0)
             await WriteStatusElementAsync(200).ConfigureAwait(false);
     }
@@ -332,7 +334,7 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     }
 
     private async Task WritePropstatAsync(int statusCode, IEnumerable<XElement> properties,
-        CancellationToken cancellationToken)
+        XName? condition, CancellationToken cancellationToken)
     {
         await writer.WriteStartElementAsync(null, "propstat", DavXml.Dav.NamespaceName).ConfigureAwait(false);
         await writer.WriteStartElementAsync(null, "prop", DavXml.Dav.NamespaceName).ConfigureAwait(false);
@@ -345,6 +347,9 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
 
         await writer.WriteEndElementAsync().ConfigureAwait(false); // prop
         await WriteStatusElementAsync(statusCode).ConfigureAwait(false);
+        // RFC 4918 § 14.22 orders a propstat prop, status, error: RFC 5689 § 3.5's example puts the
+        // precondition here rather than beside the response's own status.
+        if (condition is not null) await WriteErrorAsync(condition, null).ConfigureAwait(false);
         await writer.WriteEndElementAsync().ConfigureAwait(false); // propstat
     }
 

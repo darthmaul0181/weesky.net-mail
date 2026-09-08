@@ -59,7 +59,7 @@ codes de précondition sont alignés. Ce qui suit est ce qu'elle a **laissé** o
 
 ## Renvoyé à 5d
 
-- **Le « cinquième cas » se vérifie à la main, une fois, et pas avant 5d** — un événement récurrent écrit par le webmail, relu par Thunderbird et par DAVx⁵ sur un téléphone : mêmes heures, mêmes exceptions, même bloc de fuseau. Rien de cette tranche ne peut l'automatiser (5a n'ouvre aucune route DAV, donc aucun client tiers ne peut encore lire ce que le composeur écrit) et rien de 5c non plus tant que la synchronisation n'a pas tourné une fois pour de bon. La procédure appartient donc à 5d, avec le reste des vérifications faites contre de vrais clients. **5c ouvre les routes qui le rendent possible** (`/dav/calendars/`) sans le jouer elle-même ; la procédure et les `<features>` de `ccs-caldavtester` à allumer sont reprises dans `calendar-5c-residuals.md`.
+- **Le « cinquième cas » se vérifie à la main, une fois, et pas avant 5d** — un événement récurrent écrit par le webmail, relu par Thunderbird et par DAVx⁵ sur un téléphone : mêmes heures, mêmes exceptions — **pas** le même bloc de fuseau, attente retirée en 5d, les deux clients régénérant le `VTIMEZONE`. Rien de cette tranche ne peut l'automatiser (5a n'ouvre aucune route DAV, donc aucun client tiers ne peut encore lire ce que le composeur écrit) et rien de 5c non plus tant que la synchronisation n'a pas tourné une fois pour de bon. La procédure appartient donc à 5d, avec le reste des vérifications faites contre de vrais clients. **5c ouvre les routes qui le rendent possible** (`/dav/calendars/`) sans le jouer elle-même ; la procédure et les `<features>` de `ccs-caldavtester` à allumer sont reprises dans `calendar-5c-residuals.md`.
 
 ## Ce que les sondes ont appris d'Ical.Net 5.2.3
 

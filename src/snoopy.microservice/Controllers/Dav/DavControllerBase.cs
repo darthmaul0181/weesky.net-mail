@@ -6,7 +6,7 @@ using Microsoft.Extensions.Primitives;
 using weesky.Snoopy.Microservice.Authentication;
 using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Controllers.Dav;

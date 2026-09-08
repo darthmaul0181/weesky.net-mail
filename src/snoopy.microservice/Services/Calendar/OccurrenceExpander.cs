@@ -31,7 +31,10 @@ internal static class OccurrenceExpander
     internal static readonly TimeSpan MaxSpan = TimeSpan.FromDays(366d * MaxYears);
 
     private const string EndAnchor = "END";
-    private static readonly TimeSpan Margin = TimeSpan.FromDays(1);
+
+    /// <summary>The walker's margin and the preselection's are the one margin: a right answer
+    /// depends on their being equal, never on their looking alike.</summary>
+    internal static readonly TimeSpan Margin = TimeSpan.FromDays(1);
 
     /// <summary>10 000 instances per year of window, the density the PUT gate admits, plus the
     /// one that proves the ceiling was reached. The walk stops there; the expanded report refuses

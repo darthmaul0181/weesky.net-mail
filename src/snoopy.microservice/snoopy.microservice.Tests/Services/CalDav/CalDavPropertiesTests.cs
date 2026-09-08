@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Models.Calendar;
-using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Services.CalDav;
 using weesky.Snoopy.Microservice.Services.Calendar;
 using weesky.Snoopy.Microservice.Services.Dav;
@@ -90,6 +90,19 @@ public sealed class CalDavPropertiesTests
             DavXml.CalDav + "free-busy-query", DavXml.Dav + "sync-collection",
             DavXml.Dav + "expand-property",
         ], reports);
+    }
+
+    [Fact]
+    public void TheEventAnnouncesTheTwoReportsItServes()
+    {
+        // The closed set pins that the property is there; nothing pinned what it names — and
+        // ServeReportAsync serves exactly these two on an event.
+        var reports = Found(EventResource(), DavXml.Dav + "supported-report-set")!
+            .Descendants(DavXml.Dav + "report")
+            .Select(report => report.Elements().Single().Name);
+
+        Assert.Equal(
+            [DavXml.CalDav + "calendar-multiget", DavXml.CalDav + "calendar-query"], reports);
     }
 
     [Fact]

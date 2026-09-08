@@ -56,11 +56,14 @@ internal static class CalendarPropertyValue
             && declared.Contains(DavXml.CalDav + "calendar");
     }
 
-    /// <summary>Every <c>comp</c> must name VEVENT: this build stores nothing else, and a
-    /// collection that would refuse the client's first PUT is worse than a refused creation.</summary>
-    internal static bool OnlyEvents(XElement componentSet) =>
-        componentSet.Elements(DavXml.CalDav + "comp")
-            .All(component => DavXml.Attribute(component, "name") == "VEVENT");
+    /// <summary>Zero comp names no component at all — not "every component", which is what All()
+    /// on an empty sequence would have answered.</summary>
+    internal static bool OnlyEvents(XElement componentSet)
+    {
+        var components = componentSet.Elements(DavXml.CalDav + "comp").ToList();
+        return components.Count > 0
+            && components.All(component => DavXml.Attribute(component, "name") == "VEVENT");
+    }
 
     /// <summary>The colour as the store will hold it, or null when the text is not one — read
     /// through <see cref="CalendarStore"/> because a shape written twice is two truths.</summary>

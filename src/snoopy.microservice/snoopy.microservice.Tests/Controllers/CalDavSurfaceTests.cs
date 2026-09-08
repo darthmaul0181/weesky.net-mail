@@ -171,6 +171,58 @@ public sealed class CalDavSurfaceTests : IAsyncLifetime
         Assert.Equal(207, response.StatusCode);
     }
 
+    [Fact]
+    public async Task PropfindDepthZero_OnTheCollectionOfHomes_AnswersTheCollectionItself()
+    {
+        // The suite only ever walks this shape at Depth: 1. A client that asks for the collection
+        // alone must get the collection alone.
+        var response = await server.PropfindAsync(DavPaths.CalendarCollection, "0", null);
+
+        Assert.Equal(207, response.StatusCode);
+        var only = Assert.Single(XDocument.Parse(response.Body).Descendants(DavXml.Dav + "response"));
+        Assert.Equal(DavPaths.CalendarCollection, only.Element(DavXml.Href)!.Value);
+    }
+
+    [Fact]
+    public async Task PropfindDepthZero_OnTheHome_AnswersTheHomeAlone_NotItsCalendars()
+    {
+        var response = await server.PropfindAsync(DavPaths.CalendarHome(UserId), "0", null);
+
+        Assert.Equal(207, response.StatusCode);
+        // The href exactly, not merely one ending in a slash: a calendar ends in one too, so the
+        // bug this guards against — the first child answered in place of the home — would pass.
+        var only = Assert.Single(XDocument.Parse(response.Body).Descendants(DavXml.Dav + "response"));
+        Assert.Equal(DavPaths.CalendarHome(UserId), only.Element(DavXml.Href)!.Value);
+    }
+
+    [Theory]
+    [InlineData("MOVE")]
+    [InlineData("COPY")]
+    [InlineData("LOCK")]
+    public async Task AMethodWeDoNotServe_OnAnEvent_Answers405WithTheEventsAllow(string method)
+    {
+        // The calendar's 405 is covered; the event's own Allow was announced by OPTIONS alone.
+        var response = await server.SendAsync(method, DavPaths.Event(UserId, "work", "a.ics"));
+
+        Assert.Equal(405, response.StatusCode);
+        Assert.Equal(DavHeaders.EventAllow, response.Header("Allow"));
+    }
+
+    [Theory]
+    [InlineData("PROPPATCH")]
+    [InlineData("REPORT")]
+    [InlineData("DELETE")]
+    public async Task ACollectionUrlWithoutItsSlash_Answers308_WhateverTheVerb(string method)
+    {
+        // TracedAsync canonicalises before the action, so the redirect is not PROPFIND's alone —
+        // only its test was. DAVx5 and Thunderbird both follow it in silence.
+        var response = await server.SendAsync(
+            method, DavPaths.Calendar(UserId, "work").TrimEnd('/'));
+
+        Assert.Equal(308, response.StatusCode);
+        Assert.Equal(DavPaths.Calendar(UserId, "work"), response.Header("Location"));
+    }
+
     private void GivenCalendar()
     {
         using var db = server.CreateContext();

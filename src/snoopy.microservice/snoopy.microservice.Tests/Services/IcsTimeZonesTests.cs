@@ -23,6 +23,20 @@ public sealed class IcsTimeZonesTests
         Assert.False(IcsTimeZones.IsKnownIana("Romance Standard Time"));
     }
 
+    [Theory]
+    [InlineData("US/Eastern")]
+    [InlineData("US/Mountain")]
+    [InlineData("US/Pacific")]
+    [InlineData("GMT")]
+    public void ATzdbBackwardLink_ResolvesToItself_NeverToItsCanonicalName(string id)
+    {
+        // ccs-caldavtester writes these in its start blocks; floating.xml dies at its own if
+        // US/Eastern does not resolve, and seven more files would read every instant in the wrong
+        // zone. What is stored, and what Emit writes back, is the alias itself.
+        Assert.Equal(id, IcsTimeZones.ResolveIana(id));
+        Assert.True(IcsTimeZones.IsKnownIana(id));
+    }
+
     [Fact]
     public void ToUtc_FollowsTzdbNotHost()
     {

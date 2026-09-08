@@ -1,7 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Http;
-using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Services.Dav;
 using Xunit;
 

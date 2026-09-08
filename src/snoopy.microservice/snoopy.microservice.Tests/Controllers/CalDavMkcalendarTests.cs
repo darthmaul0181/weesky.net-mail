@@ -91,8 +91,11 @@ public sealed class CalDavMkcalendarTests : IAsyncLifetime
     {
         var response = await server.SendAsync("MKCOL", DavPaths.Calendar(UserId, "trips"));
 
-        // RFC 5689 § 3: the extended MKCOL says what it is creating.
+        // RFC 5689 § 3: the extended MKCOL says what it is creating — and it scopes itself to the
+        // one carrying a body, so a bodyless MKCOL answers RFC 4918 § 9.3's bare error, never a
+        // propstat naming a property nobody sent.
         Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "error", XDocument.Parse(response.Body).Root!.Name);
         Assert.Equal(DavXml.Dav + "valid-resourcetype", ConditionOf(response));
         Assert.Empty(Stored("trips"));
     }
@@ -124,6 +127,65 @@ public sealed class CalDavMkcalendarTests : IAsyncLifetime
         Assert.Empty(Stored("trips"));
     }
 
+    [Fact]
+    public async Task AMkcolRefusedOnAProperty_AnswersMkcolResponseWithThePreconditionInside()
+    {
+        // RFC 5689 § 3: a property failure answers a single DAV:mkcol-response holding propstat
+        // elements — its § 3.5 example puts DAV:valid-resourcetype inside that propstat's error.
+        var body = new XElement(DavXml.Dav + "mkcol",
+            new XElement(DavXml.Dav + "set", new XElement(DavXml.Prop,
+                new XElement(DavXml.Dav + "resourcetype", new XElement(DavXml.Dav + "collection")))));
+
+        var response = await server.SendAsync("MKCOL", DavPaths.Calendar(UserId, "trips"), body.ToString());
+
+        Assert.Equal(403, response.StatusCode);
+        var document = XDocument.Parse(response.Body).Root!;
+        Assert.Equal(DavXml.Dav + "mkcol-response", document.Name);
+        var propstat = document.Descendants(DavXml.Dav + "propstat").Single();
+        Assert.Equal(DavXml.Dav + "resourcetype",
+            propstat.Element(DavXml.Prop)!.Elements().Single().Name);
+        Assert.Equal("HTTP/1.1 403 Forbidden", propstat.Element(DavXml.Status)!.Value);
+        Assert.Equal(DavXml.Dav + "valid-resourcetype",
+            propstat.Element(DavXml.Dav + "error")!.Elements().Single().Name);
+        Assert.Empty(Stored("trips"));
+    }
+
+    [Fact]
+    public async Task AMkcolWithAnUnreadableTimezone_AnswersMkcolResponseToo()
+    {
+        var body = new XElement(DavXml.Dav + "mkcol",
+            new XElement(DavXml.Dav + "set", new XElement(DavXml.Prop,
+                ResourceType,
+                new XElement(DavXml.CalDav + "calendar-timezone", "not an iCalendar object"))));
+
+        var response = await server.SendAsync("MKCOL", DavPaths.Calendar(UserId, "trips"), body.ToString());
+
+        Assert.Equal(403, response.StatusCode);
+        var document = XDocument.Parse(response.Body).Root!;
+        Assert.Equal(DavXml.Dav + "mkcol-response", document.Name);
+        var propstat = document.Descendants(DavXml.Dav + "propstat").Single();
+        Assert.Equal(DavXml.CalDav + "calendar-timezone",
+            propstat.Element(DavXml.Prop)!.Elements().Single().Name);
+        Assert.Equal(DavXml.CalDav + "valid-calendar-data",
+            propstat.Element(DavXml.Dav + "error")!.Elements().Single().Name);
+    }
+
+    [Fact]
+    public async Task AMkcalendarWithAnUnreadableTimezone_KeepsItsBareError()
+    {
+        // RFC 4791 § 5.3.1 names CALDAV:valid-calendar-data as a precondition, and RFC 4918 § 16
+        // gives a named precondition this very shape. Only the extended MKCOL moves.
+        var body = new XElement(DavXml.CalDav + "mkcalendar",
+            new XElement(DavXml.Dav + "set", new XElement(DavXml.Prop,
+                new XElement(DavXml.CalDav + "calendar-timezone", "not an iCalendar object"))));
+
+        var response = await server.SendAsync("MKCALENDAR", DavPaths.Calendar(UserId, "trips"), body.ToString());
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.Dav + "error", XDocument.Parse(response.Body).Root!.Name);
+        Assert.Equal(DavXml.CalDav + "valid-calendar-data", ConditionOf(response));
+    }
+
     [Theory]
     [InlineData("MKCALENDAR", "urn:ietf:params:xml:ns:caldav", "mkcalendar-response", 207)]
     [InlineData("MKCOL", "DAV:", "mkcol-response", 403)]
@@ -148,6 +210,41 @@ public sealed class CalDavMkcalendarTests : IAsyncLifetime
         Assert.Equal(DavXml.CalDav + "supported-calendar-component-set",
             document.Descendants(DavXml.Prop).Single().Elements().Single().Name);
         Assert.Empty(Stored("trips"));
+    }
+
+    [Theory]
+    [InlineData("MKCALENDAR", 207)]
+    [InlineData("MKCOL", 403)]
+    public async Task AComponentSetNamingNothing_IsRefusedLikeAnUnknownOne(string method, int status)
+    {
+        // Zero comp names no component, so it does not name VEVENT either: All() on an empty
+        // sequence said yes, and a calendar serving nothing was created.
+        var response = await Create(method, "trips",
+            new XElement(DavXml.CalDav + "supported-calendar-component-set"));
+
+        Assert.Equal(status, response.StatusCode);
+        Assert.Equal(DavXml.CalDav + "supported-calendar-component-set",
+            XDocument.Parse(response.Body).Descendants(DavXml.Prop).Single().Elements().Single().Name);
+        Assert.Empty(Stored("trips"));
+    }
+
+    [Theory]
+    [InlineData("MKCALENDAR")]
+    [InlineData("MKCOL")]
+    public async Task EveryCreationAnswer_CarriesNoCache(string method)
+    {
+        // RFC 4791 § 5.3.1 Marshalling and RFC 4918 § 9.3 put the header on the response, not on
+        // the success: a refusal a proxy caches is a calendar a client cannot create twice.
+        var refusedComponent = await Create(method, "trips",
+            new XElement(DavXml.CalDav + "supported-calendar-component-set",
+                new XElement(DavXml.CalDav + "comp", new XAttribute("name", "VTODO"))));
+        var alreadyThere = await Create(method, CalendarStore.DefaultDavName, Displayname("Again"));
+        var insideACalendar = await server.SendAsync(
+            method, DavPaths.Calendar(UserId, CalendarStore.DefaultDavName) + "nested/");
+
+        Assert.Equal(DavHeaders.NoCache, refusedComponent.Header("Cache-Control"));
+        Assert.Equal(DavHeaders.NoCache, alreadyThere.Header("Cache-Control"));
+        Assert.Equal(DavHeaders.NoCache, insideACalendar.Header("Cache-Control"));
     }
 
     [Fact]
@@ -309,8 +406,12 @@ public sealed class CalDavMkcalendarTests : IAsyncLifetime
 
     private static XElement Displayname(string value) => new(DavXml.Dav + "displayname", value);
 
+    /// <summary>The precondition named, wherever its shape lodges it: RFC 5689 § 3.5 puts an
+    /// extended MKCOL's inside the refusing propstat, RFC 4918 § 16 leaves every other one bare
+    /// under the root.</summary>
     private static XName ConditionOf(DavTestResponse response) =>
-        XDocument.Parse(response.Body).Root!.Elements().First().Name;
+        XDocument.Parse(response.Body).Root!
+            .DescendantsAndSelf(DavXml.Dav + "error").First().Elements().First().Name;
 
     private Task<DavTestResponse> Propfind(string path, params string[] names)
     {

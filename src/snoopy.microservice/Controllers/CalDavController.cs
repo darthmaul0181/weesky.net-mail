@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Controllers.Dav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Calendar;
-using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.CalDav;
@@ -233,6 +232,10 @@ public sealed class CalDavController(
     public Task MakeCalendarAsync(Guid userId, string calendarName, CancellationToken cancellationToken) =>
         TracedAsync(userId, DavResourceKind.Calendar, async trace =>
         {
+            // RFC 4791 § 5.3.1 Marshalling and RFC 4918 § 9.3, without condition: the header goes
+            // on the response, so it is posed once here rather than on each of the nine exits.
+            Response.Headers.CacheControl = DavHeaders.NoCache;
+
             if (!DavName.IsValid(calendarName))
             {
                 // Decision 5 of 4c, bare: no precondition names a segment this tree will not hold,
@@ -243,10 +246,11 @@ public sealed class CalDavController(
 
             var extended = Request.Method == "MKCOL";
             MkCalendarRequest request;
+            XDocument? body;
             try
             {
-                request = MkCalendarRequest.Parse(
-                    await DavXmlReader.ParseAsync(Request.Body, cancellationToken, Logger), extended);
+                body = await DavXmlReader.ParseAsync(Request.Body, cancellationToken, Logger);
+                request = MkCalendarRequest.Parse(body, extended);
             }
             catch (DavBadRequestException ex)
             {
@@ -254,15 +258,21 @@ public sealed class CalDavController(
                 return;
             }
 
+            // RFC 5689 § 3 scopes every word of itself to the EXTENDED MKCOL, the one carrying a
+            // request body; a bodyless MKCOL stays the standard one of RFC 4918 § 9.3.
+            var extendedWithBody = extended && body is not null;
+
             if (request.ResourceTypeRefused)
             {
-                await RefuseAsync(trace, CalDavError.ValidResourceType, null, cancellationToken);
+                await RefuseCreationAsync(trace, extendedWithBody, CalendarPropertyValue.ResourceType,
+                    CalDavError.ValidResourceType, cancellationToken);
                 return;
             }
 
             if (request.TimeZoneRefused)
             {
-                await RefuseAsync(trace, CalDavError.ValidCalendarData, null, cancellationToken);
+                await RefuseCreationAsync(trace, extendedWithBody, CalendarPropertyValue.TimeZone,
+                    CalDavError.ValidCalendarData, cancellationToken);
                 return;
             }
 
@@ -271,8 +281,9 @@ public sealed class CalDavController(
                 // RFC 4791 § 5.3.1 and RFC 5689 § 3: each verb answers under its OWN root, never
                 // DAV:multistatus, and neither carries an href — nothing was created to name.
                 await MultiStatusWriter.WriteCreationRefusalAsync(Response,
-                    extended ? MkcolResponse : MkcalendarResponse, [],
-                    [CalendarPropertyValue.ComponentSet], cancellationToken);
+                    extendedWithBody ? MkcolResponse : MkcalendarResponse, [],
+                    [CalendarPropertyValue.ComponentSet], CalDavError.SupportedCalendarComponent,
+                    cancellationToken);
                 trace.Responses = 1;
                 trace.Condition = CalendarPropertyValue.ComponentSet.LocalName;
                 return;
@@ -287,7 +298,6 @@ public sealed class CalDavController(
             if (created.IsSuccess)
             {
                 Response.StatusCode = StatusCodes.Status201Created;
-                Response.Headers.CacheControl = DavHeaders.NoCache;
                 DavHeaders.ApplyDav(Response);
                 return;
             }
@@ -309,6 +319,23 @@ public sealed class CalDavController(
             await RefuseAsync(trace, CalDavError.ValidCalendarData, null, cancellationToken);
         }, calendarName);
 
+    /// <summary>RFC 5689 § 3 wants a mkcol-response holding propstat for a property failure; RFC
+    /// 4791 § 5.3.1 leaves MKCALENDAR on RFC 4918 § 16's bare error. One property, two shapes.</summary>
+    private async Task RefuseCreationAsync(Trace trace, bool extendedWithBody, XName property,
+        XName condition, CancellationToken cancellationToken)
+    {
+        if (!extendedWithBody)
+        {
+            await RefuseAsync(trace, condition, null, cancellationToken);
+            return;
+        }
+
+        await MultiStatusWriter.WriteCreationRefusalAsync(Response, MkcolResponse, [], [property],
+            condition, cancellationToken);
+        trace.Responses = 1;
+        trace.Condition = condition.LocalName;
+    }
+
     /// <summary>
     /// A creation aimed INSIDE a calendar: RFC 4791 § 5.3.1's
     /// <c>calendar-collection-location-ok</c> — the place is wrong, which is what that condition
@@ -317,7 +344,11 @@ public sealed class CalDavController(
     [AcceptVerbs("MKCALENDAR", "MKCOL", Route = EventRoute)]
     public Task MakeCalendarUnderACalendarAsync(Guid userId, CancellationToken cancellationToken) =>
         TracedAsync(userId, DavResourceKind.Event, trace =>
-            RefuseAsync(trace, CalDavError.CalendarCollectionLocationOk, null, cancellationToken));
+        {
+            // Same header, same reason as MakeCalendarAsync: this is a creation refusal too.
+            Response.Headers.CacheControl = DavHeaders.NoCache;
+            return RefuseAsync(trace, CalDavError.CalendarCollectionLocationOk, null, cancellationToken);
+        });
 
     /// <summary>
     /// DELETE on a collection: the secondary one goes, and <c>default</c> is EMPTIED instead —

@@ -64,7 +64,7 @@ internal sealed class CalendarEventStore(
     /// <summary>The window query's slack on both sides. All-day membership is decided by the
     /// expander, on dates; the columns hold instants placed in the calendar's zone, and the two
     /// readings differ by less than a day.</summary>
-    internal static readonly TimeSpan Margin = TimeSpan.FromDays(1);
+    internal static readonly TimeSpan Margin = OccurrenceExpander.Margin;
 
     public async Task<Result<IReadOnlyList<EventOccurrence>>> WindowAsync(
         Guid userId, DateTime fromUtc, DateTime toUtc, string viewTimeZone,
@@ -615,7 +615,7 @@ internal sealed class CalendarEventStore(
 
         var horizon = Shift(now, TimeSpan.FromDays(SearchHorizonDays));
         return Expand(now, Earlier(horizon, Shift(row.LastOccurrence, Margin))).FirstOrDefault()
-               ?? Expand(now, Earlier(Shift(now, TimeSpan.FromDays(365 * OccurrenceExpander.MaxYears)),
+               ?? Expand(now, Earlier(Shift(now, OccurrenceExpander.MaxSpan),
                    Shift(row.LastOccurrence, Margin))).FirstOrDefault();
 
         IReadOnlyList<EventOccurrence> Expand(DateTime from, DateTime to) =>

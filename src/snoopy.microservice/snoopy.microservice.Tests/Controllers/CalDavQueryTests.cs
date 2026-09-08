@@ -24,9 +24,12 @@ public sealed class CalDavQueryTests : IAsyncLifetime
 
     private readonly Mock<ILogger<CalDavController>> logger = new();
 
+    /// <summary>Shared by <see cref="Row"/>, which two files now call: the ranks only ever need to
+    /// grow, and one counter per process grows for every caller at once.</summary>
+    private static ulong sequence;
+
     private DavTestServer server = null!;
     private Guid work;
-    private ulong sequence;
 
     private Guid UserId => server.UserId;
 
@@ -343,7 +346,9 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         db.SaveChanges();
     }
 
-    private CalendarEvent Row(Guid owner, Guid calendarId, string davName, string ics, EventProjection columns) => new()
+    /// <summary>Internal so <c>AppleDiscoveryReplayTests</c> seeds through this one projection:
+    /// two copies of it would drift the moment a column moves.</summary>
+    internal static CalendarEvent Row(Guid owner, Guid calendarId, string davName, string ics, EventProjection columns) => new()
     {
         Id = Guid.NewGuid(),
         CalendarId = calendarId,
@@ -362,7 +367,7 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         Class = columns.Class,
         IcsRaw = ics,
         IcsHash = IcsDocument.HashOf(ics),
-        SyncSequence = ++sequence,
+        SyncSequence = Interlocked.Increment(ref sequence),
         UpdatedAt = new DateTime(2026, 9, 7, 6, 0, 0, DateTimeKind.Utc),
     };
 

@@ -127,8 +127,9 @@ internal sealed class DavTestServer : IAsyncDisposable
     /// The same request with no credentials at all: the test handler stands down, so the named
     /// policy runs against an anonymous caller exactly as it does over the wire.
     /// </summary>
-    internal Task<DavTestResponse> SendUnauthenticated(string method, string path, string? body = null) =>
-        SendAsync(method, path, body, headers: new Dictionary<string, string>
+    internal Task<DavTestResponse> SendUnauthenticated(string method, string path, string? body = null,
+        string? depth = null) =>
+        SendAsync(method, path, body, depth, new Dictionary<string, string>
         {
             [TestDavAuthenticationHandler.NoCredentialsHeader] = "1",
         });

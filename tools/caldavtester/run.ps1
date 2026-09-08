@@ -2,7 +2,10 @@
 [CmdletBinding()]
 param(
     [switch]$SetupOnly,
+    [ValidateSet('CalDAV', 'CardDAV', 'Both')]
+    [string]$Protocol = 'CalDAV',
     [string[]]$Suites,
+    [switch]$NoPurge,
     [switch]$PrintResponses
 )
 $ErrorActionPreference = 'Stop'
@@ -44,15 +47,54 @@ $serverinfoPath = Join-Path $PSScriptRoot 'serverinfo.xml'
     Set-Content -Path $serverinfoPath -NoNewline
 if ($SetupOnly) { Write-Host "Prêt : $serverinfoPath"; exit 0 }
 
+function Read-SuiteList([string]$Name) {
+    Get-Content (Join-Path $PSScriptRoot $Name) |
+        ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ } |
+        ForEach-Object {
+            # Une entree du dossier local est passee en chemin absolu : _normPath la rend intacte
+            # (voir README), la meme entree relative serait cherchee sous scripts/tests du tester.
+            if ($_ -like 'suites/*') { (Resolve-Path (Join-Path $PSScriptRoot $_)).Path } else { $_ }
+        }
+}
+
 if (-not $Suites) {
-    $Suites = Get-Content (Join-Path $PSScriptRoot 'suites.txt') |
-        ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ }
+    $Suites = @()
+    if ($Protocol -in 'CalDAV', 'Both') { $Suites += Read-SuiteList 'suites-caldav.txt' }
+    if ($Protocol -in 'CardDAV', 'Both') { $Suites += Read-SuiteList 'suites-carddav.txt' }
+}
+
+function Clear-CalendarHome([string]$Base, [string]$Guid, [string]$User, [string]$Secret) {
+    $auth = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${User}:${Secret}"))
+    # Surtout pas $home : c'est une variable automatique en lecture seule.
+    $homeUrl = "$Base/dav/calendars/$Guid/"
+    # PROPFIND n'est pas dans l'enumeration de -Method : PowerShell 7 veut -CustomMethod.
+    $listing = Invoke-WebRequest -Uri $homeUrl -CustomMethod PROPFIND -SkipHttpErrorCheck `
+        -Headers @{ Authorization = $auth; Depth = '1' } -ContentType 'text/xml; charset=utf-8'
+    if ($listing.StatusCode -ne 207) { throw "purge : PROPFIND du home a repondu $($listing.StatusCode)" }
+
+    # L'accesseur XML de PowerShell ignore le prefixe : .multistatus rend bien <D:multistatus>.
+    $hrefs = ([xml]$listing.Content).multistatus.response.href |
+        Where-Object { $_ -and $_.TrimEnd('/') -ne $homeUrl.TrimEnd('/') } | Sort-Object -Descending
+    # L'ordre est indifférent : un DELETE sur `default` le vide au lieu de le supprimer, donc l'état
+    # final est le même où qu'il tombe. Le tri ne sert qu'à rendre la purge reproductible.
+    foreach ($href in $hrefs) {
+        $target = if ($href -match '^https?://') { $href } else { "$Base$href" }
+        $null = Invoke-WebRequest -Uri $target -Method Delete -SkipHttpErrorCheck `
+            -Headers @{ Authorization = $auth }
+    }
+}
+
+if (-not $NoPurge -and $Protocol -in 'CalDAV', 'Both') {
+    # L'hôte sort du gabarit engendré : deux écritures de la même cible finiraient par diverger.
+    # Surtout pas $host : c'est une variable automatique, comme $home plus haut.
+    $serverHost = ([xml](Get-Content $serverinfoPath -Raw)).serverinfo.host
+    Clear-CalendarHome "https://$serverHost" $local.guid $local.email $local.secret
 }
 
 # --print-details-onfail imprime la requête entière sur chaque échec, Authorization
 # comprise : la sortie est épurée AVANT de toucher le disque (décision 6).
 New-Item -ItemType Directory -Force $results | Out-Null
-$out = Join-Path $results ("{0:yyyyMMdd-HHmmss}.txt" -f (Get-Date))
+$out = Join-Path $results ("{0:yyyyMMdd-HHmmss}-{1}.txt" -f (Get-Date), $Protocol.ToLowerInvariant())
 $flags = @('--ssl', '--print-details-onfail', '-s', $serverinfoPath)
 if ($PrintResponses) { $flags += '--always-print-response' }
 $env:PYTHONPATH = Join-Path $pycalendar 'src'

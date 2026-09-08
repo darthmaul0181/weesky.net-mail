@@ -1,5 +1,5 @@
 using System.Xml.Linq;
-using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using Xunit;
 using weesky.Snoopy.Microservice.Services.Dav;
 
