@@ -110,6 +110,41 @@ public sealed class IcsGuardsTests
             Check(Ics.Events(("a", null)).Replace("VERSION:2.0", "VERSION:1.0"))!.Precondition);
 
     [Fact]
+    public void AMethodProperty_IsNotACalendarObjectResource()
+    {
+        // RFC 4791 § 4.1, MUST NOT: METHOD makes the object an iTIP message, not a resource. A
+        // stored PUBLISH would be served back to every client as if it were an event of the user's.
+        var ics = Ics.Events(("a", null)).Replace("VERSION:2.0", "VERSION:2.0\r\nMETHOD:PUBLISH");
+
+        var problem = IcsGuards.CheckAll(ics, out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarObjectResource, problem!.Precondition);
+    }
+
+    [Fact]
+    public void AnIcalendarBodyThatIsInvalid_SaysSo_NotThatItIsNotIcalendar()
+    {
+        // Arbitration 2 of the report: an unterminated VEVENT is syntactically broken, but it opens
+        // as iCalendar all the same — Ical.Net throws on it, refusing is right, but the message that
+        // says "not iCalendar text" is false and sends a client looking for the wrong bug.
+        var ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n";
+
+        var problem = IcsGuards.CheckAll(ics, out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
+        Assert.DoesNotContain("not iCalendar text", problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABodyThatIsNotCalendarTextAtAll_StillSaysSo()
+    {
+        var problem = IcsGuards.CheckAll("<?xml version=\"1.0\"?><nope/>", out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
+        Assert.Contains("not iCalendar text", problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExceptionsWithoutMaster_Pass() => Assert.Null(Check(Ics.Events(("a", "20260914"), ("a", "20260921"))));
 
     [Fact]

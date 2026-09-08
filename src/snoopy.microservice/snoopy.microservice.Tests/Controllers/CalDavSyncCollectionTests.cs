@@ -239,7 +239,7 @@ public sealed class CalDavSyncCollectionTests : IAsyncLifetime
         var otherToken = DavSyncToken.Token(new SyncState(OtherEpoch, 3, 0));
 
         var put = await server.SendAsync("PUT", DavPaths.Event(UserId, "work", "new.ics"),
-            CalDavPutTests.Event("fresh"));
+            CalDavPutTests.Event("fresh"), contentType: CalDavProperties.CalendarDataMediaType);
         Assert.Equal(201, put.StatusCode);
 
         // A write in `work` is `work`'s rank and `work`'s ctag: `other` has nothing to tell its

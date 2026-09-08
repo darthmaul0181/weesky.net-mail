@@ -235,13 +235,19 @@ internal sealed class DavCalendarWriter(
             if (createOnly && row is not null) return Refused(DavWriteStatus.AlreadyExists);
 
             // RFC 4791 § 5.3.2.1: the UID must not be one ANOTHER resource of this calendar holds,
-            // and the href names that holder — never the request URI. A UID that merely changes
-            // under its own name is accepted, and the same UID in another calendar is no conflict.
+            // and the href names that holder — never the request URI. The same UID in another
+            // calendar is no conflict.
             var holder = await context.CalendarEvents.AsNoTracking().FirstOrDefaultAsync(
                 e => e.CalendarId == calendarId && e.Uid == uid && e.DavName != davName,
                 cancellationToken);
             if (holder is not null)
                 return Conflict(userId, calendar.DavName, holder.DavName);
+
+            // The other half of no-uid-conflict, which § 5.3.2.1 spells in the same sentence:
+            // « or overwrite an existing calendar object resource with one that has a different
+            // UID ». The href names this very resource — the client must re-read what it holds.
+            if (row is not null && !string.Equals(row.Uid, uid, StringComparison.Ordinal))
+                return Conflict(userId, calendar.DavName, davName);
 
             if (row is null && await context.CalendarEvents.CountAsync(
                     e => e.CalendarId == calendarId, cancellationToken)

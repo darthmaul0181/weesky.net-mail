@@ -28,6 +28,12 @@ internal static class IcsDocument
 
     internal static string Serialize(IcsCalendar calendar) => new CalendarSerializer().SerializeToString(calendar) ?? string.Empty;
 
+    /// <summary>Whether the text opens as an iCalendar object at all. What TryLoad answers null on
+    /// is two different refusals — a body that is not calendar text, and one that is calendar text
+    /// RFC 5545 refuses — and a client acts differently on each.</summary>
+    internal static bool LooksLikeCalendar(string ics) =>
+        ics.AsSpan().TrimStart().StartsWith("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase);
+
     internal static string HashOf(string ics) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ics)));
 
     internal static CalendarEvent? MasterOf(IcsCalendar calendar) =>

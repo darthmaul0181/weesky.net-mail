@@ -56,9 +56,22 @@ internal static class IcsGuards
     {
         if (CheckSize(ics) is { } tooLarge) return tooLarge;
         if (parsed is null)
-            return new IcsProblem(IcsPrecondition.ValidCalendarData, "The body is not iCalendar text.");
+        {
+            // Both are valid-calendar-data (§ 5.3.2.1 has no finer element), and both are refused
+            // — but the reason a client is handed must be true. The DTSTART/DTEND type mismatch of
+            // RFC 5545 § 3.8.2.2 lands here, and it IS iCalendar.
+            return new IcsProblem(IcsPrecondition.ValidCalendarData,
+                IcsDocument.LooksLikeCalendar(ics)
+                    ? "The body is iCalendar text RFC 5545 refuses."
+                    : "The body is not iCalendar text.");
+        }
         if (parsed.Version != SupportedVersion)
             return new IcsProblem(IcsPrecondition.SupportedCalendarData, $"VERSION is '{parsed.Version}', not {SupportedVersion}.");
+        // RFC 4791 § 4.1, MUST NOT: METHOD makes the object an iTIP message. RFC 6638 would give it
+        // a meaning; we do not serve scheduling, so storing one would serve a message as an event.
+        if (!string.IsNullOrEmpty(parsed.Method))
+            return new IcsProblem(IcsPrecondition.ValidCalendarObjectResource,
+                $"A calendar object resource must not carry METHOD ('{parsed.Method}').");
 
         var components = IcsDocument.Components(parsed).ToList();
         var unsupported = parsed.Todos.Count > 0 || parsed.Journals.Count > 0 || parsed.FreeBusy.Count > 0;

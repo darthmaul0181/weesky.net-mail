@@ -15,10 +15,11 @@ public interface IDavCalendarWriter
     /// <summary>
     /// Creates or replaces the resource named <paramref name="davName"/> in one calendar. Judges
     /// the five guards of <c>IcsGuards.CheckAll</c> first, then, under the collection's state lock:
-    /// <paramref name="ifMatch"/> re-compared, <paramref name="createOnly"/> re-judged, the UID
-    /// held by ANOTHER name of the SAME calendar refused as <see cref="DavWriteStatus.UidConflict"/>
-    /// with that holder's href, the ceiling counted, the replaced bytes archived, any tombstone on
-    /// the name lifted. Never throws for a refusable file: each refusal comes back as its own
+    /// <paramref name="ifMatch"/> re-compared, <paramref name="createOnly"/> re-judged, a UID held
+    /// by ANOTHER name of the SAME calendar or changed under this very name both refused as
+    /// <see cref="DavWriteStatus.UidConflict"/> with the relevant href, the ceiling counted, the
+    /// replaced bytes archived, any tombstone on the name lifted. Never throws for a refusable
+    /// file: each refusal comes back as its own
     /// <see cref="DavWriteStatus"/>, an invalid one carrying the precondition it broke.
     /// </summary>
     Task<DavWriteOutcome> PutAsync(Guid userId, Guid calendarId, string davName, string ics,

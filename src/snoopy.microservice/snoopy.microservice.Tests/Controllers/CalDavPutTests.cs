@@ -158,13 +158,31 @@ public sealed class CalDavPutTests : IAsyncLifetime
 
     [Theory]
     [InlineData("text/calendar; charset=utf-8")]
-    [InlineData("text/plain")]
-    [InlineData("application/x-www-form-urlencoded")]
     [InlineData(null)]
-    public async Task TheContentTypeIsNotAJudge(string? contentType) =>
-        // The body is the only judge (4c decision 10) — and a form type must not have MVC's form
-        // binder swallow the body before the action reads it.
+    public async Task ACalendarOrAbsentContentType_IsNotAJudgeOfTheBody(string? contentType) =>
+        // The body is the only remaining judge (4c decision 10) once the media type itself is
+        // calendar or absent — a form type must not have MVC's form binder swallow the body either.
         Assert.Equal(201, (await Put(Href("a.ics"), Event("u1"), contentType: contentType)).StatusCode);
+
+    [Fact]
+    public async Task APutUnderAContentTypeThatIsNotCalendar_NamesTheMediaType()
+    {
+        // RFC 4791 § 5.3.2.1: supported-calendar-data is « MUST be a supported media type », a
+        // different refusal from « the data is invalid » — and the client acts differently on each.
+        var response = await Put(Href("x.ics"), "<?xml version=\"1.0\"?><nope/>", contentType: "text/xml");
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Contains("supported-calendar-data", response.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APutWithNoContentTypeAtAll_IsJudgedOnItsBody()
+    {
+        // Not every client sends one, and refusing on absence would break them for nothing.
+        var response = await Put(Href("y.ics"), Event("u1", "sans en-tete"), contentType: null);
+
+        Assert.Equal(201, response.StatusCode);
+    }
 
     [Fact]
     public async Task ABodyThatIsNotStrictUtf8_Answers403ValidCalendarData()

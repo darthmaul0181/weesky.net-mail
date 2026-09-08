@@ -176,16 +176,26 @@ public sealed class DavCalendarWriterTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AUidChangedUnderItsOwnName_IsAccepted()
+    public async Task ReplacingAResourceWithADifferentUid_IsAUidConflict()
     {
-        await writer.PutAsync(userId, calendarId, "a.ics", Event("u1", "Ada"), None);
+        // RFC 4791 § 5.3.2.1, no-uid-conflict, second half: « or overwrite an existing calendar
+        // object resource with one that has a different UID property value ». The href a client
+        // synced on would change identity under every other device it holds.
+        await writer.PutAsync(userId, calendarId, "1.ics", Event("one@weesky.net", "avant"), None);
 
-        var outcome = await writer.PutAsync(userId, calendarId, "a.ics", Event("u2", "Ada"), None);
+        var outcome = await writer.PutAsync(userId, calendarId, "1.ics", Event("two@weesky.net", "avant"), None);
 
-        // No other resource holds u2: nothing conflicts, and the archive keeps the old identity.
+        Assert.Equal(DavWriteStatus.UidConflict, outcome.Status);
+    }
+
+    [Fact]
+    public async Task ReplacingAResourceWithTheSameUid_IsStillAReplacement()
+    {
+        await writer.PutAsync(userId, calendarId, "1.ics", Event("one@weesky.net", "avant"), None);
+
+        var outcome = await writer.PutAsync(userId, calendarId, "1.ics", Event("one@weesky.net", "apres"), None);
+
         Assert.Equal(DavWriteStatus.Replaced, outcome.Status);
-        Assert.Equal("u2", (await RowOf("a.ics")).Uid);
-        Assert.Equal("u1", Assert.Single(context.CalendarRevisions).Uid);
     }
 
     [Fact]

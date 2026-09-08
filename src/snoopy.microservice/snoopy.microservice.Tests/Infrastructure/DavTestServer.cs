@@ -111,10 +111,11 @@ internal sealed class DavTestServer : IAsyncDisposable
         SendAsync("PROPFIND", path, body, depth);
 
     internal async Task<DavTestResponse> SendAsync(string method, string path, string? body = null,
-        string? depth = null, IReadOnlyDictionary<string, string>? headers = null)
+        string? depth = null, IReadOnlyDictionary<string, string>? headers = null,
+        string contentType = "application/xml")
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
-        if (body is not null) request.Content = new StringContent(body, Encoding.UTF8, "application/xml");
+        if (body is not null) request.Content = new StringContent(body, Encoding.UTF8, contentType);
         if (depth is not null) request.Headers.Add("Depth", depth);
         foreach (var (name, value) in headers ?? new Dictionary<string, string>())
             request.Headers.TryAddWithoutValidation(name, value);

@@ -163,6 +163,16 @@ public sealed class CalDavController(
                 return;
             }
 
+            // RFC 4791 § 5.3.2.1: supported-calendar-data is about the MEDIA TYPE, and this is the
+            // one layer that sees it. An absent header is not a refusal — clients omit it — but a
+            // header naming something else is, and it is not the same answer as invalid data.
+            if (Request.ContentType is { Length: > 0 } contentType
+                && !contentType.StartsWith(CalDavProperties.CalendarDataMediaType, StringComparison.OrdinalIgnoreCase))
+            {
+                await RefuseAsync(trace, CalDavError.SupportedCalendarData, null, cancellationToken);
+                return;
+            }
+
             // The header rides along: the pre-check above ran before any lock, so the decisive
             // If-Match comparison is the gate's, under the state lock.
             var outcome = await writer.PutAsync(user.WebmailUid, calendar.Id, davName, body,
