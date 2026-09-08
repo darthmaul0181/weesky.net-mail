@@ -347,7 +347,7 @@ Dans `Services/IcsGuardsTests.cs` :
         var problem = IcsGuards.CheckAll(ics, out _);
 
         Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
-        Assert.DoesNotContain("not iCalendar text", problem.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("not iCalendar text", problem.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -356,12 +356,12 @@ Dans `Services/IcsGuardsTests.cs` :
         var problem = IcsGuards.CheckAll("<?xml version=\"1.0\"?><nope/>", out _);
 
         Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
-        Assert.Contains("not iCalendar text", problem.Reason, StringComparison.Ordinal);
+        Assert.Contains("not iCalendar text", problem.Message, StringComparison.Ordinal);
     }
 ```
 
-`problem.Reason` : si le champ de `IcsProblem` porte un autre nom, employer le sien — **le lire, ne
-pas le renommer**.
+`IcsProblem` est un record `(IcsPrecondition Precondition, string Message)` : c'est `Message`,
+vérifié. Ne pas le renommer.
 
 Dans `Repositories/DavCalendarWriterTests.cs` :
 
