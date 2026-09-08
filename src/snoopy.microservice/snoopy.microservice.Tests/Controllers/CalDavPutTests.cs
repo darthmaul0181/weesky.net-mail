@@ -176,6 +176,17 @@ public sealed class CalDavPutTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AMediaTypeThatOnlyStartsWithCalendar_IsStillRefused()
+    {
+        // StartsWith would let "text/calendarish" through: the media type must match exactly, once
+        // its parameters are stripped, or a refusal a letter can walk around is not a refusal.
+        var response = await Put(Href("z.ics"), Event("u1"), contentType: "text/calendarish");
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Contains("supported-calendar-data", response.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task APutWithNoContentTypeAtAll_IsJudgedOnItsBody()
     {
         // Not every client sends one, and refusing on absence would break them for nothing.

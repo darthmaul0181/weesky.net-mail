@@ -167,7 +167,7 @@ public sealed class CalDavController(
             // one layer that sees it. An absent header is not a refusal — clients omit it — but a
             // header naming something else is, and it is not the same answer as invalid data.
             if (Request.ContentType is { Length: > 0 } contentType
-                && !contentType.StartsWith(CalDavProperties.CalendarDataMediaType, StringComparison.OrdinalIgnoreCase))
+                && !DavHeaders.MediaTypeOf(contentType).Equals(CalDavProperties.CalendarDataMediaType, StringComparison.OrdinalIgnoreCase))
             {
                 await RefuseAsync(trace, CalDavError.SupportedCalendarData, null, cancellationToken);
                 return;
