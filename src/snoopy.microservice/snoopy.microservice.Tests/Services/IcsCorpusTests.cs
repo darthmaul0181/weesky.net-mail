@@ -64,6 +64,17 @@ public sealed class IcsCorpusTests
         Assert.True(p.UnknownTimeZone);
     }
 
+    /// <summary>The whole gate over the whole corpus. CheckOverrides is reached from nowhere else,
+    /// so without this theory the guard that walks a recurrence would ship with no real file behind
+    /// it — and a guard one shade too wide refuses a file a client legitimately sends.</summary>
+    [Theory]
+    [MemberData(nameof(Files))]
+    public void Corpus_EveryResourcePassesTheWholeGate(string file)
+    {
+        foreach (var resource in IcsResources.Split(File.ReadAllText(IcsResourcesTests.Corpus(file))).Resources)
+            Assert.Null(IcsGuards.CheckAll(resource, out _));
+    }
+
     [Theory]
     [MemberData(nameof(Files))]
     public void Corpus_DensityIsAcceptable(string file)

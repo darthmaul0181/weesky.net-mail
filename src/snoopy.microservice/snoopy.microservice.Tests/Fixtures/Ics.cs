@@ -60,6 +60,13 @@ internal static class Ics
                + Line(Summary(summary is null ? null : summary + " (moved)")) + "END:VEVENT\r\n" + Tail;
     }
 
+    /// <summary>The series of <see cref="RuleInUtc"/> with one override naming
+    /// <paramref name="recurrenceId"/> verbatim: which instance it addresses is the point.</summary>
+    internal static string RuleWithOverrideInUtc(string rrule, string recurrenceId) =>
+        RuleInUtc(rrule).Replace(Tail,
+            "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + "RECURRENCE-ID:" + recurrenceId + "\r\n"
+            + "DTSTART:" + recurrenceId + "\r\nSUMMARY:Moved\r\nEND:VEVENT\r\n" + Tail);
+
     /// <summary>Le 7, le 14 déplacé à 11:00, le 21 retiré par EXDATE, le 28.</summary>
     internal static string WeeklyWithExdateAndOverride() =>
         RuleWithOverride("FREQ=WEEKLY", "20260914T110000",

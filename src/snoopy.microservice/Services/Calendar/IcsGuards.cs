@@ -25,6 +25,17 @@ internal static class IcsGuards
     /// attacker-sized lists can ever wrap past it.</summary>
     private const long Ceiling = MaxInstancesPerYear + 1L;
 
+    /// <summary>RFC 5545 § 3.3.11: the whole of what a backslash may introduce in a TEXT value.</summary>
+    private const string Escapable = "\\;,nN";
+
+    /// <summary>The properties whose value is TEXT and therefore obeys § 3.3.11's escaping.</summary>
+    private static readonly HashSet<string> TextProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CALSCALE", "CATEGORIES", "CLASS", "COMMENT", "CONTACT", "DESCRIPTION", "LOCATION",
+        "METHOD", "PRODID", "RELATED-TO", "RESOURCES", "STATUS", "SUMMARY", "TRANSP", "TZID",
+        "TZNAME", "UID", "VERSION",
+    };
+
     /// <summary>
     /// The one precondition that must be judged <b>before</b> the body is parsed, and the reason it
     /// stands alone: parsing is the work an oversized body is trying to make us do.
@@ -40,8 +51,9 @@ internal static class IcsGuards
     /// <summary>
     /// The whole judgement of one resource, in the order the store applies it: size — before the
     /// parse, which is the work an oversized body is trying to make us do — then syntax, version
-    /// and shape, then density, then expansion, then the DTSTART every VEVENT owes (RFC 5545
-    /// § 3.6.1). Null when the file is accepted, <paramref name="parsed"/> then being its model.
+    /// and shape, then density, then expansion, then the overrides the rule has to generate, then
+    /// the DTSTART every VEVENT owes (RFC 5545 § 3.6.1). Null when the file is accepted,
+    /// <paramref name="parsed"/> then being its model.
     /// </summary>
     internal static IcsProblem? CheckAll(string ics, out IcsCalendar? parsed)
     {
@@ -49,7 +61,8 @@ internal static class IcsGuards
         if (CheckSize(ics) is { } tooLarge) return tooLarge;
 
         parsed = IcsDocument.TryLoad(ics);
-        return Check(ics, parsed) ?? CheckDensity(parsed!) ?? CheckExpansion(parsed!) ?? CheckStart(parsed!);
+        return Check(ics, parsed) ?? CheckDensity(parsed!) ?? CheckExpansion(parsed!)
+            ?? CheckOverrides(parsed!) ?? CheckStart(parsed!);
     }
 
     internal static IcsProblem? Check(string ics, IcsCalendar? parsed)
@@ -91,7 +104,97 @@ internal static class IcsGuards
             return new IcsProblem(IcsPrecondition.ValidCalendarObjectResource, "A component carries no UID.");
         if (components.Any(TooLong))
             return new IcsProblem(IcsPrecondition.ValidCalendarData, "A UID or attendee address is too long");
+        return CheckTextEscapes(ics);
+    }
+
+    /// <summary>
+    /// RFC 5545 § 3.3.11: inside a TEXT value a backslash introduces one of five escapes and
+    /// nothing else. A body carrying any other is not valid iCalendar, and what a reader makes of
+    /// it differs from reader to reader. Only the properties whose value is TEXT are judged: an X-
+    /// or IANA- property declares its type rather than owing one, and a URL or a DTSTART is not
+    /// TEXT and carries no escaping rules at all.
+    /// </summary>
+    private static IcsProblem? CheckTextEscapes(string ics)
+    {
+        foreach (var line in Unfolded(ics))
+        {
+            if (NameOf(line) is not { } property || !TextProperties.Contains(property.Name)) continue;
+
+            var value = line.AsSpan(property.Colon + 1);
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (value[i] != '\\') continue;
+                if (i + 1 >= value.Length || Escapable.IndexOf(value[i + 1]) < 0)
+                    return new IcsProblem(IcsPrecondition.ValidCalendarData,
+                        $"A {property.Name} value carries an escape RFC 5545 § 3.3.11 does not define.");
+                i++;   // the escaped character is consumed, so a doubled backslash is one escape
+            }
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// RFC 5545 § 3.8.4.4: an override's RECURRENCE-ID names an instance the master's rule
+    /// generates. One that names no instance overrides nothing and is invisible from every window.
+    /// Judged only where it can be: a resource with no master, one whose master repeats not at all,
+    /// or a series <see cref="IsWalkable(IcsCalendar)"/> refuses is left alone — a guard that must
+    /// walk in order to refuse never refuses what it could not walk.
+    /// </summary>
+    private static IcsProblem? CheckOverrides(IcsCalendar parsed)
+    {
+        if (!IsWalkable(parsed)) return null;
+        if (IcsDocument.MasterOf(parsed) is not { DtStart: not null } master) return null;
+        if (master.RecurrenceRule is null && master.RecurrenceDates?.GetAllDates().Any() != true) return null;
+        if (!IcsDocument.Components(parsed).Any(HasInstanceId)) return null;
+
+        // The clone is walked without its overrides: attached, the library answers each of them as
+        // an occurrence of its own and the identifier under judgement would always be in the set.
+        var series = IcsTimeZones.Detach(parsed)?.Calendar ?? IcsComposer.Clone(parsed);
+        var overrides = IcsDocument.Components(series).Where(HasInstanceId).ToList();
+        var latest = overrides.Max(c => IcsComposer.Instant(series, c.RecurrenceIdentifier!.StartTime!));
+        foreach (var component in overrides) IcsComposer.Detach(series, component);
+        if (InstanceIds(series, IcsDocument.MasterOf(series)!.DtStart!, latest) is not { } ids) return null;
+
+        foreach (var component in overrides)
+        {
+            var id = IcsDocument.InstanceIdOf(component);
+            if (!ids.Contains(id))
+                return new IcsProblem(IcsPrecondition.ValidCalendarData,
+                    $"RECURRENCE-ID '{id}' names no instance of the series.");
+        }
+
+        return null;
+    }
+
+    private static bool HasInstanceId(CalendarEvent component) => component.RecurrenceIdentifier?.StartTime is not null;
+
+    /// <summary>
+    /// The instance identifiers the master alone generates, walked until it is past
+    /// <paramref name="latest"/> so that every override the file carries falls inside the window.
+    /// Null when the walk threw, or when the density ceiling stopped it first: an identifier the
+    /// window never reached is one this guard cannot judge, and the file is left to the others.
+    /// </summary>
+    private static HashSet<string>? InstanceIds(IcsCalendar series, CalDateTime start, DateTime latest)
+    {
+        try
+        {
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            var walked = 0;
+            foreach (var occurrence in series.GetOccurrences(IcsTimeZones.Detached(start)).Take(MaxInstancesPerYear))
+            {
+                walked++;
+                if (occurrence.Period.StartTime is not { } at) continue;
+                ids.Add(IcsDocument.LiteralOf(at));
+                if (IcsComposer.Instant(series, at) > latest) return ids;
+            }
+
+            return walked < MaxInstancesPerYear ? ids : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>The DDL widths <c>uid VARCHAR(255)</c> and <c>calendar_attendees.email
@@ -256,21 +359,31 @@ internal static class IcsGuards
     {
         var written = 0;
         var inAlarm = false;
-        var unfolded = ics.Replace("\r\n", "\n").Replace("\n ", string.Empty).Replace("\n\t", string.Empty);
-        foreach (var line in unfolded.Split('\n'))
+        foreach (var line in Unfolded(ics))
         {
             if (line.StartsWith("BEGIN:VALARM", StringComparison.OrdinalIgnoreCase)) inAlarm = true;
             else if (line.StartsWith("END:VALARM", StringComparison.OrdinalIgnoreCase)) inAlarm = false;
             if (inAlarm) continue;
 
-            var colon = line.IndexOf(':');
-            if (colon <= 0 || line.AsSpan(colon + 1).Trim().Length == 0) continue;
-            var name = line.AsSpan(0, colon);
-            var semicolon = name.IndexOf(';');
-            if (semicolon >= 0) name = name[..semicolon];
-            if (name.Equals("UID", StringComparison.OrdinalIgnoreCase)) written++;
+            if (NameOf(line) is not { } property || line.AsSpan(property.Colon + 1).Trim().Length == 0) continue;
+            if (property.Name.Equals("UID", StringComparison.OrdinalIgnoreCase)) written++;
         }
 
         return written;
+    }
+
+    /// <summary>The file's logical lines, RFC 5545 § 3.1's folding undone, so a property split over
+    /// several physical lines is read as the one line it is.</summary>
+    private static IEnumerable<string> Unfolded(string ics) =>
+        ics.Replace("\r\n", "\n").Replace("\n ", string.Empty).Replace("\n\t", string.Empty).Split('\n');
+
+    /// <summary>The property name a logical line opens with and where its value starts, or null
+    /// when the line names no property.</summary>
+    private static (string Name, int Colon)? NameOf(string line)
+    {
+        var colon = line.IndexOf(':');
+        if (colon <= 0) return null;
+        var semicolon = line.AsSpan(0, colon).IndexOf(';');
+        return (line[..(semicolon < 0 ? colon : semicolon)], colon);
     }
 }

@@ -306,6 +306,65 @@ public sealed class IcsGuardsTests
         + "BEGIN:VEVENT\r\nUID:nostart\r\nDTSTAMP:20260901T080000Z\r\nSUMMARY:No start\r\nEND:VEVENT\r\n"
         + "END:VCALENDAR\r\n";
 
+    [Theory]
+    [InlineData(@"DESCRIPTION:Bad \""escaping\"" here.")]
+    [InlineData(@"SUMMARY:a\qb")]
+    [InlineData(@"LOCATION:trailing\")]
+    public void AnInvalidTextEscape_IsInvalidCalendarData(string line) =>
+        Assert.Equal(IcsPrecondition.ValidCalendarData,
+            IcsGuards.CheckAll(Ics.Single("DTSTART:20260101T100000Z", null, extra: line), out _)!.Precondition);
+
+    [Theory]
+    [InlineData(@"DESCRIPTION:one\, two\; three\\four\nfive\Nsix")]
+    [InlineData(@"URL:https://weesky.net/a\b")]           // not a TEXT property: no escaping rules
+    [InlineData(@"X-WR-NOTE:c:\temp")]                    // an X- property is not judged either
+    public void AValidEscapeOrANonTextProperty_IsAccepted(string line) =>
+        Assert.Null(IcsGuards.CheckAll(Ics.Single("DTSTART:20260101T100000Z", null, extra: line), out _));
+
+    [Fact]
+    public void ARecurrenceIdNoInstanceOfTheRuleProduces_IsInvalidCalendarData()
+    {
+        // RFC 5545 3.8.4.4: a RECURRENCE-ID identifies an instance the master's rule generates. One
+        // naming 16:00 of a series that only ever fires at 09:00 overrides nothing, for ever.
+        var ics = Ics.RuleWithOverrideInUtc("FREQ=WEEKLY", "20260911T160000Z");
+
+        var problem = IcsGuards.CheckAll(ics, out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
+        Assert.Contains("20260911T160000Z", problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARecurrenceIdTheRuleProduces_IsAccepted() =>
+        Assert.Null(IcsGuards.CheckAll(Ics.RuleWithOverrideInUtc("FREQ=WEEKLY", "20260914T090000Z"), out _));
+
+    /// <summary>The series is walked without its own overrides: attached, the library substitutes
+    /// the moved instance for the one the rule generates and the guard could never fire.</summary>
+    [Fact]
+    public void AnOverrideIsJudgedAgainstTheRuleAlone_NotAgainstItself() =>
+        Assert.Equal(IcsPrecondition.ValidCalendarData,
+            IcsGuards.CheckAll(Ics.RuleWithOverrideInUtc("FREQ=WEEKLY;COUNT=3", "20261005T090000Z"), out _)!.Precondition);
+
+    [Fact]
+    public void ADetachedOverrideWithNoMaster_IsAccepted() =>
+        // No rule to judge against. Every client writes these when a series is split.
+        Assert.Null(IcsGuards.CheckAll(
+            Ics.Single("DTSTART:20260919T100000Z", null, extra: "RECURRENCE-ID:20260919T100000Z"), out _));
+
+    [Fact]
+    public void AnOverrideOfAnEventThatDoesNotRepeat_IsAccepted() =>
+        Assert.Null(IcsGuards.CheckAll(Ics.Events(("a", null), ("a", "20260914")), out _));
+
+    [Fact]
+    public void AnOverrideOfASeriesTheEngineCannotWalk_IsNeverJudged()
+    {
+        // A guard that has to walk in order to refuse never refuses what it could not walk: in
+        // Ical.Net 5.2.3 this series is a stack overflow, which no catch block sees.
+        var problem = IcsGuards.CheckAll(Ics.RuleWithOverride("FREQ=HOURLY", "20260914T110000"), out _);
+
+        Assert.Equal(IcsPrecondition.MaxInstances, problem!.Precondition);
+    }
+
     [Fact]
     public void Problem_NamesWhatItRefused() =>
         Assert.Contains("VTODO", Check(Ics.Todo())!.Message, StringComparison.Ordinal);
