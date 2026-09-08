@@ -422,6 +422,27 @@ public sealed class IcsGuardsTests
         Assert.Null(IcsGuards.CheckAll(Ics.RuleWithOverrideInUtc("FREQ=WEEKLY", "20260914T090000Z",
             extra: "EXDATE:20260914T090000Z"), out _));
 
+    /// <summary>
+    /// The boundary of the narrowing that spares a zone only the file defines. A Windows-named TZID
+    /// is the CLDR-resolved tier — neither UTC nor a bare IANA id — and it is the tier every Outlook
+    /// and Exchange resource sits on. Were that narrowing ever to swallow this tier, the guard would
+    /// stop judging all of them, in silence and with the suite still green: both other refusal cases
+    /// carry a UTC master and would not notice.
+    /// </summary>
+    [Fact]
+    public void AFaultyRecurrenceIdOnAWindowsNamedZone_IsStillRefused()
+    {
+        // The rule fires at 09:00 Eastern; 16:00 on the 11th is no instance of it at all.
+        var ics = Ics.ZonedSeriesWithOverride("DTSTART;TZID=Eastern Standard Time:20260907T090000",
+            "RECURRENCE-ID;TZID=Eastern Standard Time:20260911T160000",
+            zone: Ics.WindowsZone("Eastern Standard Time"));
+
+        var problem = IcsGuards.CheckAll(ics, out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
+        Assert.Contains("20260911T160000", problem.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ADetachedOverrideWithNoMaster_IsAccepted() =>
         // No rule to judge against. Every client writes these when a series is split.

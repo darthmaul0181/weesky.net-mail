@@ -70,8 +70,8 @@ internal static class Ics
     /// <summary>A weekly series and one override, the master's start and the override's
     /// RECURRENCE-ID both spelled as the caller gives them: which form each takes against the other
     /// is the point. The file defines <see cref="Zone"/>, so a TZID either side names resolves.</summary>
-    internal static string ZonedSeriesWithOverride(string start, string recurrenceId) =>
-        Head + SeasonalZone(Zone) + "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + start
+    internal static string ZonedSeriesWithOverride(string start, string recurrenceId, string? zone = null) =>
+        Head + (zone ?? SeasonalZone(Zone)) + "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + start
         + "\r\nRRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\n"
         + "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + recurrenceId
         + "\r\nDTSTART:20260914T120000Z\r\nSUMMARY:Moved\r\nEND:VEVENT\r\n" + Tail;
