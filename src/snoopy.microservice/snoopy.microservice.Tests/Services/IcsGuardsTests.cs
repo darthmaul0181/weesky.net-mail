@@ -181,6 +181,17 @@ public sealed class IcsGuardsTests
     }
 
     [Fact]
+    public void ATzidQuotedAroundAColon_IsAccepted()
+    {
+        // RFC 5545 § 3.1: a quoted parameter value may hold a colon, and a Windows exporter writes
+        // one. Reading the name up to the first colon of all truncates the id to "(GMT+01".
+        var ics = Ics.Single("DTSTART;TZID=\"(GMT+01:00) Amsterdam, Berlin\":20260101T100000", null,
+            zone: Ics.FixedZone("(GMT+01:00) Amsterdam, Berlin", "+0100"));
+
+        Assert.Null(IcsGuards.CheckAll(ics, out _));
+    }
+
+    [Fact]
     public void AUtcOrFloatingStart_NeedsNoVtimezone()
     {
         Assert.Null(IcsGuards.CheckAll(Ics.Single("DTSTART:20260101T100000Z", null), out _));
@@ -381,6 +392,35 @@ public sealed class IcsGuardsTests
     public void AnOverrideIsJudgedAgainstTheRuleAlone_NotAgainstItself() =>
         Assert.Equal(IcsPrecondition.ValidCalendarData,
             IcsGuards.CheckAll(Ics.RuleWithOverrideInUtc("FREQ=WEEKLY;COUNT=3", "20261005T090000Z"), out _)!.Precondition);
+
+    /// <summary>Exchange writes a zoned series' RECURRENCE-ID in Z form — the same instant, another
+    /// spelling. <see cref="IcsDocument.InstanceOf"/> says so, and this guard must read it too.</summary>
+    [Fact]
+    public void AnExchangeShapedRecurrenceId_IsAccepted()
+    {
+        // 07:00Z on 14 September 2026 is 09:00 in Brussels, which is exactly what the rule fires.
+        var ics = Ics.ZonedSeriesWithOverride("DTSTART;TZID=" + Ics.Zone + ":20260907T090000",
+            "RECURRENCE-ID:20260914T070000Z");
+
+        Assert.Null(IcsGuards.CheckAll(ics, out _));
+    }
+
+    [Fact]
+    public void AZonedRecurrenceIdOnAUtcSeries_IsAccepted()
+    {
+        // The mirror: 11:00 in Brussels is the 09:00Z the rule fires.
+        var ics = Ics.ZonedSeriesWithOverride("DTSTART:20260907T090000Z",
+            "RECURRENCE-ID;TZID=" + Ics.Zone + ":20260914T110000");
+
+        Assert.Null(IcsGuards.CheckAll(ics, out _));
+    }
+
+    [Fact]
+    public void AnOverrideOfAnExdatedSlot_IsAccepted() =>
+        // The rule does generate that slot; the master merely excludes it. No MUST names the pair,
+        // and the walk hands back a set the exception dates have already been taken out of.
+        Assert.Null(IcsGuards.CheckAll(Ics.RuleWithOverrideInUtc("FREQ=WEEKLY", "20260914T090000Z",
+            extra: "EXDATE:20260914T090000Z"), out _));
 
     [Fact]
     public void ADetachedOverrideWithNoMaster_IsAccepted() =>

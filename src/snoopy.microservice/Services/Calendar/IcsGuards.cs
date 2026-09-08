@@ -141,9 +141,9 @@ internal static class IcsGuards
             else if (line.StartsWith("END:VTIMEZONE", StringComparison.OrdinalIgnoreCase)) inZone = false;
             if (inZone) continue;
 
-            var colon = line.IndexOf(':');
+            var colon = Unquoted(line, ':');
             if (colon <= 0) continue;
-            foreach (var parameter in line[..colon].Split(';').Skip(1))
+            foreach (var parameter in Parameters(line[..colon]))
             {
                 if (parameter.StartsWith(TzIdParameter, StringComparison.OrdinalIgnoreCase))
                     yield return parameter[TzIdParameter.Length..].Trim('"');
@@ -183,7 +183,8 @@ internal static class IcsGuards
     /// generates. One that names no instance overrides nothing and is invisible from every window.
     /// Judged only where it can be: a resource with no master, one whose master repeats not at all,
     /// or a series <see cref="IsWalkable(IcsCalendar)"/> refuses is left alone — a guard that must
-    /// walk in order to refuse never refuses what it could not walk.
+    /// walk in order to refuse never refuses what it could not walk. The identifier is read as an
+    /// instant, never as a string: the same slot has several legal spellings.
     /// </summary>
     private static IcsProblem? CheckOverrides(IcsCalendar parsed)
     {
@@ -198,14 +199,21 @@ internal static class IcsGuards
         var overrides = IcsDocument.Components(series).Where(HasInstanceId).ToList();
         var latest = overrides.Max(c => IcsComposer.Instant(series, c.RecurrenceIdentifier!.StartTime!));
         foreach (var component in overrides) IcsComposer.Detach(series, component);
-        if (InstanceIds(series, IcsDocument.MasterOf(series)!.DtStart!, latest) is not { } ids) return null;
+        var seriesMaster = IcsDocument.MasterOf(series)!;
+        if (InstanceInstants(series, seriesMaster.DtStart!, latest) is not { } instants) return null;
+        // The walk takes the exdated slots out of what it produces, but the rule does generate
+        // them, and no MUST refuses an override of a slot the master merely excludes.
+        foreach (var excluded in IcsComposer.Dates(seriesMaster.ExceptionDates))
+            instants.Add(IcsComposer.Instant(series, excluded));
 
         foreach (var component in overrides)
         {
-            var id = IcsDocument.InstanceIdOf(component);
-            if (!ids.Contains(id))
+            var at = component.RecurrenceIdentifier!.StartTime!;
+            // A date against a timed series is a form this guard cannot read: on doubt, accept.
+            if (at.HasTime != seriesMaster.DtStart!.HasTime) continue;
+            if (!instants.Contains(IcsComposer.Instant(series, at)))
                 return new IcsProblem(IcsPrecondition.ValidCalendarData,
-                    $"RECURRENCE-ID '{id}' names no instance of the series.");
+                    $"RECURRENCE-ID '{IcsDocument.InstanceIdOf(component)}' names no instance of the series.");
         }
 
         return null;
@@ -214,26 +222,29 @@ internal static class IcsGuards
     private static bool HasInstanceId(CalendarEvent component) => component.RecurrenceIdentifier?.StartTime is not null;
 
     /// <summary>
-    /// The instance identifiers the master alone generates, walked until it is past
+    /// The <b>instants</b> the master alone generates — not their spellings: Exchange writes a
+    /// zoned series' RECURRENCE-ID in Z form, and <see cref="IcsComposer.Instant"/> is the reading
+    /// the rest of the module already compares moments through. Walked until it is past
     /// <paramref name="latest"/> so that every override the file carries falls inside the window.
-    /// Null when the walk threw, or when the density ceiling stopped it first: an identifier the
-    /// window never reached is one this guard cannot judge, and the file is left to the others.
+    /// Null when the walk threw, or when the density ceiling stopped it first: a slot the window
+    /// never reached is one this guard cannot judge, and the file is left to the others.
     /// </summary>
-    private static HashSet<string>? InstanceIds(IcsCalendar series, CalDateTime start, DateTime latest)
+    private static HashSet<DateTime>? InstanceInstants(IcsCalendar series, CalDateTime start, DateTime latest)
     {
         try
         {
-            var ids = new HashSet<string>(StringComparer.Ordinal);
+            var instants = new HashSet<DateTime>();
             var walked = 0;
             foreach (var occurrence in series.GetOccurrences(IcsTimeZones.Detached(start)).Take(MaxInstancesPerYear))
             {
                 walked++;
                 if (occurrence.Period.StartTime is not { } at) continue;
-                ids.Add(IcsDocument.LiteralOf(at));
-                if (IcsComposer.Instant(series, at) > latest) return ids;
+                var instant = IcsComposer.Instant(series, at);
+                instants.Add(instant);
+                if (instant > latest) return instants;
             }
 
-            return walked < MaxInstancesPerYear ? ids : null;
+            return walked < MaxInstancesPerYear ? instants : null;
         }
         catch (Exception)
         {
@@ -425,9 +436,37 @@ internal static class IcsGuards
     /// when the line names no property.</summary>
     private static (string Name, int Colon)? NameOf(string line)
     {
-        var colon = line.IndexOf(':');
+        var colon = Unquoted(line, ':');
         if (colon <= 0) return null;
-        var semicolon = line.AsSpan(0, colon).IndexOf(';');
-        return (line[..(semicolon < 0 ? colon : semicolon)], colon);
+        var semicolon = Unquoted(line, ';');
+        return (line[..(semicolon < 0 || semicolon > colon ? colon : semicolon)], colon);
+    }
+
+    /// <summary>
+    /// The index of the first <paramref name="separator"/> outside a quoted parameter value, from
+    /// <paramref name="from"/> on. RFC 5545 § 3.1 lets a quoted value hold one of either, and a
+    /// Windows exporter writes TZID="(GMT+01:00) Amsterdam, Berlin", whose colon ends nothing.
+    /// </summary>
+    private static int Unquoted(string line, char separator, int from = 0)
+    {
+        var quoted = false;
+        for (var i = from; i < line.Length; i++)
+        {
+            if (line[i] == '"') quoted = !quoted;
+            else if (line[i] == separator && !quoted) return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>A content line's parameters, cut on the semicolons no quoted value holds.</summary>
+    private static IEnumerable<string> Parameters(string head)
+    {
+        for (var start = Unquoted(head, ';'); start >= 0;)
+        {
+            var end = Unquoted(head, ';', start + 1);
+            yield return end < 0 ? head[(start + 1)..] : head[(start + 1)..end];
+            start = end;
+        }
     }
 }

@@ -62,10 +62,19 @@ internal static class Ics
 
     /// <summary>The series of <see cref="RuleInUtc"/> with one override naming
     /// <paramref name="recurrenceId"/> verbatim: which instance it addresses is the point.</summary>
-    internal static string RuleWithOverrideInUtc(string rrule, string recurrenceId) =>
-        RuleInUtc(rrule).Replace(Tail,
+    internal static string RuleWithOverrideInUtc(string rrule, string recurrenceId, string? extra = null) =>
+        RuleInUtc(rrule, extra).Replace(Tail,
             "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + "RECURRENCE-ID:" + recurrenceId + "\r\n"
             + "DTSTART:" + recurrenceId + "\r\nSUMMARY:Moved\r\nEND:VEVENT\r\n" + Tail);
+
+    /// <summary>A weekly series and one override, the master's start and the override's
+    /// RECURRENCE-ID both spelled as the caller gives them: which form each takes against the other
+    /// is the point. The file defines <see cref="Zone"/>, so a TZID either side names resolves.</summary>
+    internal static string ZonedSeriesWithOverride(string start, string recurrenceId) =>
+        Head + SeasonalZone(Zone) + "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + start
+        + "\r\nRRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\n"
+        + "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + recurrenceId
+        + "\r\nDTSTART:20260914T120000Z\r\nSUMMARY:Moved\r\nEND:VEVENT\r\n" + Tail;
 
     /// <summary>The same series as <see cref="RuleWithOverride"/>, its zone defined in the file.</summary>
     internal static string ZonedRuleWithOverride(string rrule, string overrideStart) =>
