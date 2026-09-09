@@ -150,18 +150,28 @@ internal static class CalendarQueryFilter
     internal static bool Matches(IcsCalendar parsed, CalendarQuerySpec spec, string calendarTimeZone)
     {
         if (spec.NoneMatch) return false;
-        if (spec.TimeRange is { } range
-            && !OccurrenceExpander.Overlaps(parsed, range.FromUtc, range.ToUtc, calendarTimeZone))
-            return false;
 
-        if (spec.PropFilters.Count == 0 && spec.AlarmFilters.Count == 0) return true;
+        // The window alone is asked of the FILE — an instance is what overlaps it, and an instance
+        // may come from any component (§ 9.9 on a VEVENT).
+        if (spec.PropFilters.Count == 0 && spec.AlarmFilters.Count == 0)
+            return spec.TimeRange is not { } whole
+                || OccurrenceExpander.Overlaps(parsed, whole.FromUtc, whole.ToUtc, calendarTimeZone);
 
-        // RFC 4791 § 9.7.1: « the targeted calendar component » matches all of them — ONE component
-        // of the resource, master or override, satisfies every clause together (sabre's reading).
+        // RFC 4791 § 9.7.1: « the targeted calendar component » — ONE component of the resource,
+        // master or override, satisfies every clause together, window included (sabre's reading).
         return IcsDocument.Components(parsed).Any(component =>
-            spec.PropFilters.All(filter => MatchesPropFilter(component, filter))
+            OverlapsFrom(parsed, component, spec.TimeRange, calendarTimeZone)
+            && spec.PropFilters.All(filter => MatchesPropFilter(component, filter))
             && spec.AlarmFilters.All(filter => MatchesAlarmFilter(parsed, component, filter, calendarTimeZone)));
     }
+
+    /// <summary>Whether an instance THIS component sources overlaps the window — the narrowing
+    /// AlarmFires already does with its own <c>component</c> argument, applied to the VEVENT's
+    /// window. A null window is every instant.</summary>
+    private static bool OverlapsFrom(IcsCalendar parsed, CalendarEvent component, TimeRangeSpec? range,
+        string calendarTimeZone) =>
+        range is not { } window
+        || OccurrenceExpander.Overlaps(parsed, window.FromUtc, window.ToUtc, calendarTimeZone, component);
 
     // ---- evaluation, on the object model ------------------------------------------------------
 
@@ -185,7 +195,10 @@ internal static class CalendarQueryFilter
     {
         var named = instances.SelectMany(i => Parameters(i, filter.Name)).ToList();
         if (filter.IsNotDefined) return named.Count == 0;
-        if (filter.TextMatch is not { } match) return named.Count > 0;
+        // The mirror of MatchesPropFilter: past is-not-defined, a condition is asked OF an
+        // instance. With none, a negated text-match would be vacuously true.
+        if (named.Count == 0) return false;
+        if (filter.TextMatch is not { } match) return true;
         return named.SelectMany(p => p.Values ?? []).OfType<string>().Any(match.Satisfies) != match.Negate;
     }
 

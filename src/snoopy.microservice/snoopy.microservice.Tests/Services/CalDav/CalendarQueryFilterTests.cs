@@ -413,6 +413,27 @@ public sealed class CalendarQueryFilterTests
     }
 
     [Fact]
+    public void ANegatedParamFilter_DoesNotMatchAPropertyThatCarriesNoSuchParameter()
+    {
+        // RFC 4791 § 9.7.3: the param-filter's conditions apply to the parameters the property
+        // carries. « TZID does not contain Paci » is not true of a DTSTART that has no TZID at all
+        // — MatchesPropFilter has held this guard two lines above since 5c; this one lacked it.
+        var allDay = Load(Ics.Single("DTSTART;VALUE=DATE:20260907", "DTEND;VALUE=DATE:20260908"));
+        var filter = VEvent(Prop("DTSTART", Param("TZID", Text("Paci", negate: true))));
+
+        Assert.False(Matches(allDay, filter));
+    }
+
+    [Fact]
+    public void ANegatedParamFilter_StillMatchesAParameterWhoseValueDiffers()
+    {
+        var zoned = Load(Ics.Single("DTSTART;TZID=" + Ics.Zone + ":20260907T090000",
+            "DTEND;TZID=" + Ics.Zone + ":20260907T100000"));
+
+        Assert.True(Matches(zoned, VEvent(Prop("DTSTART", Param("TZID", Text("Paci", negate: true))))));
+    }
+
+    [Fact]
     public void AParticipant_MatchesOnItsAddress() =>
         Assert.True(Matches(Load(Ics.WithAttendees()), VEvent(Prop("ATTENDEE", Text("lea@example.org")))));
 
@@ -438,6 +459,49 @@ public sealed class CalendarQueryFilterTests
         Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("Standup")), ringing)));
         Assert.False(Matches(parsed, VEvent(Prop("SUMMARY", Text("(moved)")), ringing)));
         Assert.True(Matches(parsed, VEvent(Prop("SUMMARY", Text("(moved)")), Comp("VALARM", IsNotDefined()))));
+    }
+
+    [Fact]
+    public void ATimeRangeAndAPropFilter_AreSatisfiedByOneComponent_NeverByTwo()
+    {
+        // RFC 4791 § 9.7.1: « the targeted calendar component » — one component of the resource
+        // answers every clause together. reports.xml/time-range t7: the master had the hour and
+        // the override had the summary, and the file came back.
+        var parsed = Load(Ics.WeeklyWithExdateAndOverride());   // 7th 07:00Z master, 14th 09:00Z override
+        var filter = VEvent(TimeRange("20260907T070000Z", "20260907T080000Z"), Prop("SUMMARY", Text("moved")));
+
+        Assert.False(Matches(parsed, filter));
+    }
+
+    [Fact]
+    public void ATimeRangeAndAPropFilter_MatchWhenOneComponentCarriesBoth()
+    {
+        var parsed = Load(Ics.Single("DTSTART:20270103T190000Z", "DTEND:20270103T200000Z", extra: "SUMMARY:changed"));
+
+        Assert.True(Matches(parsed, VEvent(TimeRange("20270103T190000Z", "20270103T200000Z"),
+            Prop("SUMMARY", Text("changed")))));
+    }
+
+    [Fact]
+    public void ATimeRangeAlone_StillReadsTheWholeResource()
+    {
+        // No prop-filter, no alarm filter: the window is asked of the file, and an override that
+        // falls inside it answers for the file. Nothing about this changes.
+        var parsed = Load(Ics.WeeklyWithExdateAndOverride());   // the 14th moved 07:00Z -> 09:00Z
+
+        Assert.True(Matches(parsed, VEvent(TimeRange("20260914T083000Z", "20260914T100000Z"))));
+    }
+
+    [Fact]
+    public void ATimeRangeAndAPropFilter_TheOverridesLaterInstance_StillCountsDespiteAnEarlierMasterHit()
+    {
+        // The window holds two instances: the master's (day one) and the override's (day two,
+        // overridden but not moved in time). Narrowing Overlaps to the override component must not
+        // stop at the master's earlier hit and answer false — the walk has to keep going.
+        var parsed = Load(Ics.RuleWithOverrideInUtc("FREQ=DAILY", "20260908T090000Z"));
+
+        Assert.True(Matches(parsed, VEvent(TimeRange("20260907T090000Z", "20260909T000000Z"),
+            Prop("SUMMARY", Text("Moved")))));
     }
 
     [Fact]

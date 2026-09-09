@@ -55,10 +55,19 @@ internal static class OccurrenceExpander
         Over(eventId, calendarId, parsed, fromUtc, toUtc, calendarTimeZone, viewTimeZone).Run();
 
     /// <summary>Whether one instance at least overlaps <c>[fromUtc, toUtc[</c> — the very walk of
-    /// <see cref="Expand"/>, stopped at the first one found (RFC 4791 § 9.9 on a VEVENT).</summary>
-    internal static bool Overlaps(IcsCalendar parsed, DateTime fromUtc, DateTime toUtc, string calendarTimeZone) =>
-        Over(Guid.Empty, Guid.Empty, parsed, fromUtc, toUtc, calendarTimeZone, calendarTimeZone)
-            .Run(firstOnly: true).Count > 0;
+    /// <see cref="Expand"/>, stopped at the first one found (RFC 4791 § 9.9 on a VEVENT).
+    /// <paramref name="component"/> narrows the instances to those one component sources — the
+    /// one a filter is being judged on — and null takes them all.</summary>
+    internal static bool Overlaps(IcsCalendar parsed, DateTime fromUtc, DateTime toUtc,
+        string calendarTimeZone, CalendarEvent? component = null)
+    {
+        var found = Over(Guid.Empty, Guid.Empty, parsed, fromUtc, toUtc, calendarTimeZone, calendarTimeZone)
+            .Run(firstOnly: component is null);
+        if (component is null) return found.Count > 0;
+
+        var components = IcsDocument.Components(parsed).ToList();
+        return found.Any(o => ReferenceEquals(SourceOf(o, components), component));
+    }
 
     /// <summary>
     /// Whether an alarm of one instance fires inside <c>[fromUtc, toUtc[</c> (RFC 4791 § 9.9 on a
