@@ -168,9 +168,11 @@ internal static class CalendarQueryFilter
 
         // RFC 4791 § 9.7.1: « the targeted calendar component » — ONE component of the resource,
         // master or override, satisfies every clause together, window included (sabre's reading).
+        // The text clauses read properties and come first; the window and the alarms walk instances
+        // — under an open bound, up to the cap — and are only asked of a component the text admits.
         return IcsDocument.Components(parsed).Any(component =>
-            OverlapsFrom(parsed, component, spec.TimeRange, timeZone)
-            && spec.PropFilters.All(filter => MatchesPropFilter(component, filter))
+            spec.PropFilters.All(filter => MatchesPropFilter(component, filter))
+            && OverlapsFrom(parsed, component, spec.TimeRange, timeZone)
             && spec.AlarmFilters.All(filter => MatchesAlarmFilter(parsed, component, filter, timeZone)));
     }
 

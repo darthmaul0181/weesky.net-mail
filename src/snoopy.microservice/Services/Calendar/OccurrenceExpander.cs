@@ -65,17 +65,16 @@ internal static class OccurrenceExpander
     /// walk is lazy. An absent start walks from <see cref="FloorOf"/> rather than from
     /// <see cref="DateTime.MinValue"/>, which the engine refuses to walk at all.
     /// <paramref name="component"/> narrows the instances to those one component sources — the one
-    /// a filter is being judged on — and null takes them all.</summary>
+    /// a filter is being judged on — and null takes them all; the walk stops at the first instance
+    /// that component sources, never at another's, and never runs to the cap once it has one.</summary>
     internal static bool Overlaps(IcsCalendar parsed, DateTime? fromUtc, DateTime? toUtc,
         string calendarTimeZone, CalendarEvent? component = null)
     {
+        var components = IcsDocument.Components(parsed).ToList();
         var found = Over(Guid.Empty, Guid.Empty, parsed, fromUtc ?? FloorOf(parsed),
                 toUtc ?? DateTime.MaxValue, calendarTimeZone, calendarTimeZone)
-            .Run(firstOnly: component is null);
-        if (component is null) return found.Count > 0;
-
-        var components = IcsDocument.Components(parsed).ToList();
-        return found.Any(o => ReferenceEquals(SourceOf(o, components), component));
+            .Run(component is null ? null : o => ReferenceEquals(SourceOf(o, components), component), firstOnly: true);
+        return found.Count > 0;
     }
 
     /// <summary>
@@ -269,9 +268,11 @@ internal static class OccurrenceExpander
         // on at most MaxSpan. A no-op for every closed window, all of which are refused past that.
         private int Cap => CapFor(fromUtc, Earlier(toUtc, Shift(fromUtc, MaxSpan)));
 
-        /// <param name="firstOnly">stop at the first instance overlapping the window — a query
-        /// asks whether one exists, never how many</param>
-        internal IReadOnlyList<EventOccurrence> Run(bool firstOnly = false)
+        /// <param name="keep">the instances to collect among those overlapping the window — null
+        /// keeps every one</param>
+        /// <param name="firstOnly">stop at the first instance kept — a query asks whether one
+        /// exists, never how many</param>
+        internal IReadOnlyList<EventOccurrence> Run(Func<EventOccurrence, bool>? keep = null, bool firstOnly = false)
         {
             var found = new List<(DateTime At, EventOccurrence Occurrence)>();
             try
@@ -280,7 +281,7 @@ internal static class OccurrenceExpander
                 {
                     var occurrence = Build(start, end, source);
                     var (at, until) = Span(occurrence);
-                    if (at < toUtc && (until > at ? until : at.AddTicks(1)) > fromUtc)
+                    if (at < toUtc && (until > at ? until : at.AddTicks(1)) > fromUtc && keep?.Invoke(occurrence) != false)
                     {
                         found.Add((at, occurrence));
                         if (firstOnly) break;

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Services.CalDav;
@@ -201,6 +202,32 @@ public sealed class CalendarQueryFilterTests
 
         Assert.True(Matches(parsed, VEvent(window)));
         Assert.False(Matches(parsed, VEvent(window, Prop("SUMMARY", Text("Tock")))));
+    }
+
+    [Fact]
+    public void AnOpenEnd_AndAPropFilterNoComponentSatisfies_NeverWalksTheSeries()
+    {
+        // The override's instance sits before the window, so a walk narrowed to it never finds one
+        // and runs to the cap: 60 001 instances, ~0.35 s. Read after the window, the text clause
+        // would let that walk run for every endless series of the calendar — a hundred of them is
+        // half a minute inside one snapshot transaction. Read first, nothing is walked at all.
+        var parsed = Load(Ics.RuleWithOverride("FREQ=WEEKLY", "20260901T090000"));
+        var filter = VEvent(TimeRange("20260907T000000Z", null), Prop("SUMMARY", Text("Tock")));
+
+        Assert.False(Matches(parsed, filter));
+        AssertAHundredEvaluationsStayUnder(TimeSpan.FromSeconds(5), () => Matches(parsed, filter));
+    }
+
+    [Fact]
+    public void AnOpenEnd_NarrowedToTheMaster_StopsAtItsFirstInstance()
+    {
+        // The answer is existential: the walk narrowed to one component stops at the first instance
+        // that component sources, and never collects the 60 001 an endless series has under the cap.
+        var parsed = Load(Ics.Rule("FREQ=WEEKLY", extra: "SUMMARY:Tick"));
+        var filter = VEvent(TimeRange("20260907T000000Z", null), Prop("SUMMARY", Text("Tick")));
+
+        Assert.True(Matches(parsed, filter));
+        AssertAHundredEvaluationsStayUnder(TimeSpan.FromSeconds(5), () => Matches(parsed, filter));
     }
 
     [Fact]
@@ -604,6 +631,17 @@ public sealed class CalendarQueryFilterTests
     {
         var thrown = Assert.Throws<DavPreconditionException>(() => CalendarQueryFilter.Parse(filter));
         Assert.Equal(condition, thrown.Condition);
+    }
+
+    /// <summary>A hundred evaluations against a budget a seventh of what the walk they must not
+    /// run would cost on this suite's slowest host: the first call above has already warmed the
+    /// path, so what is timed is the evaluation and not the JIT.</summary>
+    private static void AssertAHundredEvaluationsStayUnder(TimeSpan budget, Func<bool> evaluate)
+    {
+        var clock = Stopwatch.StartNew();
+        for (var i = 0; i < 100; i++) evaluate();
+        Assert.True(clock.Elapsed < budget,
+            $"a hundred evaluations took {clock.Elapsed}; walked to the cap each time they would take ~35 s.");
     }
 
     private static bool Matches(IcsCalendar parsed, XElement filter) =>
