@@ -394,6 +394,32 @@ public sealed class OccurrenceExpanderTests
     }
 
     [Fact]
+    public void ARingOnTheWindowsOwnEdge_FiresOnTheLeftAndNotOnTheRight()
+    {
+        // The jump to the first ring the window can hold is arithmetic, so its edges are where it
+        // can be wrong by one. The window is [fromUtc, toUtc[ : closed left, open right.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "REPEAT:5", "DURATION:PT10M"));
+        var ring = Instant("20270101T233000Z");   // 23:00 + three spacings, the fourth of six
+
+        Assert.True(Fires(parsed, ring, ring.AddTicks(1)));                    // ON the start: fires
+        Assert.False(Fires(parsed, ring.AddTicks(1), ring.AddMinutes(5)));     // a tick before: not
+        Assert.False(Fires(parsed, ring.AddMinutes(-5), ring));                // ON the end: not
+    }
+
+    [Fact]
+    public void TheRings_SkipTheOnesTheWindowLeavesBehind()
+    {
+        // A million rings a second apart, all crammed a day before the window: counted, not walked.
+        // The trigger is the only one the walk touches before the jump lands past them all.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-P1D", "REPEAT:1000000", "DURATION:PT1S"));
+
+        Assert.False(Fires(parsed, "20270101T230000Z", "20270102T000000Z"));
+        Assert.True(Fires(parsed, "20270101T000000Z", "20270101T000100Z"));
+    }
+
+    [Fact]
     public void TheRings_StopAtTheWindowsEnd_RatherThanAtTheFilesCount()
     {
         // A million rings a second apart, all of them past a window that ends on the trigger: the
@@ -415,7 +441,10 @@ public sealed class OccurrenceExpanderTests
     private static IcsCalendar Load(string ics) => IcsDocument.TryLoad(ics)!;
 
     private static bool Fires(IcsCalendar parsed, string from, string to) =>
-        OccurrenceExpander.AlarmFires(parsed, Instant(from), Instant(to), "UTC");
+        Fires(parsed, Instant(from), Instant(to));
+
+    private static bool Fires(IcsCalendar parsed, DateTime from, DateTime to) =>
+        OccurrenceExpander.AlarmFires(parsed, from, to, "UTC");
 
     private static DateTime Instant(string value) => DateTime.ParseExact(
         value, "yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture,

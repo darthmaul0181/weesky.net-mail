@@ -103,7 +103,7 @@ internal static class OccurrenceExpander
             foreach (var alarm in source.Alarms)
             {
                 if (FiresAt(alarm.Trigger, start, end, parsed, zone) is not { } first) continue;
-                foreach (var at in Rings(first, alarm, toUtc))
+                foreach (var at in Rings(first, alarm, fromUtc, toUtc))
                     if (at >= fromUtc && at < toUtc) return true;
             }
         }
@@ -115,23 +115,35 @@ internal static class OccurrenceExpander
     /// The instants one alarm rings at: its trigger, then RFC 5545 § 3.8.6.2's REPEAT more, spaced
     /// by DURATION — the two are inseparable, and either alone rings once. The count is bounded by
     /// the window rather than by the file: a REPEAT of a million is a body a client may send, and a
-    /// query must stay finite whatever it is handed. <paramref name="toUtc"/> ends the sequence —
-    /// a positive spacing makes it monotonic, so once one ring is past the window none can fall
-    /// back inside — and <see cref="MaxRings"/> backstops a window that has no end.
+    /// query must stay finite whatever it is handed. A positive spacing makes the sequence
+    /// arithmetic and monotonic, so the rings before <paramref name="fromUtc"/> are counted rather
+    /// than walked and the first past <paramref name="toUtc"/> ends it — two the window bounds,
+    /// whatever the file names. <see cref="MaxRings"/> backstops a window that has no end.
     /// </summary>
-    private static IEnumerable<DateTime> Rings(DateTime first, Alarm alarm, DateTime toUtc)
+    private static IEnumerable<DateTime> Rings(DateTime first, Alarm alarm, DateTime fromUtc, DateTime toUtc)
     {
         yield return first;
         if (alarm.Repeat <= 0 || alarm.Duration is not { } spacing) yield break;
         if (ToTimeSpan(spacing) is not { } step || step <= TimeSpan.Zero) yield break;
 
-        var at = first;
-        for (var i = 0; i < Math.Min(alarm.Repeat, MaxRings); i++)
+        var skipped = Skipped(first, fromUtc, step);
+        var at = Shift(first, TimeSpan.FromTicks(skipped * step.Ticks));
+        for (var i = skipped; i < Math.Min(alarm.Repeat, MaxRings); i++)
         {
             at = Shift(at, step);
             if (at >= toUtc) yield break;
             yield return at;
         }
+    }
+
+    /// <summary>How many rings fall STRICTLY before the window, so that the walk resumes on the
+    /// last of them and the very next one is the first the window can hold. The ring landing on
+    /// <paramref name="fromUtc"/> itself is never among them: <c>[fromUtc, toUtc[</c> is closed on
+    /// its left, which is why the count is taken a tick short of the bound.</summary>
+    private static long Skipped(DateTime first, DateTime fromUtc, TimeSpan step)
+    {
+        var distance = (fromUtc - first).Ticks;
+        return distance <= 0 ? 0 : (distance - 1) / step.Ticks;
     }
 
     /// <summary>Null for a DURATION no TimeSpan holds: an unreadable spacing rings once, never a 500.</summary>
