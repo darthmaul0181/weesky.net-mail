@@ -79,10 +79,23 @@ describe('RecurrenceEditor', () => {
 
   it('ends on a date', async () => {
     const onChange = draw({ ...WEEKLY, end: 'Until', until: '2026-12-20' })
-    expect(screen.getByLabelText('End date')).toHaveValue('2026-12-20')
-    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2027-01-31' } })
+    expect(screen.getByLabelText('Repeat until')).toHaveValue('2026-12-20')
+    fireEvent.change(screen.getByLabelText('Repeat until'), { target: { value: '2027-01-31' } })
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ end: 'Until', until: '2027-01-31' }))
+  })
+
+  it('keeps the counter and the date drawn, disabled, while another choice is active', () => {
+    draw({ ...WEEKLY, end: 'Count', count: 4 })
+    expect(screen.getByLabelText('Number of times')).toBeEnabled()
+    expect(screen.getByLabelText('Repeat until')).toBeDisabled()
+  })
+
+  it('remembers the date it was given rather than falling back on the start', async () => {
+    const onChange = draw({ ...WEEKLY, end: 'Count', count: 4, until: '2026-12-20' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Until' }))
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ end: 'Until', until: '2026-12-20', count: undefined }))
   })
 
   it('drops the day boxes when the rule is not weekly', () => {

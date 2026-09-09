@@ -79,6 +79,31 @@ describe('EventEditor', () => {
     expect(screen.getByLabelText('End time')).toHaveValue('10:00')
   })
 
+  // A free end date beside a running series names the end of ONE occurrence, which every reader
+  // takes for the end of the series: a 3-month event repeated weekly overlapped itself ten deep.
+  it('swaps the end date for a day offset once the event repeats', async () => {
+    draw()
+    expect(screen.getByLabelText('End date')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Repeat'), 'weekly')
+    expect(screen.queryByLabelText('End date')).toBeNull()
+    expect(screen.getByLabelText('End day')).toHaveValue('0')
+  })
+
+  it('moves the end date by the offset that is picked', async () => {
+    draw({ initial: form({ repeat: { kind: 'weekly' } }) })
+    await userEvent.selectOptions(screen.getByLabelText('End day'), '2')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByLabelText('End day')).toHaveValue('2')
+  })
+
+  // Clamping would silently rewrite a series another client wrote; the odd span is offered back
+  // as its own option instead, which is what makes it visible and correctable.
+  it('carries a span the list does not hold as an option of its own', () => {
+    draw({ initial: form({ repeat: { kind: 'weekly' }, endDate: '2026-12-08' }) })
+    expect(screen.getByLabelText('End day')).toHaveValue('85')
+    expect(screen.getByRole('option', { name: '85 days later' })).toBeInTheDocument()
+  })
+
   it('reads a repeat rule back under the picker', () => {
     draw({
       initial: form({

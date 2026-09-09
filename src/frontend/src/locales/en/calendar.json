@@ -86,6 +86,11 @@
     "startTime": "Start time",
     "endDate": "End date",
     "endTime": "End time",
+    "endOffset": "End day",
+    "endSameDay": "the same day",
+    "endNextDay": "the next day",
+    "endAfterDays_one": "{{count}} day later",
+    "endAfterDays_other": "{{count}} days later",
     "timesIn": "Times in {{zone}}",
     "replaceRepeat": "Replace",
     "organizer": "Organiser",
@@ -175,8 +180,9 @@
     "ends": "Ends",
     "endNever": "Never",
     "endCount": "After",
-    "endUntil": "On",
+    "endUntil": "Until",
     "times": "times",
+    "countValue": "Number of times",
     "unitLabel": "Unit",
     "unitDay_one": "day",
     "unitDay_other": "days",
@@ -188,7 +194,7 @@
     "unitYear_other": "years",
     "positionLabel": "Position",
     "weekdayLabel": "Weekday",
-    "untilDate": "End date"
+    "untilDate": "Repeat until"
   },
   "dialogs": {
     "newCalendar": "New calendar",

@@ -41,6 +41,10 @@ const DEFAULT_RULE: RecurrenceWrite = {
   frequency: 'WEEKLY', interval: 1, byDay: [], end: 'Never',
 }
 
+/** What "Ends" offers while a series runs. A week is the ceiling because an occurrence longer
+    than its own interval overlaps the next one, which is the confusion this row removes. */
+const END_OFFSETS = [0, 1, 2, 3, 4, 5, 6, 7]
+
 const CLOCK = /^\d{2}:\d{2}$/
 const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
 
@@ -87,6 +91,10 @@ export default function EventEditor({
   const rule = ruleOf(form.repeat)
   const locked = detail != null && !detail.repeatIsExact && form.keepRepeat
   const title = detail ? t('editor.editTitle') : t('editor.newTitle')
+  const span = daysBetween(form.startDate, form.endDate)
+  // A half-typed date box answers NaN, and a negative span is the error the submit reports: both
+  // want the date input back, or the select would hold a value none of its options carries.
+  const offsetEnd = (locked || form.repeat.kind !== 'never') && Number.isInteger(span) && span >= 0
 
   // The key rather than `t(key)`: a key reaching t() as a variable is invisible to the typed
   // guard and to src/locales/keys.test.ts alike.
@@ -185,10 +193,24 @@ export default function EventEditor({
           )}
         </div>
 
+        {/* While a series runs, the end is a day offset and not a free date: a date there names
+            the end of ONE occurrence, which every reader takes for the end of the series — the
+            shipped defect was a 3-month event repeated weekly, ten of them overlapping every day.
+            An existing span the list does not hold is added to it rather than clamped away. */}
         <div className="field-h">
           <label htmlFor="event-end-date">{t('editor.end')}</label>
-          <input id="event-end-date" type="date" required aria-label={t('editor.endDate')}
-            value={form.endDate} onChange={event => set({ endDate: event.target.value })} />
+          {offsetEnd ? (
+            <select id="event-end-date" aria-label={t('editor.endOffset')} value={span}
+              onChange={event => set({ endDate: addDays(form.startDate, Number(event.target.value)) })}>
+              {(END_OFFSETS.includes(span) ? END_OFFSETS : [...END_OFFSETS, span])
+                .map(days => (
+                  <option key={days} value={days}>{offsetLabel(days, t)}</option>
+                ))}
+            </select>
+          ) : (
+            <input id="event-end-date" type="date" required aria-label={t('editor.endDate')}
+              value={form.endDate} onChange={event => set({ endDate: event.target.value })} />
+          )}
           {!form.isAllDay && (
             <input type="time" required aria-label={t('editor.endTime')} value={form.endTime}
               onChange={event => set({ endTime: event.target.value })} />
@@ -331,6 +353,12 @@ export default function EventEditor({
       </form>
     </>
   )
+}
+
+function offsetLabel(days: number, t: TFunction<'calendar'>) {
+  if (days === 0) return t('editor.endSameDay')
+  if (days === 1) return t('editor.endNextDay')
+  return t('editor.endAfterDays', { count: days })
 }
 
 // Spelled out rather than `t(`repeat.${kind}`)`: a key reaching t() as a variable is invisible to

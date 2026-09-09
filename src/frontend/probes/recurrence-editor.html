@@ -1,0 +1,182 @@
+<!doctype html>
+<!--
+  Probe: the event editor's recurrence block, after "Ends" was split onto two lines.
+
+  Three things no test in this repo can see. The dialog is content-sized (modal.css), so the block
+  is what decides its width: read `modal` and check the end lines are not what overflows. The two
+  `.recurrence-end-line` boxes must each stay on ONE line — `nowrap` is what pairs "Until" with its
+  date — so read their heights, not only their widths. And the phone tier gives `.modal` the whole
+  screen: at 360 the lines must still not escape it.
+
+  Read at the desktop width: modale 689, bloc 513, ligne 1 241x39, ligne 2 229x41, escape 0 on
+  both. The two lines are what MADE it narrower — the same block with the three choices and the
+  date on one line measured 730. The phone box reads 241 and 229 inside the 332px a 360px screen
+  leaves, escape 0. A `ligne 2 sur UNE ligne` of NON is the regression this file exists for.
+
+  Drive it in Chrome/Edge with device metrics. jsdom computes no layout, so none of this is
+  assertable in the suite. document.title becomes 'probe-done'.
+-->
+<html lang="fr" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — recurrence editor</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/calendar.css" />
+  <style>
+    #out { position: fixed; right: 0; bottom: 0; z-index: 9; max-width: 46ch;
+           white-space: pre; font-family: ui-monospace, monospace; font-size: 11px;
+           background: #fff; color: #000; padding: 8px; }
+  </style>
+</head>
+<body>
+  <div class="modal-overlay">
+    <div class="modal calendar-editor">
+      <div class="modal-header"><span class="modal-title">Nouvel événement</span></div>
+      <form>
+        <div class="field-h">
+          <label for="p-start">Début</label>
+          <input id="p-start" type="date" value="2026-10-05" />
+          <input type="time" value="19:00" aria-label="Heure de début" />
+        </div>
+
+        <div class="field-h">
+          <label for="p-end">Fin</label>
+          <select id="p-end" aria-label="Jour de fin">
+            <option>le jour même</option>
+            <option>le lendemain</option>
+            <option>2 jours plus tard</option>
+          </select>
+          <input type="time" value="20:00" aria-label="Heure de fin" />
+        </div>
+
+        <div class="field-h">
+          <label for="p-repeat">Répéter</label>
+          <select id="p-repeat"><option>Personnalisée</option></select>
+        </div>
+
+        <div class="recurrence-editor">
+          <div class="field-h">
+            <label for="p-interval">Tous les</label>
+            <input id="p-interval" type="number" value="1" class="recurrence-interval" />
+            <select aria-label="Unité"><option>semaines</option></select>
+          </div>
+
+          <div class="field-h">
+            <span class="field-h-label">Le</span>
+            <div class="recurrence-days">
+              <label><input type="checkbox" checked aria-label="lundi" />lun.</label>
+              <label><input type="checkbox" checked aria-label="mardi" />mar.</label>
+              <label><input type="checkbox" aria-label="mercredi" />mer.</label>
+              <label><input type="checkbox" aria-label="jeudi" />jeu.</label>
+              <label><input type="checkbox" aria-label="vendredi" />ven.</label>
+              <label><input type="checkbox" aria-label="samedi" />sam.</label>
+              <label><input type="checkbox" aria-label="dimanche" />dim.</label>
+            </div>
+          </div>
+
+          <div class="field-h">
+            <span class="field-h-label">Se termine</span>
+            <div class="recurrence-end">
+              <div class="recurrence-end-line">
+                <label><input type="radio" name="p-repeat-end" />Jamais</label>
+                <label><input type="radio" name="p-repeat-end" />Après</label>
+                <input type="number" value="10" class="recurrence-interval" disabled
+                       aria-label="Nombre de fois" />
+                <span>fois</span>
+              </div>
+              <div class="recurrence-end-line">
+                <label><input type="radio" name="p-repeat-end" checked />Jusqu’au</label>
+                <input type="date" value="2026-10-27" aria-label="Répéter jusqu’au" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- The phone tier, simulated rather than triggered: a media query answers to the viewport and
+       the platform clamps the window well above 360, so the phone block's own declarations are
+       restated on a 360px box below. Same engine, same declarations, same width — what it cannot
+       prove is that the query fires, which the stylesheet's `639px` already says. -->
+  <div class="phone-sim">
+    <div class="calendar-editor-screen">
+      <form>
+        <div class="recurrence-editor">
+          <div class="field-h">
+            <span class="field-h-label">Se termine</span>
+            <div class="recurrence-end">
+              <div class="recurrence-end-line">
+                <label><input type="radio" name="q-repeat-end" />Jamais</label>
+                <label><input type="radio" name="q-repeat-end" />Après</label>
+                <input type="number" value="10" class="recurrence-interval" disabled
+                       aria-label="Nombre de fois (téléphone)" />
+                <span>fois</span>
+              </div>
+              <div class="recurrence-end-line">
+                <label><input type="radio" name="q-repeat-end" checked />Jusqu’au</label>
+                <input type="date" value="2026-10-27" aria-label="Répéter jusqu’au (téléphone)" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <style>
+    /* The screen is `position: fixed; inset: 0` in the stylesheet — pinned back into the 360px
+       box here so the numbers are the phone's and not the desktop window's. */
+    .phone-sim { width: 360px; overflow: hidden; }
+    .phone-sim .calendar-editor-screen {
+      position: static; inset: auto; width: 360px; padding: 14px; background: var(--surface);
+    }
+    .phone-sim .field-h { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+    .phone-sim .field-h > :is(label, .field-h-label):first-child { flex: 0 0 100%; width: auto; }
+    .phone-sim .recurrence-editor { margin-left: 0; }
+  </style>
+
+  <div id="out">…</div>
+
+  <script>
+    const box = sel => document.querySelector(sel).getBoundingClientRect()
+    const all = sel => [...document.querySelectorAll(sel)].map(el => el.getBoundingClientRect())
+
+    const modal = box('.modal')
+    const block = box('.recurrence-editor')
+    const lines = all('.recurrence-end-line')
+    const days = box('.recurrence-days')
+    const phone = box('.phone-sim .calendar-editor-screen')
+    const phoneLines = all('.phone-sim .recurrence-end-line')
+
+    // A line that wrapped is taller than the tallest control it holds: the date input decides it.
+    const control = box('.recurrence-end-line input[type="date"]').height
+
+    const report = {
+      viewport: `${window.innerWidth} x ${window.innerHeight}`,
+      'modale': Math.ceil(modal.width),
+      'bloc repetition': Math.ceil(block.width),
+      'ligne jours': Math.ceil(days.width),
+      'ligne 1 (jamais/apres)': `${Math.ceil(lines[0].width)} x ${Math.ceil(lines[0].height)}`,
+      'ligne 2 (jusqu au + date)': `${Math.ceil(lines[1].width)} x ${Math.ceil(lines[1].height)}`,
+      'hauteur d un controle': Math.ceil(control),
+      'ligne 2 sur UNE ligne': lines[1].height <= control + 2 ? 'oui' : 'NON — elle a passe a la ligne',
+      'escape droite (bloc)': Math.max(0, Math.ceil(block.right - modal.right)),
+      'escape droite (ligne 2)': Math.max(0, Math.ceil(lines[1].right - modal.right)),
+      '--- tier telephone (360)': '',
+      'ecran': Math.ceil(phone.width),
+      'ligne 1': `${Math.ceil(phoneLines[0].width)} x ${Math.ceil(phoneLines[0].height)}`,
+      'ligne 2': `${Math.ceil(phoneLines[1].width)} x ${Math.ceil(phoneLines[1].height)}`,
+      'ligne 2 sur UNE ligne (tel)':
+        phoneLines[1].height <= control + 2 ? 'oui' : 'NON — elle a passe a la ligne',
+      'escape droite (tel)': Math.max(0, Math.ceil(
+        Math.max(...phoneLines.map(one => one.right)) - phone.right)),
+    }
+    document.getElementById('out').textContent =
+      Object.entries(report).map(([k, v]) => k.padEnd(26) + v).join('\n')
+    document.title = 'probe-done'
+  </script>
+</body>
+</html>

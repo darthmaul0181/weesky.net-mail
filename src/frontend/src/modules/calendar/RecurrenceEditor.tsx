@@ -138,37 +138,42 @@ export default function RecurrenceEditor({ value, startDate, onChange }: Recurre
 
       <div className="field-h">
         <span className="field-h-label">{t('repeat.ends')}</span>
+        {/* Two lines, and the second holds "until" with its date: the three choices plus a real
+            date input come to 435px on one line, which is 223 more than the widest the rest of
+            this block ever asks for. The counter and the date stay drawn while another choice is
+            active — they are remembered values, and a control that comes and goes makes the whole
+            block jump under the pointer. */}
         <div className="recurrence-end">
-          <label>
-            <input type="radio" name="repeat-end" checked={value.end === 'Never'}
-              onChange={() => emit({ end: 'Never', count: undefined, until: undefined })} />
-            {t('repeat.endNever')}
-          </label>
-          <label>
-            <input type="radio" name="repeat-end" checked={value.end === 'Count'}
-              onChange={() => emit({
-                end: 'Count', count: value.count ?? DEFAULT_COUNT, until: undefined,
-              })} />
-            {t('repeat.endCount')}
-          </label>
-          {value.end === 'Count' && (
-            <>
-              <input type="number" min={1} max={999} aria-label={t('repeat.endCount')}
-                value={value.count ?? DEFAULT_COUNT} className="recurrence-interval"
-                onChange={event => emit({ count: Math.max(1, Number(event.target.value) || 1) })} />
-              <span>{t('repeat.times')}</span>
-            </>
-          )}
-          <label>
-            <input type="radio" name="repeat-end" checked={value.end === 'Until'}
-              onChange={() => emit({ end: 'Until', until: startDate, count: undefined })} />
-            {t('repeat.endUntil')}
-          </label>
-          {value.end === 'Until' && (
-            <input type="date" aria-label={t('repeat.untilDate')}
+          <div className="recurrence-end-line">
+            <label>
+              <input type="radio" name="repeat-end" checked={value.end === 'Never'}
+                onChange={() => emit({ end: 'Never', count: undefined, until: undefined })} />
+              {t('repeat.endNever')}
+            </label>
+            <label>
+              <input type="radio" name="repeat-end" checked={value.end === 'Count'}
+                onChange={() => emit({
+                  end: 'Count', count: value.count ?? DEFAULT_COUNT, until: undefined,
+                })} />
+              {t('repeat.endCount')}
+            </label>
+            <input type="number" min={1} max={999} aria-label={t('repeat.countValue')}
+              disabled={value.end !== 'Count'} value={value.count ?? DEFAULT_COUNT}
+              className="recurrence-interval"
+              onChange={event => emit({ count: Math.max(1, Number(event.target.value) || 1) })} />
+            <span>{t('repeat.times')}</span>
+          </div>
+          <div className="recurrence-end-line">
+            <label>
+              <input type="radio" name="repeat-end" checked={value.end === 'Until'}
+                onChange={() => emit({ end: 'Until', until: value.until ?? startDate,
+                  count: undefined })} />
+              {t('repeat.endUntil')}
+            </label>
+            <input type="date" aria-label={t('repeat.untilDate')} disabled={value.end !== 'Until'}
               value={(value.until ?? startDate).slice(0, 10)}
               onChange={event => emit({ until: event.target.value })} />
-          )}
+          </div>
         </div>
       </div>
     </div>
