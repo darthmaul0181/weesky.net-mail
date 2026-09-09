@@ -669,6 +669,48 @@ describe('CalendarLayout', () => {
     expect(screen.queryByRole('dialog', { name: 'Stand-up' })).toBeNull()
   })
 
+  // Deleting from the bubble asks the same scope question the editor does, and reads the detail
+  // the bubble's own fetch already put in the cache — never the raw rule `one.recurrenceText`
+  // carries, which `deletePreviewed` never even reads any more.
+  it('asks the delete scope with the worded rule, never the raw one, from the bubble', async () => {
+    const one = {
+      ...floating('e1', 'Dentist', '2026-09-16T09:00:00'),
+      recurrenceText: 'FREQ=MONTHLY;INTERVAL=6',
+    }
+    api.getOccurrences.mockResolvedValue({ occurrences: [one] })
+    api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
+    renderAt('/calendar?view=week&date=2026-09-16')
+
+    await userEvent.click(await screen.findByRole('button', { name: /Dentist/ }))
+    const bubble = await screen.findByRole('dialog', { name: 'Dentist' })
+    // Waits for the bubble's own fetch to land — the cache `deletePreviewed` reads from.
+    await waitFor(() => expect(bubble).toHaveTextContent('Every 6 months'))
+
+    await userEvent.click(within(bubble).getByRole('button', { name: 'Delete' }))
+    await screen.findByText('Delete a recurring event')
+    expect(screen.getByText(/repeats/)).toHaveTextContent('Every 6 months')
+    expect(document.body.textContent).not.toMatch(/FREQ=/)
+  })
+
+  it('falls back to the generic label on delete when the cached rule is not exact', async () => {
+    const one = {
+      ...floating('e1', 'Dentist', '2026-09-16T09:00:00'),
+      recurrenceText: 'FREQ=MONTHLY;INTERVAL=6;BYSETPOS=-1',
+    }
+    api.getOccurrences.mockResolvedValue({ occurrences: [one] })
+    api.getEvent.mockResolvedValue({ ...detail({ repeat: REPEAT }), repeatIsExact: false })
+    renderAt('/calendar?view=week&date=2026-09-16')
+
+    await userEvent.click(await screen.findByRole('button', { name: /Dentist/ }))
+    const bubble = await screen.findByRole('dialog', { name: 'Dentist' })
+    await waitFor(() => expect(bubble).toHaveTextContent('Repeats'))
+
+    await userEvent.click(within(bubble).getByRole('button', { name: 'Delete' }))
+    await screen.findByText('Delete a recurring event')
+    expect(screen.getByText(/repeats/)).toHaveTextContent('Repeats')
+    expect(document.body.textContent).not.toMatch(/FREQ=/)
+  })
+
   it('gives the grid back when the search is cleared', async () => {
     renderAt('/calendar?view=week&date=2026-09-16')
     await screen.findByRole('searchbox', { name: 'Search events' })
@@ -722,11 +764,33 @@ describe('CalendarLayout — the grid gestures', () => {
 
     await dragChip(/Dentist/, 56)
 
+    // The detail `loadDetail` just fetched is what words the question — never a raw stored rule,
+    // which this occurrence carries none of in the fixture anyway.
+    await screen.findByText('Save a recurring event')
+    expect(screen.getByText(/repeats/)).toHaveTextContent('Every 6 months')
+    expect(document.body.textContent).not.toMatch(/FREQ=/)
+
     await userEvent.click(await screen.findByRole('button', { name: 'This occurrence only' }))
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalled())
     expect(api.updateEvent.mock.calls[0][1]).toMatchObject({
       scope: 'This', instanceId: '2026-09-16T09:00:00', start: '2026-09-16T10:00:00',
     })
+  })
+
+  // A rule the picker cannot draw exactly (`repeatIsExact: false`) gets the generic label on the
+  // drop's scope question too — the regression guard for the whole fix, on the third site.
+  it('asks the scope with the generic label when the fetched rule is not exact', async () => {
+    const one = floating('e1', 'Dentist', '2026-09-16T09:00:00')
+    api.getOccurrences.mockResolvedValue({ occurrences: [one] })
+    api.getEvent.mockResolvedValue({ ...detail({ repeat: REPEAT }), repeatIsExact: false })
+    api.updateEvent.mockResolvedValue({})
+    renderAt('/calendar?view=week&date=2026-09-16')
+
+    await dragChip(/Dentist/, 56)
+
+    await screen.findByText('Save a recurring event')
+    expect(screen.getByText(/repeats/)).toHaveTextContent('Repeats')
+    expect(document.body.textContent).not.toMatch(/FREQ=/)
   })
 
   it('abandons the drop when the scope question is closed', async () => {

@@ -405,8 +405,11 @@ export default function CalendarLayout() {
       // changes calendar, so it has no scope to withhold.
       let scope: EditScope = 'All'
       if (one.instanceId) {
+        // `detail` just landed above, from the cache or a fresh fetch — never the raw stored rule:
+        // the same exact-or-generic split as everywhere else in the module.
+        const rule = detail.repeatIsExact ? detail.fields.repeat : undefined
         const chosen = await askScope('save', one.summary || t('views.noTitle'),
-          one.recurrenceText ?? '')
+          rule ? recurrenceSummary(rule, t, lang, region) : t('preview.repeatsGeneric'))
         if (chosen === null) return
         scope = chosen
       }
@@ -420,7 +423,7 @@ export default function CalendarLayout() {
       release()
       if (pending.current.get(one.eventId) === mine) pending.current.delete(one.eventId)
     }
-  }, [loadDetail, addToast, t, askScope, moveEventAsync])
+  }, [loadDetail, addToast, t, lang, region, askScope, moveEventAsync])
 
   const startGesture = useCallback(() => setPreview(null), [])
   const moveOccurrence = useCallback(
@@ -680,10 +683,22 @@ export default function CalendarLayout() {
       occurrence?.instanceId)
   }
 
+  /** The worded rule for a dialog raised from an `Occurrence` alone — a handler, not a render, so
+      `useEvent` is not available to it and a fetch here would make the dialog wait on the network
+      mid-gesture. Reads whatever `EventDetail` the cache already holds (the bubble's own fetch, or
+      the editor's, very often put it there) and falls back to the generic label exactly as
+      `EventPreview` does: no cached detail, or one whose `repeatIsExact` is false, never the raw
+      stored rule. */
+  function repeatLabelOf(eventId: string): string {
+    const cached = queryClient.getQueryData<EventDetail>(calendarKeys.event(accountId, eventId))
+    const rule = cached?.repeatIsExact ? cached.fields.repeat : undefined
+    return rule ? recurrenceSummary(rule, t, lang, region) : t('preview.repeatsGeneric')
+  }
+
   function deletePreviewed(one: Occurrence) {
     // An occurrence of a series carries its RECURRENCE-ID; a lone event's is empty.
     void askDelete(one.eventId, one.summary || t('views.noTitle'),
-      one.instanceId ? one.recurrenceText ?? '' : null, one.instanceId)
+      one.instanceId ? repeatLabelOf(one.eventId) : null, one.instanceId)
   }
 
   const sidebar = (
