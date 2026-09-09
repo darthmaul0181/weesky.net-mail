@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
@@ -128,8 +128,8 @@ internal static class CalDavProperties
         (DavXml.Apple + "calendar-order", r => FromCalendar(r, DavXml.Apple + "calendar-order",
             c => c.Order.ToString(CultureInfo.InvariantCulture))),
         // A zone the tzdb no longer holds answers 404 rather than throwing: Emit hands the raw id
-        // to Ical.Net, which refuses it, and allprop pours this property — one hand-edited row would
-        // 500 the whole Depth: 1 of the home. IcsComposer guards its own call for the same reason.
+        // to Ical.Net, which refuses it, and a client naming this property over a Depth: 1 home
+        // would 500 on one hand-edited row. IcsComposer guards its own call for the same reason.
         (DavXml.CalDav + "calendar-timezone", r => r.Calendar is { } c
             && IcsTimeZones.IsKnownIana(c.TimeZone)
                 ? new XElement(DavXml.CalDav + "calendar-timezone", TimeZoneDocument(c.TimeZone, year))
