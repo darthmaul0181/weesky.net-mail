@@ -212,6 +212,16 @@ grid invites. The second waits and reads the version the first wrote. A drop on 
 scope question first, through `askScope`, which is a **promise**: the layout owns the one dialog
 and three callers await its answer, `null` being the ✕ and nothing written.
 
+**A click on the empty part of a month cell creates, and the chips around it name the hour.** A
+month cell names a day and no hour, so the one hint there is is where the click lands among the
+timed chips, which are stacked in order: below a chip, the new event starts when that one ends
+(rounded up to the quarter); above the first, it ends when that one starts; on a day with no
+timed chip, nine to ten. Bands carry no hour and are skipped. A click that started on a chip or
+on the *+N more* count is theirs — they are buttons whose clicks bubble to the cell, and
+`closest('.event-chip, .month-more')` is what tells the two apart — and a click while a bubble
+stands is spent closing it, the hour grid's own rule. The rectangles are read at the click, as
+the bubble's are; jsdom has none, so the test pins them.
+
 **The bubble is a highlight, a swallowed click and a rectangle.** `selectedKey` — the previewed
 occurrence's `eventId#instanceId` — goes to every stage, so *every* chip of that occurrence lights
 under an open bubble, both halves of an evening running to 02:00 included; the same pairing is what

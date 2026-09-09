@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import MonthView from './MonthView'
@@ -19,11 +19,25 @@ function tentative(id: string, summary: string): Occurrence {
   })
 }
 
-function month(visible: Occurrence[], overrides = {}) {
+function month(visible: Occurrence[], overrides = {}, props = {}) {
   return renderInCalendar(
-    <MonthView onOpen={noop} onOpenEditor={noop} />,
+    <MonthView onOpen={noop} onOpenEditor={noop} {...props} />,
     { visible, anchor: '2026-09-16', view: 'month', ...overrides })
 }
+
+/** The cell of 16 September, and a chip's box pinned so a click can land above or below it —
+    jsdom lays nothing out, so the rectangles are the test's own. */
+function cellOf16() {
+  return [...document.querySelectorAll<HTMLElement>('.month-cell')]
+    .find(cell => cell.querySelector('.month-day-number')?.textContent === '16'
+      && !cell.classList.contains('is-outside'))!
+}
+function pin(el: Element, top: number, bottom: number) {
+  Object.defineProperty(el, 'getBoundingClientRect', {
+    value: () => ({ top, bottom, left: 0, right: 100, width: 100, height: bottom - top }),
+  })
+}
+const hourOf = (iso: string) => new Date(iso).getUTCHours()
 
 describe('MonthView', () => {
   it('always draws the six rows the grid holds', () => {
@@ -77,6 +91,43 @@ describe('MonthView', () => {
     })])
 
     expect(screen.getAllByText('Party')).toHaveLength(1)
+  })
+
+  // A month cell names a day and no hour: a click on its empty part opens nine to ten there.
+  it('opens an hour at nine on a click on an empty cell', async () => {
+    const createAt = vi.fn()
+    month([], { createAt })
+    await userEvent.click(cellOf16())
+    expect(createAt).toHaveBeenCalledTimes(1)
+    const [start, end, allDay] = createAt.mock.calls[0]
+    expect(hourOf(start.toISOString())).toBe(7)   // 09:00 in Europe/Brussels, UTC+2
+    expect(end.getTime() - start.getTime()).toBe(3_600_000)
+    expect(allDay).toBe(false)
+  })
+
+  // The chips are stacked in order, so where the click lands among them is the one hint there is.
+  it('reads the hour off the chip the click landed under or over', async () => {
+    const createAt = vi.fn()
+    month([dated('e1', 'Stand-up', 10)], { createAt })
+    const cell = cellOf16()
+    pin(cell.querySelector('.event-chip')!, 40, 60)
+
+    fireEvent.click(cell, { clientY: 80 })
+    expect(hourOf(createAt.mock.calls[0][0].toISOString())).toBe(9)   // 11:00, after 10-11
+    fireEvent.click(cell, { clientY: 20 })
+    expect(hourOf(createAt.mock.calls[1][0].toISOString())).toBe(7)   // 09:00, ending at 10
+  })
+
+  it('leaves a click on a chip to the chip, and spends one on an empty cell closing a bubble', async () => {
+    const createAt = vi.fn()
+    const onOpen = vi.fn()
+    renderInCalendar(
+      <MonthView onOpen={onOpen} onOpenEditor={noop} previewOpen />,
+      { visible: [dated('e1', 'Stand-up', 10)], anchor: '2026-09-16', view: 'month', createAt })
+    await userEvent.click(screen.getByRole('button', { name: /Stand-up/ }))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    await userEvent.click(cellOf16())
+    expect(createAt).not.toHaveBeenCalled()
   })
 
   it('opens the day the count was clicked on', async () => {

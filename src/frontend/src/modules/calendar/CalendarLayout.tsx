@@ -749,7 +749,7 @@ export default function CalendarLayout() {
             onOpenEditor={openFromChip} />
         </div>
       )
-      : <MonthView selectedKey={selectedKey} onOpen={openPreview} onOpenEditor={openFromChip} />
+      : <MonthView previewOpen={preview !== null} selectedKey={selectedKey} onOpen={openPreview} onOpenEditor={openFromChip} />
     : view === 'list'
       ? (
         <UpcomingList days={days} selectedKey={selectedKey} onOpen={openPreview}
