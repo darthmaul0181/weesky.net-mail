@@ -139,6 +139,39 @@ public sealed class CalendarPropertyUpdateTests
         Assert.Throws<DavBadRequestException>(() => CalendarPropertyUpdate.Parse(body));
     }
 
+    [Fact]
+    public void RemovingAPropertyThatWasNeverSet_IsNotAnError()
+    {
+        // RFC 4918 § 14.23, word for word: « Specifying the removal of a property that does not
+        // exist is not an error ». We store five properties; removing a sixth removes nothing,
+        // which is precisely what the RFC asks us to answer 200 to — without landing among the
+        // five values a store write would ever see.
+        var update = CalendarPropertyUpdate.Parse(Remove(new XElement(Dead("details"))));
+
+        Assert.Empty(update.Refused);
+        Assert.DoesNotContain(Dead("details"), update.Accepted.Keys);
+        Assert.Contains(Dead("details"), update.RemovedAndAbsent);
+    }
+
+    [Theory]
+    [InlineData("DAV:", "resourcetype")]
+    [InlineData("DAV:", "getetag")]
+    [InlineData("urn:ietf:params:xml:ns:caldav", "supported-calendar-component-set")]
+    public void RemovingAProtectedProperty_IsStillRefused(string ns, string localName)
+    {
+        // RFC 4918 § 15 makes these MUST NOT be modified by a client — never absent, so § 14.23
+        // does not apply to them.
+        var name = XNamespace.Get(ns) + localName;
+
+        var update = CalendarPropertyUpdate.Parse(Remove(new XElement(name)));
+
+        Assert.Empty(update.Accepted);
+        Assert.Empty(update.RemovedAndAbsent);
+        Assert.Equal([name], update.Refused);
+    }
+
+    private static XName Dead(string localName) => XNamespace.Get("http://example.com/ns/") + localName;
+
     private static XDocument Set(params XElement[] properties) =>
         Document(DavXml.Dav + "set", properties);
 

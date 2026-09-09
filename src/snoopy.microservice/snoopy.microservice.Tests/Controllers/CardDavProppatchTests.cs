@@ -58,6 +58,30 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RemovingAPropertyTheBookNeverCarries_Answers200()
+    {
+        // RFC 4918 § 14.23: removing what is not there is not an error. Nothing is stored on this
+        // tree, but a property outside the closed set PROPFIND would 404 on is still not a "live"
+        // one a remove must refuse.
+        var response = await Proppatch(DavPaths.Collection(UserId), RemoveBody(Dead("details")));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal("HTTP/1.1 200 OK",
+            XDocument.Parse(response.Body).Descendants(DavXml.Status).Single().Value);
+    }
+
+    [Fact]
+    public async Task RemovingTheDisplayName_IsStillRefused()
+    {
+        // displayname IS in the book's closed set (served as a fixed constant) — always carried,
+        // so § 14.23 does not apply and § 9.2.1's 403 stands.
+        var response = await Proppatch(DavPaths.Collection(UserId), RemoveBody(DavXml.Dav + "displayname"));
+
+        Assert.Equal("HTTP/1.1 403 Forbidden",
+            XDocument.Parse(response.Body).Descendants(DavXml.Status).Single().Value);
+    }
+
+    [Fact]
     public async Task Proppatch_RefusesEachPropertyIn403()
     {
         var response = await Proppatch(DavPaths.Collection(UserId),
@@ -140,9 +164,10 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
             SetAndRemoveBody(DavXml.Dav + "displayname", DavXml.CardDav + "addressbook-description"));
 
         // § 9.2 names both in one document. Reading only DAV:set answers a client that its removal
-        // succeeded — the propstat it never received.
-        var named = XDocument.Parse(response.Body).Descendants(DavXml.Prop).Single().Elements()
-            .Select(element => element.Name).ToList();
+        // succeeded — the propstat it never received. The two land in separate propstats now that
+        // a DAV:remove of what the book never carried (§ 14.23) is told apart from the DAV:set.
+        var named = XDocument.Parse(response.Body).Descendants(DavXml.Prop)
+            .SelectMany(prop => prop.Elements()).Select(element => element.Name).ToList();
         Assert.Contains(DavXml.Dav + "displayname", named);
         Assert.Contains(DavXml.CardDav + "addressbook-description", named);
     }
@@ -308,6 +333,10 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
 
     private static string SetAndRemoveBody(XName set, XName removed) =>
         Update([(set, "X")], [removed]);
+
+    /// <summary>A name in a namespace that is neither DAV:, CardDAV nor CalendarServer's — a
+    /// property this server never stores, whatever the client calls it.</summary>
+    private static XName Dead(string localName) => XNamespace.Get("http://example.com/ns/") + localName;
 
     private static string Update((XName Name, string Value)[] set, XName[] removed)
     {

@@ -178,18 +178,22 @@ public abstract class DavControllerBase(PreferencesDbContext preferences, ILogge
     /// PROPPATCH is the one non-mutating method that is NOT a 405, on every shape the <c>Allow</c>
     /// header announces it on: RFC 4918 § 9.2 requires it of every conforming resource, and Apple's
     /// Contacts.app PROPPATCHes <c>{calendarserver}me-card</c> on the address HOME — sabre documents
-    /// that refusing it can make that client crash. The answer is § 9.2.1's for a property one does
-    /// not let write, a 207 whose every propstat carries 403, and nothing is stored on the way
-    /// through. Virtual for the one shape whose properties ARE written from a client.
+    /// that refusing it can make that client crash. Nothing is ever stored here, so a <c>DAV:set</c>
+    /// stays § 9.2.1's blanket 403 whatever it names. A <c>DAV:remove</c> is judged against the
+    /// shape's own closed property set — the one <see cref="Resolve"/> already serves PROPFIND
+    /// from: a name it does not carry is not there, and § 14.23 says removing what is not there is
+    /// not an error, while a name it does carry is either protected or live and stays a 403. Virtual
+    /// for the one shape whose properties ARE written from a client.
     /// </summary>
     private protected virtual Task ProppatchAsync(DavResourceKind kind, Guid? userId, string? collectionName,
         string? davName, string? rootHref, CancellationToken cancellationToken) =>
         TracedAsync(userId, kind, async trace =>
         {
-            IReadOnlyList<XName> names;
+            IReadOnlyList<XName> setNames;
+            IReadOnlyList<XName> removeNames;
             try
             {
-                names = DavPropertyUpdate.NamesIn(
+                (setNames, removeNames) = DavPropertyUpdate.NamesIn(
                     await DavXmlReader.ParseAsync(Request.Body, cancellationToken, logger));
             }
             catch (DavBadRequestException ex)
@@ -198,17 +202,25 @@ public abstract class DavControllerBase(PreferencesDbContext preferences, ILogge
                 return;
             }
 
+            // The removed names double as a property request, so the 404-would-be Missing list
+            // below is read off the very table PROPFIND resolves against.
+            var probe = new DavPropertyRequest(DavPropertyMode.Named, removeNames);
+
             // Answering 207 on a name that designates nothing would tell the client the member
             // exists — the same lie PROPFIND and GET refuse to tell here.
-            if (await ContextOrNotFoundAsync(kind, collectionName, davName, null, cancellationToken)
-                is null)
+            if (await ContextOrNotFoundAsync(kind, collectionName, davName, probe, cancellationToken)
+                is not { } resource)
             {
                 return;
             }
 
+            var absent = Resolve(probe, resource).Missing;
+            IReadOnlyList<XName> ok = [.. removeNames.Where(absent.Contains)];
+            IReadOnlyList<XName> refused = [.. setNames, .. removeNames.Except(ok)];
+
             await using var writer = await MultiStatusWriter.BeginAsync(Response, cancellationToken);
-            await writer.WriteRefusalAsync(
-                HrefOf(kind, AuthenticatedUser.WebmailUid, collectionName, davName, rootHref), names,
+            await writer.WriteMixedAsync(
+                HrefOf(kind, AuthenticatedUser.WebmailUid, collectionName, davName, rootHref), ok, refused,
                 cancellationToken);
             trace.Responses = writer.ResponseCount;
         }, collectionName);

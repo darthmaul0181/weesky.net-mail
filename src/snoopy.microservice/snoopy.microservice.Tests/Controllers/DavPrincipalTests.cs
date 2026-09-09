@@ -146,6 +146,38 @@ public sealed class DavPrincipalTests
     }
 
     [Fact]
+    public async Task Proppatch_RemovingAPropertyThatWasNeverSet_Answers200()
+    {
+        // The shared refusal path (DavControllerBase.ProppatchAsync) carries RFC 4918 § 14.23 too:
+        // removing what this shape does not carry at all is not an error.
+        await using var server = await DavTestServer.StartAsync();
+
+        var response = await server.SendAsync("PROPPATCH", DavPaths.Principal(server.UserId),
+            RemoveBody(Dead("details")));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Contains("200", StatusOf(response, Dead("details")));
+    }
+
+    [Fact]
+    public async Task Proppatch_RemovingTheCalendarUserAddressSet_IsStillRefused()
+    {
+        // Its factory reads the account's domains, gathered here for the same reason PROPFIND
+        // gathers them (AddressesOrNullAsync): a remove of a live property must not read as
+        // absent merely because nothing had fetched its value yet.
+        await using var server = await DavTestServer.StartAsync(
+            email: "Someone@weesky.be",
+            overrides: services => services
+                .WithDomains("weesky.be", "weesky.net")
+                .WithSendingIdentities("someone@weesky.be", "Sales@weesky.net", "me@example.org"));
+
+        var response = await server.SendAsync("PROPPATCH", DavPaths.Principal(server.UserId),
+            RemoveBody(DavXml.CalDav + "calendar-user-address-set"));
+
+        Assert.Contains("403", StatusOf(response, DavXml.CalDav + "calendar-user-address-set"));
+    }
+
+    [Fact]
     public async Task AnExpandPropertyNestedOnTheCalendarHomeSet_Resolves()
     {
         await using var server = await DavTestServer.StartAsync();
@@ -188,6 +220,14 @@ public sealed class DavPrincipalTests
     private static string PropBody(params XName[] names) =>
         new XElement(DavXml.Dav + "propfind",
             new XElement(DavXml.Prop, names.Select(name => new XElement(name)))).ToString();
+
+    private static string RemoveBody(XName name) =>
+        new XElement(DavXml.Dav + "propertyupdate",
+            new XElement(DavXml.Dav + "remove", new XElement(DavXml.Prop, new XElement(name)))).ToString();
+
+    /// <summary>A name in a namespace that is neither DAV:, CalDAV nor CardDAV's — a property this
+    /// server never stores, whatever the client calls it.</summary>
+    private static XName Dead(string localName) => XNamespace.Get("http://example.com/ns/") + localName;
 
     private static string? HrefOf(DavTestResponse response, XName property) =>
         XDocument.Parse(response.Body).Descendants(property)

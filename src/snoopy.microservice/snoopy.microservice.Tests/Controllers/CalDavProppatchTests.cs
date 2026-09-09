@@ -116,6 +116,21 @@ public sealed class CalDavProppatchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RemovingAPropertyThatWasNeverSet_Answers200InItsPropstat()
+    {
+        // RFC 4918 § 14.23: removing what is not there is not an error. errors.xml/proppatch.xml
+        // "prop patches" t2/t3 and "prop patch property attributes" t2 measured this as a 403.
+        var response = await Proppatch(DavPaths.Calendar(UserId, "work"),
+            Remove(new XElement(Dead("details"))));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal("HTTP/1.1 200 OK",
+            XDocument.Parse(response.Body).Descendants(DavXml.Status).Single().Value);
+        Assert.Equal(Dead("details"),
+            XDocument.Parse(response.Body).Descendants(DavXml.Prop).Single().Elements().Single().Name);
+    }
+
+    [Fact]
     public async Task RemovingTheDisplayName_Is403AndChangesNothing()
     {
         var response = await Proppatch(DavPaths.Calendar(UserId, "work"),
@@ -183,6 +198,33 @@ public sealed class CalDavProppatchTests : IAsyncLifetime
             Assert.Single(propstats).Element(DavXml.Status)!.Value);
     }
 
+    [Theory]
+    [InlineData("collection")]
+    [InlineData("home")]
+    [InlineData("event")]
+    public async Task EveryOtherShape_AlsoAnswers200ToRemovingAPropertyThatWasNeverSet(string shape)
+    {
+        // The shared refusal path (DavControllerBase.ProppatchAsync) carries the same § 14.23
+        // fix: a remove of a live property (resourcetype, § 15 protected and common to all three
+        // shapes) still 403s, a remove of a dead one 200s.
+        await GivenAnEvent();
+        var path = shape switch
+        {
+            "collection" => DavPaths.CalendarCollection,
+            "home" => DavPaths.CalendarHome(UserId),
+            _ => DavPaths.Event(UserId, "work", "a.ics"),
+        };
+
+        var response = await Proppatch(path, Remove(
+            new XElement(DavXml.Dav + "resourcetype"), new XElement(Dead("details"))));
+
+        Assert.Equal(207, response.StatusCode);
+        var propstats = XDocument.Parse(response.Body).Descendants(DavXml.PropStat).ToList();
+        Assert.Equal(["HTTP/1.1 200 OK", "HTTP/1.1 403 Forbidden"],
+            propstats.Select(p => p.Element(DavXml.Status)!.Value));
+        Assert.Equal(Dead("details"), propstats[0].Element(DavXml.Prop)!.Elements().Single().Name);
+    }
+
     [Fact]
     public async Task ACalendarTimezoneCarryingAVEvent_IsRefusedAndNothingOfItIsStored()
     {
@@ -211,6 +253,10 @@ public sealed class CalDavProppatchTests : IAsyncLifetime
     private static XElement Update(XName instruction, XElement[] properties) =>
         new(DavXml.Dav + "propertyupdate",
             new XElement(instruction, new XElement(DavXml.Prop, properties)));
+
+    /// <summary>A name in a namespace that is neither DAV:, CalDAV nor Apple's — a property this
+    /// server never stores, whatever the client calls it.</summary>
+    private static XName Dead(string localName) => XNamespace.Get("http://example.com/ns/") + localName;
 
     private async Task<string> CtagAndToken()
     {

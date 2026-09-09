@@ -3,10 +3,11 @@ using System.Xml.Linq;
 namespace weesky.Snoopy.Microservice.Services.Dav;
 
 /// <summary>
-/// The property NAMES a PROPPATCH body asks to write or to erase (RFC 4918 § 9.2) — both
-/// <c>DAV:set</c> and <c>DAV:remove</c>, in the order the document writes them, each name once.
-/// No value is ever read, because nothing is stored: the answer to every one of these names is
-/// § 9.2.1's <c>403 Forbidden</c>.
+/// The property NAMES a PROPPATCH body asks to write or to erase (RFC 4918 § 9.2), split by
+/// instruction: nothing here is ever stored, so a <c>DAV:set</c> stays § 9.2.1's <c>403
+/// Forbidden</c> whatever it names, but a <c>DAV:remove</c> of a property this shape does not
+/// carry is § 14.23's "not an error" — the caller judges that half against its own closed set,
+/// this type only tells the two instructions apart.
 /// </summary>
 internal static class DavPropertyUpdate
 {
@@ -20,23 +21,36 @@ internal static class DavPropertyUpdate
     /// RFC's own examples and fails against the first real client.
     /// </summary>
     /// <param name="document">the parsed body, or null when it was empty</param>
+    /// <returns>
+    /// The names of <c>DAV:set</c>, and of <c>DAV:remove</c>, each in document order and each
+    /// name once: first judgement wins, so a name in both keeps only the earlier instruction's.
+    /// </returns>
     /// <exception cref="DavBadRequestException">
     /// The body is absent or is not a <c>DAV:propertyupdate</c>. § 9.2 requires one, and a request
     /// naming nothing to change is a client bug worth telling apart from one whose properties were
     /// all refused — which is what a 207 full of 403s would say instead.
     /// </exception>
-    internal static IReadOnlyList<XName> NamesIn(XDocument? document)
+    internal static (IReadOnlyList<XName> SetNames, IReadOnlyList<XName> RemoveNames) NamesIn(
+        XDocument? document)
     {
         if (document?.Root is not { } root || root.Name != PropertyUpdate)
             throw new DavBadRequestException("A PROPPATCH body must be a DAV:propertyupdate document.");
 
-        return
-        [
-            .. root.Elements().Where(child => child.Name == Set || child.Name == Remove)
-                .SelectMany(child => child.Elements(DavXml.Prop))
-                .SelectMany(prop => prop.Elements())
-                .Select(property => property.Name)
-                .Distinct()
-        ];
+        List<XName> set = [];
+        List<XName> remove = [];
+
+        foreach (var instruction in root.Elements())
+        {
+            if (instruction.Name != Set && instruction.Name != Remove) continue;
+            var target = instruction.Name == Remove ? remove : set;
+
+            foreach (var property in instruction.Elements(DavXml.Prop).SelectMany(prop => prop.Elements()))
+            {
+                if (set.Contains(property.Name) || remove.Contains(property.Name)) continue;
+                target.Add(property.Name);
+            }
+        }
+
+        return (set, remove);
     }
 }

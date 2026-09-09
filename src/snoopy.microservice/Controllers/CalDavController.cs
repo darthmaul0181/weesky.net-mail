@@ -530,10 +530,13 @@ public sealed class CalDavController(
                 AuthenticatedUser.WebmailUid, calendar.Id, Written(calendar, update),
                 cancellationToken)).IsSuccess;
 
-            // Listed in the table's own order and not the dictionary's, which no host promises.
+            // Listed in the table's own order and not the dictionary's, which no host promises. A
+            // dead property a DAV:remove named joins the 200s too (RFC 4918 § 14.23) — it was never
+            // written, so its status does not depend on whether the store write above succeeded any
+            // more than it depends on the write happening at all.
             IReadOnlyList<XName> ok = stored
-                ? [.. CalendarPropertyValue.Writable.Where(update.Accepted.ContainsKey)]
-                : [];
+                ? [.. CalendarPropertyValue.Writable.Where(update.Accepted.ContainsKey), .. update.RemovedAndAbsent]
+                : [.. update.RemovedAndAbsent];
             IReadOnlyList<XName> refused = stored
                 ? update.Refused
                 : [.. CalendarPropertyValue.Writable.Where(update.Accepted.ContainsKey), .. update.Refused];

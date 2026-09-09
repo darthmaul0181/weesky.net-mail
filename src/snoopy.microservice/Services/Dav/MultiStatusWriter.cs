@@ -205,18 +205,6 @@ internal sealed class MultiStatusWriter : IAsyncDisposable
     }
 
     /// <summary>
-    /// One <c>response</c> whose single <c>propstat</c> refuses every named property with 403 —
-    /// RFC 4918 § 9.2.1's answer for a property a server does not let a client write. The names
-    /// carry no value: a <c>propstat</c>'s <c>prop</c> names properties, it never restates them.
-    /// An empty list — a grammatically valid <c>propertyupdate</c> naming nothing — writes no
-    /// propstat at all, and then the bare status of § 14.24, exactly as
-    /// <see cref="WriteResourceAsync"/> does: nothing was refused when nothing was asked, but an
-    /// href on its own is still a response no conforming client can read.
-    /// </summary>
-    internal Task WriteRefusalAsync(string href, IReadOnlyList<XName> names,
-        CancellationToken cancellationToken) => WriteMixedAsync(href, [], names, cancellationToken);
-
-    /// <summary>
     /// One <c>response</c> carrying both statuses of a PROPPATCH that stored some of what it was
     /// handed: § 9.2's answer when a property is refused on its own and the others are written.
     /// </summary>
