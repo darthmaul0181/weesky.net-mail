@@ -27,6 +27,8 @@ internal static class CalDavError
     internal static readonly XName ValidFilter = DavXml.CalDav + "valid-filter";
     internal static readonly XName NumberOfMatchesWithinLimits = DavXml.Dav + "number-of-matches-within-limits";
     internal static readonly XName ValidSyncToken = DavXml.Dav + "valid-sync-token";
+    internal static readonly XName ResourceMustBeNull = DavXml.Dav + "resource-must-be-null";
+    internal static readonly XName CannotModifyProtectedProperty = DavXml.Dav + "cannot-modify-protected-property";
 
 #pragma warning disable CS8524
 

@@ -355,6 +355,28 @@ public sealed class CalDavMkcalendarTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AMkcalendarBodyNamingAProtectedProperty_NamesOnlyWhatTheBodySent()
+    {
+        // 9.2's atomicity is about the properties OF THIS REQUEST: a body naming only getetag,
+        // displayname and calendar-description must not blame calendar-color, calendar-order or
+        // calendar-timezone too - properties the client never sent.
+        var response = await Create("MKCALENDAR", "caltest3b",
+            new XElement(DavXml.Dav + "getetag", "\"x\""),
+            Displayname("Essai"),
+            new XElement(DavXml.CalDav + "calendar-description", "essai"));
+
+        var document = XDocument.Parse(response.Body).Root!;
+        var propstats = document.Descendants(DavXml.Dav + "propstat").ToList();
+        var dependent = propstats.Single(p => p.Element(DavXml.Status)!.Value.Contains("200"))
+            .Element(DavXml.Prop)!.Elements().Select(e => e.Name).ToList();
+        var refused = propstats.Single(p => p.Element(DavXml.Status)!.Value.Contains("403"))
+            .Element(DavXml.Prop)!.Elements().Select(e => e.Name).ToList();
+
+        Assert.Equal([DavXml.Dav + "displayname", DavXml.CalDav + "calendar-description"], dependent);
+        Assert.Equal([DavXml.Dav + "getetag"], refused);
+    }
+
+    [Fact]
     public async Task AMkcalendarBodyNamingAPropertyWeSimplyDoNotServe_StillCreates()
     {
         // calendar-free-busy-set and its like: a client that sends one wants a calendar, not

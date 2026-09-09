@@ -30,10 +30,14 @@ namespace weesky.Snoopy.Microservice.Services.CalDav;
 /// not know is IGNORED, a client sending <c>calendar-free-busy-set</c> wanting a calendar and not
 /// an argument.
 /// </param>
+/// <param name="NamedWritable">
+/// The writable properties the body itself asked for — what an atomic refusal's propstat may name
+/// as failed in dependency, and nothing beyond what the client actually sent.
+/// </param>
 internal sealed record MkCalendarRequest(
     string? DisplayName, string? Description, string? Color, int? Order, string? TimeZoneId,
     bool AsksUnsupportedComponent, bool ResourceTypeRefused, bool TimeZoneRefused,
-    IReadOnlyList<XName> Refused)
+    IReadOnlyList<XName> Refused, IReadOnlyList<XName> NamedWritable)
 {
     private static readonly XName MkCalendar = DavXml.CalDav + "mkcalendar";
     private static readonly XName MkCol = DavXml.Dav + "mkcol";
@@ -43,7 +47,8 @@ internal sealed record MkCalendarRequest(
     private static readonly XName[] Protected =
     [
         DavXml.Dav + "getetag", DavXml.Dav + "getcontentlength", DavXml.Dav + "getlastmodified",
-        DavXml.Dav + "creationdate", DavXml.Dav + "lockdiscovery", DavXml.Dav + "supportedlock",
+        DavXml.Dav + "getcontenttype", DavXml.Dav + "creationdate", DavXml.Dav + "lockdiscovery",
+        DavXml.Dav + "supportedlock",
     ];
 
     /// <param name="body">the parsed body, or null when the request carried none</param>
@@ -55,7 +60,7 @@ internal sealed record MkCalendarRequest(
     internal static MkCalendarRequest Parse(XDocument? body, bool extendedMkcol)
     {
         if (body is null)
-            return new MkCalendarRequest(null, null, null, null, null, false, extendedMkcol, false, []);
+            return new MkCalendarRequest(null, null, null, null, null, false, extendedMkcol, false, [], []);
 
         var root = extendedMkcol ? MkCol : MkCalendar;
         if (body.Root?.Name != root)
@@ -75,7 +80,9 @@ internal sealed record MkCalendarRequest(
         var zone = First(CalendarPropertyValue.TimeZone);
         var components = First(CalendarPropertyValue.ComponentSet);
         var resolved = zone is null ? null : CalendarPropertyValue.Zone(zone.Value);
-        var refused = asked.Select(property => property.Name).Where(Protected.Contains).Distinct().ToList();
+        var askedNames = asked.Select(property => property.Name).Distinct().ToList();
+        var refused = askedNames.Where(Protected.Contains).ToList();
+        var namedWritable = askedNames.Where(CalendarPropertyValue.Writable.Contains).ToList();
 
         return new MkCalendarRequest(
             First(CalendarPropertyValue.DisplayName) is { } name
@@ -96,6 +103,6 @@ internal sealed record MkCalendarRequest(
                 ? extendedMkcol
                 : !CalendarPropertyValue.IsCalendar(resourceType),
             zone is not null && resolved is null,
-            refused);
+            refused, namedWritable);
     }
 }

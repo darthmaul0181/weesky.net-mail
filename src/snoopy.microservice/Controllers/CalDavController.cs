@@ -301,14 +301,14 @@ public sealed class CalDavController(
 
             if (request.Refused.Count > 0)
             {
-                // § 9.2's atomicity: the named property fails, and every other property of the body
-                // fails in dependency — nothing is set, and nothing is created.
+                // § 9.2's atomicity: the named property fails, and every other WRITABLE property the
+                // body itself asked for fails in dependency — never a property the client never sent.
                 await MultiStatusWriter.WriteCreationRefusalAsync(Response,
                     extendedWithBody ? MkcolResponse : MkcalendarResponse,
-                    CalendarPropertyValue.Writable.Except(request.Refused).ToList(),
-                    request.Refused, DavXml.Dav + "cannot-modify-protected-property", cancellationToken);
+                    request.NamedWritable.Except(request.Refused).ToList(),
+                    request.Refused, CalDavError.CannotModifyProtectedProperty, cancellationToken);
                 trace.Responses = 1;
-                trace.Condition = "cannot-modify-protected-property";
+                trace.Condition = CalDavError.CannotModifyProtectedProperty.LocalName;
                 return;
             }
 
@@ -338,8 +338,8 @@ public sealed class CalDavController(
                 // refusal name its precondition, so the client reads a reason and not a code.
                 Response.Headers.Allow = DavHeaders.CalendarAllow;
                 await DavError.WriteAsync(Response, StatusCodes.Status405MethodNotAllowed,
-                    DavXml.Dav + "resource-must-be-null", null, cancellationToken, Logger);
-                trace.Condition = "resource-must-be-null";
+                    CalDavError.ResourceMustBeNull, null, cancellationToken, Logger);
+                trace.Condition = CalDavError.ResourceMustBeNull.LocalName;
                 return;
             }
 
