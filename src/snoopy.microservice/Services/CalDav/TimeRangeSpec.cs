@@ -1,5 +1,8 @@
 namespace weesky.Snoopy.Microservice.Services.CalDav;
 
-/// <summary>A window <c>[FromUtc, ToUtc[</c> with both bounds closed (spec ง 8): an open one was
-/// shut at <see cref="Calendar.OccurrenceExpander.MaxSpan"/> of the other before it got here.</summary>
-internal sealed record TimeRangeSpec(DateTime FromUtc, DateTime ToUtc);
+/// <summary>A window <c>[FromUtc, ToUtc[</c> where a null bound is an infinity, as RFC 4791 ยง 9.9
+/// reads an absent one. <see cref="Closed"/> is for the callers that demanded both.</summary>
+internal sealed record TimeRangeSpec(DateTime? FromUtc, DateTime? ToUtc)
+{
+    internal (DateTime From, DateTime To) Closed => (FromUtc!.Value, ToUtc!.Value);
+}

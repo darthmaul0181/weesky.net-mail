@@ -55,8 +55,9 @@ internal static class CalendarQueryFilter
     private static readonly CalendarQuerySpec Nothing = new(false, true, null, [], []);
 
     /// <summary>Throws <see cref="DavPreconditionException"/> (<c>supported-filter</c>,
-    /// <c>supported-collation</c> or <c>valid-filter</c>) on the forms § 8 refuses. Open bounds
-    /// are closed here, at <see cref="OccurrenceExpander.MaxYears"/> of the other.</summary>
+    /// <c>supported-collation</c> or <c>valid-filter</c>) on the forms § 8 refuses. An absent bound
+    /// stays absent on the VEVENT window and is closed on the VALARM one — see
+    /// <see cref="AbsentBound"/>.</summary>
     internal static CalendarQuerySpec Parse(XElement filter)
     {
         RefuseAnyOf(filter);
@@ -90,25 +91,31 @@ internal static class CalendarQueryFilter
 
     /// <summary>
     /// Strict <c>yyyyMMdd'T'HHmmss'Z'</c>. RFC 4791 § 9.9: a time-range MUST carry at least one of
-    /// start/end — neither is a refusal, never a window invented around now. One missing bound is
-    /// closed at <see cref="OccurrenceExpander.MaxSpan"/> of the other; <paramref name="bothRequired"/>
-    /// demands the two; <c>end ≤ start</c> and a window wider than that span are refused — the cap
-    /// grows with the window, so nothing else bounds what one candidate can make the walk produce.
+    /// start/end — neither is a refusal, never a window invented around now. <paramref name="absent"/>
+    /// says what becomes of the bound the client left out. <c>end ≤ start</c> and a window naming
+    /// BOTH bounds wider than <see cref="OccurrenceExpander.MaxSpan"/> are refused — the cap grows
+    /// with the window, so nothing else bounds what one candidate can make the walk produce.
     /// <paramref name="refusal"/> names the precondition to throw (<c>CALDAV:valid-filter</c>
     /// inside a filter), null for a plain <see cref="DavBadRequestException"/>.
     /// </summary>
-    internal static TimeRangeSpec ParseTimeRange(XElement timeRange, bool bothRequired, XName? refusal)
+    internal static TimeRangeSpec ParseTimeRange(XElement timeRange, AbsentBound absent, XName? refusal)
     {
         var start = Bound(timeRange, "start", refusal);
         var end = Bound(timeRange, "end", refusal);
-        if ((start is null && end is null) || (bothRequired && (start is null || end is null)))
+        if ((start is null && end is null)
+            || (absent is AbsentBound.Refused && (start is null || end is null)))
             throw Refusal(refusal, "A time-range names no bound the report can close.");
 
-        var from = start ?? OccurrenceExpander.Shift(end!.Value, -OccurrenceExpander.MaxSpan);
-        var to = end ?? OccurrenceExpander.Shift(start!.Value, OccurrenceExpander.MaxSpan);
-        if (to <= from) throw Refusal(refusal, "A time-range ends before it starts.");
-        if (to - from > OccurrenceExpander.MaxSpan)
-            throw Refusal(refusal, $"A time-range spans more than the {OccurrenceExpander.MaxYears} years served.");
+        var closes = absent is not AbsentBound.Open;
+        var from = start ?? (closes ? OccurrenceExpander.Shift(end!.Value, -OccurrenceExpander.MaxSpan) : null);
+        var to = end ?? (closes ? OccurrenceExpander.Shift(start!.Value, OccurrenceExpander.MaxSpan) : null);
+        if (from is { } f && to is { } t)
+        {
+            if (t <= f) throw Refusal(refusal, "A time-range ends before it starts.");
+            if (t - f > OccurrenceExpander.MaxSpan)
+                throw Refusal(refusal, $"A time-range spans more than the {OccurrenceExpander.MaxYears} years served.");
+        }
+
         return new TimeRangeSpec(from, to);
     }
 
@@ -207,9 +214,11 @@ internal static class CalendarQueryFilter
     {
         var alarmed = component.Alarms.Count > 0;
         if (filter.IsNotDefined) return !alarmed;
-        return filter.TimeRange is { } range
-            ? alarmed && OccurrenceExpander.AlarmFires(parsed, range.FromUtc, range.ToUtc, calendarTimeZone, component)
-            : alarmed;
+        if (filter.TimeRange is not { } range) return alarmed;
+
+        // AbsentBound.Closed at parse time: this window always names both its bounds.
+        var (fromUtc, toUtc) = range.Closed;
+        return alarmed && OccurrenceExpander.AlarmFires(parsed, fromUtc, toUtc, calendarTimeZone, component);
     }
 
     private static IEnumerable<CalendarParameter> Parameters(ICalendarProperty property, string name) =>
@@ -246,7 +255,7 @@ internal static class CalendarQueryFilter
             if (child.Name == TimeRangeName)
             {
                 if (range is not null) throw Malformed();
-                range = ParseTimeRange(child, false, CalDavError.ValidFilter);
+                range = ParseTimeRange(child, AbsentBound.Open, CalDavError.ValidFilter);
             }
             else if (child.Name == PropFilterName) propFilters.Add(ParsePropFilter(child));
             else if (child.Name == CompFilterName)
@@ -269,7 +278,8 @@ internal static class CalendarQueryFilter
         foreach (var child in element.Elements())
         {
             if (child.Name == IsNotDefinedName) isNotDefined = true;
-            else if (child.Name == TimeRangeName && range is null) range = ParseTimeRange(child, false, CalDavError.ValidFilter);
+            else if (child.Name == TimeRangeName && range is null)
+                range = ParseTimeRange(child, AbsentBound.Closed, CalDavError.ValidFilter);
             else if (child.Name == TimeRangeName) throw Malformed();
             else throw Unsupported();
         }

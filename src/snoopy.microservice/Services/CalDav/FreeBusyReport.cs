@@ -107,7 +107,8 @@ internal static class FreeBusyReport
     {
         if (body.Root?.Element(TimeRangeName) is not { } element)
             throw new DavBadRequestException("A free-busy-query names no time-range.");
-        var range = CalendarQueryFilter.ParseTimeRange(element, bothRequired: true, refusal: null);
+        var (fromUtc, toUtc) = CalendarQueryFilter
+            .ParseTimeRange(element, AbsentBound.Refused, refusal: null).Closed;
 
         // The window is bounded, the TOTAL is not: five thousand resources times the cap of a
         // five-year window is tens of millions of instances, all held here before a single byte is
@@ -115,20 +116,20 @@ internal static class FreeBusyReport
         // report that composes its whole answer in memory, so it is the one that must count.
         // RFC 4791 § 7.10 names the refusal for exactly this case.
         var occurrences = new List<EventOccurrence>();
-        await foreach (var candidate in reader.CandidatesAsync(calendar.Id, range.FromUtc, range.ToUtc,
+        await foreach (var candidate in reader.CandidatesAsync(calendar.Id, fromUtc, toUtc,
             EventColumnFilter.None, upTo, ct).WithCancellation(ct))
         {
             // A stored resource is validated at PUT time; a file that no longer parses here is
             // database corruption, not a client's doing — left out, never a 500.
             if (IcsDocument.TryLoad(candidate.IcsRaw) is not { } parsed) continue;
             occurrences.AddRange(OccurrenceExpander.Expand(Guid.Empty, Guid.Empty, parsed,
-                range.FromUtc, range.ToUtc, calendar.TimeZone, calendar.TimeZone));
+                fromUtc, toUtc, calendar.TimeZone, calendar.TimeZone));
 
             if (occurrences.Count > MaxInstances)
                 throw new DavPreconditionException(CalDavError.NumberOfMatchesWithinLimits);
         }
 
-        var text = Compose(range.FromUtc, range.ToUtc, Periods(occurrences, calendar.TimeZone),
+        var text = Compose(fromUtc, toUtc, Periods(occurrences, calendar.TimeZone),
             clock.GetUtcNow().UtcDateTime);
         var bytes = Encoding.UTF8.GetBytes(text);
         response.StatusCode = StatusCodes.Status200OK;

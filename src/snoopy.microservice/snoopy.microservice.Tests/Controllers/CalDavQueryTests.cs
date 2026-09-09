@@ -97,6 +97,30 @@ public sealed class CalDavQueryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ATimeRangeWithStartAlone_ServesAnEventBeyondTheFiveYearsTheEngineWalks()
+    {
+        // « Renouvellement du passeport », March 2032: the event that used to vanish from the
+        // phone without anything saying so.
+        GivenEvent("passeport.ics", Ics.Single("DTSTART:20320315T090000Z", "DTEND:20320315T100000Z"));
+
+        var response = await Report(Calendar(), QueryBody(VEvent(TimeRange("20260907T000000Z", null))));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Contains(Href("passeport.ics"), HrefsOf(response));
+    }
+
+    [Fact]
+    public async Task AnEndlessSeries_MatchesAnOpenWindow_WithoutBeingWalkedToTheEnd()
+    {
+        GivenEvent("standup.ics", Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T093000Z",
+            "RRULE:FREQ=DAILY"));
+
+        var response = await Report(Calendar(), QueryBody(VEvent(TimeRange("20260907T000000Z", null))));
+
+        Assert.Equal([Href("standup.ics")], HrefsOf(response));
+    }
+
+    [Fact]
     public async Task AnExpandInTheQuery_ServesOneVEventPerInstance()
     {
         GivenEvent("rule.ics", Ics.Rule("FREQ=WEEKLY"));

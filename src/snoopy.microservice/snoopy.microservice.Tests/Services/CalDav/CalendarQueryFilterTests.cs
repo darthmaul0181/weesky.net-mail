@@ -138,39 +138,69 @@ public sealed class CalendarQueryFilterTests
         AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange(start, null)));
 
     [Fact]
-    public void AMissingEnd_IsClosedAtTheEnginesSpanFromTheStart()
+    public void AMissingEnd_StaysMissing()
     {
+        // RFC 4791 § 9.9: « the server assumes unbounded limits in that direction ». Closing at
+        // five years answered wrong without saying so — DAVx5 asks this very question at every
+        // sync, and reports.xml/time-range t13 measures it.
         var spec = CalendarQueryFilter.Parse(VEvent(TimeRange("20260907T090000Z", null)));
 
-        var from = new DateTime(2026, 9, 7, 9, 0, 0, DateTimeKind.Utc);
-        Assert.Equal(new TimeRangeSpec(from, from + OccurrenceExpander.MaxSpan), spec.TimeRange);
+        Assert.Equal(new DateTime(2026, 9, 7, 9, 0, 0, DateTimeKind.Utc), spec.TimeRange!.FromUtc);
+        Assert.Null(spec.TimeRange.ToUtc);
     }
 
     [Fact]
-    public void AMissingStart_IsClosedAtTheEnginesSpanFromTheEnd()
+    public void AMissingStart_StaysMissing()
     {
         var spec = CalendarQueryFilter.Parse(VEvent(TimeRange(null, "20260907T090000Z")));
 
-        var to = new DateTime(2026, 9, 7, 9, 0, 0, DateTimeKind.Utc);
-        Assert.Equal(new TimeRangeSpec(to - OccurrenceExpander.MaxSpan, to), spec.TimeRange);
+        Assert.Null(spec.TimeRange!.FromUtc);
+        Assert.Equal(new DateTime(2026, 9, 7, 9, 0, 0, DateTimeKind.Utc), spec.TimeRange.ToUtc);
     }
 
     [Fact]
     public void AWindowWiderThanTheEnginesSpan_IsMalformed()
     {
-        // The cap grows with the window, so the window itself is the only bound on what one
-        // candidate can make the walk produce — the expand's rule, applied to the time-range.
+        // A window naming BOTH bounds is capped by the window itself, so past MaxSpan nothing
+        // would bound what one candidate makes the walk produce. Assumed: the narrower request is
+        // the only one refused — an absent bound is served open, and the walk caps itself instead.
         AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange("20260101T000000Z", "20320101T000000Z")));
         Assert.NotNull(CalendarQueryFilter.Parse(VEvent(TimeRange("20260101T000000Z", "20301231T000000Z"))).TimeRange);
     }
 
     [Fact]
-    public void ABoundAtTheEdgeOfTime_IsClosedAtTheEdge_NeverAnException()
+    public void ABoundAtTheEdgeOfTime_NeedsNoClosing_AndNeverThrows()
     {
+        // What used to shift MaxSpan past DateTime.MaxValue and be clamped. Nothing is shifted now.
         var spec = CalendarQueryFilter.Parse(VEvent(TimeRange("99991231T000000Z", null)));
 
-        Assert.Equal(DateTime.MaxValue.Ticks, spec.TimeRange!.ToUtc.Ticks);
-        AssertRefused(CalDavError.ValidFilter, VEvent(TimeRange(null, "00010101T000000Z")));
+        Assert.Null(spec.TimeRange!.ToUtc);
+        Assert.NotNull(CalendarQueryFilter.Parse(VEvent(TimeRange(null, "00010101T000000Z"))).TimeRange);
+    }
+
+    [Fact]
+    public void AVAlarmTimeRange_KeepsItsClosure()
+    {
+        // The alarm walk reads a WHOLE window rather than stopping at a first hit; leaving it open
+        // would reread the calendar at every query. Named in the spec as a known non-conformity
+        // that no targeted client exercises.
+        var spec = CalendarQueryFilter.Parse(VEvent(Comp("VALARM", TimeRange("20260907T090000Z", null))));
+
+        var from = new DateTime(2026, 9, 7, 9, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(from + OccurrenceExpander.MaxSpan, spec.AlarmFilters.Single().TimeRange!.ToUtc);
+    }
+
+    [Fact]
+    public void AnOpenWindow_NarrowedToOneComponent_WalksAtMostTheEnginesSpan()
+    {
+        // A prop-filter narrows the walk to one component, and that one cannot stop at a first hit.
+        // Read off the window, the cap here would be 100_000_001 instead of 60_001 — a MINUTELY
+        // rule walked to the end of time for an answer of false.
+        var parsed = Load(Ics.DensityBomb());   // FREQ=MINUTELY, no UNTIL
+        var window = TimeRange("20260907T000000Z", null);
+
+        Assert.True(Matches(parsed, VEvent(window)));
+        Assert.False(Matches(parsed, VEvent(window, Prop("SUMMARY", Text("Tock")))));
     }
 
     [Fact]
@@ -183,12 +213,13 @@ public sealed class CalendarQueryFilterTests
     {
         // FreeBusyReport's contract: both bounds, and a bare 400 rather than valid-filter.
         Assert.Throws<DavBadRequestException>(() =>
-            CalendarQueryFilter.ParseTimeRange(TimeRange("20260907T090000Z", null), true, null));
+            CalendarQueryFilter.ParseTimeRange(TimeRange("20260907T090000Z", null), AbsentBound.Refused, null));
         Assert.Throws<DavBadRequestException>(() =>
-            CalendarQueryFilter.ParseTimeRange(TimeRange(null, null), false, null));
+            CalendarQueryFilter.ParseTimeRange(TimeRange(null, null), AbsentBound.Open, null));
 
-        var both = CalendarQueryFilter.ParseTimeRange(TimeRange("20260907T090000Z", "20260908T090000Z"), true, null);
-        Assert.Equal(TimeSpan.FromDays(1), both.ToUtc - both.FromUtc);
+        var both = CalendarQueryFilter.ParseTimeRange(
+            TimeRange("20260907T090000Z", "20260908T090000Z"), AbsentBound.Refused, null);
+        Assert.Equal(TimeSpan.FromDays(1), both.Closed.To - both.Closed.From);
     }
 
     [Fact]

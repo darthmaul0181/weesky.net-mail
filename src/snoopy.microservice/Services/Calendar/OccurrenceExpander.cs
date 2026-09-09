@@ -58,14 +58,16 @@ internal static class OccurrenceExpander
         string calendarTimeZone, string viewTimeZone) =>
         Over(eventId, calendarId, parsed, fromUtc, toUtc, calendarTimeZone, viewTimeZone).Run();
 
-    /// <summary>Whether one instance at least overlaps <c>[fromUtc, toUtc[</c> — the very walk of
-    /// <see cref="Expand"/>, stopped at the first one found (RFC 4791 § 9.9 on a VEVENT).
-    /// <paramref name="component"/> narrows the instances to those one component sources — the
-    /// one a filter is being judged on — and null takes them all.</summary>
-    internal static bool Overlaps(IcsCalendar parsed, DateTime fromUtc, DateTime toUtc,
+    /// <summary>Whether one instance at least overlaps the window — the very walk of
+    /// <see cref="Expand"/>, stopped at the first one found (RFC 4791 § 9.9 on a VEVENT). A null
+    /// bound is that side's infinity: an endless series always answers an endless question, and the
+    /// walk is lazy. <paramref name="component"/> narrows the instances to those one component
+    /// sources — the one a filter is being judged on — and null takes them all.</summary>
+    internal static bool Overlaps(IcsCalendar parsed, DateTime? fromUtc, DateTime? toUtc,
         string calendarTimeZone, CalendarEvent? component = null)
     {
-        var found = Over(Guid.Empty, Guid.Empty, parsed, fromUtc, toUtc, calendarTimeZone, calendarTimeZone)
+        var found = Over(Guid.Empty, Guid.Empty, parsed, fromUtc ?? DateTime.MinValue,
+                toUtc ?? DateTime.MaxValue, calendarTimeZone, calendarTimeZone)
             .Run(firstOnly: component is null);
         if (component is null) return found.Count > 0;
 
@@ -222,7 +224,11 @@ internal static class OccurrenceExpander
 
         private readonly string? recurrenceText = master?.RecurrenceRule?.ToString();
 
-        private int Cap => CapFor(fromUtc, toUtc);
+        // The cap grows with the window, so an open one would not bound it at all: it is computed
+        // on at most MaxSpan. A no-op for every closed window, all of which are refused past that.
+        private int Cap => CapFor(fromUtc, Min(toUtc, Shift(fromUtc, MaxSpan)));
+
+        private static DateTime Min(DateTime left, DateTime right) => left < right ? left : right;
 
         /// <param name="firstOnly">stop at the first instance overlapping the window — a query
         /// asks whether one exists, never how many</param>

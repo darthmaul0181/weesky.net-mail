@@ -388,7 +388,7 @@ public sealed class AppleDiscoveryReplayTests : IAsyncLifetime
         Assert.Contains("UID:single", data.Value, StringComparison.Ordinal);
     }
 
-    [Fact(Skip = "decision 11 — the expected behaviour only ships with task 10 of this plan")]
+    [Fact]
     public async Task TheIosInitialLoad_ATimeRangeWithStartAlone_ServesAnEventBeyondFiveYears()
     {
         // The shape of the only published iOS calendar-query (sabre): a time-range on the VEVENT
