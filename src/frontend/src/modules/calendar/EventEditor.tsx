@@ -165,11 +165,13 @@ export default function EventEditor({
 
         <div className="field-h">
           <label htmlFor="event-allday">{t('editor.allDay')}</label>
-          <span className="toggle-switch">
+          {/* A label, not a span: the input is 0x0 and .toggle-track covers the painted box, so
+              only label semantics carry a click on the switch itself to the control. */}
+          <label className="toggle-switch">
             <input id="event-allday" type="checkbox" checked={form.isAllDay}
               onChange={event => toggleAllDay(event.target.checked)} />
             <span className="toggle-track" />
-          </span>
+          </label>
         </div>
 
         <div className="field-h">

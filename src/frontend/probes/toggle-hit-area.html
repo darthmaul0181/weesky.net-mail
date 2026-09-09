@@ -1,0 +1,71 @@
+<!doctype html>
+<!--
+  Probe: is the painted toggle switch actually clickable?
+
+  The editor draws `<label for=…>` beside `<span class="toggle-switch">`, whose <input> is
+  0x0 and transparent while `.toggle-track` is `inset: 0` and painted after it. jsdom computes no
+  layout and hit-testing needs one, so the question can only be answered here: what does
+  elementFromPoint return at the centre of the painted switch, and does a click there flip the
+  checkbox? Real markup, real class names, real stylesheets in main.tsx's order.
+
+  Read: `hit` must be the <input> (or an element that forwards to it) and `flipped` must be true.
+  A `hit` of `.toggle-track` means every click on the switch itself is swallowed and only the text
+  label works. document.title becomes 'probe-done'.
+-->
+<html lang="fr" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — toggle hit area</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <style>
+    body { padding: 24px; font: 14px system-ui; }
+    #out { margin-top: 24px; white-space: pre; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <div class="field-h">
+    <label for="event-allday">Journée entière</label>
+    <label class="toggle-switch">
+      <input id="event-allday" type="checkbox" />
+      <span class="toggle-track"></span>
+    </label>
+  </div>
+
+  <div id="out">…</div>
+
+  <script>
+    const input = document.getElementById('event-allday')
+    const paint = document.querySelector('.toggle-track')
+    const box = paint.getBoundingClientRect()
+    const cx = box.left + box.width / 2
+    const cy = box.top + box.height / 2
+
+    const at = document.elementFromPoint(cx, cy)
+    const describe = el => el
+      ? el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+        (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : '')
+      : 'null'
+
+    const before = input.checked
+    at && at.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: cx, clientY: cy }))
+    const flipped = input.checked !== before
+
+    // The text label, for comparison: it is the path that is known to work today.
+    const label = document.querySelector('label[for="event-allday"]')
+    const wasAfterSwitch = input.checked
+    label.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    const labelFlips = input.checked !== wasAfterSwitch
+
+    document.getElementById('out').textContent = [
+      'painted box   : ' + JSON.stringify({ w: box.width, h: box.height }),
+      'input box     : ' + JSON.stringify((({width, height}) => ({ w: width, h: height }))(input.getBoundingClientRect())),
+      'hit at centre : ' + describe(at),
+      'click flips   : ' + flipped,
+      'label flips   : ' + labelFlips,
+    ].join('\n')
+    document.title = 'probe-done'
+  </script>
+</body>
+</html>
