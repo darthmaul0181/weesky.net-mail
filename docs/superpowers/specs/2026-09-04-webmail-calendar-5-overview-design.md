@@ -744,9 +744,9 @@ taille d'une réponse, pas son sens.
    comme les autres, avec ce que le client a su régler ; c'est ici qu'on affine le reste
    (décision 2).
 3. **Éditeur** *(amendé le 2026-09-10)* : titre, agenda, journée entière, début et fin, se
-   répète, rappel(s), lieu. Sous « Plus d'options » : description, disponibilité (Occupé /
-   Provisoire / Libre), visibilité (Par défaut / Privé), adresse web, participants en lecture
-   seule. Le pli existe pour qu'un événement simple se crée sans faire défiler ; une description
+   répète, rappel(s), lieu, disponibilité (Occupé / Provisoire / Libre). Sous « Plus
+   d'options » : description, visibilité (Par défaut / Privé), adresse web, participants en
+   lecture seule. Le pli existe pour qu'un événement simple se crée sans faire défiler ; une description
    déjà remplie l'ouvre d'elle-même, comme tout champ non vide dessous. L'agenda présélectionné
    est le dernier utilisé dans ce navigateur, `default` la première fois ; son sélecteur porte la
    pastille de couleur **dans** la boîte et dans chaque ligne de sa liste, alignée sur « Titre ».

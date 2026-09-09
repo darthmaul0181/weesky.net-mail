@@ -176,8 +176,16 @@ describe('EventEditor', () => {
   // A value that is not the default is a value somebody set: hiding it behind a chevron would
   // make the form say something the event does not.
   it('opens More options when something under it is not the default', () => {
-    draw({ initial: form({ description: '', availability: 'Free' }) })
+    draw({ initial: form({ description: '', visibility: 'Private' }) })
     expect(screen.getByLabelText('Web address')).toBeVisible()
+  })
+
+  // Availability moved up beside the location: it is always drawn, and no longer a reason to
+  // open the chevron.
+  it('draws availability under the location, outside More options', () => {
+    draw({ initial: form({ description: '', availability: 'Free' }) })
+    expect(screen.getByRole('radio', { name: 'Free' })).toBeChecked()
+    expect(screen.queryByLabelText('Web address')).toBeNull()
   })
 
   // The description moved under the chevron; one that holds text is the case above.

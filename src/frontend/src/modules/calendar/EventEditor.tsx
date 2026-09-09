@@ -77,8 +77,7 @@ export default function EventEditor({
   const [form, setForm] = useState(initial)
   const [invalid, setInvalid] = useState<string | null>(null)
   const [more, setMore] = useState(
-    initial.description !== '' || initial.availability !== 'Busy'
-    || initial.visibility !== 'Default' || initial.url !== ''
+    initial.description !== '' || initial.visibility !== 'Default' || initial.url !== ''
     || (detail?.attendees.length ?? 0) > 0)
 
   // Every write goes through `alignEnd`: while a series runs the end date is not the user's to
@@ -259,6 +258,19 @@ export default function EventEditor({
             onChange={event => set({ location: event.target.value })} />
         </div>
 
+        <div className="field-h">
+          <span className="field-h-label">{t('editor.availability')}</span>
+          <div className="seg" role="radiogroup" aria-label={t('editor.availability')}>
+            {(['Busy', 'Tentative', 'Free'] as Availability[]).map(one => (
+              <label key={one}>
+                <input type="radio" name="event-availability" checked={form.availability === one}
+                  onChange={() => set({ availability: one })} />
+                {availabilityLabel(one, t)}
+              </label>
+            ))}
+          </div>
+        </div>
+
         <hr className="editor-rule" />
 
         <button type="button" className="editor-more" aria-expanded={more}
@@ -273,19 +285,6 @@ export default function EventEditor({
               <label htmlFor="event-description">{t('editor.description')}</label>
               <textarea id="event-description" value={form.description}
                 onChange={event => set({ description: event.target.value })} />
-            </div>
-
-            <div className="field-h">
-              <span className="field-h-label">{t('editor.availability')}</span>
-              <div className="seg" role="radiogroup" aria-label={t('editor.availability')}>
-                {(['Busy', 'Tentative', 'Free'] as Availability[]).map(one => (
-                  <label key={one}>
-                    <input type="radio" name="event-availability" checked={form.availability === one}
-                      onChange={() => set({ availability: one })} />
-                    {availabilityLabel(one, t)}
-                  </label>
-                ))}
-              </div>
             </div>
 
             <div className="field-h">

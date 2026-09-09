@@ -362,7 +362,12 @@
 .month-day-number {
   flex: none; align-self: flex-start; display: inline-flex; align-items: center;
   justify-content: center; min-width: 18px; height: 18px; border-radius: 50%;
-  color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--text); font-size: 12px;
+  /* Proportional figures, not the tabular ones the rest of the grid aligns on: a number alone
+     in a disc aligns no column, and a tabular "1" carries its cell's blank with it — "10"
+     drew its ink 0.7px off centre, more under a fractional device scale. Measured at 6x on
+     10, 11, 28 and 5: proportional ink sits within 0.3px of the disc's centre. */
+  font-variant-numeric: normal;
   /* The line box is centred; the digits are not — the face leaves more room under its
      baseline than above its cap, so a centred line box draws the number a pixel high in the
      disc. One pixel of top padding, inside the 18px. Measured at 6x. */
