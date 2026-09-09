@@ -188,17 +188,18 @@ internal static class IcsComposer
             ? new CalDateTime(at.Value + (end.Value - start.Value), at.TzId, at.HasTime)
             : null;
 
-    /// <summary>Removal by identity: the library's own Remove finds a child by Equals, which for
-    /// two VEVENTs of one UID is the first one, never the one given.</summary>
+    /// <summary>
+    /// Removal by identity: the library's own Remove finds a child by Equals, which for two VEVENTs
+    /// of one UID is the first one, never the one given. Nor may the flat index be used — Ical.Net
+    /// 5.2.3 never chains its per-component lists, so every group starts at 0 and an index past the
+    /// first group's length reads another group's item or throws. The group alone is rewritten.
+    /// </summary>
     internal static void Detach(ICalendarObject parent, ICalendarObject child)
     {
-        var children = (IList<ICalendarObject>)parent.Children;
-        for (var i = 0; i < children.Count; i++)
-            if (ReferenceEquals(children[i], child))
-            {
-                children.RemoveAt(i);
-                return;
-            }
+        var kept = parent.Children.AllOf(child.Group).Where(sibling => !ReferenceEquals(sibling, child)).ToList();
+        if (kept.Count == parent.Children.CountOf(child.Group)) return;
+        parent.Children.Clear(child.Group);
+        foreach (var sibling in kept) parent.Children.Add(sibling);
     }
 
     /// <summary>The wrapper's Remove leaves the property as it was; clearing it and adding the

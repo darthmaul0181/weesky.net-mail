@@ -375,6 +375,20 @@ public sealed class IcsComposerTests
         Assert.Equal("Renamed", master.Summary);
     }
 
+    /// <summary>Ical.Net 5.2.3 never chains its per-component lists, so every group starts at index
+    /// 0: past a VTIMEZONE the flat index names another group's item, or none at all.</summary>
+    [Fact]
+    public void Detach_TakesTheComponentGiven_WhateverItsPositionPastTheFilesOwnZone()
+    {
+        var calendar = IcsDocument.TryLoad(Ics.OverrideBeforeMaster())!;
+        var moved = calendar.Events.Single(e => e.RecurrenceIdentifier is not null);
+
+        IcsComposer.Detach(calendar, moved);
+
+        Assert.Equal("Daily", Assert.Single(IcsDocument.Components(calendar)).Summary);
+        Assert.Single(calendar.TimeZones);
+    }
+
     private static CalendarEvent Override(string ics) =>
         IcsDocument.TryLoad(ics)!.Events.Single(e => e.RecurrenceIdentifier is not null);
 

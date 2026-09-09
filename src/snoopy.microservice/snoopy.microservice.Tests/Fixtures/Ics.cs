@@ -77,6 +77,20 @@ internal static class Ics
         + "BEGIN:VEVENT\r\nUID:rule\r\n" + Stamp + recurrenceId
         + "\r\nDTSTART:20260914T120000Z\r\nSUMMARY:Moved\r\nEND:VEVENT\r\n" + Tail;
 
+    /// <summary>
+    /// A daily series of ten and one override, written in the order a conformance suite sends and
+    /// RFC 5545 § 3.6 allows: the file's own VTIMEZONE, then the override, then the master it
+    /// belongs to. <paramref name="recurrenceId"/> names the second instance by default.
+    /// </summary>
+    internal static string OverrideBeforeMaster(string recurrenceId = "20270102T100000") =>
+        Head + SeasonalZone(Zone)
+        + "BEGIN:VEVENT\r\nUID:daily\r\n" + Stamp
+        + "RECURRENCE-ID;TZID=" + Zone + ":" + recurrenceId + "\r\n"
+        + "DTSTART;TZID=" + Zone + ":20270101T100000\r\nDURATION:PT1H\r\nSUMMARY:Moved\r\nEND:VEVENT\r\n"
+        + "BEGIN:VEVENT\r\nUID:daily\r\n" + Stamp
+        + "DTSTART;TZID=" + Zone + ":20270101T100000\r\nDURATION:PT1H\r\n"
+        + "RRULE:FREQ=DAILY;COUNT=10\r\nSUMMARY:Daily\r\nEND:VEVENT\r\n" + Tail;
+
     /// <summary>The same series as <see cref="RuleWithOverride"/>, its zone defined in the file.</summary>
     internal static string ZonedRuleWithOverride(string rrule, string overrideStart) =>
         Head + SeasonalZone(Zone) + RuleWithOverride(rrule, overrideStart)[Head.Length..];

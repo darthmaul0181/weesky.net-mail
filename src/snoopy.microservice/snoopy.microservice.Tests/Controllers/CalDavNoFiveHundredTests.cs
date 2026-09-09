@@ -126,6 +126,18 @@ public sealed class CalDavNoFiveHundredTests : IAsyncLifetime
         Assert.Equal(412, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("20270102T100000", 201)]
+    [InlineData("20270102T160000", 403)]
+    public async Task AnOverrideWrittenBeforeItsMaster_IsAnsweredNotCrashedOn(string recurrenceId, int expected)
+    {
+        // The one 500 a conformance pass drew out of the deployed server: RFC 5545 imposes no order
+        // between components, and every body this suite carried put the master first.
+        var response = await Put(Href("a.ics"), Ics.OverrideBeforeMaster(recurrenceId));
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
     [Fact]
     public async Task AFaultingStore_IsTheOnlyThingLeftThatTraverses()
     {

@@ -461,6 +461,26 @@ public sealed class IcsGuardsTests
         Assert.Contains("20260911T160000", problem.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// RFC 5545 imposes no order between components, and a deployed server answered 500 to this
+    /// one: the walk isolates the master by detaching the overrides, and detaching read the
+    /// library's flat index, which past the file's own VTIMEZONE names another group's item.
+    /// </summary>
+    [Fact]
+    public void AnOverrideWrittenBeforeItsMaster_IsAccepted() =>
+        Assert.Null(IcsGuards.CheckAll(Ics.OverrideBeforeMaster(), out _));
+
+    [Fact]
+    public void AnOverrideWrittenBeforeItsMaster_IsStillJudgedAgainstTheRule()
+    {
+        // The master is the component detaching must leave behind: 16:00 is no instance of a series
+        // that only ever fires at 10:00, and the order it was written in changes nothing.
+        var problem = IcsGuards.CheckAll(Ics.OverrideBeforeMaster("20270102T160000"), out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
+        Assert.Contains("20270102T160000", problem.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ADetachedOverrideWithNoMaster_IsAccepted() =>
         // No rule to judge against. Every client writes these when a series is split.
