@@ -1,7 +1,9 @@
+using System.Globalization;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Services.Calendar;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 using Xunit;
+using IcsCalendar = Ical.Net.Calendar;
 
 namespace weesky.Snoopy.Microservice.Tests.Services;
 
@@ -276,10 +278,56 @@ public sealed class OccurrenceExpanderTests
         });
     }
 
+    // ---- the VALARM REPEAT/DURATION repetitions --------------------------------------------
+
+    [Fact]
+    public void ARepeatedAlarm_FiresAtEachRepetition()
+    {
+        // RFC 5545 § 3.8.6.2: REPEAT:5 with DURATION:PT10M is five MORE rings after the trigger.
+        // The event starts at 00:00, the trigger is an hour before, so the six rings run
+        // 23:00, 23:10 … 23:50 of the day before.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "REPEAT:5", "DURATION:PT10M"));
+
+        Assert.True(Fires(parsed, "20270101T234500Z", "20270102T000000Z"));   // the fifth ring
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230100Z"));   // the trigger itself
+        Assert.False(Fires(parsed, "20270102T000500Z", "20270102T010000Z"));  // past the last one
+    }
+
+    [Fact]
+    public void ARepeatWithoutADuration_RingsOnce()
+    {
+        // § 3.8.6.2 makes the two inseparable: REPEAT alone spaces nothing.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z", "TRIGGER;RELATED=START:-PT1H", "REPEAT:5"));
+
+        Assert.False(Fires(parsed, "20270101T234500Z", "20270102T000000Z"));
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230100Z"));
+    }
+
+    [Fact]
+    public void AnAbsurdRepeatCount_IsBounded()
+    {
+        // A body may name REPEAT:1000000. The walk that answers a query must stay finite whatever
+        // it is handed; the window decides, never the file.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "REPEAT:1000000", "DURATION:PT1S"));
+
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230100Z"));
+    }
+
     private static string Daily(string start, string end) =>
         Ics.Single(start: "DTSTART;TZID=Europe/Brussels:" + start, end: "DTEND;TZID=Europe/Brussels:" + end,
             extra: "RRULE:FREQ=DAILY;COUNT=4");
 
     private static IReadOnlyList<EventOccurrence> Expand(string ics, DateTime? from = null, DateTime? to = null, string view = "Europe/Brussels") =>
         OccurrenceExpander.Expand(Guid.Empty, Guid.Empty, IcsDocument.TryLoad(ics)!, from ?? From, to ?? To, "Europe/Brussels", view);
+
+    private static IcsCalendar Load(string ics) => IcsDocument.TryLoad(ics)!;
+
+    private static bool Fires(IcsCalendar parsed, string from, string to) =>
+        OccurrenceExpander.AlarmFires(parsed, Instant(from), Instant(to), "UTC");
+
+    private static DateTime Instant(string value) => DateTime.ParseExact(
+        value, "yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture,
+        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 }

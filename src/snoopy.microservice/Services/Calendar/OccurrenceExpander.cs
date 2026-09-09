@@ -36,6 +36,10 @@ internal static class OccurrenceExpander
     /// depends on their being equal, never on their looking alike.</summary>
     internal static readonly TimeSpan Margin = TimeSpan.FromDays(1);
 
+    /// <summary>The repetitions one alarm may contribute to a window. Ten thousand for the day of
+    /// slack the walk carries on each side, which is more than any real reminder writes.</summary>
+    private const int MaxRings = 10_000;
+
     /// <summary>10 000 instances per year of window, the density the PUT gate admits, plus the
     /// one that proves the ceiling was reached. The walk stops there; the expanded report refuses
     /// there — the same number, so nothing can be cut by one and served whole by the other.</summary>
@@ -73,7 +77,8 @@ internal static class OccurrenceExpander
     /// Whether an alarm of one instance fires inside <c>[fromUtc, toUtc[</c> (RFC 4791 § 9.9 on a
     /// VALARM). The instances of <c>[fromUtc − 1 day, toUtc + 1 day[</c> are walked and each
     /// trigger read as the instant it pins, or as its distance from the instance's start — or its
-    /// end, which RELATED=END names. A day of slack and no more: a TRIGGER:-P1W before an instance
+    /// end, which RELATED=END names — then walked through its own REPEAT/DURATION rings, if any
+    /// (see <see cref="Rings"/>). A day of slack and no more: a TRIGGER:-P1W before an instance
     /// past the window is missed, an incomplete answer rather than a false one, and the bound is
     /// assumed — a week of slack would have every query reread the whole calendar.
     /// <paramref name="component"/> narrows the instances to those one component of the file
@@ -93,12 +98,46 @@ internal static class OccurrenceExpander
             var (start, end) = Anchors(occurrence, zone);
             foreach (var alarm in source.Alarms)
             {
-                if (FiresAt(alarm.Trigger, start, end, parsed, zone) is { } at && at >= fromUtc && at < toUtc)
-                    return true;
+                if (FiresAt(alarm.Trigger, start, end, parsed, zone) is not { } first) continue;
+                foreach (var at in Rings(first, alarm))
+                    if (at >= fromUtc && at < toUtc) return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The instants one alarm rings at: its trigger, then RFC 5545 § 3.8.6.2's REPEAT more, spaced
+    /// by DURATION — the two are inseparable, and either alone rings once. The count is bounded by
+    /// the window rather than by the file: a REPEAT of a million is a body a client may send, and a
+    /// query must stay finite whatever it is handed.
+    /// </summary>
+    private static IEnumerable<DateTime> Rings(DateTime first, Alarm alarm)
+    {
+        yield return first;
+        if (alarm.Repeat <= 0 || alarm.Duration is not { } spacing) yield break;
+        if (ToTimeSpan(spacing) is not { } step || step <= TimeSpan.Zero) yield break;
+
+        var at = first;
+        for (var i = 0; i < Math.Min(alarm.Repeat, MaxRings); i++)
+        {
+            at = Shift(at, step);
+            yield return at;
+        }
+    }
+
+    /// <summary>Null for a DURATION no TimeSpan holds: an unreadable spacing rings once, never a 500.</summary>
+    private static TimeSpan? ToTimeSpan(Duration duration)
+    {
+        try
+        {
+            return duration.ToTimeSpanUnspecified();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>The component an occurrence came from: the override it names, found by the id the

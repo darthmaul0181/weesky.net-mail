@@ -345,6 +345,17 @@ public sealed class CalendarQueryFilterTests
     }
 
     [Fact]
+    public void AnAlarmTimeRange_SeesARepetition()
+    {
+        // RFC 5545 3.8.6.2: REPEAT:5, DURATION:PT10M rings again at 23:10 ... 23:50; the window
+        // below excludes the 23:00 trigger itself and only the fifth ring falls inside it.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "REPEAT:5", "DURATION:PT10M"));
+
+        Assert.True(Matches(parsed, Alarm("20270101T234500Z", "20270102T000000Z")));
+    }
+
+    [Fact]
     public void AVAlarmFilter_NamesAnAlarmOrItsAbsence()
     {
         var alarmed = Load(Ics.Single("DTSTART:20260907T090000Z", null,

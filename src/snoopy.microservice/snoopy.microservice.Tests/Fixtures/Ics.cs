@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 
 namespace weesky.Snoopy.Microservice.Tests.Fixtures;
 
@@ -121,6 +122,13 @@ internal static class Ics
         + "DTSTART;TZID=" + Zone + ":20260914T110000\r\nDTEND;TZID=" + Zone + ":20260914T120000\r\n"
         + "ATTENDEE;CN=Lea;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:lea@example.org\r\nEND:VEVENT\r\n"
         + Tail;
+
+    /// <summary>A single VEVENT carrying one VALARM built from <paramref name="alarmLines"/> —
+    /// TRIGGER, REPEAT, DURATION or any other VALARM property, one per element.</summary>
+    internal static string Alarmed(string dtstart, params string[] alarmLines) =>
+        Head + "BEGIN:VEVENT\r\nUID:alarmed\r\n" + Stamp + dtstart + "\r\nSUMMARY:Alarmed\r\n"
+        + "BEGIN:VALARM\r\nACTION:DISPLAY\r\n" + string.Join("", alarmLines.Select(l => l + "\r\n"))
+        + "DESCRIPTION:x\r\nEND:VALARM\r\nEND:VEVENT\r\n" + Tail;
 
     internal static string Single(string start, string? end, string? extra = null, string? zone = null) =>
         Head + (zone ?? "") + "BEGIN:VEVENT\r\nUID:single\r\n" + Stamp
