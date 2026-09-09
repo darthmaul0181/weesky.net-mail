@@ -93,15 +93,22 @@ describe('RecurrenceEditor', () => {
       expect.objectContaining({ end: 'Until', until: '2027-01-31' }))
   })
 
-  it('keeps the counter and the date drawn, disabled, while another choice is active', () => {
+  // One line: the choice, then the one value it needs and nothing else.
+  it('draws the value the chosen end needs, and only that one', () => {
     draw({ ...WEEKLY, end: 'Count', count: 4 })
-    expect(screen.getByLabelText('Number of times')).toBeEnabled()
-    expect(screen.getByLabelText('Repeat until')).toBeDisabled()
+    expect(screen.getByLabelText('Number of times')).toHaveValue(4)
+    expect(screen.queryByLabelText('Repeat until')).toBeNull()
+  })
+
+  it('draws no value at all under never', () => {
+    draw({ ...WEEKLY, end: 'Never' })
+    expect(screen.queryByLabelText('Number of times')).toBeNull()
+    expect(screen.queryByLabelText('Repeat until')).toBeNull()
   })
 
   it('remembers the date it was given rather than falling back on the start', async () => {
     const onChange = draw({ ...WEEKLY, end: 'Count', count: 4, until: '2026-12-20' })
-    await userEvent.click(screen.getByRole('radio', { name: 'on' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'On' }))
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ end: 'Until', until: '2026-12-20', count: undefined }))
   })

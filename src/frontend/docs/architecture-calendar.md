@@ -132,12 +132,21 @@ the word between the two boxes.
 
 **The dialog's width does not move under the switch, and the contract is what keeps it still.**
 The recurrence block is the widest thing the editor ever draws, and a content-sized dialog would
-grow for it; `.calendar-editor-form { --field-w: 53ch }` therefore hands the Title box — drawn in
+grow for it; `.calendar-editor-form { --field-w: 66ch }` therefore hands the Title box — drawn in
 every state — a measure wide enough for the block's widest line in French *and* in English, on the
 contract's own variable rather than a pixel width. Measured in `probes/recurrence-editor.html`:
-**576px in all eight states** (hours / whole day × once / repeating × FR / EN), block 400, escape 0.
-At 52ch the English block still won by one pixel, which is what the last ch buys. A `UNE seule
-largeur` of NON in that probe is the regression to look for.
+**675px in all eight states** (hours / whole day × once / repeating × FR / EN), block 499, escape 0.
+A `UNE seule largeur` of NON in that probe is the regression to look for — and the probe links
+`shell.css`, because the end row's segmented control lives there and without it the three choices
+measure as bare radios, 42px narrower than what ships.
+
+**The calendar picker is a dropdown drawn as the select it replaces** (`CalendarSelect`, on
+`DropdownMenu`). A native `<select>` cannot paint an option, so the colour swatch used to sit
+*beside* the box, and the box then started 8px to the right of every other control in the column.
+The trigger wears the `.field-h` control's own box with the swatch inside it, and every row of the
+menu carries its calendar's swatch. **Description lives under *More options***: on a plain event
+the form is title, calendar, when, and whether it repeats; a description that holds text opens
+the chevron on its own, the rule every other field under it already follows.
 
 **The block says one sentence and nothing more.** *Repeat every [n] [day|week|month|year]*, the
 seven weekday boxes, and *Ends: never / after [n] times / on [date]*. Three things about it. The
@@ -146,10 +155,12 @@ disabled, since choosing days makes no sense when it is every day, and a row tha
 makes the block jump under the pointer; leaving *day* lands on the start's own weekday rather than
 on no day at all, which a rule would repeat on nothing. They are the calendar row's own trick: a
 hidden checkbox keeping the tab order, the space bar and the long name, a one-letter
-`.recurrence-day` box that is what is seen. The *ends* row is **two lines by construction**
-(`.recurrence-end-line`, `nowrap`), *on* paired with its date, and the counter and the date stay
-drawn while another choice is active, disabled — remembered values, and the same
-"asleep, not gone" rule the End date follows. **The day-of-month and weekday-position controls
+`.recurrence-day` box that is what is seen. The *ends* row is **one line**: the label, the three
+choices as the `.seg` segmented control the toolbar and *More options* already draw for a choice
+among a few (never bare radios — the form has one control language), then the one value the
+choice needs — a counter after *after*, a date after *on*, nothing after *never*. Both `.seg` and
+the date box are `flex: none` there: modal.css's `flex: 1` would hand the date the whole column
+and push the dialog wide. **The day-of-month and weekday-position controls
 are gone from the block**: `byMonthDay`/`bySetPos` are still read, written and summarised, but a
 stored rule carrying either is opened *locked* (`beyondTheBlock` arms `keepRepeat` beside
 `repeatIsExact`), so a screen that cannot show "the last Friday" cannot rewrite it; *Replace*

@@ -1,9 +1,10 @@
-import { useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import ChevronDownIcon from '../../icons/ChevronDownIcon'
 import ChevronRightIcon from '../../icons/ChevronRightIcon'
 import { useCalendar } from './calendarContext'
+import CalendarSelect from './CalendarSelect'
 import type {
   Availability, Calendar, EditScope, EventDetail, Occurrence, RecurrenceWrite, Visibility,
 } from './calendarTypes'
@@ -76,8 +77,9 @@ export default function EventEditor({
   const [form, setForm] = useState(initial)
   const [invalid, setInvalid] = useState<string | null>(null)
   const [more, setMore] = useState(
-    initial.availability !== 'Busy' || initial.visibility !== 'Default'
-    || initial.url !== '' || (detail?.attendees.length ?? 0) > 0)
+    initial.description !== '' || initial.availability !== 'Busy'
+    || initial.visibility !== 'Default' || initial.url !== ''
+    || (detail?.attendees.length ?? 0) > 0)
 
   // Every write goes through `alignEnd`: while a series runs the end date is not the user's to
   // set, and a state that ever held a stale one would save it.
@@ -161,16 +163,9 @@ export default function EventEditor({
         </div>
 
         <div className="field-h">
-          <label htmlFor="event-calendar">{t('editor.calendar')}</label>
-          <span className="calendar-swatch" aria-hidden="true" style={{
-            '--cal': calendars.find(one => one.id === form.calendarId)?.color,
-          } as CSSProperties} />
-          <select id="event-calendar" value={form.calendarId}
-            onChange={event => set({ calendarId: event.target.value })}>
-            {calendars.map(one => (
-              <option key={one.id} value={one.id}>{one.displayName}</option>
-            ))}
-          </select>
+          <span className="field-h-label">{t('editor.calendar')}</span>
+          <CalendarSelect label={t('editor.calendar')} calendars={calendars}
+            value={form.calendarId} onChange={calendarId => set({ calendarId })} />
         </div>
 
         <div className="field-h">
@@ -278,12 +273,6 @@ export default function EventEditor({
             onChange={event => set({ location: event.target.value })} />
         </div>
 
-        <div className="field-h">
-          <label htmlFor="event-description">{t('editor.description')}</label>
-          <textarea id="event-description" value={form.description}
-            onChange={event => set({ description: event.target.value })} />
-        </div>
-
         <hr className="editor-rule" />
 
         <button type="button" className="editor-more" aria-expanded={more}
@@ -294,6 +283,12 @@ export default function EventEditor({
 
         {more && (
           <>
+            <div className="field-h">
+              <label htmlFor="event-description">{t('editor.description')}</label>
+              <textarea id="event-description" value={form.description}
+                onChange={event => set({ description: event.target.value })} />
+            </div>
+
             <div className="field-h">
               <span className="field-h-label">{t('editor.availability')}</span>
               <div className="seg" role="radiogroup" aria-label={t('editor.availability')}>

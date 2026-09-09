@@ -235,7 +235,8 @@ describe('CalendarLayout', () => {
     api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16&instance=2026-09-16T09:00:00')
 
-    await userEvent.selectOptions(await screen.findByLabelText('Calendar'), 'b')
+    await userEvent.click(await screen.findByLabelText('Calendar'))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Work' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await screen.findByText('Save a recurring event')

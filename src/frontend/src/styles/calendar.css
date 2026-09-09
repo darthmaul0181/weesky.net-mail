@@ -495,7 +495,24 @@
 .calendar-editor-screen > .calendar-editor-form {
   flex: 1; min-height: 0; overflow-y: auto; padding: 16px 14px;
 }
-.calendar-editor-form .calendar-swatch { margin-right: -8px; }
+/* The calendar picker is a dropdown drawn as the select it replaces: the same box as every
+   text control in the row (index.css's .field-h rule), the swatch inside it, and it takes the
+   row like the Title box above it does. The swatch is 16px in a 20px line, so `flex: 1` on the
+   root and `width: 100%` on the button are both needed: the root is the flex item, the button
+   is what is seen. */
+.calendar-editor-form .field-h > .dropdown-root { flex: 1; min-width: 0; }
+.calendar-select {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px;
+  font-size: 14px; font-family: var(--font); color: var(--text); background: var(--surface);
+  cursor: pointer; text-align: left;
+}
+.calendar-select:focus-visible { outline: none; border-color: var(--action-primary); }
+.calendar-select > .calendar-swatch { background: var(--cal); }
+.calendar-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-select > svg { flex: none; color: var(--text-muted); }
+.calendar-editor-form .dropdown-menu { left: 0; right: auto; min-width: 100%; }
+.calendar-editor-form .dropdown-item > .calendar-swatch { background: var(--cal); }
 /* A time box is four characters wide whatever the date beside it holds. */
 .calendar-editor-form input[type="time"] { flex: none; width: 8em; }
 /* The dialog's width must not move under the Repeats switch, and the recurrence block is what
@@ -503,7 +520,7 @@
    contract's own variable and carried by the Title box that every state draws: wide enough for
    the block's widest line in French and in English (measured in probes/recurrence-editor.html),
    so opening the block changes the dialog's height and nothing else. */
-.calendar-editor-form { --field-w: 53ch; }
+.calendar-editor-form { --field-w: 66ch; }
 /* "From [date] to [date]": the word between two boxes, in the label's own voice. */
 .editor-joiner { flex: none; font-size: 13px; color: var(--text-muted); }
 /* Under the row it explains, in that row's own control column. */
@@ -560,18 +577,15 @@
    characters of "3" reads as a rendering fault. Equal specificity, later sheet. */
 .modal .recurrence-editor .field-h > input[type="number"] { width: 5em; }
 .recurrence-editor input[type="number"] { flex: none; width: 5em; }
-.recurrence-days,
-.recurrence-end {
+.recurrence-days {
   flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13px;
 }
-/* The end row is two lines by construction, never by wrapping: "on" and its date belong
-   together, and a wrap decided by the available width splits them the moment a translation is a
-   few pixels longer. */
-.recurrence-end { flex-direction: column; align-items: flex-start; gap: 9px; }
-.recurrence-end-line { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
-.recurrence-end-line > :disabled,
-.recurrence-end-line > :disabled + span { color: var(--text-muted); opacity: 0.7; }
-.recurrence-end label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+/* The end row is one line: label, the segmented choice, the one value it needs. The date box
+   there takes the row's leftover and no more — `flex: 1` from modal.css would hand it the
+   whole column and push the dialog wide. */
+.recurrence-editor .field-h > .seg { flex: none; }
+.recurrence-editor .field-h > input[type="date"] { flex: none; }
+.recurrence-times { font-size: 13px; color: var(--text-muted); }
 /* Seven one-letter boxes, the calendar row's own trick: the checkbox is hidden and keeps the tab
    order, the space bar and the accessible name, the box is what is seen. Disabled — "every day"
    — they stay drawn, all lit, greyed: a row that vanishes makes the block jump. */

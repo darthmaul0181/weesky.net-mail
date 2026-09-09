@@ -8,14 +8,14 @@
   keeps it that way: the width that must NOT move under the switch is carried by
   `.calendar-editor-form { --field-w }`, the Title box's measure, which every state draws. So the
   eight `modale` numbers must be ONE number, in French and in English alike, and the recurrence
-  block must fit inside it with `escape 0`. The two `.recurrence-end-line` boxes must each stay
-  on one line — `nowrap` is what pairs "on" with its date — and the seven weekday boxes are one
-  row: `jours` must be one box tall.
+  block must fit inside it with `escape 0`. The end row is ONE line — label, segmented choice,
+  the date — so `fin` must be one control tall, and the seven weekday boxes are one row:
+  `jours` must be one box tall.
 
-  Read at the desktop width, --field-w 53ch: modale 576 in all eight states, FR and EN; block
-  400, days row 250x26, end lines 241x39 / 193x41 (244 / 194 in English), escape 0 everywhere.
-  At 52ch the English block still won by one pixel (569 against 570), which is what the last
-  ch buys.
+  Read at the desktop width, --field-w 66ch: modale 675 in all eight states, FR and EN; block
+  499, days row 349x26, the end row 469x41 (label, the segmented choice, the date), escape 0
+  everywhere. The segmented control is what moved the measure from 53ch: three pills are 42px
+  wider than three bare radios, which is also why shell.css is linked here.
 
   A `UNE seule largeur` of NON is the regression this file exists for. Drive it in Chrome/Edge;
   jsdom computes no layout, so none of this is assertable in the suite. document.title becomes
@@ -28,6 +28,9 @@
   <link rel="stylesheet" href="/src/styles/tokens.css" />
   <link rel="stylesheet" href="/src/styles/theme-night.css" />
   <link rel="stylesheet" href="/src/index.css" />
+  <!-- shell.css carries .seg, the segmented control the end row draws; without it the three
+       choices fall back to bare radios and every width below is somebody else's. -->
+  <link rel="stylesheet" href="/src/styles/shell.css" />
   <link rel="stylesheet" href="/src/styles/modal.css" />
   <link rel="stylesheet" href="/src/styles/calendar.css" />
   <style>
@@ -62,18 +65,12 @@
       </div>
       <div class="field-h">
         <span class="field-h-label">Se termine</span>
-        <div class="recurrence-end">
-          <div class="recurrence-end-line">
-            <label><input type="radio" name="_" />Jamais</label>
-            <label><input type="radio" name="_" />Après</label>
-            <input type="number" value="10" class="recurrence-interval" disabled aria-label="Nombre de fois" />
-            <span>fois</span>
-          </div>
-          <div class="recurrence-end-line">
-            <label><input type="radio" name="_" checked />au</label>
-            <input type="date" value="2026-10-27" aria-label="Répéter jusqu’au" />
-          </div>
+        <div class="seg" role="radiogroup" aria-label="Se termine">
+          <label><input type="radio" name="_" />Jamais</label>
+          <label><input type="radio" name="_" />Après</label>
+          <label><input type="radio" name="_" checked />Au</label>
         </div>
+        <input type="date" value="2026-10-27" aria-label="Répéter jusqu’au" />
       </div>
     </div>
   </template>
@@ -100,18 +97,12 @@
       </div>
       <div class="field-h">
         <span class="field-h-label">Ends</span>
-        <div class="recurrence-end">
-          <div class="recurrence-end-line">
-            <label><input type="radio" name="_" />Never</label>
-            <label><input type="radio" name="_" />After</label>
-            <input type="number" value="10" class="recurrence-interval" disabled aria-label="Number of times" />
-            <span>times</span>
-          </div>
-          <div class="recurrence-end-line">
-            <label><input type="radio" name="_" checked />on</label>
-            <input type="date" value="2026-10-27" aria-label="Repeat until" />
-          </div>
+        <div class="seg" role="radiogroup" aria-label="Ends">
+          <label><input type="radio" name="_" />Never</label>
+          <label><input type="radio" name="_" />After</label>
+          <label><input type="radio" name="_" checked />On</label>
         </div>
+        <input type="date" value="2026-10-27" aria-label="Repeat until" />
       </div>
     </div>
   </template>
@@ -152,6 +143,12 @@
         <div class="modal-header"><span class="modal-title">${s.title}</span></div>
         <form class="calendar-editor-form">
           <div class="field-h"><label>${s.name}</label><input type="text" value="Réunion" /></div>
+          <div class="field-h"><span class="field-h-label">${lang === 'fr' ? 'Agenda' : 'Calendar'}</span>
+            <div class="dropdown-root"><button type="button" class="calendar-select" aria-label="Calendar">
+              <span class="calendar-swatch" style="--cal: #3b82c4"></span>
+              <span class="calendar-select-name">Personnel</span>
+              <svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button></div></div>
           ${toggle(allDay, s.allday)}
           ${rows}
           ${toggle(rep, s.repeats)}
@@ -176,18 +173,16 @@
       let line = String(w(modal))
       const block = c.querySelector('.recurrence-editor')
       if (block) {
-        const lines = [...c.querySelectorAll('.recurrence-end-line')]
+        const ends = c.querySelector('.recurrence-editor .field-h:has(.seg)')
+        const date = ends.querySelector('input[type="date"]')
         const days = c.querySelector('.recurrence-days')
         const day = c.querySelector('.recurrence-day')
         const escape = Math.max(0, Math.ceil(
-          Math.max(block.getBoundingClientRect().right,
-                   ...lines.map(l => l.getBoundingClientRect().right))
+          Math.max(block.getBoundingClientRect().right, date.getBoundingClientRect().right)
           - modal.getBoundingClientRect().right))
         line += `  bloc ${w(block)}  jours ${w(days)}x${h(days)}`
           + (h(days) > h(day) + 2 ? ' WRAP' : '')
-          + `  fin ${w(lines[0])}x${h(lines[0])} / ${w(lines[1])}x${h(lines[1])}`
-          + (h(lines[1]) > h(c.querySelector('.recurrence-end-line input[type="date"]')) + 2
-             ? ' WRAP' : '')
+          + `  fin ${w(ends)}x${h(ends)}` + (h(ends) > h(date) + 2 ? ' WRAP' : '')
           + `  escape ${escape}`
       }
       report['modale ' + c.dataset.case] = line

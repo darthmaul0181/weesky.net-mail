@@ -45,7 +45,7 @@ describe('EventEditor', () => {
   it('sows the form from the state it is handed', () => {
     draw()
     expect(screen.getByLabelText('Title')).toHaveValue('Dentist')
-    expect(screen.getByLabelText('Calendar')).toHaveValue('a')
+    expect(screen.getByLabelText('Calendar')).toHaveTextContent('Personal')
     expect(screen.getByLabelText('Start date')).toHaveValue('2026-09-14')
     expect(screen.getByLabelText('Start time')).toHaveValue('09:00')
     expect(screen.getByLabelText('End time')).toHaveValue('10:00')
@@ -162,12 +162,21 @@ describe('EventEditor', () => {
   // A value that is not the default is a value somebody set: hiding it behind a chevron would
   // make the form say something the event does not.
   it('opens More options when something under it is not the default', () => {
-    draw({ initial: form({ availability: 'Free' }) })
+    draw({ initial: form({ description: '', availability: 'Free' }) })
     expect(screen.getByLabelText('Web address')).toBeVisible()
   })
 
-  it('keeps More options folded on a plain event', async () => {
+  // The description moved under the chevron; one that holds text is the case above.
+  it('opens More options on a description, and picks a calendar from the coloured list', async () => {
     draw()
+    expect(screen.getByLabelText('Description')).toHaveValue('Bring the card')
+    await userEvent.click(screen.getByLabelText('Calendar'))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Work' }))
+    expect(screen.getByLabelText('Calendar')).toHaveTextContent('Work')
+  })
+
+  it('keeps More options folded on a plain event', async () => {
+    draw({ initial: form({ description: '' }) })
     expect(screen.queryByLabelText('Web address')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
     expect(screen.getByLabelText('Web address')).toBeInTheDocument()
