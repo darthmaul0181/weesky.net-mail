@@ -327,6 +327,46 @@ public sealed class CalDavMkcalendarTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AUrlAnotherCalendarAlreadyHolds_NamesItsPrecondition()
+    {
+        // RFC 4918 9.3.1 gives the 405 and 16 asks for the body that says why. The status is
+        // the RFC's; only the reason was missing.
+        var response = await Create("MKCALENDAR", CalendarStore.DefaultDavName, Displayname("Again"));
+
+        Assert.Equal(405, response.StatusCode);
+        Assert.Equal(DavHeaders.CalendarAllow, response.Header("Allow"));
+        Assert.Equal(DavXml.Dav + "error", XDocument.Parse(response.Body).Root!.Name);
+        Assert.Equal(DavXml.Dav + "resource-must-be-null", ConditionOf(response));
+    }
+
+    [Fact]
+    public async Task AMkcalendarBodyNamingAProtectedProperty_CreatesNothing()
+    {
+        // RFC 4918 15.6: getetag is protected, MUST NOT be set. 5.3.1 of RFC 4791 makes this
+        // body a PROPPATCH, and 9.2 makes a PROPPATCH atomic - so displayname does not land
+        // "half", and no calendar is born.
+        var response = await Create("MKCALENDAR", "caltest3",
+            new XElement(DavXml.Dav + "getetag", "\"x\""),
+            Displayname("Essai"),
+            new XElement(DavXml.CalDav + "calendar-description", "essai"));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Empty(Stored("caltest3"));
+    }
+
+    [Fact]
+    public async Task AMkcalendarBodyNamingAPropertyWeSimplyDoNotServe_StillCreates()
+    {
+        // calendar-free-busy-set and its like: a client that sends one wants a calendar, not
+        // an argument. Only PROTECTED and unknown-in-a-live-namespace properties refuse - the
+        // rule MkCalendarRequest already documents, kept.
+        var response = await Create("MKCALENDAR", "caltest4",
+            new XElement(DavXml.CalDav + "calendar-free-busy-set", string.Empty));
+
+        Assert.Equal(201, response.StatusCode);
+    }
+
+    [Fact]
     public async Task TheTwentyFirstCalendar_Answers507()
     {
         for (var i = 1; i < CalendarStore.MaxPerUser; i++)

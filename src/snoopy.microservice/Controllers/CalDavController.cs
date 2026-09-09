@@ -299,6 +299,19 @@ public sealed class CalDavController(
                 return;
             }
 
+            if (request.Refused.Count > 0)
+            {
+                // § 9.2's atomicity: the named property fails, and every other property of the body
+                // fails in dependency — nothing is set, and nothing is created.
+                await MultiStatusWriter.WriteCreationRefusalAsync(Response,
+                    extendedWithBody ? MkcolResponse : MkcalendarResponse,
+                    CalendarPropertyValue.Writable.Except(request.Refused).ToList(),
+                    request.Refused, DavXml.Dav + "cannot-modify-protected-property", cancellationToken);
+                trace.Responses = 1;
+                trace.Condition = "cannot-modify-protected-property";
+                return;
+            }
+
             // The segment as the display name when the client sends none: a calendar with no name
             // is one every client lists as a blank row.
             var write = new CalendarWrite(request.DisplayName ?? calendarName, request.Description,
@@ -321,8 +334,12 @@ public sealed class CalDavController(
             if (created.Error == CalendarStore.NameTaken)
             {
                 // The same answer the home gets, and for the same reason: the collection is there.
+                // RFC 4918 § 9.3.1 gives the 405 and RFC 7231 § 6.5.5 the Allow; § 16 asks that a
+                // refusal name its precondition, so the client reads a reason and not a code.
                 Response.Headers.Allow = DavHeaders.CalendarAllow;
-                Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+                await DavError.WriteAsync(Response, StatusCodes.Status405MethodNotAllowed,
+                    DavXml.Dav + "resource-must-be-null", null, cancellationToken, Logger);
+                trace.Condition = "resource-must-be-null";
                 return;
             }
 

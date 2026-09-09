@@ -6,7 +6,7 @@ namespace weesky.Snoopy.Microservice.Services.CalDav;
 /// <summary>
 /// What a MKCALENDAR or an extended MKCOL body asks of the collection being born (§ 11). The five
 /// writable properties are read and everything else is IGNORED rather than refused — a client that
-/// sends <c>calendar-free-busy-set</c> wants a calendar, not an argument — with three exceptions,
+/// sends <c>calendar-free-busy-set</c> wants a calendar, not an argument — with four exceptions,
 /// each of which stops the creation.
 /// </summary>
 /// <param name="DisplayName">the label asked, or null when the client sent none</param>
@@ -25,12 +25,26 @@ namespace weesky.Snoopy.Microservice.Services.CalDav;
 /// <param name="TimeZoneRefused">
 /// <c>calendar-timezone</c> carried no single resolvable VTIMEZONE — <c>CALDAV:valid-calendar-data</c>.
 /// </param>
+/// <param name="Refused">
+/// The protected properties the body sets, which stop the creation whole — everything else it does
+/// not know is IGNORED, a client sending <c>calendar-free-busy-set</c> wanting a calendar and not
+/// an argument.
+/// </param>
 internal sealed record MkCalendarRequest(
     string? DisplayName, string? Description, string? Color, int? Order, string? TimeZoneId,
-    bool AsksUnsupportedComponent, bool ResourceTypeRefused, bool TimeZoneRefused)
+    bool AsksUnsupportedComponent, bool ResourceTypeRefused, bool TimeZoneRefused,
+    IReadOnlyList<XName> Refused)
 {
     private static readonly XName MkCalendar = DavXml.CalDav + "mkcalendar";
     private static readonly XName MkCol = DavXml.Dav + "mkcol";
+
+    /// <summary>The properties RFC 4918 § 15 declares protected: a body that sets one is a body
+    /// § 9.2 must refuse whole, since § 5.3.1 of RFC 4791 makes this body a PROPPATCH.</summary>
+    private static readonly XName[] Protected =
+    [
+        DavXml.Dav + "getetag", DavXml.Dav + "getcontentlength", DavXml.Dav + "getlastmodified",
+        DavXml.Dav + "creationdate", DavXml.Dav + "lockdiscovery", DavXml.Dav + "supportedlock",
+    ];
 
     /// <param name="body">the parsed body, or null when the request carried none</param>
     /// <param name="extendedMkcol">
@@ -41,7 +55,7 @@ internal sealed record MkCalendarRequest(
     internal static MkCalendarRequest Parse(XDocument? body, bool extendedMkcol)
     {
         if (body is null)
-            return new MkCalendarRequest(null, null, null, null, null, false, extendedMkcol, false);
+            return new MkCalendarRequest(null, null, null, null, null, false, extendedMkcol, false, []);
 
         var root = extendedMkcol ? MkCol : MkCalendar;
         if (body.Root?.Name != root)
@@ -61,6 +75,7 @@ internal sealed record MkCalendarRequest(
         var zone = First(CalendarPropertyValue.TimeZone);
         var components = First(CalendarPropertyValue.ComponentSet);
         var resolved = zone is null ? null : CalendarPropertyValue.Zone(zone.Value);
+        var refused = asked.Select(property => property.Name).Where(Protected.Contains).Distinct().ToList();
 
         return new MkCalendarRequest(
             First(CalendarPropertyValue.DisplayName) is { } name
@@ -80,6 +95,7 @@ internal sealed record MkCalendarRequest(
             resourceType is null
                 ? extendedMkcol
                 : !CalendarPropertyValue.IsCalendar(resourceType),
-            zone is not null && resolved is null);
+            zone is not null && resolved is null,
+            refused);
     }
 }
