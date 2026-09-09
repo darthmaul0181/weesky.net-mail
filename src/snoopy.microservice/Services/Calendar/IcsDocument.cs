@@ -43,6 +43,17 @@ internal static class IcsDocument
     internal static IEnumerable<CalendarEvent> Components(IcsCalendar calendar) =>
         calendar.Children.OfType<CalendarEvent>();
 
+    /// <summary>The instants a component's RDATEs source, in both spellings: GetAllDates leaves
+    /// out RDATE;VALUE=PERIOD, whose start sources an instance like any other.</summary>
+    internal static IEnumerable<CalDateTime> RecurrenceDatesOf(CalendarEvent component) =>
+        (component.RecurrenceDates?.GetAllDates() ?? [])
+        .Concat((component.RecurrenceDates?.GetAllPeriods() ?? []).Select(p => p.StartTime).OfType<CalDateTime>());
+
+    /// <summary>Whether a master sources more than its own instance — a rule, or an RDATE in either
+    /// spelling. The one predicate the walk, the gate, the projection and the store read.</summary>
+    internal static bool Repeats(CalendarEvent master) =>
+        master.RecurrenceRule is not null || RecurrenceDatesOf(master).Any();
+
     /// <summary>The RECURRENCE-ID as the file spells it — "" for a master, since that is the key
     /// an override-less component holds in <c>calendar_attendees</c>.</summary>
     internal static string InstanceIdOf(CalendarEvent component) =>

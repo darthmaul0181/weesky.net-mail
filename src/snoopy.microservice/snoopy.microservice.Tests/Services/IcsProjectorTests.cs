@@ -81,6 +81,17 @@ public sealed class IcsProjectorTests
     }
 
     [Fact]
+    public void RdatePeriodAlone_IsRecurring()
+    {
+        // The one spelling GetAllDates leaves out; the column decides whether a prop-filter may
+        // preselect on the master's own values, which an override of this series could contradict.
+        var p = Project(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z",
+            "RDATE;VALUE=PERIOD:20260914T090000Z/PT1H"));
+
+        Assert.True(p.IsRecurring);
+    }
+
+    [Fact]
     public void ExceptionsWithoutMaster_ReadFirstException_NotRecurring()
     {
         var p = Project(Ics.Events(("a", "20260914"), ("a", "20260921")));

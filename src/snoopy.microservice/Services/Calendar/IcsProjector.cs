@@ -46,8 +46,7 @@ internal static class IcsProjector
 
         var start = IcsTimeZones.Place(master.DtStart, zone, parsed);
         var end = IcsTimeZones.Place(IcsDocument.EndOf(master), zone, parsed);
-        var recurring = master.RecurrenceIdentifier is null
-                        && (master.RecurrenceRule is not null || master.RecurrenceDates?.GetAllDates().Any() == true);
+        var recurring = master.RecurrenceIdentifier is null && IcsDocument.Repeats(master);
         var (first, last) = Occurrences(parsed, components, master, recurring, start, end, zone);
 
         return new EventProjection(

@@ -190,7 +190,7 @@ internal static class IcsGuards
     {
         if (!IsWalkable(parsed)) return null;
         if (IcsDocument.MasterOf(parsed) is not { DtStart: not null } master) return null;
-        if (master.RecurrenceRule is null && master.RecurrenceDates?.GetAllDates().Any() != true) return null;
+        if (!IcsDocument.Repeats(master)) return null;
         if (!IcsDocument.Components(parsed).Any(HasInstanceId)) return null;
         // A zone only the file's own VTIMEZONE defines is walked floating, so the walk's instants
         // are not in the frame the file wrote and no comparison between them means anything.

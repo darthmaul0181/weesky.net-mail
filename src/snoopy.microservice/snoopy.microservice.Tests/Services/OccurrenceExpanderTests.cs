@@ -359,6 +359,17 @@ public sealed class OccurrenceExpanderTests
     }
 
     [Fact]
+    public void AMasterRepeatingByPeriodAlone_IsRecurring_AndItsInstancesCarryTheirIds()
+    {
+        // The floor reads RDATE;VALUE=PERIOD; the « this master repeats » predicate must read the
+        // same file, or its instances walk with an empty id while the walk itself serves two.
+        var list = Expand(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z",
+            "RDATE;VALUE=PERIOD:20260914T090000Z/PT1H"));
+
+        Assert.Equal(["20260907T090000Z", "20260914T090000Z"], list.Select(o => o.InstanceId));
+    }
+
+    [Fact]
     public void AnAbsentStart_OnAFileAtTheEdgeOfTime_StillWalks()
     {
         // The floor keeps two margins above DateTime.MinValue: its own, and the one Periods adds.

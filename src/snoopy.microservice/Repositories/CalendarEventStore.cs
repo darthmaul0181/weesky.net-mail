@@ -468,8 +468,7 @@ internal sealed class CalendarEventStore(
 
         var master = IcsDocument.MasterOf(held);
         if (master is null) return EditScope.All;
-        if (master.RecurrenceRule is null && master.RecurrenceDates?.GetAllDates().Any() != true)
-            return EditScope.All;
+        if (!IcsDocument.Repeats(master)) return EditScope.All;
         if (scope == EditScope.This) return scope;
 
         return IcsDocument.InstanceOf(master, instanceId ?? string.Empty) is { } at

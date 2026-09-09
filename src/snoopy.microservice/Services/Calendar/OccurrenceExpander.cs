@@ -195,11 +195,7 @@ internal static class OccurrenceExpander
     {
         if (component.DtStart is { } start) yield return start.Value;
         if (component.RecurrenceIdentifier?.StartTime is { } identified) yield return identified.Value;
-        foreach (var date in component.RecurrenceDates?.GetAllDates() ?? []) yield return date.Value;
-
-        // GetAllDates leaves out RDATE;VALUE=PERIOD, whose start sources an instance like any other.
-        foreach (var period in component.RecurrenceDates?.GetAllPeriods() ?? [])
-            if (period.StartTime is { } at) yield return at.Value;
+        foreach (var date in IcsDocument.RecurrenceDatesOf(component)) yield return date.Value;
     }
 
     private static DateTime Earlier(DateTime left, DateTime right) => left < right ? left : right;
@@ -265,8 +261,7 @@ internal static class OccurrenceExpander
     {
         private const string Opaque = "OPAQUE";
 
-        private readonly bool recurring =
-            master?.RecurrenceRule is not null || master?.RecurrenceDates?.GetAllDates().Any() == true;
+        private readonly bool recurring = master is not null && IcsDocument.Repeats(master);
 
         private readonly string? recurrenceText = master?.RecurrenceRule?.ToString();
 
