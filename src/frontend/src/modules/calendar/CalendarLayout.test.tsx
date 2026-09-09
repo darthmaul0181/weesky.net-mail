@@ -251,7 +251,8 @@ describe('CalendarLayout', () => {
     api.updateEvent.mockResolvedValue(null)
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
 
-    await userEvent.selectOptions(await screen.findByLabelText('Repeat'), 'monthly')
+    await userEvent.click(await screen.findByLabelText('Repeats'))
+    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'MONTHLY')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalledWith('e1',

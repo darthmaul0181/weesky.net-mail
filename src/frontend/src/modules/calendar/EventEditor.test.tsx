@@ -81,30 +81,54 @@ describe('EventEditor', () => {
 
   // A free end date beside a running series names the end of ONE occurrence, which every reader
   // takes for the end of the series: a 3-month event repeated weekly overlapped itself ten deep.
-  it('swaps the end date for a day offset once the event repeats', async () => {
+  // The box stays — same row, same width — asleep on the start date.
+  it('puts the end date to sleep on the start date once the event repeats', async () => {
+    draw({ initial: form({ endDate: '2026-09-20' }) })
+    expect(screen.getByLabelText('End date')).toBeEnabled()
+    await userEvent.click(screen.getByLabelText('Repeats'))
+    expect(screen.getByLabelText('End date')).toBeDisabled()
+    expect(screen.getByLabelText('End date')).toHaveValue('2026-09-14')
+  })
+
+  // 23:00 to 01:00 ends the morning after; pinned to the start day it would refuse to save.
+  it('lets a repeating event cross midnight', () => {
+    draw({ initial: form({
+      repeat: { kind: 'weekly' }, startTime: '23:00', endTime: '01:00', endDate: '2026-09-14',
+    }) })
+    fireEvent.change(screen.getByLabelText('End time'), { target: { value: '01:30' } })
+    expect(screen.getByLabelText('End date')).toHaveValue('2026-09-15')
+  })
+
+  // The switch turns on Outlook's default: every week, on the start's own weekday, for ever.
+  it('turns on a weekly rule on the start weekday, and remembers a rule it was turned off on', async () => {
     draw()
-    expect(screen.getByLabelText('End date')).toBeInTheDocument()
-    await userEvent.selectOptions(screen.getByLabelText('Repeat'), 'weekly')
+    await userEvent.click(screen.getByLabelText('Repeats'))
+    expect(screen.getByRole('checkbox', { name: 'Monday' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Tuesday' })).not.toBeChecked()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Wednesday' }))
+    await userEvent.click(screen.getByLabelText('Repeats'))
+    expect(screen.queryByRole('checkbox', { name: 'Wednesday' })).toBeNull()
+    await userEvent.click(screen.getByLabelText('Repeats'))
+    expect(screen.getByRole('checkbox', { name: 'Wednesday' })).toBeChecked()
+  })
+
+  // A whole day has no hour: one sentence, "From … to …", and "On …" alone once it repeats,
+  // since its end is then no longer its own.
+  it('collapses a whole day to one date sentence', async () => {
+    draw({ initial: form({ isAllDay: true, endDate: '2026-09-16' }) })
+    expect(screen.getByText('From')).toBeInTheDocument()
+    expect(screen.getByLabelText('End date')).toHaveValue('2026-09-16')
+    expect(screen.queryByLabelText('Start time')).toBeNull()
+
+    await userEvent.click(screen.getByLabelText('Repeats'))
+    // "On" is also the block's own weekday label: read the one on the date row.
+    expect(screen.getByLabelText('Start date').closest('.field-h')?.querySelector('label'))
+      .toHaveTextContent('On')
     expect(screen.queryByLabelText('End date')).toBeNull()
-    expect(screen.getByLabelText('End day')).toHaveValue('0')
   })
 
-  it('moves the end date by the offset that is picked', async () => {
-    draw({ initial: form({ repeat: { kind: 'weekly' } }) })
-    await userEvent.selectOptions(screen.getByLabelText('End day'), '2')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(screen.getByLabelText('End day')).toHaveValue('2')
-  })
-
-  // Clamping would silently rewrite a series another client wrote; the odd span is offered back
-  // as its own option instead, which is what makes it visible and correctable.
-  it('carries a span the list does not hold as an option of its own', () => {
-    draw({ initial: form({ repeat: { kind: 'weekly' }, endDate: '2026-12-08' }) })
-    expect(screen.getByLabelText('End day')).toHaveValue('85')
-    expect(screen.getByRole('option', { name: '85 days later' })).toBeInTheDocument()
-  })
-
-  it('reads a repeat rule back under the picker', () => {
+  it('reads a repeat rule back into the block', () => {
     draw({
       initial: form({
         repeat: {
@@ -113,7 +137,8 @@ describe('EventEditor', () => {
         },
       }),
     })
-    expect(screen.getByLabelText('Repeat')).toHaveValue('custom')
+    expect(screen.getByLabelText('Repeats')).toBeChecked()
+    expect(screen.getByLabelText('Repeat every')).toHaveValue(6)
     expect(screen.getByText('Every 6 months')).toBeInTheDocument()
   })
 
@@ -124,12 +149,14 @@ describe('EventEditor', () => {
       initial: form({ keepRepeat: true, repeat: { kind: 'never' } }),
     })
     expect(screen.getByText(/repeats in a way this screen cannot show/)).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Repeat' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Repeats' })).toBeNull()
     // The row's label must name what is drawn, never a control that is not there.
-    expect(screen.getByRole('group', { name: 'Repeat' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Repeats' })).toBeInTheDocument()
 
+    // Replacing starts from a rule the block can draw, never from the one it cannot.
     await userEvent.click(screen.getByRole('button', { name: 'Replace' }))
-    expect(screen.getByLabelText('Repeat')).toBeInTheDocument()
+    expect(screen.getByLabelText('Repeats')).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Monday' })).toBeChecked()
   })
 
   // A value that is not the default is a value somebody set: hiding it behind a chevron would

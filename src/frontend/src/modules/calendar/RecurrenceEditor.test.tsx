@@ -30,7 +30,7 @@ const MONTHLY: RecurrenceWrite = { frequency: 'MONTHLY', interval: 1, byDay: [],
 describe('RecurrenceEditor', () => {
   it('shows the interval and the unit', () => {
     draw({ ...WEEKLY, interval: 3 })
-    expect(screen.getByLabelText('Every')).toHaveValue(3)
+    expect(screen.getByLabelText('Repeat every')).toHaveValue(3)
     expect(screen.getByLabelText('Unit')).toHaveValue('WEEKLY')
   })
 
@@ -48,26 +48,34 @@ describe('RecurrenceEditor', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ byDay: ['MO', 'WE'] }))
   })
 
-  // The whole point of the monthly branch: "the last Friday" is a position and a weekday, never
-  // a day number, and the rule has to come out complete.
-  it('writes a monthly rule on the last Friday', async () => {
-    const onChange = draw(MONTHLY)
-    await userEvent.click(screen.getByRole('radio', { name: 'Weekday of the month' }))
-    await userEvent.selectOptions(screen.getByLabelText('Position'), 'last')
-    await userEvent.selectOptions(screen.getByLabelText('Weekday'), 'FR')
-
-    expect(onChange).toHaveBeenLastCalledWith({
-      frequency: 'MONTHLY', interval: 1, byDay: [], end: 'Never',
-      bySetPos: -1, bySetPosDay: 'FR', byMonthDay: undefined,
+  // "Every day" names no weekday, and the seven boxes say so by being all lit and asleep
+  // rather than gone: a row that vanishes makes the block jump under the pointer.
+  it('draws the seven days lit and disabled under every day', () => {
+    draw({ frequency: 'DAILY', interval: 1, byDay: [], end: 'Never' })
+    const days = screen.getAllByRole('checkbox')
+    expect(days).toHaveLength(7)
+    days.forEach(one => {
+      expect(one).toBeChecked()
+      expect(one).toBeDisabled()
     })
   })
 
-  it('writes a monthly rule on a day number', async () => {
-    const onChange = draw({ ...MONTHLY, bySetPos: 1, bySetPosDay: 'FR' })
-    await userEvent.click(screen.getByRole('radio', { name: 'Day of the month' }))
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
-      byMonthDay: 25, bySetPos: undefined, bySetPosDay: undefined,
-    }))
+  it('keeps the days chosen when the unit moves off weekly, and drops them for daily', async () => {
+    const onChange = draw({ ...WEEKLY, byDay: ['MO', 'WE'] })
+    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'MONTHLY')
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ frequency: 'MONTHLY', byDay: ['MO', 'WE'] }))
+    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'DAILY')
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ frequency: 'DAILY', byDay: [] }))
+  })
+
+  // A rule that names no day repeats on nothing: leaving daily lands on the start's own weekday.
+  it('falls back on the start weekday when a rule leaves daily with no day', async () => {
+    const onChange = draw(MONTHLY)
+    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'WEEKLY')
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ frequency: 'WEEKLY', byDay: ['FR'] }))
   })
 
   it('ends after a count', async () => {
@@ -93,14 +101,15 @@ describe('RecurrenceEditor', () => {
 
   it('remembers the date it was given rather than falling back on the start', async () => {
     const onChange = draw({ ...WEEKLY, end: 'Count', count: 4, until: '2026-12-20' })
-    await userEvent.click(screen.getByRole('radio', { name: 'Until' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'on' }))
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ end: 'Until', until: '2026-12-20', count: undefined }))
   })
 
-  it('drops the day boxes when the rule is not weekly', () => {
-    draw({ frequency: 'YEARLY', interval: 1, byDay: [], end: 'Never' })
-    expect(screen.queryByRole('checkbox')).toBeNull()
-    expect(screen.queryByRole('radio', { name: 'Day of the month' })).toBeNull()
+  it('draws the day boxes for every unit, live once the unit is not daily', () => {
+    draw({ frequency: 'YEARLY', interval: 1, byDay: ['MO'], end: 'Never' })
+    expect(screen.getAllByRole('checkbox')).toHaveLength(7)
+    expect(screen.getByRole('checkbox', { name: 'Monday' })).toBeEnabled()
+    expect(screen.getByRole('checkbox', { name: 'Monday' })).toBeChecked()
   })
 })

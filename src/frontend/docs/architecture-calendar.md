@@ -111,39 +111,55 @@ success, bumps `reloads`, which changes `editorKey` and reseeds the form from th
 The form stands untouched behind the band until the user pulls that lever: bouncing back to a
 grid that kept nothing is how somebody loses an hour's work without being told why.
 
+**Repetition is a switch, and it is always "custom".** The Repeat row is a `.toggle-switch`, the
+All-day row's twin, and turning it on opens the recurrence block on Outlook's default — every week,
+on the start's own weekday, for ever (`defaultRule`). There is no preset picker any more: the
+`daily`/`weekly`/… kinds of `RepeatChoice` survive only so a stored plain rule still reads back,
+and the block draws whatever `ruleOf` answers. A rule the switch was turned off on is remembered
+in a ref, so turning it back on finds it rather than the default.
+
 **The end of an event and the end of a series are two questions, and the form only ever asks
-one.** While `repeat.kind` is anything but `never` — the locked `keepRepeat` state included — the
-End row's date input is replaced by a day-offset `<select>` (`END_OFFSETS`, 0 to 7, *the same day*
-/ *the next day* / *N days later*), and picking one writes `endDate = addDays(startDate, n)`. The
-free date is drawn again only when nothing repeats. That is a shipped defect rather than a
-preference: a 3-month event repeated weekly is ten overlapping occurrences every day for four
-months, and the form accepted it because the date above the Repeat row reads as the end of the
-*series* to everyone who is not the person who wrote the code. Two things about it. **A span the
-list does not hold is added to the list rather than clamped** — a series another client wrote
-comes back as its own option (`85 days later`), which is what makes it visible and correctable;
-silently rewriting it would be the same class of surprise from the other side. And **the select is
-withheld on a span that is NaN or negative** (a half-typed date box, or the error the submit
-already reports), because a `<select>` holding a value none of its options carries picks the first
-one and would rewrite the form under the user.
+one.** While the event repeats, the End row keeps its date box — same row, same width — but the
+box is **disabled and follows the start date** (`alignEnd`, applied on every write through `set`).
+That is a shipped defect rather than a preference: a 3-month event repeated weekly is ten
+overlapping occurrences every day for four months, and the form accepted it because a free end
+date beside a rule reads as the end of the *series* to everyone who did not write the code. The
+one thing that can still move that date is a time that crosses midnight — 23:00 to 01:00 ends the
+morning after, and pinning it to the start day would refuse the save. **A whole day collapses the
+two rows into one sentence**: *From [date] to [date]* once, *On [date]* alone while it repeats,
+because a whole day has no hour and a repeating one has no end of its own. `.editor-joiner` is
+the word between the two boxes.
 
-**The recurrence block's "ends" row is two lines by construction.** `.recurrence-end` is a column
-of `.recurrence-end-line` boxes, each `flex-wrap: nowrap`: *Never · After [n] times* on the first,
-*Until* and its date on the second. Three consequences, all measured in
-`probes/recurrence-editor.html` rather than reasoned. The pairing is structural — a wrap decided by
-the available width splits *Until* from the date it governs the day a translation is a few pixels
-longer. `nowrap` gives the block a real min-content, so the content-sized dialog (`modal.css`)
-grows to hold it instead of breaking it — and the split made the dialog **narrower**, 689px against
-the 730 the same content measured on one line, because the three choices plus a real
-`input[type=date]` come to 435px where the widest line here is 241. And the counter and the date
-**stay drawn while another choice is active, disabled**: they are remembered values, and a control
-that comes and goes makes the whole block jump under the pointer.
+**The dialog's width does not move under the switch, and the contract is what keeps it still.**
+The recurrence block is the widest thing the editor ever draws, and a content-sized dialog would
+grow for it; `.calendar-editor-form { --field-w: 53ch }` therefore hands the Title box — drawn in
+every state — a measure wide enough for the block's widest line in French *and* in English, on the
+contract's own variable rather than a pixel width. Measured in `probes/recurrence-editor.html`:
+**576px in all eight states** (hours / whole day × once / repeating × FR / EN), block 400, escape 0.
+At 52ch the English block still won by one pixel, which is what the last ch buys. A `UNE seule
+largeur` of NON in that probe is the regression to look for.
 
-**Two labels were renamed for what they name rather than for taste.** `repeat.ends` was *Fin* in
-French, which is the same word as the End row three lines above it, and `repeat.endUntil` was *Le*,
-which names nothing on its own; they are *Se termine* and *Jusqu'au*. The two date controls also
-had one accessible name between them (`repeat.untilDate` and `editor.endDate` were both *End
-date*), so the rule's own date is now *Repeat until* / *Répéter jusqu'au*, and the counter took a
-name of its own (`repeat.countValue`) instead of sharing *After* with its radio.
+**The block says one sentence and nothing more.** *Repeat every [n] [day|week|month|year]*, the
+seven weekday boxes, and *Ends: never / after [n] times / on [date]*. Three things about it. The
+weekday boxes are **drawn for every unit and never withheld** — under *day* they are all lit and
+disabled, since choosing days makes no sense when it is every day, and a row that comes and goes
+makes the block jump under the pointer; leaving *day* lands on the start's own weekday rather than
+on no day at all, which a rule would repeat on nothing. They are the calendar row's own trick: a
+hidden checkbox keeping the tab order, the space bar and the long name, a one-letter
+`.recurrence-day` box that is what is seen. The *ends* row is **two lines by construction**
+(`.recurrence-end-line`, `nowrap`), *on* paired with its date, and the counter and the date stay
+drawn while another choice is active, disabled — remembered values, and the same
+"asleep, not gone" rule the End date follows. **The day-of-month and weekday-position controls
+are gone from the block**: `byMonthDay`/`bySetPos` are still read, written and summarised, but a
+stored rule carrying either is opened *locked* (`beyondTheBlock` arms `keepRepeat` beside
+`repeatIsExact`), so a screen that cannot show "the last Friday" cannot rewrite it; *Replace*
+starts from `defaultRule`, never from the rule the block cannot draw.
+
+**Labels were renamed for what they name.** `repeat.ends` was *Fin* in French — the End row's own
+word — and `repeat.endUntil` was *Le*, which names nothing on its own; they are *Se termine* and
+*au* / *on*. `repeat.interval` reads *Répéter chaque* / *Repeat every*. The rule's date and the
+counter each took a name of their own (`repeat.untilDate` *Repeat until*, `repeat.countValue`
+*Number of times*) instead of sharing *End date* and *After* with the controls beside them.
 
 **`keepRepeat` is a lock, not a value.** An event whose `RRULE` this editor cannot draw comes back
 with `repeatIsExact: false`; the Repeat row is then frozen on `editor.keptRepeat` with a

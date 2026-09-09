@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EventDetail, EventWrite, Occurrence } from './calendarTypes'
 import {
-  allowedScopes, formOf, isRecurring, movedBody, movedOccurrence, newEventForm, updateBodyOf,
-  validate, writeOf,
+  alignEnd, allowedScopes, defaultRule, formOf, isRecurring, movedBody, movedOccurrence, newEventForm, updateBodyOf, validate, writeOf,
 } from './eventForm'
 
 const TZ = 'Europe/Brussels'
@@ -162,6 +161,13 @@ describe('formOf', () => {
   it('arms keepRepeat when the stored rule is more than the editor can show', () => {
     expect(formOf(detailOf({ repeatIsExact: false }), null, TZ).keepRepeat).toBe(true)
     expect(formOf(detailOf({ repeatIsExact: true }), null, TZ).keepRepeat).toBe(false)
+    // Exact on the wire, but a day of the month or a weekday position is a shape the block no
+    // longer draws — a screen that cannot show it must not be allowed to rewrite it.
+    const positioned = detailOf()
+    positioned.fields.repeat = {
+      frequency: 'MONTHLY', interval: 1, byDay: [], end: 'Never', bySetPos: -1, bySetPosDay: 'FR',
+    }
+    expect(formOf(positioned, null, TZ).keepRepeat).toBe(true)
   })
 })
 
@@ -364,6 +370,43 @@ describe('movedBody', () => {
 
     expect(body.start).toBe('2026-10-25T02:30:00')
     expect(body.end).toBe('2026-10-25T03:30:00')
+  })
+})
+
+describe('defaultRule', () => {
+  it('repeats every week on the start weekday, for ever', () => {
+    expect(defaultRule('2026-09-14')).toEqual(
+      { frequency: 'WEEKLY', interval: 1, byDay: ['MO'], end: 'Never' })
+    expect(defaultRule('2026-09-20').byDay).toEqual(['SU'])
+  })
+})
+
+describe('alignEnd', () => {
+  const base = formOf(detailOf(), null, TZ)
+
+  it('leaves a lone event alone', () => {
+    const form = { ...base, endDate: '2026-12-08' }
+    expect(alignEnd(form)).toBe(form)
+  })
+
+  it('pins a repeating event to the day it starts', () => {
+    const form = { ...base, repeat: { kind: 'weekly' as const }, endDate: '2026-12-08' }
+    expect(alignEnd(form).endDate).toBe(base.startDate)
+  })
+
+  it('lets a repeating event that crosses midnight end the morning after', () => {
+    const form = {
+      ...base, repeat: { kind: 'daily' as const }, startTime: '23:00', endTime: '01:00',
+    }
+    expect(alignEnd(form).endDate).toBe('2026-09-15')
+  })
+
+  it('never lets a whole day cross', () => {
+    const form = {
+      ...base, isAllDay: true, repeat: { kind: 'daily' as const },
+      startTime: '23:00', endTime: '01:00', endDate: '2026-12-08',
+    }
+    expect(alignEnd(form).endDate).toBe(base.startDate)
   })
 })
 

@@ -6,17 +6,11 @@ import { isoWeekdayOf, type PlainDate } from './plainDate'
 
 export interface RecurrenceEditorProps {
   value: RecurrenceWrite
-  /** The event's own start: what "on day N" and "on the last Friday" default to. */
+  /** The event's own start: the weekday a rule falls back on when it names none. */
   startDate: PlainDate
   onChange(rule: RecurrenceWrite): void
 }
 
-const POSITIONS = [1, 2, 3, 4, -1]
-/** `-1` is the rule's own way of saying "the last one"; the option carries the word rather than
-    the number, so a select never has to explain a minus sign. */
-const LAST = 'last'
-const posValue = (position: number | undefined) =>
-  (position === -1 ? LAST : String(position ?? 1))
 const DEFAULT_COUNT = 10
 
 export default function RecurrenceEditor({ value, startDate, onChange }: RecurrenceEditorProps) {
@@ -25,9 +19,8 @@ export default function RecurrenceEditor({ value, startDate, onChange }: Recurre
   const locale = dateLocaleOf(lang, region)
 
   const frequency = value.frequency.toUpperCase()
-  const dayNumber = Number(startDate.slice(8, 10)) || 1
+  const daily = frequency === 'DAILY'
   const startDay = WEEKDAY_TOKENS[isoWeekdayOf(startDate) - 1]
-  const bySetPos = value.bySetPos !== undefined
 
   const unit: Record<string, string> = {
     DAILY: t('repeat.unitDay', { count: value.interval }),
@@ -35,14 +28,16 @@ export default function RecurrenceEditor({ value, startDate, onChange }: Recurre
     MONTHLY: t('repeat.unitMonth', { count: value.interval }),
     YEARLY: t('repeat.unitYear', { count: value.interval }),
   }
-  const positionLabel: Record<number, string> = {
-    1: t('repeat.position.first'), 2: t('repeat.position.second'),
-    3: t('repeat.position.third'), 4: t('repeat.position.fourth'),
-    [-1]: t('repeat.position.last'),
-  }
 
   /** Every branch answers with a whole `RecurrenceWrite`: the API takes a rule, never a patch. */
   const emit = (patch: Partial<RecurrenceWrite>) => onChange({ ...value, ...patch })
+
+  // "Every day" names no weekday, so the rule carries none; every other unit starts from the
+  // start's own day rather than from nothing, which is what a rule with no day would repeat on.
+  const pickUnit = (next: string) => emit({
+    frequency: next,
+    byDay: next === 'DAILY' ? [] : value.byDay.length ? value.byDay : [startDay],
+  })
 
   const toggleDay = (token: string) => emit({
     byDay: value.byDay.includes(token)
@@ -58,87 +53,36 @@ export default function RecurrenceEditor({ value, startDate, onChange }: Recurre
           className="recurrence-interval"
           onChange={event => emit({ interval: Math.max(1, Number(event.target.value) || 1) })} />
         <select aria-label={t('repeat.unitLabel')} value={frequency}
-          onChange={event => emit({
-            frequency: event.target.value, byDay: [],
-            byMonthDay: undefined, bySetPos: undefined, bySetPosDay: undefined,
-          })}>
+          onChange={event => pickUnit(event.target.value)}>
           {['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].map(one => (
             <option key={one} value={one}>{unit[one]}</option>
           ))}
         </select>
       </div>
 
-      {frequency === 'WEEKLY' && (
-        <div className="field-h">
-          <span className="field-h-label">{t('repeat.byDay')}</span>
-          <div className="recurrence-days">
-            {Array.from({ length: 7 }, (_, index) => (rules.firstDay - 1 + index) % 7)
-              .map(offset => (
-                <label key={WEEKDAY_TOKENS[offset]}>
-                  {/* The whole name is the box's own, the abbreviation is what is drawn: seven
-                      long names unwrapped are the modal's intrinsic width, and a content-sized
-                      dialog would take the screen to hold them. */}
-                  <input type="checkbox" aria-label={weekdayNameOf(offset, 'long', locale)}
-                    checked={value.byDay.includes(WEEKDAY_TOKENS[offset])}
-                    onChange={() => toggleDay(WEEKDAY_TOKENS[offset])} />
-                  {weekdayNameOf(offset, 'short', locale)}
-                </label>
-              ))}
-          </div>
+      {/* Drawn for every unit, never withheld: under "every day" the seven boxes are all lit and
+          disabled — choosing days makes no sense when it is every day, and a row that comes and
+          goes makes the block jump under the pointer. */}
+      <div className="field-h">
+        <span className="field-h-label">{t('repeat.byDay')}</span>
+        <div className="recurrence-days">
+          {Array.from({ length: 7 }, (_, index) => (rules.firstDay - 1 + index) % 7)
+            .map(offset => (
+              <label key={WEEKDAY_TOKENS[offset]}>
+                {/* The whole name is the box's own; one letter is what is drawn. */}
+                <input type="checkbox" aria-label={weekdayNameOf(offset, 'long', locale)}
+                  disabled={daily}
+                  checked={daily || value.byDay.includes(WEEKDAY_TOKENS[offset])}
+                  onChange={() => toggleDay(WEEKDAY_TOKENS[offset])} />
+                <span className="recurrence-day">{weekdayNameOf(offset, 'narrow', locale)}</span>
+              </label>
+            ))}
         </div>
-      )}
-
-      {frequency === 'MONTHLY' && (
-        <div className="field-h">
-          <span className="field-h-label">{t('repeat.bySetPos')}</span>
-          <div className="recurrence-monthly">
-            <label>
-              <input type="radio" name="repeat-monthly" checked={!bySetPos}
-                onChange={() => emit({
-                  byMonthDay: dayNumber, bySetPos: undefined, bySetPosDay: undefined,
-                })} />
-              {t('repeat.byMonthDay')}
-            </label>
-            {!bySetPos && (
-              <input type="number" min={1} max={31} aria-label={t('repeat.byMonthDay')}
-                value={value.byMonthDay ?? dayNumber} className="recurrence-interval"
-                onChange={event => emit({
-                  byMonthDay: Math.min(31, Math.max(1, Number(event.target.value) || 1)),
-                })} />
-            )}
-            <label>
-              <input type="radio" name="repeat-monthly" checked={bySetPos}
-                onChange={() => emit({
-                  bySetPos: 1, bySetPosDay: startDay, byMonthDay: undefined,
-                })} />
-              {t('repeat.bySetPos')}
-            </label>
-            {bySetPos && (
-              <>
-                <select aria-label={t('repeat.positionLabel')} value={posValue(value.bySetPos)}
-                  onChange={event => emit({
-                    bySetPos: event.target.value === LAST ? -1 : Number(event.target.value),
-                  })}>
-                  {POSITIONS.map(one => (
-                    <option key={one} value={posValue(one)}>{positionLabel[one]}</option>
-                  ))}
-                </select>
-                <select aria-label={t('repeat.weekdayLabel')}
-                  value={value.bySetPosDay ?? startDay}
-                  onChange={event => emit({ bySetPosDay: event.target.value })}>
-                  {WEEKDAY_TOKENS.map((token, offset) => (
-                    <option key={token} value={token}>{weekdayNameOf(offset, 'long', locale)}</option>
-                  ))}
-                </select>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      </div>
 
       <div className="field-h">
         <span className="field-h-label">{t('repeat.ends')}</span>
-        {/* Two lines, and the second holds "until" with its date: the three choices plus a real
+        {/* Two lines, and the second holds "on" with its date: the three choices plus a real
             date input come to 435px on one line, which is 223 more than the widest the rest of
             this block ever asks for. The counter and the date stay drawn while another choice is
             active — they are remembered values, and a control that comes and goes makes the whole

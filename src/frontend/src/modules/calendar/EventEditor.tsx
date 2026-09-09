@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent } from 'react'
+import { useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import ChevronDownIcon from '../../icons/ChevronDownIcon'
@@ -8,7 +8,7 @@ import type {
   Availability, Calendar, EditScope, EventDetail, Occurrence, RecurrenceWrite, Visibility,
 } from './calendarTypes'
 import {
-  ruleOf, type EventFormState, type RepeatChoice, validate,
+  alignEnd, defaultRule, ruleOf, type EventFormState, validate,
 } from './eventForm'
 import { addDays, clockOf, daysBetween, isPlainDate, MINUTES_PER_DAY } from './plainDate'
 import RecurrenceEditor from './RecurrenceEditor'
@@ -36,14 +36,6 @@ export interface EventEditorProps {
 }
 
 const FORM_ID = 'calendar-event-form'
-const REPEATS: RepeatChoice['kind'][] = ['never', 'daily', 'weekly', 'monthly', 'yearly', 'custom']
-const DEFAULT_RULE: RecurrenceWrite = {
-  frequency: 'WEEKLY', interval: 1, byDay: [], end: 'Never',
-}
-
-/** What "Ends" offers while a series runs. A week is the ceiling because an occurrence longer
-    than its own interval overlaps the next one, which is the confusion this row removes. */
-const END_OFFSETS = [0, 1, 2, 3, 4, 5, 6, 7]
 
 const CLOCK = /^\d{2}:\d{2}$/
 const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
@@ -87,14 +79,16 @@ export default function EventEditor({
     initial.availability !== 'Busy' || initial.visibility !== 'Default'
     || initial.url !== '' || (detail?.attendees.length ?? 0) > 0)
 
-  const set = (patch: Partial<EventFormState>) => setForm(current => ({ ...current, ...patch }))
+  // Every write goes through `alignEnd`: while a series runs the end date is not the user's to
+  // set, and a state that ever held a stale one would save it.
+  const set = (patch: Partial<EventFormState>) =>
+    setForm(current => alignEnd({ ...current, ...patch }))
   const rule = ruleOf(form.repeat)
-  const locked = detail != null && !detail.repeatIsExact && form.keepRepeat
+  const repeating = form.repeat.kind !== 'never'
+  const locked = detail != null && form.keepRepeat
   const title = detail ? t('editor.editTitle') : t('editor.newTitle')
-  const span = daysBetween(form.startDate, form.endDate)
-  // A half-typed date box answers NaN, and a negative span is the error the submit reports: both
-  // want the date input back, or the select would hold a value none of its options carries.
-  const offsetEnd = (locked || form.repeat.kind !== 'never') && Number.isInteger(span) && span >= 0
+  // The rule the switch was turned off on, so turning it back on finds it rather than a default.
+  const remembered = useRef<RecurrenceWrite | null>(null)
 
   // The key rather than `t(key)`: a key reaching t() as a variable is invisible to the typed
   // guard and to src/locales/keys.test.ts alike.
@@ -112,10 +106,18 @@ export default function EventEditor({
     set({ isAllDay, reminders: [...new Set(converted)] })
   }
 
-  function pickRepeat(kind: RepeatChoice['kind']) {
-    if (kind === 'never') return set({ repeat: { kind: 'never' } })
-    if (kind !== 'custom') return set({ repeat: { kind } })
-    set({ repeat: { kind: 'custom', rule: rule ?? DEFAULT_RULE } })
+  function toggleRepeat(on: boolean) {
+    if (!on) {
+      remembered.current = rule ?? null
+      return set({ repeat: { kind: 'never' } })
+    }
+    set({ repeat: { kind: 'custom', rule: remembered.current ?? defaultRule(form.startDate) } })
+  }
+
+  /** The stored rule is more than the block draws (a day of the month, a weekday position):
+      replacing it starts from a rule the block CAN draw, never from the one it cannot. */
+  function replaceRepeat() {
+    set({ keepRepeat: false, repeat: { kind: 'custom', rule: defaultRule(form.startDate) } })
   }
 
   function submit(event: FormEvent) {
@@ -182,40 +184,50 @@ export default function EventEditor({
           </label>
         </div>
 
-        <div className="field-h">
-          <label htmlFor="event-start-date">{t('editor.start')}</label>
-          <input id="event-start-date" type="date" required aria-label={t('editor.startDate')}
-            value={form.startDate}
-            onChange={event => setForm(withStart(form, event.target.value, form.startTime))} />
-          {!form.isAllDay && (
-            <input type="time" required aria-label={t('editor.startTime')} value={form.startTime}
-              onChange={event => setForm(withStart(form, form.startDate, event.target.value))} />
-          )}
-        </div>
+        {/* A whole day has no hour, so Start and End collapse into one sentence: "From [date] to
+            [date]", or "On [date]" once the event repeats and its end is no longer its own. With
+            hours the two rows stay, and while a series runs the End date is drawn disabled on the
+            start date — the shipped defect was a 3-month event repeated weekly, ten of them
+            overlapping every day, because a free end date beside a rule reads as the end of the
+            SERIES to everyone who did not write the code. The box stays rather than vanishing:
+            the same row, the same width, one control asleep. */}
+        {form.isAllDay ? (
+          <div className="field-h">
+            <label htmlFor="event-start-date">
+              {repeating ? t('editor.on') : t('editor.from')}
+            </label>
+            <input id="event-start-date" type="date" required aria-label={t('editor.startDate')}
+              value={form.startDate}
+              onChange={event => setForm(alignEnd(withStart(form, event.target.value, form.startTime)))} />
+            {!repeating && (
+              <>
+                <span className="editor-joiner">{t('editor.to')}</span>
+                <input type="date" required aria-label={t('editor.endDate')} value={form.endDate}
+                  onChange={event => set({ endDate: event.target.value })} />
+              </>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="field-h">
+              <label htmlFor="event-start-date">{t('editor.start')}</label>
+              <input id="event-start-date" type="date" required aria-label={t('editor.startDate')}
+                value={form.startDate}
+                onChange={event => setForm(alignEnd(withStart(form, event.target.value, form.startTime)))} />
+              <input type="time" required aria-label={t('editor.startTime')} value={form.startTime}
+                onChange={event => setForm(alignEnd(withStart(form, form.startDate, event.target.value)))} />
+            </div>
 
-        {/* While a series runs, the end is a day offset and not a free date: a date there names
-            the end of ONE occurrence, which every reader takes for the end of the series — the
-            shipped defect was a 3-month event repeated weekly, ten of them overlapping every day.
-            An existing span the list does not hold is added to it rather than clamped away. */}
-        <div className="field-h">
-          <label htmlFor="event-end-date">{t('editor.end')}</label>
-          {offsetEnd ? (
-            <select id="event-end-date" aria-label={t('editor.endOffset')} value={span}
-              onChange={event => set({ endDate: addDays(form.startDate, Number(event.target.value)) })}>
-              {(END_OFFSETS.includes(span) ? END_OFFSETS : [...END_OFFSETS, span])
-                .map(days => (
-                  <option key={days} value={days}>{offsetLabel(days, t)}</option>
-                ))}
-            </select>
-          ) : (
-            <input id="event-end-date" type="date" required aria-label={t('editor.endDate')}
-              value={form.endDate} onChange={event => set({ endDate: event.target.value })} />
-          )}
-          {!form.isAllDay && (
-            <input type="time" required aria-label={t('editor.endTime')} value={form.endTime}
-              onChange={event => set({ endTime: event.target.value })} />
-          )}
-        </div>
+            <div className="field-h">
+              <label htmlFor="event-end-date">{t('editor.end')}</label>
+              <input id="event-end-date" type="date" required aria-label={t('editor.endDate')}
+                disabled={repeating} value={form.endDate}
+                onChange={event => set({ endDate: event.target.value })} />
+              <input type="time" required aria-label={t('editor.endTime')} value={form.endTime}
+                onChange={event => set({ endTime: event.target.value })} />
+            </div>
+          </>
+        )}
 
         {form.timeZone !== tz && (
           <p className="editor-hint">{t('editor.timesIn', { zone: form.timeZone })}</p>
@@ -225,31 +237,32 @@ export default function EventEditor({
           {/* A `for` pointing at a control that is not rendered names nothing: in the locked state
               the row's label is the group's own. */}
           {locked
-            ? <span className="field-h-label" id="event-repeat-label">{t('editor.repeat')}</span>
-            : <label htmlFor="event-repeat">{t('editor.repeat')}</label>}
+            ? <span className="field-h-label" id="event-repeat-label">{t('editor.repeats')}</span>
+            : <label htmlFor="event-repeat">{t('editor.repeats')}</label>}
           {locked ? (
             <div className="editor-kept" role="group" aria-labelledby="event-repeat-label">
               <span>{t('editor.keptRepeat')}</span>
-              <button type="button" className="btn" onClick={() => set({ keepRepeat: false })}>
+              <button type="button" className="btn" onClick={replaceRepeat}>
                 {t('editor.replaceRepeat')}
               </button>
             </div>
           ) : (
-            <select id="event-repeat" value={form.repeat.kind}
-              onChange={event => pickRepeat(event.target.value as RepeatChoice['kind'])}>
-              {REPEATS.map(kind => (
-                <option key={kind} value={kind}>{repeatLabel(kind, t)}</option>
-              ))}
-            </select>
+            <label className="toggle-switch">
+              <input id="event-repeat" type="checkbox" checked={repeating}
+                onChange={event => toggleRepeat(event.target.checked)} />
+              <span className="toggle-track" />
+            </label>
           )}
         </div>
 
+        {/* Every rule the switch turns on is the block's own: the presets the old picker offered
+            are read back as `custom` too, through `ruleOf`. */}
+        {!locked && rule && (
+          <RecurrenceEditor value={rule} startDate={form.startDate}
+            onChange={next => set({ repeat: { kind: 'custom', rule: next } })} />
+        )}
         {!locked && rule && (
           <p className="editor-hint">{recurrenceSummary(rule, t, lang, region)}</p>
-        )}
-        {!locked && form.repeat.kind === 'custom' && (
-          <RecurrenceEditor value={form.repeat.rule} startDate={form.startDate}
-            onChange={next => set({ repeat: { kind: 'custom', rule: next } })} />
         )}
 
         <div className="field-h">
@@ -355,25 +368,8 @@ export default function EventEditor({
   )
 }
 
-function offsetLabel(days: number, t: TFunction<'calendar'>) {
-  if (days === 0) return t('editor.endSameDay')
-  if (days === 1) return t('editor.endNextDay')
-  return t('editor.endAfterDays', { count: days })
-}
-
-// Spelled out rather than `t(`repeat.${kind}`)`: a key reaching t() as a variable is invisible to
-// the typed guard and to src/locales/keys.test.ts alike. Same reason for the two below.
-function repeatLabel(kind: RepeatChoice['kind'], t: TFunction<'calendar'>) {
-  switch (kind) {
-    case 'never': return t('repeat.never')
-    case 'daily': return t('repeat.frequency.daily', { count: 1 })
-    case 'weekly': return t('repeat.frequency.weekly', { count: 1 })
-    case 'monthly': return t('repeat.frequency.monthly', { count: 1 })
-    case 'yearly': return t('repeat.frequency.yearly', { count: 1 })
-    default: return t('repeat.custom')
-  }
-}
-
+// Spelled out rather than `t(`availability.${one}`)`: a key reaching t() as a variable is
+// invisible to the typed guard and to src/locales/keys.test.ts alike. Same reason below.
 function availabilityLabel(one: Availability, t: TFunction<'calendar'>) {
   switch (one) {
     case 'Busy': return t('availability.Busy')

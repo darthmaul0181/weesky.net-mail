@@ -498,6 +498,14 @@
 .calendar-editor-form .calendar-swatch { margin-right: -8px; }
 /* A time box is four characters wide whatever the date beside it holds. */
 .calendar-editor-form input[type="time"] { flex: none; width: 8em; }
+/* The dialog's width must not move under the Repeats switch, and the recurrence block is what
+   a content-sized dialog would grow for. The measure is therefore the form's, declared on the
+   contract's own variable and carried by the Title box that every state draws: wide enough for
+   the block's widest line in French and in English (measured in probes/recurrence-editor.html),
+   so opening the block changes the dialog's height and nothing else. */
+.calendar-editor-form { --field-w: 53ch; }
+/* "From [date] to [date]": the word between two boxes, in the label's own voice. */
+.editor-joiner { flex: none; font-size: 13px; color: var(--text-muted); }
 /* Under the row it explains, in that row's own control column. */
 .editor-hint { margin: -6px 0 12px 126px; font-size: 12px; color: var(--text-muted); }
 .editor-kept {
@@ -546,28 +554,46 @@
   margin: 0 0 12px 126px; padding: 12px 14px;
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);
 }
-.recurrence-editor .field-h > :is(label, .field-h-label):first-child { width: 84px; }
+.recurrence-editor .field-h > :is(label, .field-h-label):first-child { width: 104px; }
 .recurrence-editor .field-h:last-child { margin-bottom: 0; }
 /* A counter is not a field: modal.css hands every number box the dialog's 34ch measure, and 34
    characters of "3" reads as a rendering fault. Equal specificity, later sheet. */
 .modal .recurrence-editor .field-h > input[type="number"] { width: 5em; }
 .recurrence-editor input[type="number"] { flex: none; width: 5em; }
 .recurrence-days,
-.recurrence-monthly,
 .recurrence-end {
   flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13px;
 }
-/* The end row is two lines by construction, never by wrapping: "until" and its date belong
+/* The end row is two lines by construction, never by wrapping: "on" and its date belong
    together, and a wrap decided by the available width splits them the moment a translation is a
-   few pixels longer. `nowrap` on the lines is also what gives this block a real min-content, so
-   the content-sized dialog grows to hold it instead of breaking it. */
+   few pixels longer. */
 .recurrence-end { flex-direction: column; align-items: flex-start; gap: 9px; }
 .recurrence-end-line { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
 .recurrence-end-line > :disabled,
 .recurrence-end-line > :disabled + span { color: var(--text-muted); opacity: 0.7; }
-.recurrence-days > label,
-.recurrence-monthly > label,
 .recurrence-end label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+/* Seven one-letter boxes, the calendar row's own trick: the checkbox is hidden and keeps the tab
+   order, the space bar and the accessible name, the box is what is seen. Disabled — "every day"
+   — they stay drawn, all lit, greyed: a row that vanishes makes the block jump. */
+.recurrence-days { flex-wrap: nowrap; gap: 6px; }
+.recurrence-days > label { position: relative; cursor: pointer; }
+.recurrence-days > label > input {
+  position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;
+}
+.recurrence-day {
+  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  color: var(--text-muted); font-size: 12px; font-weight: 600;
+}
+.recurrence-days > label:has(input:checked) > .recurrence-day {
+  background: var(--action-primary); border-color: var(--action-primary);
+  color: var(--action-primary-fg);
+}
+.recurrence-days > label:has(input:focus-visible) > .recurrence-day {
+  outline: 2px solid var(--action-primary); outline-offset: 2px;
+}
+.recurrence-days > label:has(input:disabled) { cursor: default; }
+.recurrence-days > label:has(input:disabled) > .recurrence-day { opacity: 0.45; }
 
 /* ── The scope question ───────────────────────────────────────────────────── */
 .scope-choices { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }

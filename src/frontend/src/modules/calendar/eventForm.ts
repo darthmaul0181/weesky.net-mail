@@ -4,9 +4,10 @@ import type {
 } from './calendarTypes'
 import { durationMinutesOf, wallClockOf, type WallClock } from './multiDay'
 import {
-  addDays, clockOf, daysBetween, MINUTES_PER_DAY, minutesIntoDay, type PlainDate, plainDateOf,
-  utcOfLocalTime,
+  addDays, clockOf, daysBetween, isoWeekdayOf, MINUTES_PER_DAY, minutesIntoDay, type PlainDate,
+  plainDateOf, utcOfLocalTime,
 } from './plainDate'
+import { WEEKDAY_TOKENS } from './calendarLocale'
 import { DATED_DEFAULT } from './reminderPresets'
 
 /** What the repeat picker can say. Anything richer a phone wrote comes back as `custom`, rule
@@ -87,6 +88,31 @@ export function ruleOf(choice: RepeatChoice): RecurrenceWrite | undefined {
   return { frequency: FREQUENCIES[choice.kind], interval: 1, byDay: [], end: 'Never' }
 }
 
+/** What the switch turns on: every week, on the start's own weekday, for ever — Outlook's
+    default, and the one rule nobody has to correct before saving. */
+export function defaultRule(startDate: PlainDate): RecurrenceWrite {
+  return {
+    frequency: 'WEEKLY', interval: 1, byDay: [WEEKDAY_TOKENS[isoWeekdayOf(startDate) - 1]],
+    end: 'Never',
+  }
+}
+
+/** A day-of-month or a weekday position is a shape the block no longer draws: the rule stays
+    exact on the wire, but a screen that cannot show it must not be allowed to rewrite it. */
+export function beyondTheBlock(rule: RecurrenceWrite | undefined): boolean {
+  return rule !== undefined && (rule.byMonthDay !== undefined || rule.bySetPos !== undefined)
+}
+
+/** A repeating event ends on the day it starts: the End row's date is drawn greyed on the start
+    date, and the one thing that can move it is a time that crosses midnight — 23:00 to 01:00
+    ends the morning after, and pinning it to the start day would refuse the save. */
+export function alignEnd(form: EventFormState): EventFormState {
+  if (form.repeat.kind === 'never') return form
+  const crosses = !form.isAllDay && form.endTime < form.startTime
+  const endDate = crosses ? addDays(form.startDate, 1) : form.startDate
+  return endDate === form.endDate ? form : { ...form, endDate }
+}
+
 /** The event as the editor opens it. An occurrence's instant is read in the *event's* own zone,
     never the browser's: one written in New York and opened from Brussels still has to say the
     hour its author chose, or saving it unchanged would move it. */
@@ -123,7 +149,7 @@ export function formOf(
     repeat: repeatChoiceOf(f.repeat), reminders: [...f.reminderMinutesBefore],
     location: f.location ?? '', description: f.description ?? '',
     availability: f.availability, visibility: f.visibility, url: f.url ?? '',
-    keepRepeat: !detail.repeatIsExact, foreignAlarms: detail.foreignAlarms,
+    keepRepeat: !detail.repeatIsExact || beyondTheBlock(f.repeat), foreignAlarms: detail.foreignAlarms,
   }
 }
 
