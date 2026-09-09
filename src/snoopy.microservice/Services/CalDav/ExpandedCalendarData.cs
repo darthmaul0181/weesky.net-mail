@@ -12,12 +12,12 @@ namespace weesky.Snoopy.Microservice.Services.CalDav;
 /// </summary>
 internal static class ExpandedCalendarData
 {
-    /// <exception cref="DavPreconditionException"><c>max-instances</c> past the expander's own
-    /// cap — never a document quietly missing the rest; <c>valid-calendar-data</c> on a stored
-    /// file that no longer parses.</exception>
     /// <summary>The instances of <c>[fromUtc, toUtc[</c>, a floating or all-day one posed in
     /// <paramref name="timeZone"/> — the request's <c>CALDAV:timezone</c> where the query named one
     /// (RFC 4791 § 9.8), else the collection's.</summary>
+    /// <exception cref="DavPreconditionException"><c>max-instances</c> past the expander's own
+    /// cap — never a document quietly missing the rest; <c>valid-calendar-data</c> on a stored
+    /// file that no longer parses.</exception>
     internal static string Expand(string icsRaw, DateTime fromUtc, DateTime toUtc, string timeZone)
     {
         var parsed = IcsDocument.TryLoad(icsRaw)

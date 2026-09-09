@@ -50,8 +50,8 @@ public sealed class OccurrenceExpanderTests
 
         // Fenêtre [1er sept 00:00 UTC, 1er oct 00:00 UTC[ vue depuis Los Angeles : le 30 sept y est encore.
         Assert.Single(Expand(ics, From, To, view: "America/Los_Angeles"));
-        // Une fenêtre qui s'arrête au 30 sept 00:00 UTC voit déjà deux heures du 30 vu de Bruxelles
-        // (il y commence le 29 à 22:00 UTC), et rien du 30 vu d'UTC.
+        // A window closing at 30 Sep 00:00Z already sees two hours of the 30th from Brussels, where
+        // the day opens at 22:00Z on the 29th — and nothing of it from UTC.
         var edge = new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc);
         Assert.Single(Expand(ics, From, edge, view: "Europe/Brussels"));
         Assert.Empty(Expand(ics, From, edge, view: IcsTimeZones.Utc));

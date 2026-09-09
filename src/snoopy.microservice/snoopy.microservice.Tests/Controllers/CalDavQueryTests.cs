@@ -345,6 +345,22 @@ public sealed class CalDavQueryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ARequestZoneTwentySixHoursFromTheCalendars_StillFindsTheAllDayEvent()
+    {
+        // Kiritimati (UTC+14) stores 17 October as [16T10:00Z, 17T10:00Z]; Pago Pago (UTC-11) reads
+        // it as [17T11:00Z, 18T11:00Z[. Its last half hour must not be dropped by the preselection
+        // before the expander has judged it — a 207 quietly missing the resource says nothing.
+        GivenCalendarZone("Pacific/Kiritimati");
+        GivenEvent("journee.ics", Ics.Single("DTSTART;VALUE=DATE:20281017", "DTEND;VALUE=DATE:20281018"),
+            zone: "Pacific/Kiritimati");
+
+        var response = await Report(Calendar(), QueryBody(
+            VEvent(TimeRange("20281018T103000Z", "20281018T110000Z")), zone: "Pacific/Pago_Pago"));
+
+        Assert.Equal([Href("journee.ics")], HrefsOf(response));
+    }
+
+    [Fact]
     public async Task AnExpandInTheQuery_PosesAFloatingInstanceInTheRequestsZone()
     {
         // reports.xml/limit-expand t9a and t10: § 9.6.5's expansion resolves in the request's
@@ -412,7 +428,8 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         return row.Id;
     }
 
-    private void GivenEvent(string davName, string ics) => GivenEvent(server, work, davName, ics);
+    private void GivenEvent(string davName, string ics, string zone = Ics.Zone) =>
+        GivenEvent(server, work, davName, ics, zone);
 
     private void GivenCalendarZone(string zone)
     {
@@ -421,12 +438,13 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         db.SaveChanges();
     }
 
-    /// <summary>A row projected as the writer projects it, so the preselection reads real columns.</summary>
-    private void GivenEvent(DavTestServer on, Guid calendarId, string davName, string ics)
+    /// <summary>A row projected as the writer projects it — in <paramref name="zone"/>, the
+    /// calendar's — so the preselection reads real columns.</summary>
+    private void GivenEvent(DavTestServer on, Guid calendarId, string davName, string ics, string zone = Ics.Zone)
     {
         using var db = on.CreateContext();
         db.CalendarEvents.Add(Row(on.UserId, calendarId, davName, ics,
-            IcsProjector.Project(IcsDocument.TryLoad(ics)!, Ics.Zone)));
+            IcsProjector.Project(IcsDocument.TryLoad(ics)!, zone)));
         db.SaveChanges();
     }
 

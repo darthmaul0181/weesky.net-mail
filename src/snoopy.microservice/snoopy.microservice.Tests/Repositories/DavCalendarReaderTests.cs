@@ -175,8 +175,8 @@ public sealed class DavCalendarReaderTests
     [Fact]
     public async Task Candidates_KeepTheDayOfSlackTheWindowQueryApplies()
     {
-        // The case CalendarEventStore.Margin is written for, and the reason it is READ here rather
-        // than rewritten: a calendar in Pacific/Auckland, an all-day 2 January. The columns hold
+        // The case DavCalendarReader.Slack is written for: a calendar in Pacific/Auckland, an
+        // all-day 2 January. The columns hold
         // [01T11:00Z, 02T11:00Z] because the day is placed in the calendar's zone, while the
         // expander reads the instance as [02T00:00Z, 03T00:00Z[ on dates. Bare bounds would drop
         // the candidate before any expansion judged it, and the calendar-query would answer false
@@ -195,6 +195,33 @@ public sealed class DavCalendarReaderTests
             ulong.MaxValue, CancellationToken.None));
 
         Assert.Equal(["chores.ics"], found);
+    }
+
+    [Fact]
+    public async Task Candidates_KeepARowTheRequestsZoneMovesTwentySixHoursAwayFromItsColumns()
+    {
+        // The widest spread two zones can have: a calendar in Kiritimati (UTC+14) holds an all-day
+        // 17 October as [16T10:00Z, 17T10:00Z]; a request in Pago Pago (UTC-11) reads that day as
+        // [17T11:00Z, 18T11:00Z[ and asks for its last half hour. A day of slack drops the row; the
+        // preselection must reach 26 hours back — and no further, or the band would be a blanket.
+        var calendar = Calendar("work");
+        calendar.TimeZone = "Pacific/Kiritimati";
+        var allDay = Event(calendar.Id, "journee.ics");
+        allDay.IsAllDay = true;
+        allDay.FirstOccurrence = new DateTime(2028, 10, 16, 10, 0, 0, DateTimeKind.Utc);
+        allDay.LastOccurrence = new DateTime(2028, 10, 17, 10, 0, 0, DateTimeKind.Utc);
+        var reader = ReaderOver([calendar], allDay);
+        var to = new DateTime(2028, 10, 18, 11, 0, 0, DateTimeKind.Utc);
+
+        var lastHalfHour = await Collect(reader.CandidatesAsync(calendar.Id,
+            new DateTime(2028, 10, 18, 10, 30, 0, DateTimeKind.Utc), to, EventColumnFilter.None,
+            ulong.MaxValue, CancellationToken.None));
+        var pastTheSpread = await Collect(reader.CandidatesAsync(calendar.Id,
+            new DateTime(2028, 10, 18, 12, 0, 0, DateTimeKind.Utc), to.AddHours(1), EventColumnFilter.None,
+            ulong.MaxValue, CancellationToken.None));
+
+        Assert.Equal(["journee.ics"], lastHalfHour);
+        Assert.Empty(pastTheSpread);
     }
 
     private static async Task<List<string>> Collect(IAsyncEnumerable<DavEvent> events)

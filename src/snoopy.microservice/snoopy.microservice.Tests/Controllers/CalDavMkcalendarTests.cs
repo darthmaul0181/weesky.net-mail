@@ -2,6 +2,7 @@ using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.CalDav;
 using weesky.Snoopy.Microservice.Services.Dav;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Services.CalDav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -121,6 +122,22 @@ public sealed class CalDavMkcalendarTests : IAsyncLifetime
         var response = await Create(method, "trips",
             new XElement(DavXml.CalDav + "calendar-timezone",
                 MkCalendarRequestTests.Zones("Mars/Olympus")));
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(DavXml.CalDav + "valid-calendar-data", ConditionOf(response));
+        Assert.Empty(Stored("trips"));
+    }
+
+    [Theory]
+    [InlineData("MKCALENDAR")]
+    [InlineData("MKCOL")]
+    public async Task AZoneWithAVEventBesideIt_Answers403ValidCalendarDataAndCreatesNothing(string method)
+    {
+        // RFC 4791 § 5.2.2: « exactly one VTIMEZONE component ». A zone that resolves is not enough
+        // when the object carries an event too — refused whole, never a calendar created on half of it.
+        var response = await Create(method, "trips",
+            new XElement(DavXml.CalDav + "calendar-timezone",
+                Ics.Single("DTSTART:20260907T090000Z", null, zone: Ics.FixedZone("America/New_York", "-0500"))));
 
         Assert.Equal(403, response.StatusCode);
         Assert.Equal(DavXml.CalDav + "valid-calendar-data", ConditionOf(response));

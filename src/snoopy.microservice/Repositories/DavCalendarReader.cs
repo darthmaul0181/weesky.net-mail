@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Calendar;
+using weesky.Snoopy.Microservice.Services.Calendar;
 using CalendarRow = weesky.Snoopy.Microservice.Data.Preferences.Calendar;
 
 namespace weesky.Snoopy.Microservice.Repositories;
@@ -10,6 +11,15 @@ namespace weesky.Snoopy.Microservice.Repositories;
 /// <inheritdoc cref="IDavCalendarReader"/>
 internal sealed class DavCalendarReader(PreferencesDbContext context) : IDavCalendarReader
 {
+    /// <summary>
+    /// The preselection's widening on both sides of a report's window. The columns hold instants
+    /// posed in the collection's zone; a calendar-query judges an all-day or floating instance in
+    /// the REQUEST's (RFC 4791 § 9.8), and the two may lie 26 hours apart — UTC+14 against UTC−12.
+    /// Its own constant, not <see cref="OccurrenceExpander.Margin"/>: that one is the walk's, and
+    /// its equality with the store's window query is an invariant this band has no part in.
+    /// </summary>
+    internal static readonly TimeSpan Slack = TimeSpan.FromHours(26);
+
     private static readonly Expression<Func<CalendarRow, DavCalendar>> ToCalendar = c =>
         new DavCalendar(c.Id, c.UserId, c.DavName, c.DisplayName, c.Description, c.Color, c.Order,
             c.TimeZone);
@@ -89,19 +99,18 @@ internal sealed class DavCalendarReader(PreferencesDbContext context) : IDavCale
     {
         var query = Members(calendarId).Where(e => e.SyncSequence <= upTo);
 
-        // The day of slack CalendarEventStore.WindowAsync already applies, READ from it and never
-        // rewritten: the columns hold instants placed in the calendar's zone while the expander
-        // decides an all-day membership on dates, so bare bounds drop a candidate before anything
-        // has judged it — a calendar-query answering false with nothing in the logs.
+        // Wider than the columns by Slack: they hold instants posed in the calendar's zone while
+        // the expander judges in the request's, so bare bounds would drop a candidate before
+        // anything has judged it — a calendar-query answering false with nothing in the logs.
         if (toUtc is { } to)
         {
-            var upper = CalendarEventStore.Shift(to, CalendarEventStore.Margin);
+            var upper = CalendarEventStore.Shift(to, Slack);
             query = query.Where(e => e.FirstOccurrence < upper);
         }
 
         if (fromUtc is { } from)
         {
-            var lower = CalendarEventStore.Shift(from, -CalendarEventStore.Margin);
+            var lower = CalendarEventStore.Shift(from, -Slack);
             query = query.Where(e => e.LastOccurrence > lower);
         }
 
