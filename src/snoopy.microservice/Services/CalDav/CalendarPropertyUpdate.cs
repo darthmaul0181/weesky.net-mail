@@ -29,21 +29,6 @@ internal sealed record CalendarPropertyUpdate(
     private static readonly XName Set = DavXml.Dav + "set";
     private static readonly XName Remove = DavXml.Dav + "remove";
 
-    /// <summary>The properties a calendar always carries, and the protected ones: a DAV:remove of
-    /// either is the 403 of § 9.2.1 — a calendar with no name is a blank row in every client, and
-    /// § 15 makes the protected ones unsettable. Everything else a remove names is not there, and
-    /// § 14.23 says removing what is not there is not an error.</summary>
-    private static readonly XName[] Undeletable =
-    [
-        CalendarPropertyValue.DisplayName, CalendarPropertyValue.Color, CalendarPropertyValue.Order,
-        CalendarPropertyValue.TimeZone, CalendarPropertyValue.ResourceType,
-        CalendarPropertyValue.ComponentSet,
-        DavXml.Dav + "getetag", DavXml.Dav + "getcontentlength", DavXml.Dav + "getlastmodified",
-        DavXml.Dav + "creationdate", DavXml.Dav + "lockdiscovery", DavXml.Dav + "supportedlock",
-        DavXml.Dav + "sync-token", DavXml.Dav + "current-user-principal", DavXml.Dav + "owner",
-        DavXml.Dav + "supported-report-set", DavXml.Dav + "current-user-privilege-set",
-    ];
-
     /// <param name="body">the parsed body, or null when it was empty</param>
     /// <exception cref="DavBadRequestException">
     /// The body is absent or is not a <c>DAV:propertyupdate</c>, exactly as
@@ -93,12 +78,15 @@ internal sealed record CalendarPropertyUpdate(
     {
         if (removing)
         {
-            // Only the description is stored AND emptiable; the rest is either always carried, or
-            // was never there — and § 14.23 answers 200 to the removal of what is not there.
+            // Only the description is stored AND emptiable. Everything else the calendar's own
+            // table (CalDavProperties.CalendarPropertyNames — the same set PROPFIND answers from,
+            // so this cannot drift the day a property is added there) carries, or that RFC 4918
+            // § 15 protects outright whether or not this table happens to serve it, is refused;
+            // anything else was never there, and § 14.23 answers 200 to removing what is not there.
             if (property.Name == CalendarPropertyValue.Description) return (Outcome.Accepted, null);
-            return Undeletable.Contains(property.Name)
-                ? (Outcome.Refused, null)
-                : (Outcome.RemovedAndAbsent, null);
+            var carried = CalDavProperties.CalendarPropertyNames.Contains(property.Name)
+                || CalendarPropertyValue.Protected.Contains(property.Name);
+            return carried ? (Outcome.Refused, null) : (Outcome.RemovedAndAbsent, null);
         }
 
         if (property.Name == CalendarPropertyValue.Description) return (Outcome.Accepted, property.Value);

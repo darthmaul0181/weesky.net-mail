@@ -70,6 +70,15 @@ internal static class CalDavProperties
     private static readonly ConcurrentDictionary<int, PropertySet> CalendarTables = new();
 
     /// <summary>
+    /// The calendar's own closed set of NAMES — the one source of what a calendar always carries,
+    /// read by <see cref="CalendarPropertyUpdate"/> to judge a <c>DAV:remove</c> so that set can
+    /// never drift from what this table actually serves. Year-independent: the year only varies
+    /// <c>calendar-timezone</c>'s VALUE, never whether the table names it, so any year's table
+    /// names the same set.
+    /// </summary>
+    internal static readonly IReadOnlyList<XName> CalendarPropertyNames = CalendarTable(0).Names;
+
+    /// <summary>
     /// The calendar tree's own shapes, and above them the principal's: an expand-property on a
     /// calendar nests into <c>owner</c> and <c>current-user-principal</c>, so the tables it resolves
     /// against must reach the shapes those hrefs designate.

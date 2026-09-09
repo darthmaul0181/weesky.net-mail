@@ -131,6 +131,20 @@ public sealed class CalDavProppatchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RemovingGetctag_Is403_TheSameAnswerAsOnTheAddressBook()
+    {
+        // getctag is server-computed on both trees under the same {calendarserver} name; a
+        // hand-copied "always carried" list on the calendar side once missed it, so this one name
+        // answered 403 on the address book and 200 here — fixed by deriving from the calendar's
+        // own property table instead of a second, driftable list.
+        var response = await Proppatch(DavPaths.Calendar(UserId, "work"),
+            Remove(new XElement(DavXml.CalendarServer + "getctag")));
+
+        Assert.Equal("HTTP/1.1 403 Forbidden",
+            XDocument.Parse(response.Body).Descendants(DavXml.Status).Single().Value);
+    }
+
+    [Fact]
     public async Task RemovingTheDisplayName_Is403AndChangesNothing()
     {
         var response = await Proppatch(DavPaths.Calendar(UserId, "work"),

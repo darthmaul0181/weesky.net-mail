@@ -42,15 +42,6 @@ internal sealed record MkCalendarRequest(
     private static readonly XName MkCalendar = DavXml.CalDav + "mkcalendar";
     private static readonly XName MkCol = DavXml.Dav + "mkcol";
 
-    /// <summary>The properties RFC 4918 § 15 declares protected: a body that sets one is a body
-    /// § 9.2 must refuse whole, since § 5.3.1 of RFC 4791 makes this body a PROPPATCH.</summary>
-    private static readonly XName[] Protected =
-    [
-        DavXml.Dav + "getetag", DavXml.Dav + "getcontentlength", DavXml.Dav + "getlastmodified",
-        DavXml.Dav + "getcontenttype", DavXml.Dav + "creationdate", DavXml.Dav + "lockdiscovery",
-        DavXml.Dav + "supportedlock",
-    ];
-
     /// <param name="body">the parsed body, or null when the request carried none</param>
     /// <param name="extendedMkcol">
     /// True for MKCOL, whose body is mandatory and must declare a calendar (RFC 5689 § 3); a
@@ -81,7 +72,10 @@ internal sealed record MkCalendarRequest(
         var components = First(CalendarPropertyValue.ComponentSet);
         var resolved = zone is null ? null : CalendarPropertyValue.Zone(zone.Value);
         var askedNames = asked.Select(property => property.Name).Distinct().ToList();
-        var refused = askedNames.Where(Protected.Contains).ToList();
+        // RFC 4918 § 15: a body that sets a protected property is refused whole, since § 5.3.1 of
+        // RFC 4791 makes this body a PROPPATCH. CalendarPropertyValue.Protected is the one source,
+        // shared with CalendarPropertyUpdate's own refusal of the same set on a PROPPATCH remove.
+        var refused = askedNames.Where(CalendarPropertyValue.Protected.Contains).ToList();
         var namedWritable = askedNames.Where(CalendarPropertyValue.Writable.Contains).ToList();
 
         return new MkCalendarRequest(

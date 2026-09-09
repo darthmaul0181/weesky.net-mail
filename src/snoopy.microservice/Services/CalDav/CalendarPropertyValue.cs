@@ -25,6 +25,18 @@ internal static class CalendarPropertyValue
     /// enumeration would differ between hosts for no reason a client could act on.</summary>
     internal static readonly XName[] Writable = [DisplayName, Description, Color, Order, TimeZone];
 
+    /// <summary>The properties RFC 4918 § 15 declares protected — not calendar-specific, true of
+    /// every resource on this tree, and a client MUST NOT set or remove any of them. The one
+    /// source: <see cref="MkCalendarRequest"/> stops a creation that sets one, and
+    /// <see cref="CalendarPropertyUpdate"/> refuses a PROPPATCH that removes one, whether or not
+    /// the calendar's own table happens to serve it.</summary>
+    internal static readonly XName[] Protected =
+    [
+        DavXml.Dav + "getetag", DavXml.Dav + "getcontentlength", DavXml.Dav + "getlastmodified",
+        DavXml.Dav + "getcontenttype", DavXml.Dav + "creationdate", DavXml.Dav + "lockdiscovery",
+        DavXml.Dav + "supportedlock",
+    ];
+
     /// <summary>Trimmed, and null when nothing is left: a calendar always has a name.</summary>
     internal static string? Name(string value) => value.Trim() is { Length: > 0 } name ? name : null;
 

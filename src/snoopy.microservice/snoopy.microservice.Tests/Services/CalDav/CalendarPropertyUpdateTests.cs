@@ -156,6 +156,7 @@ public sealed class CalendarPropertyUpdateTests
     [Theory]
     [InlineData("DAV:", "resourcetype")]
     [InlineData("DAV:", "getetag")]
+    [InlineData("DAV:", "getcontenttype")]
     [InlineData("urn:ietf:params:xml:ns:caldav", "supported-calendar-component-set")]
     public void RemovingAProtectedProperty_IsStillRefused(string ns, string localName)
     {
@@ -168,6 +169,41 @@ public sealed class CalendarPropertyUpdateTests
         Assert.Empty(update.Accepted);
         Assert.Empty(update.RemovedAndAbsent);
         Assert.Equal([name], update.Refused);
+    }
+
+    [Theory]
+    [InlineData("urn:ietf:params:xml:ns:caldav", "supported-calendar-data")]
+    [InlineData("urn:ietf:params:xml:ns:caldav", "supported-collation-set")]
+    [InlineData("urn:ietf:params:xml:ns:caldav", "max-resource-size")]
+    [InlineData("urn:ietf:params:xml:ns:caldav", "max-instances")]
+    [InlineData("http://calendarserver.org/ns/", "getctag")]
+    public void RemovingALiveCalendarPropertyTheOldHandWrittenListMissed_IsRefused(string ns, string localName)
+    {
+        // Named regression: these five were absent from the previous hand-copied list, so e.g.
+        // getctag answered 403 on the address book and 200 here — the same property name, two
+        // opposite answers, from one server. The calendar's own table is now the only source.
+        var name = XNamespace.Get(ns) + localName;
+
+        var update = CalendarPropertyUpdate.Parse(Remove(new XElement(name)));
+
+        Assert.Empty(update.Accepted);
+        Assert.Empty(update.RemovedAndAbsent);
+        Assert.Equal([name], update.Refused);
+    }
+
+    [Fact]
+    public void EveryPropertyTheCalendarTableServes_ExceptTheDescription_IsRefusedOnRemoval()
+    {
+        // Pins the DERIVATION rather than a copy of its output: the day a property is added to
+        // CalDavProperties' calendar table and not to this judgement, this fails — the defect a
+        // hand-written second list let slip through review.
+        foreach (var name in CalDavProperties.CalendarPropertyNames
+                     .Where(name => name != CalendarPropertyValue.Description))
+        {
+            var update = CalendarPropertyUpdate.Parse(Remove(new XElement(name)));
+
+            Assert.Contains(name, update.Refused);
+        }
     }
 
     private static XName Dead(string localName) => XNamespace.Get("http://example.com/ns/") + localName;
