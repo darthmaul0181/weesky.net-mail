@@ -39,7 +39,6 @@ internal static class DavXmlReader
         IgnoreProcessingInstructions = true,
     };
 
-    private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
     private static readonly byte[] Utf16LeBom = [0xFF, 0xFE];
     private static readonly byte[] Utf16BeBom = [0xFE, 0xFF];
 
@@ -142,9 +141,10 @@ internal static class DavXmlReader
 
     private static int SkipBom(byte[] bytes, int length)
     {
-        if (length >= 3 && bytes.AsSpan(0, 3).SequenceEqual(Utf8Bom)) return 3;
-        if (length >= 2 && bytes.AsSpan(0, 2).SequenceEqual(Utf16LeBom)) return 2;
-        if (length >= 2 && bytes.AsSpan(0, 2).SequenceEqual(Utf16BeBom)) return 2;
+        var head = bytes.AsSpan(0, length);
+        if (head.StartsWith(FileText.Utf8Signature)) return FileText.Utf8Signature.Length;
+        if (head.StartsWith(Utf16LeBom)) return Utf16LeBom.Length;
+        if (head.StartsWith(Utf16BeBom)) return Utf16BeBom.Length;
         return 0;
     }
 }

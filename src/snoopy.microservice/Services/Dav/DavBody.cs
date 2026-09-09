@@ -16,14 +16,11 @@ internal static class DavBody
     private static readonly UTF8Encoding Strict = new(
         encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
-    /// <summary>RFC 3629 § 6: these three bytes are a signature, not content. Windows exporters
-    /// write them ahead of BEGIN:, and every parser downstream then fails on the first line.</summary>
-    private static readonly byte[] Signature = [0xEF, 0xBB, 0xBF];
-
     internal static bool TryDecode(ReadOnlySpan<byte> body, [NotNullWhen(true)] out string? text)
     {
-        // Before the decode, never instead of it: what follows is still judged strictly.
-        if (body.StartsWith(Signature)) body = body[Signature.Length..];
+        // Windows exporters write the signature ahead of BEGIN:, and every parser downstream then
+        // fails on the first line. Before the decode, never instead of it: the rest is still strict.
+        if (body.StartsWith(FileText.Utf8Signature)) body = body[FileText.Utf8Signature.Length..];
 
         try
         {
