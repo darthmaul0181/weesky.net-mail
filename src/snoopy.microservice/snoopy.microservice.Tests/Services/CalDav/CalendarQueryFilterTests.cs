@@ -64,12 +64,33 @@ public sealed class CalendarQueryFilterTests
     }
 
     [Fact]
-    public void ACompFilterOnAnotherComponent_IsUnsupported() =>
-        AssertRefused(CalDavError.SupportedFilter, Filter(Comp("VCALENDAR", Comp("VTODO"))));
+    public void ATimeRangeDirectlyUnderTheVCalendar_IsMalformed() =>
+        // § 9.7's grammar puts time-range under a comp-filter, and VCALENDAR is not a component
+        // that spans time. errors.xml/15.xml.
+        AssertRefused(CalDavError.ValidFilter,
+            Filter(Comp("VCALENDAR", TimeRange("20260101T000000Z", "20260201T000000Z"))));
 
     [Fact]
-    public void AVEventNestedInAVEvent_IsUnsupported() =>
-        AssertRefused(CalDavError.SupportedFilter, VEvent(Comp("VEVENT")));
+    public void AVEventNestedInAVEvent_IsMalformed() =>
+        AssertRefused(CalDavError.ValidFilter, Filter(Comp("VCALENDAR", Comp("VEVENT", Comp("VEVENT")))));
+
+    [Fact]
+    public void AVAlarmDirectlyUnderTheVCalendar_IsMalformed() =>
+        AssertRefused(CalDavError.ValidFilter, Filter(Comp("VCALENDAR", Comp("VALARM"))));
+
+    [Fact]
+    public void ATimeRangeUnderAVTimezone_IsMalformed() =>
+        AssertRefused(CalDavError.ValidFilter,
+            Filter(Comp("VCALENDAR", Comp("VTIMEZONE", TimeRange("20260101T000000Z", null)))));
+
+    [Fact]
+    public void AnUnknownComponentName_IsUnsupported_NotMalformed() =>
+        // X-COMP is a well-formed reference to a component we do not serve: § 7.8's own division.
+        AssertRefused(CalDavError.SupportedFilter, Filter(Comp("VCALENDAR", Comp("X-COMP"))));
+
+    [Fact]
+    public void AVTodoCompFilter_IsUnsupported_NotMalformed() =>
+        AssertRefused(CalDavError.SupportedFilter, Filter(Comp("VCALENDAR", Comp("VTODO"))));
 
     [Fact]
     public void TwoVEventCompFilters_AreUnsupported() =>
@@ -202,8 +223,13 @@ public sealed class CalendarQueryFilterTests
         AssertRefused(CalDavError.SupportedFilter, VEvent(Comp("VALARM", Prop("ACTION", Text("DISPLAY")))));
 
     [Fact]
-    public void ATimeRangeOnAProperty_IsUnsupported() =>
-        AssertRefused(CalDavError.SupportedFilter, VEvent(Prop("DTSTART", TimeRange("20260907T000000Z", null))));
+    public void ATimeRangeNestedInAPropFilter_IsMalformed_TheRfcsOwnExample()
+    {
+        // RFC 4791 § 7.8.9, word for word: « a CALDAV:filter cannot nest a time-range element in a
+        // prop name="SUMMARY" element ». Accepted until now — a 207 over a filter we never applied.
+        AssertRefused(CalDavError.ValidFilter,
+            VEvent(Prop("SUMMARY", TimeRange("20260101T000000Z", "20260201T000000Z"))));
+    }
 
     [Fact]
     public void TwoTextMatchesOnOneProperty_AreMalformed() =>

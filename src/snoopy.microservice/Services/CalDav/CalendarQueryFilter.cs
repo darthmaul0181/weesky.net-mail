@@ -17,6 +17,24 @@ namespace weesky.Snoopy.Microservice.Services.CalDav;
 /// that pretends; one that is malformed — a bound-less or backwards <c>time-range</c>, a date in
 /// another form — answers <c>403 valid-filter</c>, so the client knows which of its body or its
 /// filter is refused; an unknown collation alone answers <c>supported-collation</c>.
+///
+/// <para><c>valid-filter</c> vs. <c>supported-filter</c>, once and for all — structure decides
+/// before the name does:</para>
+/// <list type="table">
+/// <listheader><term>What the body carries</term><description>Precondition</description></listheader>
+/// <item><term>A nesting the § 9.7 grammar does not allow, wherever it sits</term>
+/// <description><c>valid-filter</c></description></item>
+/// <item><term>A <c>time-range</c> under anything but a comp-filter</term>
+/// <description><c>valid-filter</c></description></item>
+/// <item><term>A malformed value (a non-UTC bound, a <c>negate-condition</c> outside yes/no,
+/// two time-ranges)</term><description><c>valid-filter</c></description></item>
+/// <item><term>A component, property or parameter name the grammar allows but we do not serve —
+/// VTODO, VJOURNAL, X-COMP</term><description><c>supported-filter</c></description></item>
+/// <item><term>A <c>test="anyof"</c>, an unknown match-type</term>
+/// <description><c>supported-filter</c></description></item>
+/// </list>
+/// A <c>time-range</c> under VCALENDAR is malformed whatever a server happens to support; a
+/// VTODO comp-filter is a well-formed reference to something we do not serve.
 /// </summary>
 internal static class CalendarQueryFilter
 {
@@ -30,6 +48,7 @@ internal static class CalendarQueryFilter
     private const string VCalendar = "VCALENDAR";
     private const string VEvent = "VEVENT";
     private const string VAlarm = "VALARM";
+    private const string VTimezone = "VTIMEZONE";
     private const string UtcFormat = "yyyyMMdd'T'HHmmss'Z'";
 
     private static readonly CalendarQuerySpec WholeCalendar = new(true, false, null, [], []);
@@ -51,7 +70,18 @@ internal static class CalendarQueryFilter
         XElement? vevent = null;
         foreach (var child in children)
         {
-            if (child.Name != CompFilterName || !Named(child, VEvent) || vevent is not null) throw Unsupported();
+            // Structure first (§ 7.8's valid-filter), name second (supported-filter): a time-range
+            // or a VALARM can never sit directly under VCALENDAR in any real iCalendar object, while
+            // a PRODID prop-filter or a VTODO/X-COMP comp-filter is a well-formed reference to
+            // something we do not serve.
+            if (child.Name == TimeRangeName) throw Malformed();
+            if (child.Name == PropFilterName) throw Unsupported();
+            if (child.Name != CompFilterName) throw Malformed();
+            if (Named(child, VAlarm)) throw Malformed();
+            // RFC 4791 § 9.9 names only VEVENT/VTODO/VJOURNAL/VFREEBUSY as time-based; VTIMEZONE
+            // never scopes to a time-range, whatever a server supports.
+            if (Named(child, VTimezone) && child.Elements(TimeRangeName).Any()) throw Malformed();
+            if (!Named(child, VEvent) || vevent is not null) throw Unsupported();
             vevent = child;
         }
 
@@ -206,7 +236,11 @@ internal static class CalendarQueryFilter
                 range = ParseTimeRange(child, false, CalDavError.ValidFilter);
             }
             else if (child.Name == PropFilterName) propFilters.Add(ParsePropFilter(child));
-            else if (child.Name == CompFilterName && Named(child, VAlarm)) alarmFilters.Add(ParseAlarmFilter(child));
+            else if (child.Name == CompFilterName)
+            {
+                if (!Named(child, VAlarm)) throw Malformed();   // § 9.7.1: VALARM alone nests here
+                alarmFilters.Add(ParseAlarmFilter(child));
+            }
             else if (child.Name == IsNotDefinedName) throw Malformed();
             else throw Unsupported();
         }
@@ -246,7 +280,8 @@ internal static class CalendarQueryFilter
             else if (child.Name == TextMatchName && textMatch is null) textMatch = ParseTextMatch(child);
             else if (child.Name == TextMatchName) throw Malformed();
             else if (child.Name == ParamFilterName) paramFilters.Add(ParseParamFilter(child));
-            else throw Unsupported();   // a time-range on a property, or anything else (spec § 8)
+            else if (child.Name == TimeRangeName) throw Malformed();   // § 7.8.9's own example
+            else throw Unsupported();
         }
 
         if (isNotDefined && (textMatch is not null || paramFilters.Count > 0)) throw Malformed();
