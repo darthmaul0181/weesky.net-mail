@@ -4,6 +4,10 @@
 # `default` au milieu du passage. Verifie : aucun fichier lance apres lui n'en depend, chacun pose
 # le sien dans son <start> ou dans ses tests. Reordonner cette liste demande de le reverifier.
 #
+# La zone de `default` fuit d'errors.xml (US/Eastern, par PROPPATCH) vers tout ce qui suit dans
+# cette liste ; floating.xml la remet en UTC dans son <start> avant de creer calendar-none.
+# Reordonner cette liste demande de le reverifier aussi.
+#
 # QUATRE FICHIERS MESURENT MOINS QUE LEUR NOM : get.xml ne joue qu'UN test (directory listing garde
 # ses deux suites de collection) ; nonascii.xml joue douze tests (trois suites d'URI en ignore, une
 # gardee par regular-collection) ; conditional.xml et options.xml ne portent que des conventions
@@ -43,7 +47,7 @@ CalDAV/well-known.xml
 CalDAV/current-user-principal.xml
 CalDAV/expandproperty.xml
 CalDAV/recurrenceput.xml
-CalDAV/floating.xml
+suites/CalDAV/floating.xml
 CalDAV/ctag.xml
 CalDAV/encodedURIs.xml
 CalDAV/conditional.xml

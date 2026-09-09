@@ -189,10 +189,12 @@ public sealed class CalDavPropertiesTests
             DavResourceKind.Calendar, UserId, "someone@weesky.be", null, State,
             CollectionName: "work", Calendar: Calendar with { TimeZone = "Mars/Olympus" });
 
-        var (found, missing) = CalDavProperties.Resolve(AllProp(), lost, new MutableTimeProvider());
+        // Named via allprop's own include, since a plain allprop no longer pours the property at all.
+        var request = new DavPropertyRequest(DavPropertyMode.AllProp, [DavXml.CalDav + "calendar-timezone"]);
+        var (found, missing) = CalDavProperties.Resolve(request, lost, new MutableTimeProvider());
 
-        // Ical.Net refuses an id NodaTime does not hold, and allprop pours this property: one
-        // hand-edited row would otherwise 500 the whole Depth: 1 of the home.
+        // Ical.Net refuses an id NodaTime does not hold: one hand-edited row would otherwise 500
+        // the whole Depth: 1 of the home.
         Assert.DoesNotContain(found, e => e.Name == DavXml.CalDav + "calendar-timezone");
         Assert.Contains(DavXml.CalDav + "calendar-timezone", missing);
         Assert.Contains(found, e => e.Name == DavXml.Dav + "displayname");
@@ -206,6 +208,18 @@ public sealed class CalDavPropertiesTests
 
         Assert.DoesNotContain(found, element => element.Name == DavXml.Dav + "sync-token");
         Assert.Contains(found, element => element.Name == DavXml.CalendarServer + "getctag");
+    }
+
+    [Fact]
+    public void Allprop_PoursEveryCalendarProperty_ExceptTheTimeZone()
+    {
+        // RFC 4791 § 5.2.2, SHOULD NOT: the property carries a whole VTIMEZONE, and a Depth: 1
+        // allprop on a home of ten calendars would pour ten of them. Named still answers it.
+        var (found, _) = CalDavProperties.Resolve(AllProp(), CalendarResource(), new MutableTimeProvider());
+
+        Assert.DoesNotContain(found, element => element.Name == CalendarPropertyValue.TimeZone);
+        Assert.Contains(found, element => element.Name == CalendarPropertyValue.DisplayName);
+        Assert.NotNull(Found(CalendarResource(), CalendarPropertyValue.TimeZone));
     }
 
     [Fact]

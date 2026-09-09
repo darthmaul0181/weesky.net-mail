@@ -114,7 +114,9 @@ internal static class CalDavProperties
     /// <summary>The quoted entity tag, shared with the <c>ETag</c> header a GET answers.</summary>
     internal static string EntityTag(DavEvent member) => DavPropertyTables.EntityTag(member.IcsHash);
 
-    private static PropertySet CalendarTable(int year) => Set(
+    // RFC 4791 § 5.2.2, SHOULD NOT: a named PROPFIND still answers calendar-timezone; allprop does
+    // not pour it. Same mechanism, same reason as calendar-data on a member — it is large.
+    private static PropertySet CalendarTable(int year) => Excluding(Set(
         (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype",
             new XElement(DavXml.Dav + "collection"), new XElement(DavXml.CalDav + "calendar"))),
         (DavXml.Dav + "displayname", r => FromCalendar(r, DavXml.Dav + "displayname",
@@ -162,7 +164,8 @@ internal static class CalDavProperties
             DavXml.Dav + "expand-property")),
         (DavXml.Dav + "current-user-privilege-set", _ => PrivilegeSet()),
         (DavXml.Dav + "owner", r => Href(DavXml.Dav + "owner", DavPaths.Principal(r.UserId))),
-        (DavXml.Dav + "current-user-principal", CurrentUserPrincipal));
+        (DavXml.Dav + "current-user-principal", CurrentUserPrincipal)),
+        DavXml.CalDav + "calendar-timezone");
 
     /// <summary>
     /// A VCALENDAR carrying the collection's zone and nothing else. The lower bound is the first of

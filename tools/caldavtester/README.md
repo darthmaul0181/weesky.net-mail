@@ -85,10 +85,15 @@ et un `VFREEBUSY` qu'un agenda ne sert pas — et le premier échec d'un `<start
 tue le fichier entier, zéro test joué. `suites/CalDAV/` reçoit donc une copie
 de ces deux fichiers, identique à l'amont à ceci près que ces préparatifs
 impossibles sont retirés ; le diff contre le commit épinglé est versionné à
-côté (`reports.xml.diff`, `delete.xml.diff`), sans aucune ligne ajoutée. Ce
-n'est pas un portage de l'outil, et aucun test n'est modifié : ceux qui
-dépendaient de ces préparatifs échouent ensuite un par un et nommément, c'est
-la mesure. Détail dans `suites/CalDAV/README.md` (spec 5d, décision 10).
+côté (`reports.xml.diff`, `delete.xml.diff`), sans aucune ligne ajoutée.
+`floating.xml` (décision 11) y ajoute une troisième copie, pour la raison
+inverse : `errors.xml`, joué avant lui, laisse `default` en `US/Eastern`, et
+son `<start>` remet la zone en UTC avant de créer un agenda qui en hérite —
+`floating.xml.diff` est donc le seul des trois à contenir des lignes
+ajoutées. Aucun de ces trois fichiers n'est un portage de l'outil, et aucun
+test n'est modifié : ceux qui dépendaient de ces préparatifs échouent ensuite
+un par un et nommément, c'est la mesure. Détail dans
+`suites/CalDAV/README.md` (spec 5d, décisions 10 et 11).
 
 ## Le plafond d'authentification d'`api-dev`
 
