@@ -647,6 +647,21 @@ public sealed class CalendarQueryFilterTests
         Assert.Null(CalendarQueryFilter.Parse(VEvent()).Preselection);
     }
 
+    [Fact]
+    public void APreselectionOverAnOpenAlarmWindow_StaysOpenOnThatSide()
+    {
+        // Min/Max over DateTime? SKIP nulls, so an infinity would come back as the widest CLOSED
+        // bound and the preselection would drop rows the filter still had to judge. The VALARM
+        // window is closed today; this holds the envelope right the day that changes.
+        var at = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+        var spec = new CalendarQuerySpec(false, false, null, [],
+            [new AlarmFilterSpec(false, new TimeRangeSpec(at, null)),
+             new AlarmFilterSpec(false, new TimeRangeSpec(null, at))]);
+
+        Assert.Null(spec.Preselection!.FromUtc);
+        Assert.Null(spec.Preselection.ToUtc);
+    }
+
     private static XElement VEvent(params object[] children) => Filter(Comp("VCALENDAR", Comp("VEVENT", children)));
 
     private static XElement Alarm(string start, string end) => VEvent(Comp("VALARM", TimeRange(start, end)));

@@ -121,6 +121,19 @@ public sealed class CalDavQueryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ATimeRangeWithEndAlone_StillServesARecurringResource()
+    {
+        // The mirror of the query above, and the one that made every recurring resource vanish:
+        // walked from DateTime.MinValue the engine throws and the blanket catch reads it as a miss.
+        GivenEvent("rule.ics", Ics.Rule("FREQ=WEEKLY;COUNT=3"));   // the 7th, 14th, 21st
+        GivenEvent("later.ics", Ics.Single("DTSTART:20320315T090000Z", "DTEND:20320315T100000Z"));
+
+        var response = await Report(Calendar(), QueryBody(VEvent(TimeRange(null, "20261001T000000Z"))));
+
+        Assert.Equal([Href("rule.ics")], HrefsOf(response));
+    }
+
+    [Fact]
     public async Task AnExpandInTheQuery_ServesOneVEventPerInstance()
     {
         GivenEvent("rule.ics", Ics.Rule("FREQ=WEEKLY"));

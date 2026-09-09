@@ -315,6 +315,96 @@ public sealed class OccurrenceExpanderTests
         Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230100Z"));
     }
 
+    // ---- an absent bound ------------------------------------------------------------------
+
+    [Fact]
+    public void AnAbsentStart_WalksTheFileFromItsOwnFirstInstant()
+    {
+        // Opened at DateTime.MinValue the engine throws « un-representable DateTime », the walk's
+        // blanket catch reads it as no occurrence, and every recurring resource vanishes from the
+        // 207 — the mirror of the closure this slice removes. reports.xml/time-range t14.
+        var end = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.True(OccurrenceExpander.Overlaps(Load(Ics.Rule("FREQ=WEEKLY")), null, end, Ics.Zone));
+        Assert.True(OccurrenceExpander.Overlaps(
+            Load(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z")), null, end, Ics.Zone));
+    }
+
+    [Fact]
+    public void AnAbsentStart_SeesAnInstanceOlderThanTheFiveYearsTheEngineWalks()
+    {
+        // The floor is the file's own earliest instant, never a span back from the end: a series
+        // begun in 1990 answers a window that names no start at all.
+        var parsed = Load(Ics.Single("DTSTART:19900315T090000Z", "DTEND:19900315T100000Z"));
+
+        Assert.True(OccurrenceExpander.Overlaps(parsed, null, Instant("20261001T000000Z"), Ics.Zone));
+        Assert.False(OccurrenceExpander.Overlaps(parsed, null, Instant("19900315T080000Z"), Ics.Zone));
+    }
+
+    [Fact]
+    public void AnAbsentStart_OnAFileAtTheEdgeOfTime_StillWalks()
+    {
+        // The floor keeps two margins above DateTime.MinValue: its own, and the one Periods adds.
+        var parsed = Load(Ics.Single("DTSTART:00010101T000000Z", "DTEND:00010101T010000Z", "RRULE:FREQ=WEEKLY"));
+
+        Assert.True(OccurrenceExpander.Overlaps(parsed, null, Instant("20261001T000000Z"), Ics.Zone));
+    }
+
+    [Fact]
+    public void AnAbsentStart_IsNotAnExcuseToMatchEverything()
+    {
+        var parsed = Load(Ics.Single("DTSTART:20320315T090000Z", "DTEND:20320315T100000Z"));
+
+        Assert.False(OccurrenceExpander.Overlaps(parsed, null, Instant("20260907T000000Z"), Ics.Zone));
+    }
+
+    [Theory]
+    [InlineData("DURATION:PT0S")]
+    [InlineData("DURATION:-PT10M")]
+    public void ARepeatWhoseSpacingRingsNowhere_RingsOnce(string duration)
+    {
+        // A spacing of nothing would ring at one instant for ever, a backwards one would walk away
+        // from the window: § 3.8.6.2 gives neither a meaning, so the trigger stands alone.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "REPEAT:5", duration));
+
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230100Z"));
+        Assert.False(Fires(parsed, "20270101T234500Z", "20270102T000000Z"));
+    }
+
+    [Fact]
+    public void ANegativeRepeat_RingsOnce()
+    {
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "REPEAT:-1", "DURATION:PT10M"));
+
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230100Z"));
+        Assert.False(Fires(parsed, "20270101T234500Z", "20270102T000000Z"));
+    }
+
+    [Fact]
+    public void ADurationWithoutARepeat_RingsOnce()
+    {
+        // The other direction of the inseparability: a spacing spaces nothing on its own.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "DURATION:PT10M"));
+
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230100Z"));
+        Assert.False(Fires(parsed, "20270101T234500Z", "20270102T000000Z"));
+    }
+
+    [Fact]
+    public void TheRings_StopAtTheWindowsEnd_RatherThanAtTheFilesCount()
+    {
+        // A million rings a second apart, all of them past a window that ends on the trigger: the
+        // sequence is monotonic, so the first one past the end ends the walk instead of MaxRings.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
+            "TRIGGER;RELATED=START:-PT1H", "REPEAT:1000000", "DURATION:PT1S"));
+
+        Assert.False(Fires(parsed, "20270101T220000Z", "20270101T230000Z"));
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230001Z"));
+    }
+
     private static string Daily(string start, string end) =>
         Ics.Single(start: "DTSTART;TZID=Europe/Brussels:" + start, end: "DTEND;TZID=Europe/Brussels:" + end,
             extra: "RRULE:FREQ=DAILY;COUNT=4");

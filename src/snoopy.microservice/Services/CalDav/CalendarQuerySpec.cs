@@ -30,9 +30,13 @@ internal sealed record CalendarQuerySpec(
             if (TimeRange is not null) return TimeRange;
 
             var windows = AlarmFilters.Select(alarm => alarm.TimeRange).OfType<TimeRangeSpec>().ToList();
-            return windows.Count == 0
-                ? null
-                : new TimeRangeSpec(windows.Min(w => w.FromUtc), windows.Max(w => w.ToUtc));
+            if (windows.Count == 0) return null;
+
+            // A null bound is an infinity and must WIDEN the envelope, while Min/Max over DateTime?
+            // skip nulls — which would narrow it, and drop rows the filter had still to judge.
+            return new TimeRangeSpec(
+                windows.All(w => w.FromUtc is not null) ? windows.Min(w => w.FromUtc) : null,
+                windows.All(w => w.ToUtc is not null) ? windows.Max(w => w.ToUtc) : null);
         }
     }
 }

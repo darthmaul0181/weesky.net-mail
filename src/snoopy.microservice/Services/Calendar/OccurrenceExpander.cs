@@ -61,12 +61,14 @@ internal static class OccurrenceExpander
     /// <summary>Whether one instance at least overlaps the window — the very walk of
     /// <see cref="Expand"/>, stopped at the first one found (RFC 4791 § 9.9 on a VEVENT). A null
     /// bound is that side's infinity: an endless series always answers an endless question, and the
-    /// walk is lazy. <paramref name="component"/> narrows the instances to those one component
-    /// sources — the one a filter is being judged on — and null takes them all.</summary>
+    /// walk is lazy. An absent start walks from <see cref="FloorOf"/> rather than from
+    /// <see cref="DateTime.MinValue"/>, which the engine refuses to walk at all.
+    /// <paramref name="component"/> narrows the instances to those one component sources — the one
+    /// a filter is being judged on — and null takes them all.</summary>
     internal static bool Overlaps(IcsCalendar parsed, DateTime? fromUtc, DateTime? toUtc,
         string calendarTimeZone, CalendarEvent? component = null)
     {
-        var found = Over(Guid.Empty, Guid.Empty, parsed, fromUtc ?? DateTime.MinValue,
+        var found = Over(Guid.Empty, Guid.Empty, parsed, fromUtc ?? FloorOf(parsed),
                 toUtc ?? DateTime.MaxValue, calendarTimeZone, calendarTimeZone)
             .Run(firstOnly: component is null);
         if (component is null) return found.Count > 0;
@@ -101,7 +103,7 @@ internal static class OccurrenceExpander
             foreach (var alarm in source.Alarms)
             {
                 if (FiresAt(alarm.Trigger, start, end, parsed, zone) is not { } first) continue;
-                foreach (var at in Rings(first, alarm))
+                foreach (var at in Rings(first, alarm, toUtc))
                     if (at >= fromUtc && at < toUtc) return true;
             }
         }
@@ -113,9 +115,11 @@ internal static class OccurrenceExpander
     /// The instants one alarm rings at: its trigger, then RFC 5545 § 3.8.6.2's REPEAT more, spaced
     /// by DURATION — the two are inseparable, and either alone rings once. The count is bounded by
     /// the window rather than by the file: a REPEAT of a million is a body a client may send, and a
-    /// query must stay finite whatever it is handed.
+    /// query must stay finite whatever it is handed. <paramref name="toUtc"/> ends the sequence —
+    /// a positive spacing makes it monotonic, so once one ring is past the window none can fall
+    /// back inside — and <see cref="MaxRings"/> backstops a window that has no end.
     /// </summary>
-    private static IEnumerable<DateTime> Rings(DateTime first, Alarm alarm)
+    private static IEnumerable<DateTime> Rings(DateTime first, Alarm alarm, DateTime toUtc)
     {
         yield return first;
         if (alarm.Repeat <= 0 || alarm.Duration is not { } spacing) yield break;
@@ -125,6 +129,7 @@ internal static class OccurrenceExpander
         for (var i = 0; i < Math.Min(alarm.Repeat, MaxRings); i++)
         {
             at = Shift(at, step);
+            if (at >= toUtc) yield break;
             yield return at;
         }
     }
@@ -150,6 +155,36 @@ internal static class OccurrenceExpander
             : null)
         ?? components.FirstOrDefault(c => c.RecurrenceIdentifier is null)
         ?? components.FirstOrDefault();
+
+    /// <summary>
+    /// The instant an absent start walks from. Every instance a file can produce is sourced by a
+    /// component's own DTSTART, RDATE or RECURRENCE-ID, so the earliest of those, less
+    /// <see cref="Margin"/>, is below every instance the walk can find: the margin covers the
+    /// offset a floating or zoned literal is posed through, which reaches 14 hours at the far side
+    /// of the day. Ical.Net throws « un-representable DateTime » on a walk opened at
+    /// <see cref="DateTime.MinValue"/>, and <see cref="Expansion.Periods"/> takes one margin more,
+    /// hence the two the floor keeps above it.
+    /// </summary>
+    private static DateTime FloorOf(IcsCalendar parsed)
+    {
+        var earliest = IcsDocument.Components(parsed).SelectMany(SourceLiterals)
+            .DefaultIfEmpty(DateTime.MaxValue)
+            .Min();
+        return Later(Shift(earliest, -Margin), Shift(DateTime.MinValue, 2 * Margin));
+    }
+
+    /// <summary>The literals a component sources its instances from, as the file spells them — a
+    /// zone turns one into an instant, and only ever a later one than the margin allows for.</summary>
+    private static IEnumerable<DateTime> SourceLiterals(CalendarEvent component)
+    {
+        if (component.DtStart is { } start) yield return start.Value;
+        if (component.RecurrenceIdentifier?.StartTime is { } identified) yield return identified.Value;
+        foreach (var date in component.RecurrenceDates?.GetAllDates() ?? []) yield return date.Value;
+    }
+
+    private static DateTime Earlier(DateTime left, DateTime right) => left < right ? left : right;
+
+    private static DateTime Later(DateTime left, DateTime right) => left > right ? left : right;
 
     private static Expansion Over(Guid eventId, Guid calendarId, IcsCalendar parsed, DateTime fromUtc,
         DateTime toUtc, string calendarTimeZone, string viewTimeZone) =>
@@ -226,9 +261,7 @@ internal static class OccurrenceExpander
 
         // The cap grows with the window, so an open one would not bound it at all: it is computed
         // on at most MaxSpan. A no-op for every closed window, all of which are refused past that.
-        private int Cap => CapFor(fromUtc, Min(toUtc, Shift(fromUtc, MaxSpan)));
-
-        private static DateTime Min(DateTime left, DateTime right) => left < right ? left : right;
+        private int Cap => CapFor(fromUtc, Earlier(toUtc, Shift(fromUtc, MaxSpan)));
 
         /// <param name="firstOnly">stop at the first instance overlapping the window — a query
         /// asks whether one exists, never how many</param>
