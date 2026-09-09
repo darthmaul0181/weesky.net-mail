@@ -203,7 +203,11 @@ internal static class IcsGuards
         var latest = overrides.Max(c => IcsComposer.Instant(series, c.RecurrenceIdentifier!.StartTime!));
         foreach (var component in overrides) IcsComposer.Detach(series, component);
         var seriesMaster = IcsDocument.MasterOf(series)!;
-        if (InstanceInstants(series, seriesMaster.DtStart!, latest) is not { } instants) return null;
+        // An RDATE may sit before DTSTART (RFC 5545 § 3.8.5.2) and the walker serves that instance:
+        // the walk opens on the earliest literal the master sources, as the walk floor does.
+        var opens = IcsDocument.RecurrenceDatesOf(seriesMaster).Append(seriesMaster.DtStart!)
+            .MinBy(at => IcsComposer.Instant(series, at))!;
+        if (InstanceInstants(series, opens, latest) is not { } instants) return null;
         // The walk takes the exdated slots out of what it produces, but the rule does generate
         // them, and no MUST refuses an override of a slot the master merely excludes.
         foreach (var excluded in IcsComposer.Dates(seriesMaster.ExceptionDates))
@@ -227,8 +231,9 @@ internal static class IcsGuards
     /// <summary>
     /// The <b>instants</b> the master alone generates — not their spellings: Exchange writes a
     /// zoned series' RECURRENCE-ID in Z form, and <see cref="IcsComposer.Instant"/> is the reading
-    /// the rest of the module already compares moments through. Walked until it is past
-    /// <paramref name="latest"/> so that every override the file carries falls inside the window.
+    /// the rest of the module already compares moments through. Walked from <paramref name="start"/>
+    /// until it is past <paramref name="latest"/>, so that every override the file carries falls
+    /// inside the window.
     /// Null when the walk threw, or when the density ceiling stopped it first: a slot the window
     /// never reached is one this guard cannot judge, and the file is left to the others.
     /// </summary>

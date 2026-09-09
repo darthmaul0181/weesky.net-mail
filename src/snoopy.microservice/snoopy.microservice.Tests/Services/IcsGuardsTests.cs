@@ -422,6 +422,24 @@ public sealed class IcsGuardsTests
         Assert.Null(IcsGuards.CheckAll(Ics.RuleWithOverrideInUtc("FREQ=WEEKLY", "20260914T090000Z",
             extra: "EXDATE:20260914T090000Z"), out _));
 
+    [Theory]
+    [InlineData("RDATE:20260801T090000Z")]
+    [InlineData("RDATE;VALUE=PERIOD:20260801T090000Z/PT1H")]
+    public void AnOverrideOfAnRDateBeforeTheMastersStart_IsAccepted(string rdate) =>
+        // RFC 5545 § 3.8.5.2 lets an RDATE sit before DTSTART and the walker serves that instance:
+        // a guard walking from DTSTART alone would refuse at the door what the server then serves.
+        Assert.Null(IcsGuards.CheckAll(
+            Ics.RuleWithOverrideInUtc("FREQ=WEEKLY", "20260801T090000Z", extra: rdate), out _));
+
+    [Fact]
+    public void AnOverrideBeforeTheMastersStart_ThatNoRDateSources_IsStillRefused()
+    {
+        var problem = IcsGuards.CheckAll(Ics.RuleWithOverrideInUtc("FREQ=WEEKLY", "20260801T090000Z"), out _);
+
+        Assert.Equal(IcsPrecondition.ValidCalendarData, problem!.Precondition);
+        Assert.Contains("20260801T090000Z", problem.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// The boundary of the narrowing that spares a zone only the file defines. A Windows-named TZID
     /// is the CLDR-resolved tier — neither UTC nor a bare IANA id — and it is the tier every Outlook
