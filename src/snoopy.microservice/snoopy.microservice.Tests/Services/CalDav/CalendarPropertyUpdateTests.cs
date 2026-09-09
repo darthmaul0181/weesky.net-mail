@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Services.CalDav;
 using weesky.Snoopy.Microservice.Services.Dav;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Services.CalDav;
@@ -29,6 +30,18 @@ public sealed class CalendarPropertyUpdateTests
         Assert.Equal("#aabbcc", update.Accepted[DavXml.Apple + "calendar-color"]);
         Assert.Equal("3", update.Accepted[DavXml.Apple + "calendar-order"]);
         Assert.Equal("Europe/Paris", update.TimeZoneId);
+    }
+
+    [Fact]
+    public void ATimeZoneCarryingAnything_ButOneVTimezone_NamesNoZone()
+    {
+        // RFC 4791 § 5.2.2 and § 9.8 both spell it « an iCalendar object with exactly one
+        // VTIMEZONE component ». A VEVENT beside it is not that object, and storing its zone would
+        // keep half of a body we refused to read.
+        var zone = Ics.FixedZone("America/New_York", "-0500");
+
+        Assert.Equal("America/New_York", CalendarPropertyValue.Zone(MkCalendarRequestTests.Zones("America/New_York")));
+        Assert.Null(CalendarPropertyValue.Zone(Ics.Single("DTSTART:20260907T090000Z", null, zone: zone)));
     }
 
     [Fact]

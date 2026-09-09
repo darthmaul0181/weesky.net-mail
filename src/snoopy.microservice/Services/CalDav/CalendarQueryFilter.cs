@@ -153,8 +153,10 @@ internal static class CalendarQueryFilter
         return new EventColumnFilter(status, transparency, classification);
     }
 
-    /// <summary>Whether one resource satisfies the filter, judged on its parsed file.</summary>
-    internal static bool Matches(IcsCalendar parsed, CalendarQuerySpec spec, string calendarTimeZone)
+    /// <summary>Whether one resource satisfies the filter, judged on its parsed file.
+    /// <paramref name="timeZone"/> resolves every « date » and « date with local time » value —
+    /// the request's <c>CALDAV:timezone</c>, else the collection's (RFC 4791 § 9.8, § 9.9).</summary>
+    internal static bool Matches(IcsCalendar parsed, CalendarQuerySpec spec, string timeZone)
     {
         if (spec.NoneMatch) return false;
 
@@ -162,23 +164,23 @@ internal static class CalendarQueryFilter
         // may come from any component (§ 9.9 on a VEVENT).
         if (spec.PropFilters.Count == 0 && spec.AlarmFilters.Count == 0)
             return spec.TimeRange is not { } whole
-                || OccurrenceExpander.Overlaps(parsed, whole.FromUtc, whole.ToUtc, calendarTimeZone);
+                || OccurrenceExpander.Overlaps(parsed, whole.FromUtc, whole.ToUtc, timeZone);
 
         // RFC 4791 § 9.7.1: « the targeted calendar component » — ONE component of the resource,
         // master or override, satisfies every clause together, window included (sabre's reading).
         return IcsDocument.Components(parsed).Any(component =>
-            OverlapsFrom(parsed, component, spec.TimeRange, calendarTimeZone)
+            OverlapsFrom(parsed, component, spec.TimeRange, timeZone)
             && spec.PropFilters.All(filter => MatchesPropFilter(component, filter))
-            && spec.AlarmFilters.All(filter => MatchesAlarmFilter(parsed, component, filter, calendarTimeZone)));
+            && spec.AlarmFilters.All(filter => MatchesAlarmFilter(parsed, component, filter, timeZone)));
     }
 
     /// <summary>Whether an instance THIS component sources overlaps the window — the narrowing
     /// AlarmFires already does with its own <c>component</c> argument, applied to the VEVENT's
     /// window. A null window is every instant.</summary>
     private static bool OverlapsFrom(IcsCalendar parsed, CalendarEvent component, TimeRangeSpec? range,
-        string calendarTimeZone) =>
+        string timeZone) =>
         range is not { } window
-        || OccurrenceExpander.Overlaps(parsed, window.FromUtc, window.ToUtc, calendarTimeZone, component);
+        || OccurrenceExpander.Overlaps(parsed, window.FromUtc, window.ToUtc, timeZone, component);
 
     // ---- evaluation, on the object model ------------------------------------------------------
 
@@ -210,7 +212,7 @@ internal static class CalendarQueryFilter
     }
 
     private static bool MatchesAlarmFilter(IcsCalendar parsed, CalendarEvent component, AlarmFilterSpec filter,
-        string calendarTimeZone)
+        string timeZone)
     {
         var alarmed = component.Alarms.Count > 0;
         if (filter.IsNotDefined) return !alarmed;
@@ -218,7 +220,7 @@ internal static class CalendarQueryFilter
 
         // AbsentBound.Closed at parse time: this window always names both its bounds.
         var (fromUtc, toUtc) = range.Closed;
-        return alarmed && OccurrenceExpander.AlarmFires(parsed, fromUtc, toUtc, calendarTimeZone, component);
+        return alarmed && OccurrenceExpander.AlarmFires(parsed, fromUtc, toUtc, timeZone, component);
     }
 
     private static IEnumerable<CalendarParameter> Parameters(ICalendarProperty property, string name) =>

@@ -35,15 +35,17 @@ internal static class CalendarPropertyValue
             : null;
 
     /// <summary>
-    /// The IANA id of the zone the value carries — a VCALENDAR holding exactly one VTIMEZONE whose
-    /// TZID TZDB or the Windows mapping answers — or null, which every caller refuses with
+    /// The IANA id of the zone the value carries — an iCalendar object holding exactly one VTIMEZONE
+    /// <b>and nothing else</b> (RFC 4791 § 5.2.2 and § 9.8 spell it the same way), whose TZID TZDB
+    /// or the Windows mapping answers — or null, which every caller refuses with
     /// <c>CALDAV:valid-calendar-data</c>. More than one block names no zone: the property is
-    /// singular (RFC 4791 § 5.2.2), and picking one of two would store the wrong one silently.
+    /// singular, and picking one of two would store the wrong one silently. A VEVENT beside the
+    /// block names none either: storing its zone would keep half of a body we refused to read.
     /// </summary>
     internal static string? Zone(string value)
     {
-        var zones = IcsDocument.TryLoad(value)?.TimeZones;
-        return zones?.Count == 1 ? IcsTimeZones.ResolveIana(zones.First().TzId) : null;
+        if (IcsDocument.TryLoad(value) is not { } document || document.Children.Count != 1) return null;
+        return document.TimeZones.Count == 1 ? IcsTimeZones.ResolveIana(document.TimeZones.First().TzId) : null;
     }
 
     /// <summary>Exactly <c>{DAV:collection, CALDAV:calendar}</c>: iCal's

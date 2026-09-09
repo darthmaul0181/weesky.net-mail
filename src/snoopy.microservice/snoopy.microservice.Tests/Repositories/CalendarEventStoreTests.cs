@@ -505,8 +505,9 @@ public sealed class CalendarEventStoreTests
     /// <summary>
     /// A calendar twelve hours ahead of UTC stores an all-day event's instants half a day before
     /// the dates it names, so the row falls outside a bare <c>last_occurrence &gt; from</c> while
-    /// the day it covers is squarely inside the window. The margin preselects it; the expander,
-    /// which alone reads the dates, decides that it belongs.
+    /// the day it covers, read from UTC, is still inside the window. The margin preselects it; the
+    /// expander, which alone reads the dates, decides that it belongs — and decides the opposite
+    /// for a reader in Auckland, where the 6th was over six hours before the window opened.
     /// </summary>
     [Fact]
     public async Task Window_KeepsAnAllDayRowThatOnlyTheMarginPreselects()
@@ -521,13 +522,13 @@ public sealed class CalendarEventStoreTests
         var row = await new PreferencesTestDbContext(db).CalendarEvents.SingleAsync(None);
         Assert.True(row.LastOccurrence < new DateTime(2026, 9, 6, 18, 0, 0, DateTimeKind.Utc));
 
-        var found = (await Events(db).WindowAsync(
-            user, new DateTime(2026, 9, 6, 18, 0, 0, DateTimeKind.Utc), Utc(2026, 9, 8),
-            "Pacific/Auckland", None)).Value;
+        var from = new DateTime(2026, 9, 6, 18, 0, 0, DateTimeKind.Utc);
+        var found = (await Events(db).WindowAsync(user, from, Utc(2026, 9, 8), IcsTimeZones.Utc, None)).Value;
 
         var only = Assert.Single(found);
         Assert.True(only.IsAllDay);
         Assert.Equal(new DateOnly(2026, 9, 6), only.StartDate);
+        Assert.Empty((await Events(db).WindowAsync(user, from, Utc(2026, 9, 8), "Pacific/Auckland", None)).Value);
     }
 
     [Fact]

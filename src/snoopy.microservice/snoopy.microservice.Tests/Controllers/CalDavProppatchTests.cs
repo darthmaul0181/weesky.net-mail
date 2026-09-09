@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Services.Dav;
+using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Services.CalDav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -180,6 +181,22 @@ public sealed class CalDavProppatchTests : IAsyncLifetime
         var propstats = XDocument.Parse(response.Body).Descendants(DavXml.PropStat).ToList();
         Assert.Equal("HTTP/1.1 403 Forbidden",
             Assert.Single(propstats).Element(DavXml.Status)!.Value);
+    }
+
+    [Fact]
+    public async Task ACalendarTimezoneCarryingAVEvent_IsRefusedAndNothingOfItIsStored()
+    {
+        // errors.xml/Invalid CalDAV:timezone t2: the property is « exactly one VTIMEZONE » (RFC 4791
+        // § 5.2.2), and a body with an event beside it is refused whole, never half-stored.
+        var response = await Proppatch(DavPaths.Calendar(UserId, "work"), Set(
+            new XElement(DavXml.CalDav + "calendar-timezone",
+                Ics.Single("DTSTART:20260907T090000Z", null, zone: Ics.FixedZone("America/New_York", "-0500")))));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal("HTTP/1.1 403 Forbidden",
+            XDocument.Parse(response.Body).Descendants(DavXml.Status).Single().Value);
+        using var db = server.CreateContext();
+        Assert.Equal("Europe/Brussels", db.Calendars.Find(calendarId)!.TimeZone);
     }
 
     private Task<DavTestResponse> Proppatch(string path, XElement body) =>

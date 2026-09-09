@@ -38,16 +38,27 @@ internal sealed class EventMemberSource(
 
     public ulong RankOf(DavEvent member) => member.SyncSequence;
 
-    public (DavPropertyRequest Request, IDavMemberResolver<DavEvent> Resolver) Prepare(XDocument body)
+    /// <summary>The generic reports' entry — multiget and sync-collection, whose grammars carry no
+    /// <c>CALDAV:timezone</c> (RFC 4791 § 9.6, RFC 6578 § 3.2) — so the collection's zone is the
+    /// one § 9.9 leaves them. Explicit: a calendar-aware caller must name the zone it means.</summary>
+    (DavPropertyRequest Request, IDavMemberResolver<DavEvent> Resolver) IDavMemberSource<DavEvent>.Prepare(
+        XDocument body) => Prepare(body, calendar.TimeZone);
+
+    /// <param name="body">the report body, read once — see <see cref="IDavMemberSource{TMember}.Prepare"/></param>
+    /// <param name="timeZone">the zone this report resolves dates in — the request's
+    /// <c>CALDAV:timezone</c> where it named one (RFC 4791 § 9.8), the collection's otherwise.
+    /// Never read off the collection here: the caller is the layer that knows which § 9.8 wants.</param>
+    internal (DavPropertyRequest Request, IDavMemberResolver<DavEvent> Resolver) Prepare(
+        XDocument body, string timeZone)
     {
         // Expansion is a multiget's and a query's (RFC 4791 § 9.6): on a sync-collection the
         // event table serves a named calendar-data as stored, like a PROPFIND would.
         if (ReportRequest.KindOf(body) is not (DavReportKind.CalendarMultiget or DavReportKind.CalendarQuery))
-            return (DavPropertyRequest.Parse(body), new Resolver(ContextOf, resolve, calendar.TimeZone, null));
+            return (DavPropertyRequest.Parse(body), new Resolver(ContextOf, resolve, timeZone, null));
 
         var request = CalendarDataRequest.PropertiesAsked(body);
         var calendarData = CalendarDataRequest.Asked(body); // may refuse — before anything is written
-        return (request, new Resolver(ContextOf, resolve, calendar.TimeZone, calendarData));
+        return (request, new Resolver(ContextOf, resolve, timeZone, calendarData));
     }
 
     private DavResourceContext ContextOf(DavEvent member) => new(
@@ -55,12 +66,12 @@ internal sealed class EventMemberSource(
         CollectionName: calendar.DavName, Calendar: calendar, Event: member);
 
     private sealed class Resolver(Func<DavEvent, DavResourceContext> contextOf, DavPropertyResolver resolve,
-        string calendarTimeZone, CalendarDataRequest? calendarData) : IDavMemberResolver<DavEvent>
+        string timeZone, CalendarDataRequest? calendarData) : IDavMemberResolver<DavEvent>
     {
         public (List<XElement> Found, List<XName> Missing) Resolve(DavPropertyRequest request, DavEvent member)
         {
             var (found, missing) = resolve(request, contextOf(member));
-            if (calendarData is not null) found.Add(calendarData.Element(member, calendarTimeZone));
+            if (calendarData is not null) found.Add(calendarData.Element(member, timeZone));
             return (found, missing);
         }
     }

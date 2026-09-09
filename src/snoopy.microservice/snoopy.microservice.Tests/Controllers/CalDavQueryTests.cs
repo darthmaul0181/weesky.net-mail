@@ -10,6 +10,7 @@ using weesky.Snoopy.Microservice.Services.Calendar;
 using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
+using weesky.Snoopy.Microservice.Tests.Services.CalDav;
 using Xunit;
 using CalendarRow = weesky.Snoopy.Microservice.Data.Preferences.Calendar;
 
@@ -327,6 +328,64 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         Assert.Equal(207, single.StatusCode);
     }
 
+    [Fact]
+    public async Task ACalendarQueryTimeZone_DecidesWhichDayAnAllDayEventFallsOn()
+    {
+        // floating.xml/calendar without timezone t2: the calendar is in Brussels, the request says
+        // Los Angeles, and the file says « 17 October » without saying where. In Los Angeles that
+        // day ends at 07:00Z on the 18th; in Brussels it ended nine hours earlier.
+        GivenEvent("journee.ics", Ics.Single("DTSTART;VALUE=DATE:20281017", "DTEND;VALUE=DATE:20281018"));
+        var window = VEvent(TimeRange("20281018T060000Z", "20281018T070000Z"));
+
+        var inPacific = await Report(Calendar(), QueryBody(window, zone: "America/Los_Angeles"));
+        var inBrussels = await Report(Calendar(), QueryBody(window));
+
+        Assert.Equal([Href("journee.ics")], HrefsOf(inPacific));
+        Assert.Empty(HrefsOf(inBrussels));
+    }
+
+    [Fact]
+    public async Task AnExpandInTheQuery_PosesAFloatingInstanceInTheRequestsZone()
+    {
+        // reports.xml/limit-expand t9a and t10: § 9.6.5's expansion resolves in the request's
+        // CALDAV:timezone too. A floating 09:00 is 16:00Z in Los Angeles (PDT), 07:00Z in Brussels.
+        GivenEvent("flottant.ics", Ics.Single("DTSTART:20260907T090000", "DTEND:20260907T100000"));
+        var window = VEvent(TimeRange("20260901T000000Z", "20261001T000000Z"));
+        var expand = ("20260901T000000Z", "20261001T000000Z");
+
+        var inPacific = await Report(Calendar(), QueryBody(window, expand: expand, zone: "America/Los_Angeles"));
+        var inBrussels = await Report(Calendar(), QueryBody(window, expand: expand));
+
+        Assert.Contains("DTSTART:20260907T160000Z", CalendarDataOf(inPacific), StringComparison.Ordinal);
+        Assert.Contains("DTSTART:20260907T070000Z", CalendarDataOf(inBrussels), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACalendarQueryTimeZoneThatIsNotOne_IsRefused()
+    {
+        // reports.xml/time-range t12a: a VCALENDAR with no VERSION, no PRODID and no VTIMEZONE.
+        // RFC 4791 § 9.8 names CALDAV:valid-calendar-data.
+        GivenEvent("a.ics", CalDavPutTests.Event("ua"));
+
+        var response = await Report(Calendar(), QueryBody(VEvent(), rawZone: "BEGIN:VCALENDAR\r\nEND:VCALENDAR"));
+
+        Assert.Equal(403, response.StatusCode);
+        Assert.Equal(CalDavError.ValidCalendarData, ConditionOf(response));
+    }
+
+    [Fact]
+    public async Task WithoutATimeZoneElement_TheCollectionsOwnZoneStillDecides()
+    {
+        // The fallback § 9.9 names second. Nothing about a client that sends no timezone changes.
+        GivenCalendarZone("America/New_York");
+        GivenEvent("journee.ics", Ics.Single("DTSTART;VALUE=DATE:20270101", "DTEND;VALUE=DATE:20270102"));
+
+        var response = await Report(Calendar(), QueryBody(
+            VEvent(TimeRange("20270102T000000Z", "20270102T040000Z"))));
+
+        Assert.Equal([Href("journee.ics")], HrefsOf(response));
+    }
+
     private Task<DavTestResponse> Report(string path, string? body) => server.SendAsync("REPORT", path, body);
 
     private string Calendar() => DavPaths.Calendar(UserId, "work");
@@ -354,6 +413,13 @@ public sealed class CalDavQueryTests : IAsyncLifetime
     }
 
     private void GivenEvent(string davName, string ics) => GivenEvent(server, work, davName, ics);
+
+    private void GivenCalendarZone(string zone)
+    {
+        using var db = server.CreateContext();
+        db.Calendars.Find(work)!.TimeZone = zone;
+        db.SaveChanges();
+    }
 
     /// <summary>A row projected as the writer projects it, so the preselection reads real columns.</summary>
     private void GivenEvent(DavTestServer on, Guid calendarId, string davName, string ics)
@@ -408,8 +474,10 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         UpdatedAt = new DateTime(2026, 9, 7, 6, 0, 0, DateTimeKind.Utc),
     };
 
+    /// <param name="zone">the IANA id a <c>CALDAV:timezone</c> element carries a block of</param>
+    /// <param name="rawZone">the text of that element verbatim, for a body the report refuses</param>
     private static string QueryBody(XElement? filter, bool withCalendarData = false,
-        (string Start, string End)? expand = null)
+        (string Start, string End)? expand = null, string? zone = null, string? rawZone = null)
     {
         var prop = new XElement(DavXml.Prop, new XElement(DavXml.Dav + "getetag"));
         if (withCalendarData || expand is not null)
@@ -421,7 +489,10 @@ public sealed class CalDavQueryTests : IAsyncLifetime
             prop.Add(calendarData);
         }
 
-        return new XDocument(new XElement(DavXml.CalDav + "calendar-query", prop, filter)).ToString();
+        var query = new XElement(DavXml.CalDav + "calendar-query", prop, filter);
+        if (zone is not null) rawZone = MkCalendarRequestTests.Zones(zone);
+        if (rawZone is not null) query.Add(new XElement(DavXml.CalDav + "timezone", rawZone));
+        return new XDocument(query).ToString();
     }
 
     private static XElement VEvent(params object[] children) =>
@@ -453,6 +524,9 @@ public sealed class CalDavQueryTests : IAsyncLifetime
 
     private static List<XElement> ResponsesOf(DavTestResponse response) =>
         [.. XDocument.Parse(response.Body).Root!.Elements(DavXml.Response)];
+
+    private static string CalendarDataOf(DavTestResponse response) =>
+        XDocument.Parse(response.Body).Descendants(CalendarData).Single().Value;
 
     private static List<string> HrefsOf(DavTestResponse response) =>
         [.. ResponsesOf(response).Select(r => r.Element(DavXml.Href)!.Value)];

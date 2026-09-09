@@ -15,12 +15,15 @@ internal static class ExpandedCalendarData
     /// <exception cref="DavPreconditionException"><c>max-instances</c> past the expander's own
     /// cap — never a document quietly missing the rest; <c>valid-calendar-data</c> on a stored
     /// file that no longer parses.</exception>
-    internal static string Expand(string icsRaw, DateTime fromUtc, DateTime toUtc, string calendarTimeZone)
+    /// <summary>The instances of <c>[fromUtc, toUtc[</c>, a floating or all-day one posed in
+    /// <paramref name="timeZone"/> — the request's <c>CALDAV:timezone</c> where the query named one
+    /// (RFC 4791 § 9.8), else the collection's.</summary>
+    internal static string Expand(string icsRaw, DateTime fromUtc, DateTime toUtc, string timeZone)
     {
         var parsed = IcsDocument.TryLoad(icsRaw)
             ?? throw new DavPreconditionException(CalDavError.ValidCalendarData);
         var occurrences = OccurrenceExpander.Expand(Guid.Empty, Guid.Empty, parsed, fromUtc, toUtc,
-            calendarTimeZone, calendarTimeZone);
+            timeZone, timeZone);
         if (occurrences.Count >= OccurrenceExpander.CapFor(fromUtc, toUtc))
             throw new DavPreconditionException(CalDavError.MaxInstances);
 
@@ -29,7 +32,7 @@ internal static class ExpandedCalendarData
         foreach (var occurrence in occurrences)
         {
             expanded.Events.Add(IcsComposer.Instance(parsed, occurrence,
-                OccurrenceExpander.SourceOf(occurrence, components)!, calendarTimeZone));
+                OccurrenceExpander.SourceOf(occurrence, components)!, timeZone));
         }
 
         return IcsDocument.Serialize(expanded);

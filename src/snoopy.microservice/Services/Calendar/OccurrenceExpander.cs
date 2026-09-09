@@ -49,9 +49,9 @@ internal static class OccurrenceExpander
 
     /// <summary>
     /// The window is <c>[fromUtc, toUtc[</c>. <paramref name="calendarTimeZone"/> poses what the
-    /// file left unposed, <paramref name="viewTimeZone"/> cuts the days a floating instance falls
-    /// on. All-day dates are read as dates — UTC midnights, the reading RFC 4791 § 9.9 gives a
-    /// DATE value — so the same day is the same day for every reader.
+    /// file left unposed, <paramref name="viewTimeZone"/> is where a floating or all-day instance
+    /// is judged against the window — RFC 4791 § 9.9's reading of a « date » value, the midnights
+    /// of the zone the reader means, never UTC's for a reader who is not there.
     /// </summary>
     internal static IReadOnlyList<EventOccurrence> Expand(
         Guid eventId, Guid calendarId, IcsCalendar parsed, DateTime fromUtc, DateTime toUtc,
@@ -99,7 +99,7 @@ internal static class OccurrenceExpander
         {
             if (SourceOf(occurrence, components) is not { } source) continue;
             if (component is not null && !ReferenceEquals(source, component)) continue;
-            var (start, end) = Anchors(occurrence, zone);
+            var (start, end) = Span(occurrence, zone);
             foreach (var alarm in source.Alarms)
             {
                 if (FiresAt(alarm.Trigger, start, end, parsed, zone) is not { } first) continue;
@@ -215,22 +215,13 @@ internal static class OccurrenceExpander
             toUtc);
 
     /// <summary>
-    /// The instants the window is judged on: a dated instance as it stands, an all-day one as the
-    /// UTC midnights of the dates it names (RFC 4791 § 9.9's reading of a DATE value — the same
-    /// day everywhere, never a local one), a floating one posed in <paramref name="zone"/>. This is
-    /// also what a <c>free-busy-query</c> reads a busy period's own bounds from.
+    /// The instants the window is judged on: a dated instance as it stands, a floating or all-day
+    /// one posed in <paramref name="zone"/> — RFC 4791 § 9.9's reading, where a « date » value is
+    /// resolved in the request's <c>CALDAV:timezone</c>, else the collection's, else the server's.
+    /// This is also what a <c>free-busy-query</c> reads a busy period's own bounds from, and what a
+    /// trigger is measured from: a reminder rings on the wall clock of the zone it is read in.
     /// </summary>
     internal static (DateTime StartUtc, DateTime EndUtc) Span(EventOccurrence occurrence, string zone) => occurrence switch
-    {
-        { IsAllDay: true } => (Midnight(occurrence.StartDate!.Value), Midnight(occurrence.EndDateExclusive!.Value)),
-        { IsFloating: true } => (IcsTimeZones.ToUtc(occurrence.LocalStart!.Value, zone),
-                                 IcsTimeZones.ToUtc(occurrence.LocalEnd!.Value, zone)),
-        _ => (occurrence.StartUtc!.Value, occurrence.EndUtc!.Value),
-    };
-
-    /// <summary>The instants a trigger is measured from: an all-day or floating instance starts at
-    /// its wall-clock reading in the calendar's zone, which is where its reminder rings.</summary>
-    private static (DateTime Start, DateTime End) Anchors(EventOccurrence occurrence, string zone) => occurrence switch
     {
         { IsAllDay: true } => (IcsTimeZones.ToUtc(Midnight(occurrence.StartDate!.Value), zone),
                                IcsTimeZones.ToUtc(Midnight(occurrence.EndDateExclusive!.Value), zone)),

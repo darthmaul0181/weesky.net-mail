@@ -31,7 +31,10 @@ internal static class CalendarQueryReport
     {
         var filter = body.Root!.Element(FilterElement) ?? throw new DavPreconditionException(CalDavError.ValidFilter);
         var spec = CalendarQueryFilter.Parse(filter);
-        var (request, resolver) = source.Prepare(body);
+        // RFC 4791 § 9.8's precedence, a MUST: the request's zone where it names one, else the
+        // collection's — for the filter's dates and for an expanded calendar-data alike.
+        var zone = CalendarRequestTimeZone.Of(body) ?? calendar.TimeZone;
+        var (request, resolver) = source.Prepare(body, zone);
 
         var candidates = single is { } member
             ? Only(member)
@@ -51,7 +54,7 @@ internal static class CalendarQueryReport
 
             // The bound counts MATCHES, so the evaluation comes first: the other way round, a
             // candidate the filter excludes would forge a 507 over a complete result set.
-            if (!CalendarQueryFilter.Matches(parsed, spec, calendar.TimeZone)) continue;
+            if (!CalendarQueryFilter.Matches(parsed, spec, zone)) continue;
             if (writer.ResponseCount == MultigetReport.MaxHrefs)
             {
                 truncated = true;

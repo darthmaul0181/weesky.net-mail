@@ -95,15 +95,20 @@ public sealed class FreeBusyReportTests
     }
 
     [Fact]
-    public void AnAllDayInstance_ReadsAsUtcMidnightOfItsDates()
+    public void AnAllDayInstance_ReadsAsTheCalendarZonesMidnightsOfItsDates()
     {
+        // RFC 4791 § 9.9: a DATE value is resolved in the collection's zone. 7 September in
+        // Brussels (CEST) opens at 22:00Z the evening before; in UTC it opens at midnight.
         var start = new DateOnly(2026, 9, 7);
         var end = new DateOnly(2026, 9, 9);
-        var periods = FreeBusyReport.Periods([AllDay(start, end, status: null)], Ics.Zone);
 
-        var period = Assert.Single(periods);
-        Assert.Equal(new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc), period.StartUtc);
-        Assert.Equal(new DateTime(2026, 9, 9, 0, 0, 0, DateTimeKind.Utc), period.EndUtc);
+        var brussels = Assert.Single(FreeBusyReport.Periods([AllDay(start, end, status: null)], Ics.Zone));
+        Assert.Equal(new DateTime(2026, 9, 6, 22, 0, 0, DateTimeKind.Utc), brussels.StartUtc);
+        Assert.Equal(new DateTime(2026, 9, 8, 22, 0, 0, DateTimeKind.Utc), brussels.EndUtc);
+
+        var utc = Assert.Single(FreeBusyReport.Periods([AllDay(start, end, status: null)], IcsTimeZones.Utc));
+        Assert.Equal(new DateTime(2026, 9, 7, 0, 0, 0, DateTimeKind.Utc), utc.StartUtc);
+        Assert.Equal(new DateTime(2026, 9, 9, 0, 0, 0, DateTimeKind.Utc), utc.EndUtc);
     }
 
     [Fact]

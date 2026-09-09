@@ -73,9 +73,9 @@ internal sealed record CalendarDataRequest(DateTime? ExpandFrom, DateTime? Expan
 
     /// <summary>The element as a report writes it into a member's propstat. Throws
     /// <see cref="DavPreconditionException"/> (<c>max-instances</c>) on an expansion past the cap.</summary>
-    internal XElement Element(DavEvent member, string calendarTimeZone) =>
+    internal XElement Element(DavEvent member, string timeZone) =>
         new(Name, Expands
-            ? ExpandedCalendarData.Expand(member.IcsRaw, ExpandFrom!.Value, ExpandTo!.Value, calendarTimeZone)
+            ? ExpandedCalendarData.Expand(member.IcsRaw, ExpandFrom!.Value, ExpandTo!.Value, timeZone)
             : member.IcsRaw);
 
     private static DateTime? Instant(XElement expand, string attribute) =>

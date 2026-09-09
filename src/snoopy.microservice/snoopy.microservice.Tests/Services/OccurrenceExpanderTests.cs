@@ -50,8 +50,11 @@ public sealed class OccurrenceExpanderTests
 
         // Fenêtre [1er sept 00:00 UTC, 1er oct 00:00 UTC[ vue depuis Los Angeles : le 30 sept y est encore.
         Assert.Single(Expand(ics, From, To, view: "America/Los_Angeles"));
-        // Une fenêtre qui s'arrête au 30 sept 00:00 UTC s'arrête avant le jour du 30.
-        Assert.Empty(Expand(ics, From, new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc)));
+        // Une fenêtre qui s'arrête au 30 sept 00:00 UTC voit déjà deux heures du 30 vu de Bruxelles
+        // (il y commence le 29 à 22:00 UTC), et rien du 30 vu d'UTC.
+        var edge = new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc);
+        Assert.Single(Expand(ics, From, edge, view: "Europe/Brussels"));
+        Assert.Empty(Expand(ics, From, edge, view: IcsTimeZones.Utc));
     }
 
     [Fact]
@@ -443,6 +446,31 @@ public sealed class OccurrenceExpanderTests
 
         Assert.False(Fires(parsed, "20270101T220000Z", "20270101T230000Z"));
         Assert.True(Fires(parsed, "20270101T230000Z", "20270101T230001Z"));
+    }
+
+    [Fact]
+    public void AnAllDayInstance_IsPosedInTheZoneItIsJudgedIn()
+    {
+        // RFC 4791 § 9.9: a DATE value is resolved in the request's CALDAV:timezone, else the
+        // collection's. January 1st in New York runs from 05:00Z to 05:00Z, not midnight to midnight.
+        var parsed = Load(Ics.Single("DTSTART;VALUE=DATE:20270101", "DTEND;VALUE=DATE:20270102"));
+
+        Assert.True(OccurrenceExpander.Overlaps(parsed,
+            Instant("20270102T000000Z"), Instant("20270102T040000Z"), "America/New_York"));
+        Assert.False(OccurrenceExpander.Overlaps(parsed,
+            Instant("20270102T060000Z"), Instant("20270102T070000Z"), "America/New_York"));
+    }
+
+    [Fact]
+    public void AnAllDayInstance_InUtc_IsUnchanged()
+    {
+        // Every caller that passes UTC — the API's default view — sees exactly what it saw before.
+        var parsed = Load(Ics.Single("DTSTART;VALUE=DATE:20270101", "DTEND;VALUE=DATE:20270102"));
+
+        Assert.True(OccurrenceExpander.Overlaps(parsed,
+            Instant("20270101T000000Z"), Instant("20270101T010000Z"), IcsTimeZones.Utc));
+        Assert.False(OccurrenceExpander.Overlaps(parsed,
+            Instant("20261231T230000Z"), Instant("20270101T000000Z"), IcsTimeZones.Utc));
     }
 
     private static string Daily(string start, string end) =>
