@@ -25,11 +25,13 @@ internal static class CalendarPropertyValue
     /// enumeration would differ between hosts for no reason a client could act on.</summary>
     internal static readonly XName[] Writable = [DisplayName, Description, Color, Order, TimeZone];
 
-    /// <summary>The properties RFC 4918 § 15 declares protected — not calendar-specific, true of
-    /// every resource on this tree, and a client MUST NOT set or remove any of them. The one
-    /// source: <see cref="MkCalendarRequest"/> stops a creation that sets one, and
-    /// <see cref="CalendarPropertyUpdate"/> refuses a PROPPATCH that removes one, whether or not
-    /// the calendar's own table happens to serve it.</summary>
+    /// <summary>The properties RFC 4918 § 15 declares protected, in the RFC's own general terms —
+    /// but only the calendar tree consults this particular list: <see cref="MkCalendarRequest"/>
+    /// stops a creation that sets one, and <see cref="CalendarPropertyUpdate"/> refuses a
+    /// PROPPATCH that removes one, whether or not the calendar's own table happens to serve it.
+    /// Nothing else on the DAV surface reads it — a DAV:remove of e.g. <c>supportedlock</c> is not
+    /// judged against this list anywhere but here; see
+    /// docs/superpowers/calendar-5d-residuals.md for the asymmetry that leaves.</summary>
     internal static readonly XName[] Protected =
     [
         DavXml.Dav + "getetag", DavXml.Dav + "getcontentlength", DavXml.Dav + "getlastmodified",

@@ -70,13 +70,25 @@ internal static class CalDavProperties
     private static readonly ConcurrentDictionary<int, PropertySet> CalendarTables = new();
 
     /// <summary>
+    /// Any valid year works below: only <see cref="CalendarPropertyNames"/>' key set is ever read
+    /// off the table it names, never a value, and <c>Set</c> stores factories without invoking any
+    /// of them, so today the <c>calendar-timezone</c> factory's <c>year</c> closure never runs.
+    /// That is exactly why the year still has to be one <see cref="DateTime"/> accepts: hoisting a
+    /// year-derived value out of a factory — the most natural cleanup imaginable — would make an
+    /// invalid year throw inside THIS static initialiser, a <see cref="TypeInitializationException"/>
+    /// on first touch that 500s the whole DAV surface at startup, both protocols, from a stack
+    /// trace nowhere near the edit that caused it.
+    /// </summary>
+    private const int AnyValidYear = 2000;
+
+    /// <summary>
     /// The calendar's own closed set of NAMES — the one source of what a calendar always carries,
     /// read by <see cref="CalendarPropertyUpdate"/> to judge a <c>DAV:remove</c> so that set can
     /// never drift from what this table actually serves. Year-independent: the year only varies
     /// <c>calendar-timezone</c>'s VALUE, never whether the table names it, so any year's table
     /// names the same set.
     /// </summary>
-    internal static readonly IReadOnlyList<XName> CalendarPropertyNames = CalendarTable(0).Names;
+    internal static readonly IReadOnlyList<XName> CalendarPropertyNames = CalendarTable(AnyValidYear).Names;
 
     /// <summary>
     /// The calendar tree's own shapes, and above them the principal's: an expand-property on a

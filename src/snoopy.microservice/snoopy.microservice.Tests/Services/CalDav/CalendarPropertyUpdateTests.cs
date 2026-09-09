@@ -194,9 +194,10 @@ public sealed class CalendarPropertyUpdateTests
     [Fact]
     public void EveryPropertyTheCalendarTableServes_ExceptTheDescription_IsRefusedOnRemoval()
     {
-        // Pins the DERIVATION rather than a copy of its output: the day a property is added to
-        // CalDavProperties' calendar table and not to this judgement, this fails — the defect a
-        // hand-written second list let slip through review.
+        // Tautological today, since Judge reads this very list — that is not what this guards.
+        // Its value is against a REGRESSION: someone later re-hardcoding "what a calendar always
+        // carries" as a second, copied list instead of reading CalDavProperties.CalendarPropertyNames,
+        // exactly the defect this test exists because of.
         foreach (var name in CalDavProperties.CalendarPropertyNames
                      .Where(name => name != CalendarPropertyValue.Description))
         {
