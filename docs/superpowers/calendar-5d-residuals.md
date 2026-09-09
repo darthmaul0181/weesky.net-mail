@@ -45,6 +45,46 @@ correctifs de la vague.
 À compléter à la clôture, sur la base du triage de l'outil et des scénarios clients réels non
 joués ou non applicables.
 
+## L'outil de mesure n'a pas de contrepoids, et litmus n'en est pas un
+
+**La question, posée pendant la clôture** : notre seul juge est `ccs-caldavtester`, écrit par Apple
+pour tester **son propre** serveur. Ses attentes mélangent donc ce que la norme exige et ce que
+CalendarServer a choisi de faire, sans les distinguer — sur 212 échecs du passage initial, 59 étaient
+des défauts de l'outil, c'est-à-dire des tests qu'aucun serveur conforme ne peut passer. Existe-t-il
+un équivalent qui suive la norme plutôt qu'une implémentation ?
+
+**Pour la couche CalDAV : non.** `ccs-caldavtester` est seul sur ce créneau, et il est **archivé
+depuis février 2024** (dernier commit amont `bed21e59`, « Archival message »). Les autres serveurs du
+domaine s'y confrontent tous, faute de mieux.
+
+**Pour la couche WebDAV en dessous : `litmus` existe** — la suite de conformité historique du
+protocole, écrite indépendamment de tout éditeur, **toujours maintenue** par Joe Orton (l'auteur de
+neon) sur `github.com/notroj/litmus`, et à jour au point d'embarquer un test pour une faille de 2026.
+
+**Évalué le 2026-09-09, et écarté.** Ce n'est pas une question de coût d'installation (C, chaîne
+autotools, donc WSL ou conteneur sur nos postes Windows) : c'est que **litmus teste un serveur de
+fichiers génériques** et que nous servons un **magasin typé**.
+
+| Ce que litmus exerce | Ce que ça donne ici |
+|---|---|
+| déposer un contenu quelconque à un chemin quelconque, le relire et **comparer octet par octet** | `IcsGuards` refuse tout ce qui n'est pas de l'iCalendar — l'échec tombe à la **première étape**, et tout le reste en cascade |
+| `COPY` / `MOVE` | `405` : c'est notre non-conformité nº 1, déjà écrite et déjà arbitrée |
+| verrouillage | non implémenté, et **non annoncé** (`DavHeaders.ComplianceClasses` porte `1, 3`, pas `2`) |
+| propriétés | la suite crée d'abord sa ressource par un dépôt, donc bute sur la première ligne |
+
+Reste exploitable : les vérifications sur l'en-tête d'annonce des capacités. Une poignée, pour
+lesquelles un test chez nous coûte moins cher que d'installer l'outil.
+
+**Ce qui tient lieu de contrepoids, et qu'il faut savoir avant de rouvrir la question** : le triage
+de 5d n'a pas pris les verdicts de l'outil pour argent comptant. Les 212 échecs ont été jugés **un
+par un contre le texte des RFC**, article cité à chaque fois, et c'est ce qui a produit les quatre
+catégories du rapport. Le filtre « norme » que ni Apple ni litmus ne donnent a donc été fabriqué à la
+main, une fois, et il est écrit.
+
+**Quand rouvrir** : le jour où le serveur exposerait une collection acceptant du contenu libre, ou
+implémenterait `COPY`/`MOVE` (différés à 5e) — litmus redeviendrait alors un juge indépendant utile
+sur cette couche-là.
+
 ## Ce dont 5e hérite
 
 À compléter à la clôture.
