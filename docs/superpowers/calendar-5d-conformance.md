@@ -256,10 +256,149 @@ surcharges sans maître n'a été exercée par aucun test — elle reste ouverte
 
 ## 3. Passage final — après la vague de correctifs
 
-Date : — · commit : — · fichier : `results/—-both.txt` · `-Protocol Both`
+Date : 2026-09-09 · commit déployé : `13d32d1a` · fichier : `results/20260909-154150-both.txt` ·
+`-Protocol Both`
 
-(mêmes colonnes que le passage initial, plus les fichiers CardDAV ; le rapport dit à chaque
-comparaison lequel des deux repères CardDAV il commente)
+**`FAILED (ok=324, ignored=159, failed=255, errors=0)`** — 738 tests en 273 s, trente-huit fichiers.
+**`errors=0`, aucune ligne « Start items failed », et zéro `500` dans tout le passage.**
+
+**Il a fallu deux passages, et le premier est celui qui a servi.** Le passage du 2026-09-09 à 13:55
+(`results/20260909-135513-both.txt`, commit `a54676c9`) a trouvé ce qu'aucun des 4 935 tests unitaires
+n'avait vu : un `500` et un refus de trop. Les deux sont corrigés, et c'est le second passage qui
+fait foi. Le premier est consigné ici parce qu'un rapport qui ne montrerait que le passage propre
+mentirait sur ce que la mesure a coûté.
+
+| Repère | ok | ignorés | échecs |
+|---|---|---|---|
+| CalDAV, passage initial (§ 1), commit `c0192a48` | 188 | 138 | 212 |
+| **CalDAV, passage final**, commit `13d32d1a` | **215** | **138** | **185** |
+| CardDAV, repère de l'étape 1 (§ 0), commit `c0192a48` | 108 | 21 | 71 |
+| **CardDAV, passage final** | **109** | **21** | **70** |
+
+**Vingt-sept échecs CalDAV de moins, et le carnet ne régresse pas** — c'était le risque principal,
+cinq fichiers du socle partagé ayant été touchés. Le repère commenté ici est celui du § 0, pas le
+`ok=107` de 4d : les deux diffèrent de la tâche zéro, et comparer au mauvais ferait apparaître un
+gain qui n'existe pas. Les ignorés sont identiques des deux côtés : aucune `<feature>` n'a dérivé,
+donc le dénominateur est le même et les deux colonnes se comparent ligne à ligne.
+
+### CalDAV
+
+| Fichier | OK | Échecs | Ignorés | Suites ignorées |
+|---|---|---|---|---|
+| propfind | 24 | 2 | 1 | — |
+| proppatch | 3 | 5 | 0 | — |
+| put | 10 | 27 | 5 | 2 |
+| get | 1 | 0 | 1 | 2 |
+| delete.xml (copie) | 2 | 1 | 0 | — |
+| reports.xml (copie) | 37 | 31 | 47 | — |
+| sync-report | 26 | 6 | 20 | 11 |
+| errors | 33 | 13 | 27 | 2 |
+| mkcalendar | 8 | 11 | 0 | 2 |
+| options | 2 | 2 | 0 | — |
+| nonascii | 6 | 6 | 0 | 4 |
+| well-known | 0 | 10 | 0 | — |
+| current-user-principal | 2 | 1 | 0 | 1 |
+| expandproperty | 6 | 8 | 2 | — |
+| recurrenceput | 9 | 10 | 0 | — |
+| floating.xml (copie) | 8 | 6 | 0 | — |
+| ctag | 14 | 9 | 0 | — |
+| encodedURIs | 7 | 13 | 0 | 1 |
+| conditional | 1 | 2 | 0 | — |
+| copymove | 0 | 16 | 1 | — |
+| aclreports | 0 | 2 | 0 | 6 |
+| timezones | 10 | 4 | 3 | — |
+| ical-client | 6 | 0 | 0 | — |
+
+### CardDAV
+
+| Fichier | OK | Échecs | Ignorés | Suites ignorées |
+|---|---|---|---|---|
+| propfind | 15 | 1 | 0 | — |
+| proppatch | 1 | 6 | 0 | — |
+| put | 14 | 4 | 0 | — |
+| get | 1 | 2 | 0 | 2 |
+| reports | 33 | 6 | 0 | 2 |
+| sync-report | 23 | 3 | 8 | 3 |
+| errors | 5 | 5 | 0 | — |
+| errorcondition | 6 | 6 | 0 | 1 |
+| nonascii | 3 | 4 | 0 | — |
+| well-known | 0 | 10 | 0 | — |
+| current-user-principal | 2 | 1 | 0 | 1 |
+| mkcol | 2 | 1 | 1 | — |
+| copymove | 0 | 3 | 0 | 1 |
+| aclreports | 1 | 18 | 2 | — |
+| ab-client | 3 | 0 | 0 | — |
+
+### Ce que la vague a déplacé, fichier par fichier
+
+| Fichier | Initial | Final | Ce qui a bougé |
+|---|---|---|---|
+| `errors.xml` | 21 / 25 | **33 / 13** | Les huit préconditions mal nommées, `METHOD`, l'échappement TEXT, le `RECURRENCE-ID` sans occurrence, le filtre invalide de § 7.8.9. **−1 sur `PUT` 10**, coût accepté du relâchement de la garde des fuseaux (ci-dessous) |
+| `reports.xml` | 30 / 38 | **37 / 31** | `<C:timezone>`, le `param-filter` négatif, le `time-range` lié au composant, les répétitions de `VALARM` |
+| `floating.xml` | 2 / 12 | **8 / 6** | Le tout-journée posé dans la zone où il est jugé, et la copie locale qui remet `default` en UTC — le harnais, seule pièce qu'aucun test hors ligne ne pouvait valider |
+| `nonascii.xml` | 3 / 9 | **6 / 6** | La marque d'ordre d'octets UTF-8, plus ses cascades |
+| `recurrenceput.xml` | 12 / 7 | **9 / 10** | **−3 net.** Trois refus **justes** que le durcissement du `PUT` a produits (voir plus bas), et la forme Apple récupérée après relâchement |
+| `put.xml` | 10 / 27 | **10 / 27** | Le `500` corrigé rend un test ; les neuf `Problem VEVENTs` restent la divergence assumée de l'arbitrage 2 |
+| `proppatch.xml` | 2 / 6 | **3 / 5** | Le `remove` d'une propriété absente |
+| `mkcalendar.xml` | 7 / 12 | **8 / 11** | Le corps de création refusant une propriété protégée |
+
+### Les deux défauts que seule la mesure a trouvés
+
+**Un `500`, unique dans 738 tests.** `put.xml` `Problem VEVENTs` 11 envoie un `VCALENDAR` dont **la
+surcharge précède la maîtresse** en ordre de document — RFC 5545 n'impose aucun ordre, un client réel
+peut l'écrire. La cause n'était pas dans la vague : `IcsComposer.Detach` retirait un enfant par
+l'indice de la liste **plate** d'Ical.Net, or la bibliothèque ne chaîne jamais ses listes par groupe,
+si bien que chaque groupe repart de zéro et que le premier `VEVENT` devient inatteignable dès qu'un
+`VTIMEZONE` le précède. **Latent depuis 5a**, réveillé par le garde des surcharges de cette vague.
+Et le plantage n'était que sa moitié visible : dans un fichier ordinaire, la même ligne retirait **le
+mauvais `VEVENT`** et ne marchait que par chance. Corrigé en `a8e95d8f`, sans `catch` — un `catch`
+aurait changé un plantage en réponse silencieusement fausse. `CalDavNoFiveHundredTests` ne portait
+aucun corps de cette forme : c'est pourquoi onze tâches sont restées vertes pendant que le serveur
+plantait. La forme y est désormais.
+
+**Un export Apple refusé.** `recurrenceput.xml` `VEVENTs` 12 est un fichier
+`PRODID:-//Apple Inc.//Mac OS X 10.11//EN` qui référence `TZID=America/Los_Angeles` **sans joindre de
+`VTIMEZONE`**. Le durcissement de RFC 5545 § 3.2.19 le refusait, sur le `PUT` **et** sur l'import
+`.ics` du webmail, alors que notre propre base résout cette zone. Décision prise sur cette preuve :
+**accepter quand l'identifiant se résout**, refuser seulement ce que rien ne résout — le MUST existe
+pour qu'un lecteur puisse résoudre la zone, et quand nous le pouvons, refuser coûte un événement à
+l'utilisateur pour une pureté dont nous n'avons pas besoin. RFC 7809 existe parce que cette forme est
+courante. Corrigé en `13d32d1a` ; `errors.xml` `PUT` 10 repasse au rouge, et c'est le prix.
+
+**Ce que l'épisode établit** : l'arbitrage qui avait accordé ce durcissement le faisait « en
+connaissance de cause », en nommant son risque et en désignant l'étape des clients réels comme filet.
+Le filet a servi **avant** cette étape, et sur du matériel Apple plutôt que sur l'exportateur exotique
+annoncé. Un arbitrage rendu sans mesure reste un pari.
+
+### Ce que ce passage ne mesure pas, et qu'aucun chiffre ne dira
+
+- **Les trois `resource-must-be-null` de `mkcalendar.xml` sont rouges par décision.** RFC 4918
+  § 9.3.1 prescrit le `405` que nous rendons ; l'outil attend `403`, `409` ou `507`. La tâche 9 a
+  corrigé le SHOULD — le corps qui nomme la précondition — et non le statut. Ces trois-là passent de
+  « défaut du serveur » à **divergence nommée**.
+- **Les MUST `limit-recurrence-set` et `limit-freebusy-set` ne sont mesurés par aucun test joué.**
+  Le seul qui les envoie échoue avant, sur son `comp-filter VFREEBUSY`. Ne pas le compter comme leur
+  mesure : ils restent non mesurés, et différés à 5e.
+- **`timezones.xml` t4 et t7 sont verts faussement** — leur vérificateur lit l'argument `props` là où
+  le test passe `okprops`, donc rien n'est évalué. Deux verts qui ne mesurent rien.
+- **Trois refus de `recurrenceput.xml` sont justes.** `VEVENTs` 2 : un `UID` qui change sous une
+  adresse existante, ce que RFC 4791 § 5.3.2.1 interdit mot pour mot (« or overwrite an existing
+  calendar object resource with one that has a different UID property value »). `VEVENTs` 10 et 11 :
+  une surcharge dont le `RECURRENCE-ID` nomme le 2 janvier sur une série hebdomadaire partie du
+  1er — un créneau que la règle ne produit pas. L'outil attend l'acceptation ici et le refus dans
+  `errors.xml` pour la même forme : c'est lui qui est incohérent. Divergences nommées.
+
+### Ce que le passage confirme des prédictions écrites avant lui
+
+Les cinq prédictions posées avant de lire le fichier, au fichier près :
+
+| Prédiction | Mesure |
+|---|---|
+| `put.xml` +1, le `500` disparaît | **+1**, et zéro `500` dans tout le passage |
+| `recurrenceput.xml` +1, la forme Apple passe | **+1** |
+| `errors.xml` −1, `PUT` 10 repasse au rouge | **−1** |
+| CardDAV inchangé, `ok=109 / failed=70` | **inchangé** |
+| CalDAV net **+27** contre le passage initial | **+27** (188 → 215) |
 
 ## 4. Clients réels
 
