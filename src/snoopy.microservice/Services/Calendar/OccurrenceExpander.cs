@@ -192,6 +192,10 @@ internal static class OccurrenceExpander
         if (component.DtStart is { } start) yield return start.Value;
         if (component.RecurrenceIdentifier?.StartTime is { } identified) yield return identified.Value;
         foreach (var date in component.RecurrenceDates?.GetAllDates() ?? []) yield return date.Value;
+
+        // GetAllDates leaves out RDATE;VALUE=PERIOD, whose start sources an instance like any other.
+        foreach (var period in component.RecurrenceDates?.GetAllPeriods() ?? [])
+            if (period.StartTime is { } at) yield return at.Value;
     }
 
     private static DateTime Earlier(DateTime left, DateTime right) => left < right ? left : right;

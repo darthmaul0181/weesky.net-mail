@@ -342,6 +342,20 @@ public sealed class OccurrenceExpanderTests
     }
 
     [Fact]
+    public void AnAbsentStart_SeesAnRDatePeriodOlderThanTheMaster()
+    {
+        // RDATE;VALUE=PERIOD is read by GetAllPeriods and never by GetAllDates: a floor blind to it
+        // sits ABOVE an instance the file really produces, and the resource leaves the 207 in
+        // silence — the very loss the open bound exists to stop.
+        var parsed = Load(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z",
+            "RDATE;VALUE=PERIOD:19900315T090000Z/PT1H"));
+        var end = Instant("20200101T000000Z");
+
+        Assert.True(OccurrenceExpander.Overlaps(parsed, null, end, Ics.Zone));
+        Assert.True(OccurrenceExpander.Overlaps(parsed, Instant("19900101T000000Z"), end, Ics.Zone));
+    }
+
+    [Fact]
     public void AnAbsentStart_OnAFileAtTheEdgeOfTime_StillWalks()
     {
         // The floor keeps two margins above DateTime.MinValue: its own, and the one Periods adds.
