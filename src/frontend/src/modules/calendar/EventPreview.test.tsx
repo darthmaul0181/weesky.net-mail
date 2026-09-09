@@ -1,9 +1,32 @@
-import { cleanup, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
 import EventPreview from './EventPreview'
-import type { Occurrence } from './calendarTypes'
+import type { EventDetail, Occurrence } from './calendarTypes'
+
+vi.mock('../../api.js', () => ({
+  api: { getEvent: vi.fn() },
+  ApiError: class extends Error {},
+}))
+vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
+
+const { api } = await import('../../api.js') as unknown as {
+  api: Record<'getEvent', ReturnType<typeof vi.fn>>
+}
+
+function detailOf(fields: Partial<EventDetail> & { id: string }): EventDetail {
+  return {
+    calendarId: 'a', uid: fields.id, icsHash: 'h1',
+    fields: {
+      calendarId: 'a', isAllDay: false, reminderMinutesBefore: [],
+      availability: 'Busy', visibility: 'Default',
+    },
+    attendees: [], repeatIsExact: true, foreignAlarms: [],
+    ...fields,
+  }
+}
 
 /** jsdom lays nothing out, so the anchor states its own rectangle — which is all the placement
     reads anyway. */
@@ -15,6 +38,7 @@ const WIDTH = window.innerWidth
 afterEach(() => {
   window.innerWidth = WIDTH
   anchors.splice(0).forEach(node => node.remove())
+  vi.clearAllMocks()
 })
 
 function anchorAt(left: number, right: number): HTMLElement {
@@ -38,11 +62,14 @@ function draw(fields: Partial<Occurrence> & { eventId: string } = DENTIST,
     onClose: () => void; onEdit: () => void; onDelete: () => void
   }> = {}) {
   const noop = () => {}
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   renderInCalendar(
-    <EventPreview occurrence={occurrenceOf(fields)} calendar={calendarOf('a', '#3b82c4', 'Personal')}
-      anchor={anchor} rect={anchor.getBoundingClientRect()}
-      onClose={handlers.onClose ?? noop} onEdit={handlers.onEdit ?? noop}
-      onDelete={handlers.onDelete ?? noop} />)
+    <QueryClientProvider client={client}>
+      <EventPreview occurrence={occurrenceOf(fields)} calendar={calendarOf('a', '#3b82c4', 'Personal')}
+        anchor={anchor} rect={anchor.getBoundingClientRect()}
+        onClose={handlers.onClose ?? noop} onEdit={handlers.onEdit ?? noop}
+        onDelete={handlers.onDelete ?? noop} />
+    </QueryClientProvider>)
   return document.querySelector('.event-preview') as HTMLElement
 }
 
@@ -71,9 +98,47 @@ describe('EventPreview', () => {
     expect(draw({ ...DENTIST, hasAlarm: false })).not.toHaveTextContent('Reminder set')
   })
 
-  it('reads a recurrence back', () => {
-    expect(draw({ ...DENTIST, recurrenceText: 'Every 6 months' }))
-      .toHaveTextContent('Every 6 months')
+  // The bubble names an exact rule with the same sentence the editor shows — it fetches the
+  // detail itself, `ContactCard`'s pattern, since `Occurrence` carries no structured rule.
+  it('names an exact rule with the editor’s own sentence', async () => {
+    api.getEvent.mockResolvedValue(detailOf({
+      id: 'e1', repeatIsExact: true,
+      fields: {
+        calendarId: 'a', isAllDay: false, reminderMinutesBefore: [],
+        availability: 'Busy', visibility: 'Default',
+        repeat: { frequency: 'WEEKLY', interval: 1, byDay: ['MO', 'WE'], end: 'Never' },
+      },
+    }))
+    const bubble = draw({ ...DENTIST, recurrenceText: 'FREQ=WEEKLY;BYDAY=MO,WE' })
+    await waitFor(() => expect(bubble).toHaveTextContent('Every week on Monday and Wednesday'))
+    expect(bubble.textContent).not.toMatch(/FREQ=/)
+  })
+
+  // `repeatIsExact: false` means the stored rule is richer than the structure can hold — the
+  // generic label stands in, never the raw text the picker could not draw from.
+  it('names a non-exact rule with the generic label, never the raw rule', async () => {
+    api.getEvent.mockResolvedValue(detailOf({
+      id: 'e1', repeatIsExact: false,
+      fields: {
+        calendarId: 'a', isAllDay: false, reminderMinutesBefore: [],
+        availability: 'Busy', visibility: 'Default',
+        repeat: { frequency: 'WEEKLY', interval: 1, byDay: ['TU', 'WE'], end: 'Until', until: '20261027T170000Z' },
+      },
+    }))
+    const bubble = draw({
+      ...DENTIST, recurrenceText: 'FREQ=WEEKLY;UNTIL=20261027T170000Z;BYDAY=TU,W',
+    })
+    await waitFor(() => expect(bubble).toHaveTextContent('Repeats'))
+    expect(bubble.textContent).not.toMatch(/FREQ=/)
+  })
+
+  // The regression guard for this whole fix: while the detail is still loading (or fails to
+  // load), the raw rule must not appear either — the generic label covers that gap too.
+  it('never shows the raw rule while the detail has not answered', () => {
+    api.getEvent.mockReturnValue(new Promise(() => {})) // never resolves
+    const bubble = draw({ ...DENTIST, recurrenceText: 'FREQ=WEEKLY;UNTIL=20261027T170000Z;BYDAY=TU,W' })
+    expect(bubble).toHaveTextContent('Repeats')
+    expect(bubble.textContent).not.toMatch(/FREQ=/)
   })
 
   // The range is the whole line: an event with no hour has nothing to add to it.

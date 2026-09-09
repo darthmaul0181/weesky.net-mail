@@ -12,6 +12,8 @@ import type { Calendar, Occurrence } from './calendarTypes'
 import { wallClockOf } from './multiDay'
 import { colorOf } from './occurrenceStyle'
 import { addDays, utcOfLocalTime, type PlainDate } from './plainDate'
+import { useEvent } from './queries'
+import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
 
 export interface EventPreviewProps {
@@ -73,6 +75,15 @@ export default function EventPreview({
     }
   }, [anchor, onClose])
 
+  // Fetched only for a repeating occurrence — `EventDetail.fields.repeat` and `repeatIsExact` are
+  // what a rule can be worded from, and the bubble carries neither. Follows `ContactCard`'s
+  // `useContact`: the preview reads what the list already knows, then fetches the rest itself.
+  const { data: detail } = useEvent(occurrence.recurrenceText ? occurrence.eventId : null)
+  const rule = detail?.repeatIsExact ? detail.fields.repeat : undefined
+  // The raw RRULE must never reach the screen: loading, a failed fetch and a rule too rich for
+  // the picker (repeatIsExact false) all fall back to the same generic label as a save-in-flight.
+  const recurrenceLabel = rule ? recurrenceSummary(rule, t, lang, region) : t('preview.repeatsGeneric')
+
   const locale = dateLocaleOf(lang, region)
   const span = daysOf(occurrence, tz)
   const when = !span ? null : span[0] === span[1]
@@ -119,7 +130,7 @@ export default function EventPreview({
       )}
       {occurrence.recurrenceText && (
         <p className="event-preview-row">
-          <RepeatIcon size={14} />{occurrence.recurrenceText}
+          <RepeatIcon size={14} />{recurrenceLabel}
         </p>
       )}
       {calendar && (

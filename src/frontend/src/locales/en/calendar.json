@@ -49,7 +49,8 @@
     "edit": "Edit",
     "delete": "Delete",
     "close": "Close",
-    "reminderSet": "Reminder set"
+    "reminderSet": "Reminder set",
+    "repeatsGeneric": "Repeats"
   },
   "search": {
     "capped": "Only the first {{max}} results are shown"

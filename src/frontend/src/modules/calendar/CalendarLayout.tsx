@@ -672,8 +672,11 @@ export default function CalendarLayout() {
   function deleteEdited() {
     if (!detail) return
     const rule = detail.fields.repeat
-    void askDelete(detail.id, detail.fields.summary || t('views.noTitle'),
-      rule ? detail.recurrenceText ?? recurrenceSummary(rule, t, lang, region) : null,
+    // The raw RRULE must never reach the screen: a rule the picker cannot draw exactly
+    // (`repeatIsExact` false) gets the same generic label as `EventPreview`, never the stored text.
+    const repeatText = !rule ? null
+      : detail.repeatIsExact ? recurrenceSummary(rule, t, lang, region) : t('preview.repeatsGeneric')
+    void askDelete(detail.id, detail.fields.summary || t('views.noTitle'), repeatText,
       occurrence?.instanceId)
   }
 

@@ -49,7 +49,8 @@
     "edit": "Modifier",
     "delete": "Supprimer",
     "close": "Fermer",
-    "reminderSet": "Rappel activé"
+    "reminderSet": "Rappel activé",
+    "repeatsGeneric": "Se répète"
   },
   "search": {
     "capped": "Seuls les {{max}} premiers résultats sont affichés"
