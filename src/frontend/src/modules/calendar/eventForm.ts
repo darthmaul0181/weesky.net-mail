@@ -4,8 +4,8 @@ import type {
 } from './calendarTypes'
 import { durationMinutesOf, wallClockOf, type WallClock } from './multiDay'
 import {
-  addDays, clockOf, daysBetween, isoWeekdayOf, MINUTES_PER_DAY, minutesIntoDay, type PlainDate,
-  plainDateOf, utcOfLocalTime,
+  addDays, clockOf, daysBetween, isoWeekdayOf, isPlainDate, MINUTES_PER_DAY, minutesIntoDay,
+  type PlainDate, plainDateOf, utcOfLocalTime,
 } from './plainDate'
 import { WEEKDAY_TOKENS } from './calendarLocale'
 import { DATED_DEFAULT } from './reminderPresets'
@@ -122,26 +122,7 @@ export function formOf(
   const f = detail.fields
   const timeZone = f.timeZone ?? browserTz
 
-  // A whole-day occurrence carries its own days, never the master's — `movedBody`'s rule: an
-  // instance of a series sits weeks away from the event `fields` describe.
-  let [startDate, endDate] = f.isAllDay && occurrence
-    ? allDaySpan(detail, occurrence)
-    : [f.startDate ?? '', f.endDateInclusive ?? '']
-  let startTime = '09:00'
-  let endTime = '10:00'
-
-  if (!f.isAllDay) {
-    if (occurrence?.startUtc && occurrence.endUtc) {
-      ;[startDate, startTime] = readInstant(new Date(occurrence.startUtc), timeZone)
-      ;[endDate, endTime] = readInstant(new Date(occurrence.endUtc), timeZone)
-    } else if (occurrence?.localStart && occurrence.localEnd) {
-      ;[startDate, startTime] = splitWallClock(occurrence.localStart)
-      ;[endDate, endTime] = splitWallClock(occurrence.localEnd)
-    } else {
-      ;[startDate, startTime] = splitWallClock(f.start ?? '')
-      ;[endDate, endTime] = splitWallClock(f.end ?? '')
-    }
-  }
+  const [startDate, startTime, endDate, endTime] = seedSpan(detail, occurrence, timeZone)
 
   return {
     calendarId: detail.calendarId, title: f.summary ?? '', isAllDay: f.isAllDay,
@@ -151,6 +132,53 @@ export function formOf(
     availability: f.availability, visibility: f.visibility, url: f.url ?? '',
     keepRepeat: !detail.repeatIsExact || beyondTheBlock(f.repeat), foreignAlarms: detail.foreignAlarms,
   }
+}
+
+/** The days and clocks the editor is sown with: the occurrence's own when one is opened, the
+    event's otherwise. A whole-day occurrence carries its own days, never the master's —
+    `movedBody`'s rule: an instance of a series sits weeks away from the event `fields` describe. */
+function seedSpan(
+  detail: EventDetail, occurrence: Occurrence | null, timeZone: string,
+): [PlainDate, string, PlainDate, string] {
+  const f = detail.fields
+  if (f.isAllDay) {
+    const [startDate, endDate] = occurrence
+      ? allDaySpan(detail, occurrence)
+      : [f.startDate ?? '', f.endDateInclusive ?? '']
+    return [startDate, '09:00', endDate, '10:00']
+  }
+  if (occurrence?.startUtc && occurrence.endUtc) {
+    return [...readInstant(new Date(occurrence.startUtc), timeZone),
+      ...readInstant(new Date(occurrence.endUtc), timeZone)]
+  }
+  if (occurrence?.localStart && occurrence.localEnd) {
+    return [...splitWallClock(occurrence.localStart), ...splitWallClock(occurrence.localEnd)]
+  }
+  return [...splitWallClock(f.start ?? ''), ...splitWallClock(f.end ?? '')]
+}
+
+/** The day the whole series starts on, as the stored event says it. */
+function masterStartDay(detail: EventDetail): PlainDate {
+  const f = detail.fields
+  return f.isAllDay ? f.startDate ?? '' : splitWallClock(f.start ?? '')[0]
+}
+
+/** Scope All, saved from an occurrence that is not the first: the form was sown with THAT
+    occurrence's days, and written as they stand they would become the series' new DTSTART —
+    every occurrence before the one opened would vanish. What the whole series takes from the form
+    is the change, never the day: the clocks, the length, and the days the occurrence was moved
+    by, re-posed on the day the series actually starts. */
+function rebasedOnMaster(
+  form: EventFormState, detail: EventDetail, occurrence: Occurrence | null,
+): EventFormState {
+  if (!occurrence?.instanceId) return form
+  const [sown] = seedSpan(detail, occurrence, form.timeZone)
+  const master = masterStartDay(detail)
+  if (![sown, master, form.startDate, form.endDate].every(isPlainDate)) return form
+  const startDate = addDays(master, daysBetween(sown, form.startDate))
+  const endDate = addDays(startDate, daysBetween(form.startDate, form.endDate))
+  return startDate === form.startDate && endDate === form.endDate
+    ? form : { ...form, startDate, endDate }
 }
 
 /** The body of a creation. `keepRepeat` is never on it: there is no stored rule to keep, and the
@@ -196,7 +224,8 @@ function keepRule(body: EventWrite, keep: boolean) {
 export function updateBodyOf(
   form: EventFormState, detail: EventDetail, occurrence: Occurrence | null, scope: EditScope,
 ): EventUpdateBody {
-  const body: EventUpdateBody = { ...writeOf(form), scope, ifHash: detail.icsHash }
+  const written = scope === 'All' ? rebasedOnMaster(form, detail, occurrence) : form
+  const body: EventUpdateBody = { ...writeOf(written), scope, ifHash: detail.icsHash }
   if (scope !== 'All' && occurrence?.instanceId) body.instanceId = occurrence.instanceId
   keepRule(body, form.keepRepeat)
   return body

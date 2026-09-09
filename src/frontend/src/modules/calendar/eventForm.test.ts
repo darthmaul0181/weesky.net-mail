@@ -226,6 +226,57 @@ describe('updateBodyOf', () => {
     expect(body.instanceId).toBeUndefined()
   })
 
+  // The form is sown with the occurrence opened. Written as it stands under scope All, its day
+  // would become the series' new DTSTART and every occurrence before it would vanish — the
+  // shipped defect: All-day toggled on the 2 November instance of a series begun 14 September.
+  const later = () => occurrenceOf({
+    instanceId: '20260921T080000',
+    startUtc: '2026-09-21T06:00:00Z', endUtc: '2026-09-21T07:00:00Z',
+  })
+
+  it('keeps the series on its own first day when a later occurrence is saved for all', () => {
+    const detail = detailOf()
+    const form = { ...formOf(detail, later(), TZ), title: 'Renamed' }
+    expect(form.startDate).toBe('2026-09-21')
+
+    const body = updateBodyOf(form, detail, later(), 'All')
+    expect(body.start).toBe('2026-09-14T08:00:00')
+    expect(body.end).toBe('2026-09-14T09:00:00')
+    expect(body.summary).toBe('Renamed')
+  })
+
+  it('takes the clocks and the length from the form, on the series first day', () => {
+    const detail = detailOf()
+    const form = { ...formOf(detail, later(), TZ), startTime: '10:00', endTime: '12:30' }
+    const body = updateBodyOf(form, detail, later(), 'All')
+    expect(body.start).toBe('2026-09-14T10:00:00')
+    expect(body.end).toBe('2026-09-14T12:30:00')
+  })
+
+  it('moves the whole series by the days the occurrence was moved', () => {
+    const detail = detailOf()
+    const form = { ...formOf(detail, later(), TZ), startDate: '2026-09-23', endDate: '2026-09-23' }
+    const body = updateBodyOf(form, detail, later(), 'All')
+    expect(body.start).toBe('2026-09-16T08:00:00')
+  })
+
+  it('turns the whole series into whole days on its own first day', () => {
+    const detail = detailOf()
+    const form = { ...formOf(detail, later(), TZ), isAllDay: true }
+    const body = updateBodyOf(form, detail, later(), 'All')
+    expect(body.isAllDay).toBe(true)
+    expect(body.startDate).toBe('2026-09-14')
+    expect(body.endDateInclusive).toBe('2026-09-14')
+  })
+
+  it('leaves the first occurrence and a narrow scope exactly as sown', () => {
+    const detail = detailOf()
+    expect(updateBodyOf(formOf(detail, occurrenceOf(), TZ), detail, occurrenceOf(), 'All').start)
+      .toBe('2026-09-14T08:00:00')
+    expect(updateBodyOf(formOf(detail, later(), TZ), detail, later(), 'This').start)
+      .toBe('2026-09-21T08:00:00')
+  })
+
   // The two are refused together: keeping the stored rule means not restating it.
   it('sends keepRepeat instead of a rule the editor never showed', () => {
     const detail = detailOf({

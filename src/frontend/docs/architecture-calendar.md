@@ -167,6 +167,19 @@ with `repeatIsExact: false`; the Repeat row is then frozen on `editor.keptRepeat
 five-way `<select>` there would silently flatten a rule the screen never understood — the user has
 to say "replace it" out loud before anything is thrown away.
 
+**Scope All takes the change from the form, never the day.** The editor is sown with the
+occurrence that was opened, so a form saved for the whole series from the 2 November instance of
+a series begun 14 September holds 2 November as its start — and `RewriteAll` writes whatever
+start it is handed as the master's DTSTART. Written as it stood, the series began on 2 November
+and every occurrence before it was gone; the shipped defect was All-day toggled on a later
+occurrence, but any edit saved for all from any occurrence but the first did the same.
+`updateBodyOf` therefore re-poses the form on the series' own first day under scope All
+(`rebasedOnMaster`): the clocks and the length are the form's, the day is the master's, and a
+start date the user moved travels as a shift in days applied to that first day — moving the
+Wednesday instance to Thursday for all moves the whole series by one day, which is what Google
+and Outlook both do. A narrow scope and a save from the first occurrence are untouched, since the
+day sown is then the day meant.
+
 **Gestures are optimistic, and each event has a lane.** A drop or a resize patches the window's
 cached occurrence through `useMoveOccurrence`'s `onMutate` and rolls it back on failure, so the
 block stays where the pointer left it instead of snapping home and back. The write itself needs the
