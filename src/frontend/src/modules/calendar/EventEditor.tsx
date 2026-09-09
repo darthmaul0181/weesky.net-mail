@@ -162,67 +162,53 @@ export default function EventEditor({
             onChange={event => set({ title: event.target.value })} />
         </div>
 
-        <div className="field-h">
-          <span className="field-h-label">{t('editor.calendar')}</span>
-          <CalendarSelect label={t('editor.calendar')} calendars={calendars}
-            value={form.calendarId} onChange={calendarId => set({ calendarId })} />
-        </div>
-
-        <div className="field-h">
-          <label htmlFor="event-allday">{t('editor.allDay')}</label>
-          {/* A label, not a span: the input is 0x0 and .toggle-track covers the painted box, so
-              only label semantics carry a click on the switch itself to the control. */}
-          <label className="toggle-switch">
-            <input id="event-allday" type="checkbox" checked={form.isAllDay}
-              onChange={event => toggleAllDay(event.target.checked)} />
-            <span className="toggle-track" />
-          </label>
-        </div>
-
-        {/* A whole day has no hour, so Start and End collapse into one sentence: "From [date] to
-            [date]", or "On [date]" once the event repeats and its end is no longer its own. With
-            hours the two rows stay, and while a series runs the End date is drawn disabled on the
-            start date — the shipped defect was a 3-month event repeated weekly, ten of them
-            overlapping every day, because a free end date beside a rule reads as the end of the
-            SERIES to everyone who did not write the code. The box stays rather than vanishing:
-            the same row, the same width, one control asleep. */}
-        {form.isAllDay ? (
+        {/* One calendar is no choice: the row is withheld rather than drawn with one entry. The
+            id still travels in the form, seeded by the layout, so nothing downstream changes. */}
+        {calendars.length > 1 && (
           <div className="field-h">
-            <label htmlFor="event-start-date">
-              {repeating ? t('editor.on') : t('editor.from')}
-            </label>
-            <input id="event-start-date" type="date" required aria-label={t('editor.startDate')}
-              value={form.startDate}
-              onChange={event => setForm(alignEnd(withStart(form, event.target.value, form.startTime)))} />
-            {!repeating && (
-              <>
-                <span className="editor-joiner">{t('editor.to')}</span>
-                <input type="date" required aria-label={t('editor.endDate')} value={form.endDate}
-                  onChange={event => set({ endDate: event.target.value })} />
-              </>
-            )}
+            <span className="field-h-label">{t('editor.calendar')}</span>
+            <CalendarSelect label={t('editor.calendar')} calendars={calendars}
+              value={form.calendarId} onChange={calendarId => set({ calendarId })} />
           </div>
-        ) : (
-          <>
-            <div className="field-h">
-              <label htmlFor="event-start-date">{t('editor.start')}</label>
-              <input id="event-start-date" type="date" required aria-label={t('editor.startDate')}
-                value={form.startDate}
-                onChange={event => setForm(alignEnd(withStart(form, event.target.value, form.startTime)))} />
-              <input type="time" required aria-label={t('editor.startTime')} value={form.startTime}
-                onChange={event => setForm(alignEnd(withStart(form, form.startDate, event.target.value)))} />
-            </div>
-
-            <div className="field-h">
-              <label htmlFor="event-end-date">{t('editor.end')}</label>
-              <input id="event-end-date" type="date" required aria-label={t('editor.endDate')}
-                disabled={repeating} value={form.endDate}
-                onChange={event => set({ endDate: event.target.value })} />
-              <input type="time" required aria-label={t('editor.endTime')} value={form.endTime}
-                onChange={event => set({ endTime: event.target.value })} />
-            </div>
-          </>
         )}
+
+        {/* Start and End are two rows of one shape — a date as wide as a date, a time box, and on
+            the first row the All-day switch after the time, where it acts. All day on, the time
+            boxes stay, disabled, and read 00:00: the same row, the same width, two controls asleep.
+            The clocks they hide are kept, so the switch turned back off finds them. While a series
+            runs the End date is drawn disabled on the start date — the shipped defect was a
+            3-month event repeated weekly, ten of them overlapping every day, because a free end
+            date beside a rule reads as the end of the SERIES to everyone who did not write the
+            code. */}
+        <div className="field-h">
+          <label htmlFor="event-start-date">{t('editor.start')}</label>
+          <input id="event-start-date" type="date" required aria-label={t('editor.startDate')}
+            value={form.startDate}
+            onChange={event => setForm(alignEnd(withStart(form, event.target.value, form.startTime)))} />
+          <input type="time" required aria-label={t('editor.startTime')} disabled={form.isAllDay}
+            value={form.isAllDay ? '00:00' : form.startTime}
+            onChange={event => setForm(alignEnd(withStart(form, form.startDate, event.target.value)))} />
+          <span className="editor-allday">
+            {/* A label, not a span: the input is 0x0 and .toggle-track covers the painted box, so
+                only label semantics carry a click on the switch itself to the control. */}
+            <label className="toggle-switch">
+              <input id="event-allday" type="checkbox" checked={form.isAllDay}
+                onChange={event => toggleAllDay(event.target.checked)} />
+              <span className="toggle-track" />
+            </label>
+            <label htmlFor="event-allday" className="editor-allday-text">{t('editor.allDay')}</label>
+          </span>
+        </div>
+
+        <div className="field-h">
+          <label htmlFor="event-end-date">{t('editor.end')}</label>
+          <input id="event-end-date" type="date" required aria-label={t('editor.endDate')}
+            disabled={repeating} value={form.endDate}
+            onChange={event => set({ endDate: event.target.value })} />
+          <input type="time" required aria-label={t('editor.endTime')} disabled={form.isAllDay}
+            value={form.isAllDay ? '00:00' : form.endTime}
+            onChange={event => set({ endTime: event.target.value })} />
+        </div>
 
         {form.timeZone !== tz && (
           <p className="editor-hint">{t('editor.timesIn', { zone: form.timeZone })}</p>

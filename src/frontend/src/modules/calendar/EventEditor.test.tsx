@@ -53,6 +53,12 @@ describe('EventEditor', () => {
     expect(screen.getByLabelText('Description')).toHaveValue('Bring the card')
   })
 
+  it('withholds the calendar row when there is only one calendar to choose from', () => {
+    draw({ calendars: [CALENDARS[0]] })
+    expect(screen.queryByLabelText('Calendar')).toBeNull()
+    expect(screen.getByLabelText('Title')).toBeInTheDocument()
+  })
+
   it('names the two modes', () => {
     draw()
     expect(screen.getByText('New event')).toBeInTheDocument()
@@ -60,15 +66,26 @@ describe('EventEditor', () => {
     expect(screen.getByText('Edit event')).toBeInTheDocument()
   })
 
-  // A whole day has no hour to show, and a reminder counted in minutes before it would ring at
-  // 23:45 the night before.
-  it('drops the hours and moves the reminder onto the other ladder on All day', async () => {
+  // A whole day has no hour: the time boxes stay, asleep, and read 00:00 — and a reminder
+  // counted in minutes before it would ring at 23:45 the night before.
+  it('puts the hours to sleep at 00:00 and moves the reminder onto the other ladder on All day', async () => {
     draw()
     await userEvent.click(screen.getByLabelText('All day'))
-    expect(screen.queryByLabelText('Start time')).toBeNull()
-    expect(screen.queryByLabelText('End time')).toBeNull()
+    expect(screen.getByLabelText('Start time')).toBeDisabled()
+    expect(screen.getByLabelText('Start time')).toHaveValue('00:00')
+    expect(screen.getByLabelText('End time')).toBeDisabled()
+    expect(screen.getByLabelText('End time')).toHaveValue('00:00')
     expect(screen.getByRole('option', { name: 'The day before at 18:00', selected: true }))
       .toBeInTheDocument()
+  })
+
+  // The clocks behind the sleeping boxes are kept: the switch turned back off finds them.
+  it('remembers the hours a whole day hid', async () => {
+    draw()
+    await userEvent.click(screen.getByLabelText('All day'))
+    await userEvent.click(screen.getByLabelText('All day'))
+    expect(screen.getByLabelText('Start time')).toHaveValue('09:00')
+    expect(screen.getByLabelText('End time')).toHaveValue('10:00')
   })
 
   // Moving the start of a meeting does not shorten it: the end follows by the duration it had.
@@ -113,19 +130,16 @@ describe('EventEditor', () => {
     expect(screen.getByRole('checkbox', { name: 'Wednesday' })).toBeChecked()
   })
 
-  // A whole day has no hour: one sentence, "From … to …", and "On …" alone once it repeats,
-  // since its end is then no longer its own.
-  it('collapses a whole day to one date sentence', async () => {
+  // A whole day keeps its two rows: the end date is its own until the event repeats, and then it
+  // sleeps on the start date like any other repeating event's.
+  it('keeps a whole day on two rows, the end date free until it repeats', async () => {
     draw({ initial: form({ isAllDay: true, endDate: '2026-09-16' }) })
-    expect(screen.getByText('From')).toBeInTheDocument()
+    expect(screen.getByLabelText('End date')).toBeEnabled()
     expect(screen.getByLabelText('End date')).toHaveValue('2026-09-16')
-    expect(screen.queryByLabelText('Start time')).toBeNull()
 
     await userEvent.click(screen.getByLabelText('Repeats'))
-    // "On" is also the block's own weekday label: read the one on the date row.
-    expect(screen.getByLabelText('Start date').closest('.field-h')?.querySelector('label'))
-      .toHaveTextContent('On')
-    expect(screen.queryByLabelText('End date')).toBeNull()
+    expect(screen.getByLabelText('End date')).toBeDisabled()
+    expect(screen.getByLabelText('End date')).toHaveValue('2026-09-14')
   })
 
   it('reads a repeat rule back into the block', () => {

@@ -128,8 +128,11 @@ puisque le flottant était déjà dessiné à son heure murale dans le fuseau du
 
 `/calendar/new` et `/calendar/:id/edit`, deux routes de plus pointées sur le même `CalendarLayout`
 paresseux, exactement le mécanisme de `/mail/compose` et de `/contacts/:id/edit`. À partir de
-640 px la grille reste montée et l'éditeur est la modale maison par-dessus (`.modal`, 560 px de
-mesure via `--field-w` sur ses rangées, jamais une largeur en dur — le contrat de `modal.css`) ; sous
+640 px la grille reste montée et l'éditeur est la modale maison par-dessus (`.modal`, une mesure
+`--field-w` sur le formulaire et jamais une largeur en dur — le contrat de `modal.css` ; 66ch au
+2026-09-10, soit 675 px identiques dans les huit états heures / journée entière × sans / avec
+répétition × FR / EN, parce que le bloc de répétition est la chose la plus large que l'éditeur
+dessine et que sa largeur ne doit pas bouger sous l'interrupteur) ; sous
 640 px il prend l'écran, Save dans l'en-tête et ✕ à droite comme la maquette, et `AppShell` retire
 `BottomNav` tant qu'il est ouvert, la condition qu'il applique déjà au composeur.
 
@@ -164,10 +167,13 @@ septembre » devient un mensuel après un passage par l'éditeur pour corriger u
 backend (§ Backend) ferment ça :
 
 - `EventDetail.repeatIsExact` dit si `fields.repeat` rend la règle **sans perte**. Quand c'est
-  faux, le sélecteur « Repeat » est verrouillé sur le texte de la règle (« Custom rule from another
+  faux, l'interrupteur « Se répète » cède la place au texte de la règle (« Custom rule from another
   app — kept as is »), et l'éditeur envoie `keepRepeat: true` : le composeur ne touche pas à la
   `RRULE`. Choisir quand même une autre répétition est possible d'un clic sur « Replace », qui
-  déverrouille et envoie une règle du sous-ensemble.
+  déverrouille et repart de la règle par défaut du bloc — jamais de celle que le bloc ne sait pas
+  dessiner. *(2026-09-10)* Le même verrou s'applique côté écran à une règle **exacte** que le bloc
+  ne dessine plus : un quantième ou un n-ième jour du mois (`byMonthDay`, `bySetPos`), retirés
+  du bloc avec la refonte Outlook (§ 16).
 - `EventDetail.foreignAlarms` liste en texte les rappels que l'éditeur ne porte pas (par mail,
   déclencheur absolu ou relatif à la fin, déjà acquitté) ; ils s'affichent en muet sous les
   rappels, « Kept from another app », et restent dans le fichier.
@@ -277,9 +283,10 @@ Présélections, en minutes avant le début, seule forme que l'API porte (résid
 
 Une valeur venue d'un client qui n'est dans aucune liste s'affiche comme sa propre option
 (« 45 minutes before ») et se conserve. Basculer « All day » convertit le rappel le plus proche de
-sens (15 min → la veille à 18 h, et retour) plutôt que de le perdre. Le défaut d'un nouvel
-événement daté est 15 minutes ; une journée entière naît sans rappel et Libre, comme le cadrage
-le fixe.
+sens (15 min → la veille à 18 h, et retour) plutôt que de le perdre. **Un nouvel événement naît
+sans rappel**, daté ou non *(2026-09-10 ; le défaut de 15 minutes du cadrage est retiré)* :
+« + Add » est la seule porte, et le premier rappel ajouté propose 15 minutes avant, ou la veille à
+18 h sur une journée entière. Une journée entière naît Libre, comme le cadrage le fixe.
 
 ### 14. Localisation
 
@@ -313,6 +320,41 @@ tiroir, glisser-déposer compris.
 
 Les cas de géométrie vont dans `probes/mobile-layout.html` — grille du jour à 360 et 320, mois
 compact, éditeur plein écran, barre d'outils — parce que jsdom ne voit aucune mise en page.
+
+### 16. La répétition, refaite sur le modèle d'Outlook (amendement du 2026-09-10)
+
+Le cas qui a tout déclenché : Début 05/10 19 h, Fin 29/12 20 h, répétition personnalisée toutes
+les semaines les lundis et mardis jusqu'au 03/11. Dix occurrences de 85 jours chacune, dix
+événements par jour jusqu'au 27/01 — le calcul était juste, l'écran avait tort de l'accepter :
+une date de fin libre à côté d'une règle se lit comme la fin de la *série*. Ce qui remplace la
+liste « Jamais / Tous les jours / … / Personnalisé » du § 3 du cadrage :
+
+- **« Se répète » est un interrupteur**, jumeau de « Journée entière ». Allumé, il ouvre le bloc
+  sur le réglage d'Outlook — toutes les semaines, le jour de la date de début, sans fin — et
+  retrouve, éteint puis rallumé, le réglage qu'on avait.
+- **Le bloc dit une phrase** : « Répéter chaque [N] [jour | semaine | mois | an] », les sept jours
+  en pastilles à une lettre (toutes allumées et grisées sous « jour » ; quitter « jour » retombe
+  sur le jour de début plutôt que sur aucun), puis « Se termine [Jamais | Après | Au] » en
+  sélecteur segmenté — le contrôle maison, jamais des boutons radio système — sur la ligne de son
+  libellé, suivi de la seule valeur que le choix réclame : un compteur, une date, rien.
+- **La date de fin se grise et suit le début** tant que ça répète ; seul un horaire qui passe
+  minuit la fait finir le lendemain. **« Journée entière » est sur la ligne Début**, après
+  l'heure ; les sélecteurs de date font la largeur d'une date, les deux lignes restent alignées.
+  Allumé, les heures se grisent et affichent 00:00 sans perdre la valeur qu'elles cachent. (Une
+  première version faisait de la journée entière une phrase « Du … au … » / « Le … » ; retirée
+  le jour même.)
+- **La largeur ne bouge pas** : 675 px dans les huit états, FR et EN, mesurés dans
+  `probes/recurrence-editor.html` — par la mesure `--field-w` du contrat, jamais un pixel en dur.
+- **Retiré du bloc** : le quantième et le n-ième jour du mois. Une règle qui en porte un s'ouvre
+  verrouillée (§ 7) ; on la garde telle quelle ou on la remplace, jamais on ne la réécrit à
+  l'aveugle.
+- **« Toutes les occurrences » prend le changement, jamais le jour** : semé avec l'occurrence
+  ouverte, le formulaire écrit tel quel faisait de son jour le nouveau `DTSTART` de la série et
+  tout ce qui précédait disparaissait. La série garde son premier jour ; heures, durée, journée
+  entière et un décalage de date en jours s'y appliquent.
+- Trois retouches du même jour : la description passe sous « Plus d'options » ; le sélecteur
+  d'agenda est un menu dessiné comme la boîte de « Titre », pastille dedans et dans chaque ligne ;
+  un nouvel événement naît sans rappel (§ 13).
 
 ## Backend : trois ajouts
 

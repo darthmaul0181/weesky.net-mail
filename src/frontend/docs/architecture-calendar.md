@@ -100,7 +100,11 @@ so an invalidation behind an open form — one of this module's own mutations, a
 cannot reseed what is being typed. `editorReady` is **latched on the seed** for the same reason:
 it is recomputed every render, and a window arriving without the edited instance flipped it false,
 unmounted the keyed editor and threw the draft away. A form already sown never waits for anything
-again.
+again. **And the seed dies with the editor it was sown for**: kept past the close, the next
+creation found it under the same `new##0` key and reused it — a click on the grid put its slot in
+the URL and opened the draft of the last *New event*, the next hour of the clock. The URL was
+right all along and the test only read the URL, which is how it shipped; the test now reads the
+form.
 
 **A save carries the hash the form was seeded with, and a 409 offers Reload rather than a retry.**
 `updateBodyOf` is handed `{ ...detail, icsHash: seed.hash }`, so a second Save after a stale
@@ -125,10 +129,14 @@ That is a shipped defect rather than a preference: a 3-month event repeated week
 overlapping occurrences every day for four months, and the form accepted it because a free end
 date beside a rule reads as the end of the *series* to everyone who did not write the code. The
 one thing that can still move that date is a time that crosses midnight — 23:00 to 01:00 ends the
-morning after, and pinning it to the start day would refuse the save. **A whole day collapses the
-two rows into one sentence**: *From [date] to [date]* once, *On [date]* alone while it repeats,
-because a whole day has no hour and a repeating one has no end of its own. `.editor-joiner` is
-the word between the two boxes.
+morning after, and pinning it to the start day would refuse the save. **Start and End are two
+rows of one shape**, and a whole day does not change it: the date box is as wide as a date
+(`flex: none`, no measure), the time box four characters, and the All-day switch sits on the
+Start row after the time box, where it acts — one row fewer than a row of its own. All day on,
+the two time boxes stay, **disabled and reading 00:00**; the clocks they hide are kept in the form,
+so the switch turned back off finds them. (A first version drew a whole day as one sentence,
+*From … to …* / *On …*; the owner replaced it with the sleeping boxes on 2026-09-10, the same
+"asleep, not gone" rule the End date follows.)
 
 **The dialog's width does not move under the switch, and the contract is what keeps it still.**
 The recurrence block is the widest thing the editor ever draws, and a content-sized dialog would

@@ -492,6 +492,10 @@ export default function CalendarLayout() {
   // the deliberate lever, pulled by the Reload button a stale write puts on screen.
   const editorKey = inEditor ? `${routeId ?? 'new'}#${instanceParam}#${reloads}` : null
   const [seed, setSeed] = useState<Seed | null>(null)
+  // A seed belongs to the editor it was sown for and dies with it. Kept past the close, the next
+  // creation found it under the same `new##0` key and reused it: a click on the grid put its slot
+  // in the URL and opened the draft of the last "New event" — the next hour of the clock.
+  if (!editorKey && seed) setSeed(null)
   // Latched on the seed: `occurrenceFound` is recomputed every render, and any invalidation — one
   // of this module's own mutations, a focus refetch — can bring the window back without the
   // instance being edited, which flipped this false, unmounted the keyed editor and threw away

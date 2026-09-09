@@ -900,6 +900,36 @@ describe('CalendarLayout — the grid gestures', () => {
     expect(new Date(search.get('end') ?? '').getTime()
       - new Date(search.get('start') ?? '').getTime()).toBe(3_600_000)
   })
+
+  // The URL carried the slot all along; the form did not read it. A creation draft is sown once
+  // under one key, and that key was the same for "New event" and for every later click on the
+  // grid — so the second door found the first door's draft, the next hour of the clock.
+  it('sows a click on the grid with its own slot even after another draft was opened', async () => {
+    const router = renderAt('/calendar?view=week&date=2026-09-16')
+    await waitFor(() => expect(document.querySelector('.day-column')).not.toBeNull())
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'New event' })[0])
+    await screen.findByLabelText('Start date')
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByLabelText('Start date')).toBeNull())
+
+    const column = document.querySelectorAll('.day-column')[2] as HTMLElement
+    fireEvent.pointerDown(column, { clientX: 10, clientY: 520, button: 0, pointerId: 1 })
+    firePointer('pointerup', 10, 520)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar/new'))
+
+    // The slot the URL names, read in the zone the layout sows the form in — the machine's.
+    const start = new Date(params(router).get('start') ?? '')
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const day = new Intl.DateTimeFormat('en-CA', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(start)
+    const clock = new Intl.DateTimeFormat('en-GB', {
+      timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(start)
+    expect(await screen.findByLabelText('Start date')).toHaveValue(day)
+    expect(screen.getByLabelText('Start time')).toHaveValue(clock)
+  })
 })
 
 describe('CalendarLayout — the phone tier', () => {

@@ -57,7 +57,9 @@
 /* --action-primary-fg is the app's one "foreground over a filled colour" token, white in all
    twelve blocks; a swatch is that surface, painted from data rather than from the accent. */
 .calendar-row-label:has(input:checked) .calendar-swatch::after {
-  content: ''; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px;
+  /* A 4x8 box turned 45° keeps its centre: 6/3.5 puts it on the swatch's 8/8 with the ink's
+     long arm a hair high, which is where a tick reads centred. Measured at 6x; 5/2 sat up-left. */
+  content: ''; position: absolute; left: 6px; top: 3.5px; width: 4px; height: 8px;
   border: solid var(--action-primary-fg); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 .calendar-row-label:has(input:focus-visible) .calendar-swatch {
@@ -252,9 +254,10 @@
 
 /* The left bar is the calendar's signature: its own colour in three renderings, and --border on
    a cancelled one, where the event is no longer that calendar's business. What changes behind it
-   is the fill. */
+   is the fill. The bar's own edge is straight — the radius stays on the right corners only —
+   so it reads as the stripe the list draws beside its rows, not as a rounded pill. */
 .event-chip.is-column,
-.event-chip.is-band { box-shadow: inset 3px 0 0 var(--cal); }
+.event-chip.is-band { box-shadow: inset 3px 0 0 var(--cal); border-radius: 0 4px 4px 0; }
 .event-chip.is-busy { background: color-mix(in oklab, var(--cal) 18%, var(--surface)); }
 .event-chip.is-free { background: var(--surface); }
 .event-chip.is-column.is-free,
@@ -360,6 +363,10 @@
   flex: none; align-self: flex-start; display: inline-flex; align-items: center;
   justify-content: center; min-width: 18px; height: 18px; border-radius: 50%;
   color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums;
+  /* The line box is centred; the digits are not — the face leaves more room under its
+     baseline than above its cap, so a centred line box draws the number a pixel high in the
+     disc. One pixel of top padding, inside the 18px. Measured at 6x. */
+  padding-top: 1px; box-sizing: border-box;
 }
 .month-cell.is-outside .month-day-number { color: var(--text-muted); }
 .month-cell.is-today .month-day-number {
@@ -513,16 +520,20 @@
 .calendar-select > svg { flex: none; color: var(--text-muted); }
 .calendar-editor-form .dropdown-menu { left: 0; right: auto; min-width: 100%; }
 .calendar-editor-form .dropdown-item > .calendar-swatch { background: var(--cal); }
-/* A time box is four characters wide whatever the date beside it holds. */
+/* A date box is as wide as a date and a time box four characters, whatever the row holds: the
+   two rows keep one geometry, and the Title box above them is what takes the row. */
+.calendar-editor-form input[type="date"] { flex: none; }
 .calendar-editor-form input[type="time"] { flex: none; width: 8em; }
+/* The All-day switch and its word, after the Start time, where it acts. */
+.editor-allday { display: inline-flex; align-items: center; gap: 8px; margin-left: 4px; }
+.editor-allday-text { font-size: 13px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
 /* The dialog's width must not move under the Repeats switch, and the recurrence block is what
    a content-sized dialog would grow for. The measure is therefore the form's, declared on the
    contract's own variable and carried by the Title box that every state draws: wide enough for
    the block's widest line in French and in English (measured in probes/recurrence-editor.html),
    so opening the block changes the dialog's height and nothing else. */
 .calendar-editor-form { --field-w: 66ch; }
-/* "From [date] to [date]": the word between two boxes, in the label's own voice. */
-.editor-joiner { flex: none; font-size: 13px; color: var(--text-muted); }
+
 /* Under the row it explains, in that row's own control column. */
 .editor-hint { margin: -6px 0 12px 126px; font-size: 12px; color: var(--text-muted); }
 .editor-kept {

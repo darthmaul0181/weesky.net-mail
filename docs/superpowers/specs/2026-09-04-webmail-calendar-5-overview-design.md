@@ -743,21 +743,43 @@ taille d'une réponse, pas son sens.
    couleur, suppression depuis la barre latérale. Un agenda créé depuis un téléphone y apparaît
    comme les autres, avec ce que le client a su régler ; c'est ici qu'on affine le reste
    (décision 2).
-3. **Éditeur** : titre, agenda, journée entière, début et fin, répéter, rappel(s), lieu,
-   description. Sous « Plus d'options » : disponibilité (Occupé / Provisoire / Libre), visibilité
-   (Par défaut / Privé), adresse web, participants en lecture seule. Le pli existe pour qu'un
-   événement simple se crée sans faire défiler. L'agenda présélectionné est le dernier utilisé
-   dans ce navigateur, `default` la première fois.
-   - « Rappel » écrit un `VALARM` à `ACTION:DISPLAY` et `TRIGGER` relatif au début (`-PT15M`) ;
-     tout autre rappel venu d'un client (`ACTION:EMAIL`, déclencheur absolu ou relatif à la fin,
-     `ACKNOWLEDGED`, `X-WR-ALARMUID`) s'affiche en texte et se conserve tel quel.
+3. **Éditeur** *(amendé le 2026-09-10)* : titre, agenda, journée entière, début et fin, se
+   répète, rappel(s), lieu. Sous « Plus d'options » : description, disponibilité (Occupé /
+   Provisoire / Libre), visibilité (Par défaut / Privé), adresse web, participants en lecture
+   seule. Le pli existe pour qu'un événement simple se crée sans faire défiler ; une description
+   déjà remplie l'ouvre d'elle-même, comme tout champ non vide dessous. L'agenda présélectionné
+   est le dernier utilisé dans ce navigateur, `default` la première fois ; son sélecteur porte la
+   pastille de couleur **dans** la boîte et dans chaque ligne de sa liste, alignée sur « Titre ».
+   - « Rappel » écrit un `VALARM` à `ACTION:DISPLAY` et `TRIGGER` relatif au début ; tout autre
+     rappel venu d'un client (`ACTION:EMAIL`, déclencheur absolu ou relatif à la fin,
+     `ACKNOWLEDGED`, `X-WR-ALARMUID`) s'affiche en texte et se conserve tel quel. **Un nouvel
+     événement naît sans rappel**, daté ou non : « + Ajouter un rappel » est la seule porte, et
+     le premier ajouté propose 15 minutes avant (la veille à 18 h pour une journée entière). Les
+     15 minutes par défaut de la décision 13 sont retirées le 2026-09-10.
    - Une journée entière naît **Libre** (`TRANSP:TRANSPARENT`), comme les clients d'Apple
      l'écrivent : un congé ne bloque pas un free/busy, et l'utilisateur peut la passer Occupée.
-   - « Répéter » propose Jamais / Tous les jours / Toutes les semaines / Tous les mois / Tous les
-     ans / Personnalisé… ; le réglage personnalisé donne l'intervalle, les jours de la semaine, le
-     mois par quantième ou par n-ième jour, et la fin (jamais / après N fois / à une date). C'est le
-     sous-ensemble curé d'Apple et de Google ; une règle plus riche venue d'un client s'affiche en
-     texte et se conserve.
+   - « Se répète » est un **interrupteur**, jumeau de « Journée entière », et la répétition est
+     toujours « personnalisée », sur le modèle d'Outlook : l'allumer ouvre un bloc « Répéter
+     chaque [N] [jour | semaine | mois | an] », les sept jours de la semaine en pastilles (toutes
+     allumées et grisées sous « jour »), et « Se termine : Jamais / Après [N] fois / Au [date] »
+     — un sélecteur segmenté, sur la ligne de son libellé. Le défaut à l'allumage est toutes les
+     semaines, le jour de la date de début, sans fin. Le quantième et le n-ième jour du mois ne
+     sont plus dans le bloc : une règle qui en porte un s'ouvre verrouillée, comme toute règle
+     que l'écran ne sait pas dessiner. Une règle plus riche venue d'un client s'affiche en texte
+     et se conserve. *(Amendé le 2026-09-10 ; remplace la liste Jamais / Tous les jours / … /
+     Personnalisé.)*
+   - **La fin d'un événement et la fin d'une série sont deux questions, et l'écran n'en pose
+     qu'une.** Tant que « Se répète » est allumé, la date de fin reste à sa place mais grisée, et
+     suit la date de début ; seul un horaire qui passe minuit la fait finir le lendemain. Le cas
+     qui a fixé la règle : un événement de trois mois répété chaque semaine, dix occurrences se
+     chevauchant chaque jour, que l'écran acceptait parce qu'une date de fin libre à côté d'une
+     règle se lit comme la fin de la *série*. L'interrupteur « Journée entière » est sur la ligne
+     Début, après le sélecteur d'heure, et les sélecteurs de date ont la largeur d'une date, pas
+     de la ligne. Journée entière allumée, les deux lignes restent : les sélecteurs d'heure se
+     grisent et affichent 00:00, et l'heure qu'ils cachent est retrouvée quand on rebascule.
+   - **La largeur de la modale ne bouge pas** sous les interrupteurs : elle est celle de l'état le
+     plus large, mesurée en français et en anglais, portée par la mesure `--field-w` du contrat
+     des modales (675 px au 2026-09-10).
    - « Disponibilité » fusionne `STATUS` et `TRANSP` en un seul champ : Provisoire s'écrit
      `STATUS:TENTATIVE`, Libre `TRANSP:TRANSPARENT`, Occupé l'absence des deux. Pas de statut
      « Annulé » : on supprime.
@@ -767,7 +789,11 @@ taille d'une réponse, pas son sens.
      l'enregistrer depuis le webmail écrit la valeur choisie et retire le statut.
    - Sur un événement récurrent, Enregistrer, Supprimer et le glisser-déposer demandent d'abord
      « Cette occurrence seulement / Celle-ci et les suivantes / Toutes les occurrences »
-     (décision 5).
+     (décision 5). **« Toutes les occurrences » prend du formulaire le changement, jamais le
+     jour** *(2026-09-10)* : le formulaire est semé avec l'occurrence ouverte, et écrit tel quel il
+     ferait de son jour le nouveau début de la série — tout ce qui précède disparaissait. La
+     série garde son premier jour ; elle prend les heures, la durée, journée entière ou pas, et un
+     déplacement de date se propage comme un décalage en jours, ce que font Google et Outlook.
 4. **Glisser-déposer** pour déplacer, **redimensionnement** pour changer la durée, sur les vues
    semaine et jour ; glisser sur une case vide crée un événement.
 5. **Recherche** par texte sur titre, lieu, description. Un résultat est un événement, pas une

@@ -8,7 +8,9 @@
   keeps it that way: the width that must NOT move under the switch is carried by
   `.calendar-editor-form { --field-w }`, the Title box's measure, which every state draws. So the
   eight `modale` numbers must be ONE number, in French and in English alike, and the recurrence
-  block must fit inside it with `escape 0`. The end row is ONE line — label, segmented choice,
+  block must fit inside it with `escape 0`. The Start row carries the All-day switch after its
+  time box, and the two date rows keep one geometry (`debut`/`fin` widths must match). The end
+  row is ONE line — label, segmented choice,
   the date — so `fin` must be one control tall, and the seven weekday boxes are one row:
   `jours` must be one box tall.
 
@@ -116,6 +118,8 @@
       en: { title: 'New event', name: 'Title', allday: 'All day', start: 'Start', end: 'End',
             from: 'From', to: 'to', on: 'On', repeats: 'Repeats', block: 'block-en' },
     }
+    const toggleOnly = on => `<label class="toggle-switch"><input type="checkbox" ${on ? 'checked' : ''} />
+          <span class="toggle-track"></span></label>`
     const toggle = (on, label) => `
       <div class="field-h"><label>${label}</label>
         <label class="toggle-switch"><input type="checkbox" ${on ? 'checked' : ''} aria-label="${label}" />
@@ -123,18 +127,13 @@
 
     function build(lang, allDay, rep) {
       const s = L[lang]
-      const rows = allDay
-        ? `<div class="field-h"><label>${rep ? s.on : s.from}</label>
+      const rows = `<div class="field-h"><label>${s.start}</label>
              <input type="date" value="2026-10-05" aria-label="Start date" />
-             ${rep ? '' : `<span class="editor-joiner">${s.to}</span>
-                          <input type="date" value="2026-10-05" aria-label="End date" />`}
-           </div>`
-        : `<div class="field-h"><label>${s.start}</label>
-             <input type="date" value="2026-10-05" aria-label="Start date" />
-             <input type="time" value="19:00" aria-label="Start time" /></div>
+             <input type="time" value="${allDay ? '00:00' : '19:00'}" aria-label="Start time" ${allDay ? 'disabled' : ''} />
+             <span class="editor-allday">${toggleOnly(allDay)}<label class="editor-allday-text">${s.allday}</label></span></div>
            <div class="field-h"><label>${s.end}</label>
              <input type="date" value="2026-10-05" aria-label="End date" ${rep ? 'disabled' : ''} />
-             <input type="time" value="20:00" aria-label="End time" /></div>`
+             <input type="time" value="${allDay ? '00:00' : '20:00'}" aria-label="End time" ${allDay ? 'disabled' : ''} /></div>`
       const block = rep ? document.getElementById(s.block).innerHTML : ''
       const el = document.createElement('div')
       el.className = 'modal-overlay'
@@ -149,7 +148,6 @@
               <span class="calendar-select-name">Personnel</span>
               <svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
             </button></div></div>
-          ${toggle(allDay, s.allday)}
           ${rows}
           ${toggle(rep, s.repeats)}
           ${block}
@@ -185,6 +183,8 @@
           + `  fin ${w(ends)}x${h(ends)}` + (h(ends) > h(date) + 2 ? ' WRAP' : '')
           + `  escape ${escape}`
       }
+      const dates = [...c.querySelectorAll('.calendar-editor-form input[type="date"]')].slice(0, 2)
+      line += `  date ${w(dates[0])}/${w(dates[1])}` + (w(dates[0]) !== w(dates[1]) ? ' DESALIGNE' : '')
       report['modale ' + c.dataset.case] = line
     }
     report['UNE seule largeur'] = widths.size === 1 ? 'oui' : 'NON — ' + [...widths].join(', ')

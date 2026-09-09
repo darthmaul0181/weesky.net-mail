@@ -8,7 +8,6 @@ import {
   type PlainDate, plainDateOf, utcOfLocalTime,
 } from './plainDate'
 import { WEEKDAY_TOKENS } from './calendarLocale'
-import { DATED_DEFAULT } from './reminderPresets'
 
 /** What the repeat picker can say. Anything richer a phone wrote comes back as `custom`, rule
     and all, so nothing is narrowed by being opened in an editor that cannot draw it. */
@@ -62,8 +61,9 @@ export function newEventForm(
   return {
     calendarId, title: '', isAllDay: allDay,
     startDate, startTime, endDate, endTime, timeZone: tz,
-    // Fifteen minutes on a dated event, nothing on a whole day (décision 13).
-    repeat: { kind: 'never' }, reminders: allDay ? [] : [DATED_DEFAULT],
+    // Born silent, whole day or not: a reminder is asked for with "+ Add a reminder", never
+    // handed out — décision 13's fifteen minutes were withdrawn by the owner on 2026-09-10.
+    repeat: { kind: 'never' }, reminders: [],
     location: '', description: '',
     // A day off does not block a free/busy, and that is how Apple's clients write one.
     availability: allDay ? 'Free' : 'Busy',

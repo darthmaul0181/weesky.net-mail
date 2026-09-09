@@ -62,16 +62,16 @@ describe('newEventForm', () => {
     expect(form.endDate).toBe('2026-09-15')
   })
 
-  // Décision 13: a dated event opens on the fifteen minutes every client defaults to; a whole day
-  // has no hour for a distance to count from, so it is born silent.
-  it('gives a dated event the default reminder and a whole day none', () => {
+  // A reminder is asked for, never handed out: a new event is born silent whether it has hours
+  // or not, and "+ Add a reminder" is the one door in.
+  it('gives a new event no reminder at all', () => {
     const at = (iso: string) => new Date(iso)
     const dated = newEventForm(
       at('2026-09-14T07:00:00Z'), at('2026-09-14T08:00:00Z'), false, 'c1', TZ)
     const whole = newEventForm(
       at('2026-09-14T07:00:00Z'), at('2026-09-15T07:00:00Z'), true, 'c1', TZ)
 
-    expect(dated.reminders).toEqual([15])
+    expect(dated.reminders).toEqual([])
     expect(whole.reminders).toEqual([])
   })
 })
