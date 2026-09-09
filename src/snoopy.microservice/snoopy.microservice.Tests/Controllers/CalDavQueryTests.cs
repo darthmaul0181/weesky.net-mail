@@ -78,11 +78,41 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         GivenEvent("phone.ics", Ics.FromPhone());   // -PT15M before 07:00Z
         GivenEvent("quiet.ics", CalDavPutTests.Event("ua"));
 
-        var response = await Report(Calendar(), QueryBody(VEvent(
-            new XElement(DavXml.CalDav + "comp-filter", new XAttribute("name", "VALARM"),
-                TimeRange("20260907T064000Z", "20260907T065000Z")))));
+        var response = await Report(Calendar(), QueryBody(VEvent(Alarm("20260907T064000Z", "20260907T065000Z"))));
 
         Assert.Equal([Href("phone.ics")], HrefsOf(response));
+    }
+
+    [Fact]
+    public async Task AnAlarmWindowUnderARequestZone_StillReachesTheAllDayRowItRingsFrom()
+    {
+        // The columns hold 17 October posed in Brussels, [16T22:00Z, 17T22:00Z]; Los Angeles reads
+        // the day as [17T07:00Z, 18T07:00Z[ and a trigger twenty hours past its end rings at
+        // 19T03:00Z. The alarm walk reaches a day beyond its window, and the preselection has to
+        // reach as far again as the zone spread it already allows for — or the 207 is silently empty.
+        GivenEvent("journee.ics", Ics.Single("DTSTART;VALUE=DATE:20281017", "DTEND;VALUE=DATE:20281018",
+            extra: Ics.Alarm("TRIGGER;RELATED=END:PT20H")));
+
+        var response = await Report(Calendar(), QueryBody(
+            VEvent(Alarm("20281019T030000Z", "20281019T040000Z")), zone: "America/Los_Angeles"));
+
+        Assert.Equal([Href("journee.ics")], HrefsOf(response));
+    }
+
+    [Fact]
+    public async Task AnAlarmWindowUnderARequestZone_TheMirror_ReachesTheRowOnTheWindowsOtherSide()
+    {
+        // The columns now hold the day posed in Los Angeles, [17T07:00Z, 18T07:00Z]; Brussels opens
+        // it at 16T22:00Z and a trigger twenty hours before that rings at 16T02:00Z, twenty-nine
+        // hours before the row's first column instant.
+        GivenCalendarZone("America/Los_Angeles");
+        GivenEvent("journee.ics", Ics.Single("DTSTART;VALUE=DATE:20281017", "DTEND;VALUE=DATE:20281018",
+            extra: Ics.Alarm("TRIGGER:-PT20H")), zone: "America/Los_Angeles");
+
+        var response = await Report(Calendar(), QueryBody(
+            VEvent(Alarm("20281016T020000Z", "20281016T030000Z")), zone: Ics.Zone));
+
+        Assert.Equal([Href("journee.ics")], HrefsOf(response));
     }
 
     [Fact]
@@ -517,6 +547,9 @@ public sealed class CalDavQueryTests : IAsyncLifetime
         new(DavXml.CalDav + "filter",
             new XElement(DavXml.CalDav + "comp-filter", new XAttribute("name", "VCALENDAR"),
                 new XElement(DavXml.CalDav + "comp-filter", new XAttribute("name", "VEVENT"), children)));
+
+    private static XElement Alarm(string start, string end) =>
+        new(DavXml.CalDav + "comp-filter", new XAttribute("name", "VALARM"), TimeRange(start, end));
 
     private static XElement PropFilter(string name, params object[] children) =>
         new(DavXml.CalDav + "prop-filter", new XAttribute("name", name), children);

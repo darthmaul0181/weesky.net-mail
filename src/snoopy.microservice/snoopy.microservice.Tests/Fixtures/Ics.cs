@@ -127,8 +127,12 @@ internal static class Ics
     /// TRIGGER, REPEAT, DURATION or any other VALARM property, one per element.</summary>
     internal static string Alarmed(string dtstart, params string[] alarmLines) =>
         Head + "BEGIN:VEVENT\r\nUID:alarmed\r\n" + Stamp + dtstart + "\r\nSUMMARY:Alarmed\r\n"
-        + "BEGIN:VALARM\r\nACTION:DISPLAY\r\n" + string.Join("", alarmLines.Select(l => l + "\r\n"))
-        + "DESCRIPTION:x\r\nEND:VALARM\r\nEND:VEVENT\r\n" + Tail;
+        + Alarm(alarmLines) + "\r\nEND:VEVENT\r\n" + Tail;
+
+    /// <summary>One DISPLAY VALARM block carrying <paramref name="lines"/>, as the extra of a component.</summary>
+    internal static string Alarm(params string[] lines) =>
+        "BEGIN:VALARM\r\nACTION:DISPLAY\r\n" + string.Join("", lines.Select(l => l + "\r\n"))
+        + "DESCRIPTION:x\r\nEND:VALARM";
 
     internal static string Single(string start, string? end, string? extra = null, string? zone = null) =>
         Head + (zone ?? "") + "BEGIN:VEVENT\r\nUID:single\r\n" + Stamp

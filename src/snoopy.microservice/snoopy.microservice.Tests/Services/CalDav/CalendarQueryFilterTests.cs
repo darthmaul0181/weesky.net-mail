@@ -345,8 +345,7 @@ public sealed class CalendarQueryFilterTests
     public void AnAbsoluteTrigger_FiresAtTheInstantItPins()
     {
         var parsed = Load(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z",
-            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER;VALUE=DATE-TIME:20260906T120000Z\r\n"
-                   + "DESCRIPTION:x\r\nEND:VALARM"));
+            extra: Ics.Alarm("TRIGGER;VALUE=DATE-TIME:20260906T120000Z")));
 
         Assert.True(Matches(parsed, Alarm("20260906T110000Z", "20260906T130000Z")));
         Assert.False(Matches(parsed, Alarm("20260906T130000Z", "20260906T140000Z")));
@@ -358,7 +357,7 @@ public sealed class CalendarQueryFilterTests
         // -P1W on the 7th 09:00Z fires on August 31st: the instance sits outside the walked
         // [from − 1 day, to + 1 day[, so the query answers incomplete rather than reread everything.
         var parsed = Load(Ics.Single("DTSTART:20260907T090000Z", "DTEND:20260907T100000Z",
-            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-P1W\r\nDESCRIPTION:x\r\nEND:VALARM"));
+            extra: Ics.Alarm("TRIGGER:-P1W")));
 
         Assert.False(Matches(parsed, Alarm("20260831T080000Z", "20260831T100000Z")));
         Assert.True(Matches(parsed, VEvent(TimeRange("20260907T080000Z", "20260907T100000Z"))));
@@ -369,7 +368,7 @@ public sealed class CalendarQueryFilterTests
     {
         // -PT15M before the 7th: 23:45 Brussels on the 6th is 21:45Z.
         var parsed = Load(Ics.Single("DTSTART;VALUE=DATE:20260907", "DTEND;VALUE=DATE:20260908",
-            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:x\r\nEND:VALARM"));
+            extra: Ics.Alarm("TRIGGER:-PT15M")));
 
         Assert.True(Matches(parsed, Alarm("20260906T214000Z", "20260906T215000Z")));
         Assert.False(Matches(parsed, Alarm("20260906T234000Z", "20260906T235000Z")));
@@ -390,7 +389,7 @@ public sealed class CalendarQueryFilterTests
     public void AVAlarmFilter_NamesAnAlarmOrItsAbsence()
     {
         var alarmed = Load(Ics.Single("DTSTART:20260907T090000Z", null,
-            extra: "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:x\r\nEND:VALARM"));
+            extra: Ics.Alarm("TRIGGER:-PT15M")));
 
         Assert.True(Matches(alarmed, VEvent(Comp("VALARM"))));
         Assert.False(Matches(Load(Ics.Rule("FREQ=WEEKLY")), VEvent(Comp("VALARM"))));
@@ -628,11 +627,13 @@ public sealed class CalendarQueryFilterTests
         // iOS sends exactly this shape. Left unnarrowed, every row of the calendar is read, parsed
         // and re-expanded once per alarmed component, inside the snapshot transaction — minutes of
         // CPU for a few hundred bytes. An alarm only fires from an instance, so the union of the
-        // alarm windows bounds the rows worth looking at; CandidatesAsync widens by the same day
-        // AlarmFires does.
+        // alarm windows, widened by the day AlarmFires walks on each side of its own, bounds the
+        // rows worth looking at; the reader's slack for the zone spread comes on top of it.
         Assert.Null(spec.TimeRange);
-        Assert.Equal(new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc), spec.Preselection!.FromUtc);
-        Assert.Equal(new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), spec.Preselection.ToUtc);
+        Assert.Equal(new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc) - OccurrenceExpander.Margin,
+            spec.Preselection!.FromUtc);
+        Assert.Equal(new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) + OccurrenceExpander.Margin,
+            spec.Preselection.ToUtc);
     }
 
     [Fact]
