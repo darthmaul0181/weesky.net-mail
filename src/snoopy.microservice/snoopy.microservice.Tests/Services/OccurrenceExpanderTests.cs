@@ -427,13 +427,28 @@ public sealed class OccurrenceExpanderTests
     [Fact]
     public void TheRings_SkipTheOnesTheWindowLeavesBehind()
     {
-        // A million rings a second apart, all crammed a day before the window: counted, not walked.
-        // The trigger is the only one the walk touches before the jump lands past them all.
+        // A million rings a second apart run for eleven and a half days from the trigger; the
+        // window holds rings 82 800 to 86 399, far past MaxRings. The rings before it are counted,
+        // not walked, and the bound counts the rings walked, never their index — or every window
+        // past the ten-thousandth ring would answer false while the file rings every second there.
         var parsed = Load(Ics.Alarmed("DTSTART:20270102T000000Z",
             "TRIGGER;RELATED=START:-P1D", "REPEAT:1000000", "DURATION:PT1S"));
 
-        Assert.False(Fires(parsed, "20270101T230000Z", "20270102T000000Z"));
-        Assert.True(Fires(parsed, "20270101T000000Z", "20270101T000100Z"));
+        Assert.True(Fires(parsed, "20270101T230000Z", "20270102T000000Z"));
+        Assert.True(Fires(parsed, "20270101T000000Z", "20270101T000100Z"));    // the trigger itself
+        Assert.False(Fires(parsed, "20270113T140000Z", "20270114T000000Z"));   // past the millionth
+    }
+
+    [Fact]
+    public void ABoundedWindowPastTheTenThousandthRing_StillHearsTheAlarm()
+    {
+        // A trigger eight days ahead of its instance, ringing every minute for two weeks: the
+        // instance's own hour holds rings 11 520 to 11 579. The instance is inside the day the walk
+        // allows on each side, so only the ring bound could lose it.
+        var parsed = Load(Ics.Alarmed("DTSTART:20270110T000000Z",
+            "TRIGGER;RELATED=START:-P8D", "REPEAT:20000", "DURATION:PT1M"));
+
+        Assert.True(Fires(parsed, "20270110T000000Z", "20270110T010000Z"));
     }
 
     [Fact]

@@ -36,8 +36,9 @@ internal static class OccurrenceExpander
     /// depends on their being equal, never on their looking alike.</summary>
     internal static readonly TimeSpan Margin = TimeSpan.FromDays(1);
 
-    /// <summary>The repetitions one alarm may contribute to a window. Ten thousand for the day of
-    /// slack the walk carries on each side, which is more than any real reminder writes.</summary>
+    /// <summary>The rings one alarm may have walked past the skip — a bound on the rings produced,
+    /// never on their index, so a window past the ten-thousandth ring is still answered. A backstop
+    /// against the file: <see cref="AlarmFires"/> decides on the first ring at or past its window.</summary>
     private const int MaxRings = 10_000;
 
     /// <summary>10 000 instances per year of window, the density the PUT gate admits, plus the
@@ -118,7 +119,7 @@ internal static class OccurrenceExpander
     /// query must stay finite whatever it is handed. A positive spacing makes the sequence
     /// arithmetic and monotonic, so the rings before <paramref name="fromUtc"/> are counted rather
     /// than walked and the first past <paramref name="toUtc"/> ends it — two the window bounds,
-    /// whatever the file names. <see cref="MaxRings"/> backstops a window that has no end.
+    /// whatever the file names. <see cref="MaxRings"/> backstops a caller that reads past them.
     /// </summary>
     private static IEnumerable<DateTime> Rings(DateTime first, Alarm alarm, DateTime fromUtc, DateTime toUtc)
     {
@@ -128,7 +129,10 @@ internal static class OccurrenceExpander
 
         var skipped = Skipped(first, fromUtc, step);
         var at = Shift(first, TimeSpan.FromTicks(skipped * step.Ticks));
-        for (var i = skipped; i < Math.Min(alarm.Repeat, MaxRings); i++)
+        // The rings left after the skip, and never more than MaxRings of them: the bound is on
+        // what is walked, not on the index, which the skip may already have put past ten thousand.
+        var remaining = Math.Min(alarm.Repeat - skipped, MaxRings);
+        for (var i = 0; i < remaining; i++)
         {
             at = Shift(at, step);
             if (at >= toUtc) yield break;
