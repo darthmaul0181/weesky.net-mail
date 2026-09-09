@@ -148,16 +148,25 @@ public sealed class IcsGuardsTests
     public void ExceptionsWithoutMaster_Pass() => Assert.Null(Check(Ics.Events(("a", "20260914"), ("a", "20260921"))));
 
     [Fact]
-    public void ATzidWithNoVtimezoneInTheFile_IsNotACalendarObjectResource()
+    public void ATzidNothingResolves_IsNotACalendarObjectResource()
     {
-        // RFC 5545 § 3.2.19: "An individual 'VTIMEZONE' calendar component MUST be specified for each
-        // unique 'TZID' parameter value specified in the iCalendar object." 5a accepted this, before
-        // the server announced calendar-access; announcing it is what promises RFC 5545's MUSTs.
-        var problem = IcsGuards.CheckAll(Ics.WeeklyWithoutZone(), out _);
+        // RFC 5545 § 3.2.19 asks for a VTIMEZONE per TZID so that a reader can resolve the zone, and
+        // an id our own database resolves is accepted below. This one no block defines and no
+        // database knows: nothing can read it, which is the case the guard is left for.
+        var problem = IcsGuards.CheckAll(Ics.WeeklyInAnUnresolvableZone(), out _);
 
         Assert.Equal(IcsPrecondition.ValidCalendarObjectResource, problem!.Precondition);
         // An import refused without naming the zone it lacks is a refusal nobody can act on.
-        Assert.Contains(Ics.Zone, problem.Message, StringComparison.Ordinal);
+        Assert.Contains(Ics.UnresolvableZone, problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnIanaTzidMacOsNamesByReference_IsAccepted()
+    {
+        // A genuine macOS Calendar export names America/Los_Angeles and carries no VTIMEZONE at
+        // all — RFC 7809's timezones-by-reference. Our own tzdb resolves it, so a refusal here
+        // costs the user the event for a purity that buys nothing.
+        Assert.Null(IcsGuards.CheckAll(Ics.AppleExport(), out _));
     }
 
     [Fact]

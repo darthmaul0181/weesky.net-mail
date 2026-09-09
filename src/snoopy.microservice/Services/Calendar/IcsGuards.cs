@@ -110,11 +110,9 @@ internal static class IcsGuards
     }
 
     /// <summary>
-    /// RFC 5545 § 3.2.19: an individual VTIMEZONE component MUST be specified for each unique
-    /// TZID the object names. We announce neither RFC 7809's timezone service nor
-    /// timezones-by-reference, so the file is everything a reader gets — one whose zone lives
-    /// elsewhere cannot be resolved by anyone. Read off the text, not the model: Ical.Net resolves
-    /// a known id against tzdb, and the parsed object then no longer remembers it was missing.
+    /// RFC 5545 § 3.2.19 requires a VTIMEZONE per TZID so that a reader can resolve the zone, and
+    /// RFC 7809's shape — an id named by reference, as macOS Calendar writes it — is accepted where
+    /// our own database resolves it. Refused only when nothing does: no block, no database.
     /// </summary>
     private static IcsProblem? CheckZones(string ics, IcsCalendar parsed)
     {
@@ -122,9 +120,9 @@ internal static class IcsGuards
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var referenced in ReferencedTzIds(ics))
         {
-            if (!defined.Contains(referenced))
+            if (!defined.Contains(referenced) && IcsTimeZones.ResolveIana(referenced) is null)
                 return new IcsProblem(IcsPrecondition.ValidCalendarObjectResource,
-                    $"TZID '{referenced}' is used but no VTIMEZONE in the object defines it.");
+                    $"TZID '{referenced}' is defined by no VTIMEZONE and names no known time zone.");
         }
 
         return null;

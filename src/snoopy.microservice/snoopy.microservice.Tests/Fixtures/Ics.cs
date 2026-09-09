@@ -12,10 +12,14 @@ internal static class Ics
 {
     internal const string Zone = "Europe/Brussels";
 
+    /// <summary>A TZID no VTIMEZONE defines and no database — IANA or Windows — resolves.</summary>
+    internal const string UnresolvableZone = "Nowhere/Imaginary";
+
     private const string Head = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//weesky//tests//EN\r\n";
     private const string Tail = "END:VCALENDAR\r\n";
     private const string Stamp = "DTSTAMP:20260901T080000Z\r\n";
     private const string InstantFormat = "yyyyMMdd'T'HHmmss";
+    private const string AppleZone = "America/Los_Angeles";
 
     internal static string Events(params (string Uid, string? RecurrenceId)[] components)
     {
@@ -46,7 +50,8 @@ internal static class Ics
         + "DTSTART:20260907T090000Z\r\nDTEND:20260907T100000Z\r\n"
         + "RRULE:" + rrule + "\r\n" + Line(extra) + "END:VEVENT\r\n" + Tail;
 
-    internal static string WeeklyWithoutZone() => Rule("FREQ=WEEKLY");
+    internal static string WeeklyInAnUnresolvableZone() =>
+        Rule("FREQ=WEEKLY").Replace(Zone, UnresolvableZone);
 
     internal static string RuleWithOverride(string rrule, string overrideStart, string? extra = null, string? summary = null)
     {
@@ -208,6 +213,15 @@ internal static class Ics
         + "BEGIN:VTODO\r\nUID:todo@google.com\r\n" + Stamp + "SUMMARY:Buy milk\r\nEND:VTODO\r\n"
         + "BEGIN:VEVENT\r\nUID:broken@google.com\r\n" + Stamp + "SUMMARY:No start at all\r\nEND:VEVENT\r\n"
         + Tail;
+
+    /// <summary>What macOS Calendar really exports: an IANA TZID named by reference, the object
+    /// carrying no VTIMEZONE at all — RFC 7809's shape, and the one a real client produces.</summary>
+    internal static string AppleExport() =>
+        "BEGIN:VCALENDAR\r\nPRODID:-//Apple Inc.//Mac OS X 10.11//EN\r\nVERSION:2.0\r\n"
+        + "CALSCALE:GREGORIAN\r\nBEGIN:VEVENT\r\nUID:8B7A1E62@apple.com\r\n" + Stamp
+        + "DTSTART;TZID=" + AppleZone + ":20150324T130000\r\n"
+        + "DTEND;TZID=" + AppleZone + ":20150324T140000\r\n"
+        + "SUMMARY:Design review\r\nEND:VEVENT\r\n" + Tail;
 
     /// <summary>A resource carrying no UID of its own — what the store's one text surgery is for.</summary>
     internal static string EventWithoutUid() =>
