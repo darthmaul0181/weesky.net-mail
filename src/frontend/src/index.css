@@ -1284,7 +1284,9 @@ body {
   margin-bottom: 12px;
 }
 
-.field-h > label:first-child {
+/* A row whose control is a group rather than one box has no `for` to point at, so its label is a
+   span; the column it stands in is the same one. */
+.field-h > :is(label, .field-h-label):first-child {
   width: 110px;
   flex-shrink: 0;
   font-size: 13px;
@@ -3035,7 +3037,8 @@ body {
      probes/mobile-layout.html now carry a real type= — a bare <input /> there hid a regression
      this rule caused in the recipients box. */
   input:not([type]), input[type="text"], input[type="password"], input[type="email"],
-  input[type="number"], input[type="search"], select, textarea {
+  input[type="number"], input[type="search"], input[type="date"], input[type="time"],
+  select, textarea {
     min-height: var(--touch);
   }
 

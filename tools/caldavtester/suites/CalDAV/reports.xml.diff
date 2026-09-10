@@ -1,0 +1,75 @@
+--- .caldavtester/ccs-caldavtester/scripts/tests/CalDAV/reports.xml	2026-08-31 16:39:18.424212800 +0200
++++ suites/CalDAV/reports.xml	2026-09-08 20:30:52.921602700 +0200
+@@ -137,17 +137,6 @@
+ 			</data>
+ 		</request>
+ 		<request end-delete="yes">
+-			<exclude-feature>
+-				<feature>split-calendars</feature>
+-			</exclude-feature>
+-			<method>PUT</method>
+-			<ruri>$calendarpath1:/15.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/reports/put/15.txt</filepath>
+-			</data>
+-		</request>
+-		<request end-delete="yes">
+ 			<method>PUT</method>
+ 			<ruri>$calendarpath1:/18.ics</ruri>
+ 			<data>
+@@ -195,54 +184,6 @@
+ 				<filepath>Resource/CalDAV/reports/put/27.ics</filepath>
+ 			</data>
+ 		</request>
+-		<request end-delete="yes">
+-			<method>PUT</method>
+-			<ruri>$taskspath1:/101.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/reports/put/101.txt</filepath>
+-			</data>
+-		</request>
+-		<request end-delete="yes">
+-			<method>PUT</method>
+-			<ruri>$taskspath1:/102.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/reports/put/102.txt</filepath>
+-			</data>
+-		</request>
+-		<request end-delete="yes">
+-			<method>PUT</method>
+-			<ruri>$taskspath1:/103.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/reports/put/103.txt</filepath>
+-			</data>
+-		</request>
+-		<request end-delete="yes">
+-			<method>PUT</method>
+-			<ruri>$taskspath1:/104.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/reports/put/104.txt</filepath>
+-			</data>
+-		</request>
+-		<request end-delete="yes">
+-			<method>PUT</method>
+-			<ruri>$taskspath1:/105.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/reports/put/105.txt</filepath>
+-			</data>
+-		</request>
+-		<request end-delete="yes">
+-			<method>PUT</method>
+-			<ruri>$taskspath1:/106.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/reports/put/106.txt</filepath>
+-			</data>
+-		</request>
+ 	</start>
+ 	
+ 	<test-suite name='OPTIONS header'>

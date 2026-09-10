@@ -1,0 +1,196 @@
+<!doctype html>
+<!--
+  Probe: the event editor in its four states — hours / whole day x once / repeating — after the
+  Repeats switch replaced the repeat picker and the recurrence block became the widest thing in
+  the dialog.
+
+  What no test in this repo can see. The dialog is content-sized (modal.css), and the contract
+  keeps it that way: the width that must NOT move under the switch is carried by
+  `.calendar-editor-form { --field-w }`, the Title box's measure, which every state draws. So the
+  eight `modale` numbers must be ONE number, in French and in English alike, and the recurrence
+  block must fit inside it with `escape 0`. The Start row carries the All-day switch after its
+  time box, and the two date rows keep one geometry (`debut`/`fin` widths must match). The end
+  row is ONE line — label, segmented choice,
+  the date — so `fin` must be one control tall, and the seven weekday boxes are one row:
+  `jours` must be one box tall.
+
+  Read at the desktop width, --field-w 66ch: modale 675 in all eight states, FR and EN; block
+  499, days row 349x26, the end row 469x41 (label, the segmented choice, the date), escape 0
+  everywhere. The segmented control is what moved the measure from 53ch: three pills are 42px
+  wider than three bare radios, which is also why shell.css is linked here.
+
+  A `UNE seule largeur` of NON is the regression this file exists for. Drive it in Chrome/Edge;
+  jsdom computes no layout, so none of this is assertable in the suite. document.title becomes
+  'probe-done'.
+-->
+<html lang="fr" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — recurrence editor</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <!-- shell.css carries .seg, the segmented control the end row draws; without it the three
+       choices fall back to bare radios and every width below is somebody else's. -->
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/calendar.css" />
+  <style>
+    body { display: flex; flex-wrap: wrap; gap: 24px; padding: 24px; align-items: flex-start; }
+    /* The overlay is fixed and centres one dialog; here several sit side by side. */
+    .modal-overlay { position: static; display: block; inset: auto; background: none; padding: 0; }
+    #out { position: fixed; right: 0; bottom: 0; z-index: 9;
+           white-space: pre; font-family: ui-monospace, monospace; font-size: 11px;
+           background: #fff; color: #000; padding: 8px; }
+  </style>
+</head>
+<body>
+  <template id="block-fr">
+    <div class="recurrence-editor">
+      <div class="field-h">
+        <label for="_">Répéter chaque</label>
+        <input type="number" value="1" class="recurrence-interval" aria-label="Répéter chaque" />
+        <select aria-label="Unité"><option>semaine</option><option>jour</option>
+          <option>mois</option><option>an</option></select>
+      </div>
+      <div class="field-h">
+        <span class="field-h-label">Le</span>
+        <div class="recurrence-days">
+          <label><input type="checkbox" checked aria-label="lundi" /><span class="recurrence-day">L</span></label>
+          <label><input type="checkbox" checked aria-label="mardi" /><span class="recurrence-day">M</span></label>
+          <label><input type="checkbox" aria-label="mercredi" /><span class="recurrence-day">M</span></label>
+          <label><input type="checkbox" aria-label="jeudi" /><span class="recurrence-day">J</span></label>
+          <label><input type="checkbox" aria-label="vendredi" /><span class="recurrence-day">V</span></label>
+          <label><input type="checkbox" aria-label="samedi" /><span class="recurrence-day">S</span></label>
+          <label><input type="checkbox" aria-label="dimanche" /><span class="recurrence-day">D</span></label>
+        </div>
+      </div>
+      <div class="field-h">
+        <span class="field-h-label">Se termine</span>
+        <div class="seg" role="radiogroup" aria-label="Se termine">
+          <label><input type="radio" name="_" />Jamais</label>
+          <label><input type="radio" name="_" />Après</label>
+          <label><input type="radio" name="_" checked />Au</label>
+        </div>
+        <input type="date" value="2026-10-27" aria-label="Répéter jusqu’au" />
+      </div>
+    </div>
+  </template>
+
+  <template id="block-en">
+    <div class="recurrence-editor">
+      <div class="field-h">
+        <label for="_">Repeat every</label>
+        <input type="number" value="1" class="recurrence-interval" aria-label="Repeat every" />
+        <select aria-label="Unit"><option>week</option><option>day</option>
+          <option>month</option><option>year</option></select>
+      </div>
+      <div class="field-h">
+        <span class="field-h-label">On</span>
+        <div class="recurrence-days">
+          <label><input type="checkbox" checked aria-label="Monday" /><span class="recurrence-day">M</span></label>
+          <label><input type="checkbox" checked aria-label="Tuesday" /><span class="recurrence-day">T</span></label>
+          <label><input type="checkbox" aria-label="Wednesday" /><span class="recurrence-day">W</span></label>
+          <label><input type="checkbox" aria-label="Thursday" /><span class="recurrence-day">T</span></label>
+          <label><input type="checkbox" aria-label="Friday" /><span class="recurrence-day">F</span></label>
+          <label><input type="checkbox" aria-label="Saturday" /><span class="recurrence-day">S</span></label>
+          <label><input type="checkbox" aria-label="Sunday" /><span class="recurrence-day">S</span></label>
+        </div>
+      </div>
+      <div class="field-h">
+        <span class="field-h-label">Ends</span>
+        <div class="seg" role="radiogroup" aria-label="Ends">
+          <label><input type="radio" name="_" />Never</label>
+          <label><input type="radio" name="_" />After</label>
+          <label><input type="radio" name="_" checked />On</label>
+        </div>
+        <input type="date" value="2026-10-27" aria-label="Repeat until" />
+      </div>
+    </div>
+  </template>
+
+  <div id="out">…</div>
+
+  <script>
+    const L = {
+      fr: { title: 'Nouvel événement', name: 'Titre', allday: 'Journée entière', start: 'Début',
+            end: 'Fin', from: 'Du', to: 'au', on: 'Le', repeats: 'Se répète', block: 'block-fr' },
+      en: { title: 'New event', name: 'Title', allday: 'All day', start: 'Start', end: 'End',
+            from: 'From', to: 'to', on: 'On', repeats: 'Repeats', block: 'block-en' },
+    }
+    const toggleOnly = on => `<label class="toggle-switch"><input type="checkbox" ${on ? 'checked' : ''} />
+          <span class="toggle-track"></span></label>`
+    const toggle = (on, label) => `
+      <div class="field-h"><label>${label}</label>
+        <label class="toggle-switch"><input type="checkbox" ${on ? 'checked' : ''} aria-label="${label}" />
+          <span class="toggle-track"></span></label></div>`
+
+    function build(lang, allDay, rep) {
+      const s = L[lang]
+      const rows = `<div class="field-h"><label>${s.start}</label>
+             <input type="date" value="2026-10-05" aria-label="Start date" />
+             <input type="time" value="${allDay ? '00:00' : '19:00'}" aria-label="Start time" ${allDay ? 'disabled' : ''} />
+             <span class="editor-allday">${toggleOnly(allDay)}<label class="editor-allday-text">${s.allday}</label></span></div>
+           <div class="field-h"><label>${s.end}</label>
+             <input type="date" value="2026-10-05" aria-label="End date" ${rep ? 'disabled' : ''} />
+             <input type="time" value="${allDay ? '00:00' : '20:00'}" aria-label="End time" ${allDay ? 'disabled' : ''} /></div>`
+      const block = rep ? document.getElementById(s.block).innerHTML : ''
+      const el = document.createElement('div')
+      el.className = 'modal-overlay'
+      el.dataset.case = `${lang} ${allDay ? 'journee' : 'heures'} ${rep ? 'avec' : 'sans'}`
+      el.innerHTML = `<div class="modal calendar-editor">
+        <div class="modal-header"><span class="modal-title">${s.title}</span></div>
+        <form class="calendar-editor-form">
+          <div class="field-h"><label>${s.name}</label><input type="text" value="Réunion" /></div>
+          <div class="field-h"><span class="field-h-label">${lang === 'fr' ? 'Agenda' : 'Calendar'}</span>
+            <div class="dropdown-root"><button type="button" class="calendar-select" aria-label="Calendar">
+              <span class="calendar-swatch" style="--cal: #3b82c4"></span>
+              <span class="calendar-select-name">Personnel</span>
+              <svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button></div></div>
+          ${rows}
+          ${toggle(rep, s.repeats)}
+          ${block}
+        </form></div>`
+      document.body.insertBefore(el, document.getElementById('out'))
+      return el
+    }
+
+    const cases = []
+    for (const lang of ['fr', 'en'])
+      for (const allDay of [false, true])
+        for (const rep of [false, true]) cases.push(build(lang, allDay, rep))
+
+    const w = el => Math.ceil(el.getBoundingClientRect().width)
+    const h = el => Math.ceil(el.getBoundingClientRect().height)
+    const report = { viewport: `${window.innerWidth} x ${window.innerHeight}` }
+    const widths = new Set()
+    for (const c of cases) {
+      const modal = c.querySelector('.modal')
+      widths.add(w(modal))
+      let line = String(w(modal))
+      const block = c.querySelector('.recurrence-editor')
+      if (block) {
+        const ends = c.querySelector('.recurrence-editor .field-h:has(.seg)')
+        const date = ends.querySelector('input[type="date"]')
+        const days = c.querySelector('.recurrence-days')
+        const day = c.querySelector('.recurrence-day')
+        const escape = Math.max(0, Math.ceil(
+          Math.max(block.getBoundingClientRect().right, date.getBoundingClientRect().right)
+          - modal.getBoundingClientRect().right))
+        line += `  bloc ${w(block)}  jours ${w(days)}x${h(days)}`
+          + (h(days) > h(day) + 2 ? ' WRAP' : '')
+          + `  fin ${w(ends)}x${h(ends)}` + (h(ends) > h(date) + 2 ? ' WRAP' : '')
+          + `  escape ${escape}`
+      }
+      const dates = [...c.querySelectorAll('.calendar-editor-form input[type="date"]')].slice(0, 2)
+      line += `  date ${w(dates[0])}/${w(dates[1])}` + (w(dates[0]) !== w(dates[1]) ? ' DESALIGNE' : '')
+      report['modale ' + c.dataset.case] = line
+    }
+    report['UNE seule largeur'] = widths.size === 1 ? 'oui' : 'NON — ' + [...widths].join(', ')
+    document.getElementById('out').textContent =
+      Object.entries(report).map(([k, v]) => k.padEnd(26) + v).join('\n')
+    document.title = 'probe-done'
+  </script>
+</body>
+</html>

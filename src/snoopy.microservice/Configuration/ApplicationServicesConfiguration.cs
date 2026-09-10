@@ -7,7 +7,7 @@ using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Configuration;
 
@@ -107,6 +107,7 @@ internal static class ApplicationServicesConfiguration
         services.AddHostedService<StagedAttachmentSweeper>();
         services.AddHostedService<TrustedSenderSweeper>();
         services.AddHostedService<ContactTombstoneSweeper>();
+        services.AddHostedService<CalendarTombstoneSweeper>();
         services.AddHostedService<SyncStateConsistencyCheckHostedService>();
 
         services.AddHttpClient<IOAuthTokenService, OAuthTokenService>(client =>
@@ -153,6 +154,15 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IDavCredentialStore, DavCredentialStore>();
         services.AddScoped<IContactSyncStore, ContactSyncStore>();
         services.AddScoped<IDavContactReader, DavContactReader>();
+        // The two calendar stores follow ContactStore's shape: one scoped instance behind both
+        // faces, so the CalDAV writer of a later slice shares their write gate rather than its own.
+        services.AddScoped<CalendarStore>();
+        services.AddScoped<ICalendarStore>(provider => provider.GetRequiredService<CalendarStore>());
+        services.AddScoped<CalendarEventStore>();
+        services.AddScoped<ICalendarEventStore>(provider => provider.GetRequiredService<CalendarEventStore>());
+        services.AddScoped<ICalendarSyncStore, CalendarSyncStore>();
+        services.AddScoped<IDavCalendarReader, DavCalendarReader>();
+        services.AddScoped<IDavCalendarWriter, DavCalendarWriter>();
 
         return services;
     }

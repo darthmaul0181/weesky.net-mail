@@ -19,11 +19,10 @@
  -->
 
 <!--
- Derived from ccs-caldavtester scripts/server/serverinfo-template.xml
- (commit bed21e5924275552c1561febc8203a9f194cf737) for the weesky.net
- 4d CardDAV conformance harness. Host/features/substitutions trimmed
- to a single test account against CardDAV only — see
- tools/caldavtester/README.md.
+ Dérivé de scripts/server/serverinfo-template.xml de ccs-caldavtester
+ (commit bed21e5924275552c1561febc8203a9f194cf737) pour le harnais de
+ conformité weesky.net. Hôte, features et substitutions ramenés à un seul
+ compte de test contre CalDAV et CardDAV — voir tools/caldavtester/README.md.
  -->
 
 <serverinfo>
@@ -36,12 +35,24 @@
 	<waitdelay>0.25</waitdelay>
 	<waitsuccess>30</waitsuccess>
 
+	<!-- Éteintes et nommées ici parce qu'une feature éteinte sans être nommée est une décision
+	     non prise : no-duplicate-uids, sync-report-home, sync-report-limit, regular-collection,
+	     supported-component-sets, split-calendars, limits, query-extended, timerange-low-limit,
+	     timerange-high-limit, timezones-by-reference, remove-duplicate-alarms, directory listing,
+	     only-proxy-groups, own-root, auth-on-root, extended-principal-search, ACL Method, les
+	     quatre * REPORT de principaux, et tout le bloc ordonnancement / partage / pièces jointes /
+	     vpoll. -->
 	<features>
-		<feature>carddav</feature>						<!-- Basic CardDAV feature enabler -->
-		<feature>current-user-principal</feature>		<!-- current-user-principal extension -->
-		<feature>limits</feature>						<!-- max-collections and max-resources limits -->
-		<feature>sync-report</feature>					<!-- WebDAV collection sync REPORT -->
-		<feature>well-known</feature>					<!-- well-known feature -->
+		<feature>caldav</feature>
+		<feature>carddav</feature>						<!-- le gabarit sert les deux protocoles -->
+		<feature>current-user-principal</feature>
+		<feature>sync-report</feature>
+		<feature>well-known</feature>
+		<feature>expand-property</feature>
+		<feature>ctag</feature>							<!-- getctag est servie : ctag.xml la mesure -->
+		<feature>supported-component-sets-one</feature>	<!-- dit ce que nous sommes ; rien ne la lit -->
+		<feature>COPY Method</feature>					<!-- allumee expres : sans elle, les 39 tests sautent -->
+		<feature>MOVE Method</feature>
 	</features>
 
 	<substitutions>
@@ -124,11 +135,11 @@
 		<!-- relative path to record type principal collections-->
 		<substitution>
 			<key>$principals_uids:</key>
-			<value>$principalcollection:$uidstype:/</value>
+			<value>/dav/principals/</value>
 		</substitution>
 		<substitution>
 			<key>$principals_users:</key>
-			<value>$principalcollection:$userstype:/</value>
+			<value>/dav/principals/</value>
 		</substitution>
 		<substitution>
 			<key>$principals_groups:</key>
@@ -152,11 +163,11 @@
 		<!-- relative path to record type calendar collections-->
 		<substitution>
 			<key>$calendars_uids:</key>
-			<value>$calendars:$uidstype:/</value>
+			<value>/dav/calendars/</value>
 		</substitution>
 		<substitution>
 			<key>$calendars_users:</key>
-			<value>$calendars:$userstype:/</value>
+			<value>/dav/calendars/</value>
 		</substitution>
 		<substitution>
 			<key>$calendars_resources:</key>
@@ -170,19 +181,13 @@
 		<!-- primary calendar name-->
 		<substitution>
 			<key>$calendar:</key>
-			<value>calendar</value>
+			<value>default</value>
 		</substitution>
 
 		<!-- primary tasks-only calendar name-->
 		<substitution>
 			<key>$tasks:</key>
 			<value>tasks</value>
-		</substitution>
-
-		<!-- primary polls-only calendar name-->
-		<substitution>
-			<key>$polls:</key>
-			<value>polls</value>
 		</substitution>
 
 		<!-- inbox name-->
@@ -203,12 +208,6 @@
 			<value>dropbox</value>
 		</substitution>
 
-		<!-- attachments name-->
-		<substitution>
-			<key>$attachments:</key>
-			<value>dropbox</value>
-		</substitution>
-
 		<!-- notification name-->
 		<substitution>
 			<key>$notification:</key>
@@ -222,6 +221,10 @@
 		</substitution>
 
 		<!-- Sync home collection items - use "-" to include the home resource-->
+		<!-- $calendar_home_items_initial_sync: reste à la valeur amont. Ses vingt-quatre lectures
+		     sont toutes dans des tests de sync-report.xml gardés par sync-report-home, éteinte :
+		     clé inerte, mais pas clé corrigée — la distinction compte le jour où cette feature
+		     s'allumerait. -->
 		<substitution>
 			<key>$calendar_home_items_initial_sync:</key>
 			<value>[-,$calendar:/,$tasks:/,$inbox:/,$outbox:/,$freebusy:,$notification:/]</value>
@@ -243,24 +246,6 @@
 		</substitution>
 
 
-		<!-- server-to-server inbox-->
-		<substitution>
-			<key>$servertoserver:</key>
-			<value>$root:inbox</value>
-		</substitution>
-
-		<!-- timezone service-->
-		<substitution>
-			<key>$timezoneservice:</key>
-			<value>$root:timezones</value>
-		</substitution>
-
-		<!-- timezone std service-->
-		<substitution>
-			<key>$timezonestdservice:</key>
-			<value>$root:stdtimezones</value>
-		</substitution>
-
 		<!-- relative path to addressbooks collection-->
 		<substitution>
 			<key>$addressbooks:</key>
@@ -281,18 +266,6 @@
 		<substitution>
 			<key>$addressbook:</key>
 			<value>default</value>
-		</substitution>
-
-		<!-- directory name -->
-		<substitution>
-			<key>$directory:</key>
-			<value>$root:directory/</value>
-		</substitution>
-
-		<!-- POST add-member URI suffix -->
-		<substitution>
-			<key>$add-member:</key>
-			<value>;add-member</value>
 		</substitution>
 
 		<!-- user id for admin user -->
@@ -367,7 +340,7 @@
 		<!-- user guid -->
 		<substitution>
 			<key>$userguid1:</key>
-			<value>10000000-0000-0000-0000-000000000001</value>
+			<value>{guid}</value>
 		</substitution>
 		<!-- user name -->
 		<substitution>
@@ -411,7 +384,7 @@
 		<!-- relative path to user calendar home-->
 		<substitution>
 			<key>$calendarhome1:</key>
-			<value>$calendars_uids:$userguid1:</value>
+			<value>/dav/calendars/{guid}</value>
 		</substitution>
 		<!-- relative path to user alternate calendar home-->
 		<substitution>
@@ -432,11 +405,6 @@
 		<substitution>
 			<key>$taskspath1:</key>
 			<value>$calendarhome1:/$tasks:</value>
-		</substitution>
-		<!-- relative path to user polls calendar-->
-		<substitution>
-			<key>$pollspath1:</key>
-			<value>$calendarhome1:/$polls:</value>
 		</substitution>
 		<!-- relative path to user inbox-->
 		<substitution>
@@ -465,12 +433,12 @@
 		</substitution>
 		<substitution>
 			<key>$email1:</key>
-			<value>$userid1:@example.com</value>
+			<value>{email}</value>
 		</substitution>
 		<!-- calendar user address of user-->
 		<substitution>
 			<key>$cuaddr1:</key>
-			<value>mailto:$email1:</value>
+			<value>mailto:{email}</value>
 		</substitution>
 		<substitution>
 			<key>$cuaddralt1:</key>

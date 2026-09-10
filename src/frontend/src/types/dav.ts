@@ -8,6 +8,7 @@ export interface DavCredentials {
   username: string
   configured: boolean
   cardDavEnabled: boolean
+  calDavEnabled: boolean
   lastUsedAt?: string
   password?: string
 }

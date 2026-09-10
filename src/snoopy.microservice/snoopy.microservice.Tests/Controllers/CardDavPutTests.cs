@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -225,6 +225,18 @@ public sealed class CardDavPutTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ABodyOpeningOnAUtf8Signature_IsStored()
+    {
+        // The one place a Windows exporter's vCard proves the fix serves the address book too:
+        // refused until now with "the body is not vCard text", on a file that is exactly that.
+        var body = "\uFEFF" + ValidCard("u1");
+
+        var response = await Put(DavPaths.Card(UserId, "bom.vcf"), body);
+
+        Assert.Equal(201, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ABodyThatIsNoCard_Answers403ValidAddressData()
     {
         var response = await Put(DavPaths.Card(UserId, "a.vcf"), "this is no card at all");
@@ -347,7 +359,7 @@ public sealed class CardDavPutTests : IAsyncLifetime
     [Fact]
     public async Task AFullBook_Answers507()
     {
-        GivenTheWriterAnswers(DavWriteStatus.BookFull);
+        GivenTheWriterAnswers(DavWriteStatus.CollectionFull);
 
         // RFC 4918 § 11.5 — no CardDAV precondition names the cap, so the status carries it alone.
         Assert.Equal(507, (await Put(DavPaths.Card(UserId, "a.vcf"), ValidCard("u1"))).StatusCode);

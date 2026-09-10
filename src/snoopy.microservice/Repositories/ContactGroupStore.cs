@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
 using weesky.Snoopy.Microservice.Services;
-using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Services.Contacts;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 

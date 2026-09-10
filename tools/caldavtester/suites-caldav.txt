@@ -1,0 +1,57 @@
+# Suites CalDAV lancees (chemins relatifs a scripts/tests du tester, sauf suites/ qui est local).
+#
+# ORDRE : le <end> de ctag.xml fait un DELETEALL sur $calendarpath1:, c'est-a-dire qu'il VIDE
+# `default` au milieu du passage. Verifie : aucun fichier lance apres lui n'en depend, chacun pose
+# le sien dans son <start> ou dans ses tests. Reordonner cette liste demande de le reverifier.
+#
+# La zone de `default` fuit d'errors.xml (US/Eastern, par PROPPATCH) vers tout ce qui suit dans
+# cette liste ; floating.xml la remet en UTC dans son <start> avant de creer calendar-none.
+# Reordonner cette liste demande de le reverifier aussi.
+#
+# QUATRE FICHIERS MESURENT MOINS QUE LEUR NOM : get.xml ne joue qu'UN test (directory listing garde
+# ses deux suites de collection) ; nonascii.xml joue douze tests (trois suites d'URI en ignore, une
+# gardee par regular-collection) ; conditional.xml et options.xml ne portent que des conventions
+# CalendarServer et restent lances pour que leurs requetes partent.
+#
+# BRUIT MULTI-UTILISATEURS (un 2e et un 3e compte ne sont pas definis, leurs cles restent en texte
+# litteral) : expandproperty.xml suite Membership REPORT, gardee par RIEN, quatre de ses six tests
+# partent ; current-user-principal.xml, ses tests $principaluri2:/$userid2: ; nonascii.xml, ses
+# tests $userid2: et $i18n* ; mkcalendar.xml, test 2 de MKCALENDAR read-free-busy privilege ;
+# ctag.xml, trois des cinq tests de Scheduling (t1 et t4 mesurent, eux) et les tests $userid2: de
+# PUT/DELETE/COPY/MOVE ; aclreports.xml, dans des suites deja gardees.
+#
+# EXCLUS AVEC LEUR RAISON : caldavIOP.xml (trois comptes + ordonnancement), duplicate_uids.xml
+# (regle CalendarServer du refus par home, pas la notre), bad-ical.xml (son repertoire de donnees
+# n'a jamais ete versionne), CalDAV/limits.xml (plafonds CalendarServer), freebusy.xml (c'est le
+# POST d'ordonnancement, pas le rapport), et tout implicit*/schedule*/sharing-*/managed-attachments*
+# /partitioning-*/trash*/servertoserver*/depthreports*/directory* plus json, bad-json, rscale,
+# vtodos, timezoneservice, timezonestdservice, webcal, bulk, add-member, quota, prefer, brief,
+# resourceid, attachments, availability, extended-freebusy, freebusy-url, default-alarms,
+# alarm-dismissal, privateevents, privatecomments, acl, calendaruserproxy, proxyauthz,
+# recurrence-splitting, server-info, pretest, polls, dropbox, collection-redirects.
+#
+# copymove.xml et aclreports.xml sont lances EN SACHANT qu'ils echoueront : leur echec mesure une
+# divergence nommee, et un fichier qu'on ne lance pas ne mesure rien.
+CalDAV/propfind.xml
+CalDAV/proppatch.xml
+CalDAV/put.xml
+CalDAV/get.xml
+suites/CalDAV/delete.xml
+suites/CalDAV/reports.xml
+CalDAV/sync-report.xml
+CalDAV/errors.xml
+CalDAV/mkcalendar.xml
+CalDAV/options.xml
+CalDAV/nonascii.xml
+CalDAV/well-known.xml
+CalDAV/current-user-principal.xml
+CalDAV/expandproperty.xml
+CalDAV/recurrenceput.xml
+suites/CalDAV/floating.xml
+CalDAV/ctag.xml
+CalDAV/encodedURIs.xml
+CalDAV/conditional.xml
+CalDAV/copymove.xml
+CalDAV/aclreports.xml
+CalDAV/timezones.xml
+CalDAV/ical-client.xml

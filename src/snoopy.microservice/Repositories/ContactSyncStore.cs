@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 
 namespace weesky.Snoopy.Microservice.Repositories;
 

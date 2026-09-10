@@ -187,6 +187,36 @@ Et les quatre paragraphes qu'un relecteur redemanderait :
   révision doit pouvoir être renvoyée telle quelle, sinon l'historique ne restitue pas ce qu'il a
   archivé.
 
+## Tranche 5c — `caldav_enabled`
+
+Le second interrupteur : la ligne `dav_credentials` porte désormais un drapeau par service, et le
+secret reste unique. À rejouer sur `snoopy_webmail` **et** `snoopy_webmail_dev` avant le premier
+déploiement de 5c.
+
+```sql
+ALTER TABLE `snoopy_webmail`.`dav_credentials`
+  ADD COLUMN `caldav_enabled` TINYINT(1) NOT NULL DEFAULT 0
+    COMMENT 'Né à 0 : la ligne existe déjà pour des comptes qui n''ont rien demandé (5c)'
+  AFTER `carddav_enabled`;
+
+ALTER TABLE `snoopy_webmail_dev`.`dav_credentials`
+  ADD COLUMN `caldav_enabled` TINYINT(1) NOT NULL DEFAULT 0
+    COMMENT 'Né à 0 : la ligne existe déjà pour des comptes qui n''ont rien demandé (5c)'
+  AFTER `carddav_enabled`;
+```
+
+`DEFAULT 0` et non `1` : la colonne naît sur des lignes écrites par 4c, pour des comptes qui n'ont
+demandé que leur carnet. Allumer l'agenda est un geste de l'écran, jamais une migration.
+
+Le code pose **les deux colonnes explicitement** à la création d'une ligne : allumer CalDAV en
+premier écrit `carddav_enabled = 0`, et le carnet reste éteint tant que personne ne l'allume.
+
+**Une vérification que la suite ne peut pas faire.** Le provider InMemory des tests n'a pas de
+transactions, et l'allumage de CalDAV écrit la ligne de credentials et l'agenda `default` dans une
+seule. Sur `snoopy_webmail_dev` uniquement, avant le premier déploiement : allumer CalDAV depuis
+l'écran pour un compte qui n'a aucun agenda, puis vérifier que la ligne `dav_credentials`, l'agenda
+`default` et sa ligne `calendar_sync_state` sont nés ensemble.
+
 ## Vérification
 
 La collation est ce qui échoue réellement ici : chaque FK exige que sa colonne `user_id` et

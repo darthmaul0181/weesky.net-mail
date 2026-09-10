@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -55,6 +55,30 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
         // route of the six whose URL the theory above cannot spell.
         Assert.Equal(207, response.StatusCode);
         Assert.Equal("/", XDocument.Parse(response.Body).Descendants(DavXml.Href).Single().Value);
+    }
+
+    [Fact]
+    public async Task RemovingAPropertyTheBookNeverCarries_Answers200()
+    {
+        // RFC 4918 § 14.23: removing what is not there is not an error. Nothing is stored on this
+        // tree, but a property outside the closed set PROPFIND would 404 on is still not a "live"
+        // one a remove must refuse.
+        var response = await Proppatch(DavPaths.Collection(UserId), RemoveBody(Dead("details")));
+
+        Assert.Equal(207, response.StatusCode);
+        Assert.Equal("HTTP/1.1 200 OK",
+            XDocument.Parse(response.Body).Descendants(DavXml.Status).Single().Value);
+    }
+
+    [Fact]
+    public async Task RemovingTheDisplayName_IsStillRefused()
+    {
+        // displayname IS in the book's closed set (served as a fixed constant) — always carried,
+        // so § 14.23 does not apply and § 9.2.1's 403 stands.
+        var response = await Proppatch(DavPaths.Collection(UserId), RemoveBody(DavXml.Dav + "displayname"));
+
+        Assert.Equal("HTTP/1.1 403 Forbidden",
+            XDocument.Parse(response.Body).Descendants(DavXml.Status).Single().Value);
     }
 
     [Fact]
@@ -140,11 +164,12 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
             SetAndRemoveBody(DavXml.Dav + "displayname", DavXml.CardDav + "addressbook-description"));
 
         // § 9.2 names both in one document. Reading only DAV:set answers a client that its removal
-        // succeeded — the propstat it never received.
-        var named = XDocument.Parse(response.Body).Descendants(DavXml.Prop).Single().Elements()
-            .Select(element => element.Name).ToList();
-        Assert.Contains(DavXml.Dav + "displayname", named);
-        Assert.Contains(DavXml.CardDav + "addressbook-description", named);
+        // succeeded — the propstat it never received. Each now carries its OWN status rather than
+        // one shared 403: the DAV:set stays refused (nothing here is stored), and the DAV:remove of
+        // a property the book never carried answers 200 (§ 14.23) — a distinct propstat, not the
+        // same one, so each assertion pins which property landed where.
+        Assert.Contains("403", StatusOf(response, DavXml.Dav + "displayname"));
+        Assert.Contains("200", StatusOf(response, DavXml.CardDav + "addressbook-description"));
     }
 
     [Fact]
@@ -308,6 +333,17 @@ public sealed class CardDavProppatchTests : IAsyncLifetime
 
     private static string SetAndRemoveBody(XName set, XName removed) =>
         Update([(set, "X")], [removed]);
+
+    /// <summary>A name in a namespace that is neither DAV:, CardDAV nor CalendarServer's — a
+    /// property this server never stores, whatever the client calls it.</summary>
+    private static XName Dead(string localName) => XNamespace.Get("http://example.com/ns/") + localName;
+
+    /// <summary>The status line of the one propstat naming <paramref name="property"/> — a response
+    /// may carry more than one now that a DAV:remove can answer 200 beside a DAV:set's 403.</summary>
+    private static string StatusOf(DavTestResponse response, XName property) =>
+        XDocument.Parse(response.Body).Descendants(DavXml.PropStat)
+            .Single(propstat => propstat.Element(DavXml.Prop)!.Elements().Any(e => e.Name == property))
+            .Element(DavXml.Status)!.Value;
 
     private static string Update((XName Name, string Value)[] set, XName[] removed)
     {

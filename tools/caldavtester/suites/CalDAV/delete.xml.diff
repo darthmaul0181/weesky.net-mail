@@ -1,0 +1,17 @@
+--- .caldavtester/ccs-caldavtester/scripts/tests/CalDAV/delete.xml	2026-08-31 16:39:18.366080800 +0200
++++ suites/CalDAV/delete.xml	2026-09-08 20:30:57.998268500 +0200
+@@ -35,14 +35,6 @@
+ 				<filepath>Resource/CalDAV/delete/1.txt</filepath>
+ 			</data>
+ 		</request>
+-		<request end-delete="yes">
+-			<method>PUT</method>
+-			<ruri>$taskspath1:/1todo.ics</ruri>
+-			<data>
+-				<content-type>text/calendar; charset=utf-8</content-type>
+-				<filepath>Resource/CalDAV/todo/1.txt</filepath>
+-			</data>
+-		</request>
+ 	</start>
+ 	
+ 	<test-suite name='DELETE'>

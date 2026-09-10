@@ -22,7 +22,6 @@
     "label": "Navigation",
     "open": "Ouvrir la navigation"
   },
-  "comingSoon": "Ce module arrive bientôt.",
   "deleteConfirm": {
     "title": "Confirmer la suppression",
     "message": "Supprimer <name/> ? Cette action est irréversible."

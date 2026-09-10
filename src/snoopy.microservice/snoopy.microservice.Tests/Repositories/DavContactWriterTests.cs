@@ -5,8 +5,9 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -387,13 +388,13 @@ public sealed class DavContactWriterTests : IDisposable
     }
 
     [Fact]
-    public async Task AFullBook_IsRefusedAsBookFull()
+    public async Task AFullBook_IsRefusedAsCollectionFull()
     {
         await GivenTheBookIsFull();
 
         var outcome = await Writer.PutAsync(UserId, "new.vcf", ValidCard("u1"), CancellationToken.None);
 
-        Assert.Equal(DavWriteStatus.BookFull, outcome.Status);
+        Assert.Equal(DavWriteStatus.CollectionFull, outcome.Status);
     }
 
     [Fact]

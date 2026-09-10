@@ -11,19 +11,21 @@ vi.mock('../../../api.js', async importOriginal => ({
   api: {
     getDavCredentials: vi.fn(),
     setDavCardDav: vi.fn(),
+    setDavCalDav: vi.fn(),
     regenerateDavSecret: vi.fn(),
   },
 }))
 
 const OFF = {
   serverUrl: 'https://api.mail.weesky.net', username: 'alice@weesky.be',
-  configured: false, cardDavEnabled: false,
+  configured: false, cardDavEnabled: false, calDavEnabled: false,
 }
 const ON = { ...OFF, configured: true, cardDavEnabled: true }
 
 beforeEach(() => {
   vi.mocked(api.getDavCredentials).mockResolvedValue(OFF)
   vi.mocked(api.setDavCardDav).mockResolvedValue(ON)
+  vi.mocked(api.setDavCalDav).mockResolvedValue({ ...ON, calDavEnabled: true })
   vi.mocked(api.regenerateDavSecret).mockResolvedValue({ ...ON, password: 'TSRQPONMLKJIHGFEDCBA' })
 })
 
@@ -37,10 +39,12 @@ describe('SyncPage', () => {
 
   // The very first visit, which every other case here skips by starting from the ON fixture: both
   // branches used to be gated on `configured`, so the row rendered its label beside nothing at all.
+  // The sentence names both services: EnableAsync(CalDav) strikes the same secret on an empty table.
   it('tells a first-time visitor how to get a password rather than leaving the row empty', async () => {
     render(<SyncPage />)
 
-    expect(await screen.findByText('Turn Contacts (CardDAV) on to get a password')).toBeInTheDocument()
+    expect(await screen.findByText(
+      'Turn Contacts (CardDAV) or Calendar (CalDAV) on to get a password')).toBeInTheDocument()
   })
 
   it('says a deployment with no sync address does not offer it, rather than blaming the load', async () => {
@@ -150,6 +154,33 @@ describe('SyncPage', () => {
 
     refuse(new Error('refused'))
     await waitFor(() => expect(box).not.toBeChecked())
+  })
+
+  it('draws the calendar switch off its own flag and sends the browser zone with it', async () => {
+    vi.mocked(api.getDavCredentials).mockResolvedValue({ ...ON, calDavEnabled: false })
+    render(<SyncPage />)
+
+    const box = await screen.findByRole('checkbox', { name: 'Calendar (CalDAV)' })
+    expect(box).not.toBeChecked()
+    await userEvent.click(box)
+
+    // The zone is what the default calendar is born in, so it travels with the switch rather than
+    // being guessed server-side from a request that carries no clock.
+    expect(api.setDavCalDav).toHaveBeenCalledWith(
+      true, Intl.DateTimeFormat().resolvedOptions().timeZone)
+  })
+
+  it('keeps each switch on its own optimistic value while the other is in flight', async () => {
+    // A single pending boolean painted the value one switch was waiting for onto the other, so
+    // turning the calendar on visibly turned contacts off.
+    vi.mocked(api.getDavCredentials).mockResolvedValue({ ...ON, calDavEnabled: false })
+    vi.mocked(api.setDavCalDav).mockReturnValue(new Promise(() => {}))
+    render(<SyncPage />)
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Calendar (CalDAV)' }))
+
+    expect(screen.getByRole('checkbox', { name: 'Calendar (CalDAV)' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Contacts (CardDAV)' })).toBeChecked()
   })
 
   // Parity checks keys and typography, never prose: the order clause is the most consequential

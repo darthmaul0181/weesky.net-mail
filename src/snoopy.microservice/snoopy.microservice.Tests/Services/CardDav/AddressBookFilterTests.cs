@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Services.CardDav;
 using Xunit;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Tests.Services.CardDav;
 

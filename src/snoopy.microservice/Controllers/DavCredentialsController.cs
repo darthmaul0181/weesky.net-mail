@@ -1,16 +1,19 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Models;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Calendar;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
 /// <summary>
-/// The Sync settings tab, and nothing else: the three values a CardDAV client asks for, one switch
-/// per protocol, and a regeneration. No reveal — the table holds a digest, and a screen able to
+/// The Sync settings tab, and nothing else: the three values a synchronising client asks for, one
+/// switch per protocol, and a regeneration. No reveal — the table holds a digest, and a screen able to
 /// show the secret again would force it to hold the secret itself.
 /// </summary>
 [Route("api/[controller]")]
@@ -75,14 +78,15 @@ public sealed class DavCredentialsController(
         string? secret = null;
         if (toggle.Enabled)
         {
-            secret = await store.EnableAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+            secret = await store.EnableAsync(
+                AuthenticatedUser.WebmailUid, DavProtocol.CardDav, alongside: null, cancellationToken);
             // Same reason as the regeneration below: enabling for the first time mints a secret and
             // lands every configured device in the failure loop that blocks the identifier.
             throttle.ForgetIdentifier(Identifier);
         }
         else
         {
-            await store.DisableAsync(AuthenticatedUser.WebmailUid, cancellationToken);
+            await store.DisableAsync(AuthenticatedUser.WebmailUid, DavProtocol.CardDav, cancellationToken);
         }
 
         // The cached entry carries the switch state, so it answers with the old one for the rest
@@ -91,6 +95,59 @@ public sealed class DavCredentialsController(
 
         logger.LogInformation(
             "Audit: carddav_sync user={UserId} enabled={Enabled} created={Created} outcome=success",
+            AuthenticatedUser.WebmailUid, toggle.Enabled, secret is not null);
+
+        return Ok(await ViewAsync(secret, cancellationToken));
+    }
+
+    /// <summary>
+    /// Turns calendar synchronisation on or off
+    /// </summary>
+    /// <remarks>
+    /// Switching it on creates the account's default calendar when it has none, in the very
+    /// transaction that writes the credential row — which is why the browser's time zone is
+    /// required here: it is the zone that calendar is born with.
+    /// </remarks>
+    /// <param name="toggle">the wanted state, and the browser's IANA time zone</param>
+    /// <param name="calendars">the calendar store, run inside the switch's own transaction</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The new state, carrying the secret only when this call drew one</response>
+    /// <response code="400">A body naming no state, or switching on without a known time zone</response>
+    /// <response code="401">Not authenticated</response>
+    /// <response code="404">This deployment publishes no synchronisation address</response>
+    [HttpPut("CalDav")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DavCredentialsView>> SetCalDav(
+        DavCalDavToggle toggle, [FromServices] ICalendarStore calendars, CancellationToken cancellationToken)
+    {
+        if (!davOptions.Value.IsConfigured) return NotFoundEnveloppe(NotServed);
+
+        string? secret = null;
+        if (toggle.Enabled)
+        {
+            // Refused before the row is written rather than defaulted: a calendar born in the wrong
+            // zone shows every event an hour out, and no later screen asks the question again.
+            if (toggle.TimeZone is null || !IcsTimeZones.IsKnownIana(toggle.TimeZone))
+                return BadRequestEnveloppe(IcsTimeZones.UnknownZone);
+
+            secret = await store.EnableAsync(AuthenticatedUser.WebmailUid, DavProtocol.CalDav,
+                alongside: () => calendars.EnsureDefaultAsync(
+                    AuthenticatedUser.WebmailUid, toggle.TimeZone, cancellationToken),
+                cancellationToken);
+            throttle.ForgetIdentifier(Identifier);
+        }
+        else
+        {
+            await store.DisableAsync(AuthenticatedUser.WebmailUid, DavProtocol.CalDav, cancellationToken);
+        }
+
+        cache.Forget(Identifier);
+
+        logger.LogInformation(
+            "Audit: caldav_sync user={UserId} enabled={Enabled} created={Created} outcome=success",
             AuthenticatedUser.WebmailUid, toggle.Enabled, secret is not null);
 
         return Ok(await ViewAsync(secret, cancellationToken));
@@ -139,6 +196,7 @@ public sealed class DavCredentialsController(
             Identifier,
             state.Configured,
             state.CardDavEnabled,
+            state.CalDavEnabled,
             state.LastUsedAt,
             secret);
     }

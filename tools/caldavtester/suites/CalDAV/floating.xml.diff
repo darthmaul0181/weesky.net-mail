@@ -1,0 +1,23 @@
+--- .caldavtester/ccs-caldavtester/scripts/tests/CalDAV/floating.xml	2026-08-31 16:39:18.371524600 +0200
++++ suites/CalDAV/floating.xml	2026-09-09 11:19:13.149939700 +0200
+@@ -26,6 +26,20 @@
+ 	</require-feature>
+ 
+ 	<start>
++		<!-- Ajout local, weesky : errors.xml, joue plus tot dans suites-caldav.txt, pose
++		     US/Eastern sur calendar-timezone de default, et un agenda cree sans zone herite de
++		     celle de default (CalendarStore, 5c). calendar-none ci-dessous nait d'un MKCALENDAR
++		     sans corps : il naitrait donc en heure de New York, et free-busy t1 - le seul test
++		     qui suppose UTC - echouerait sur un etat laisse par un autre fichier. Rien des tests
++		     propres du fichier ne change. -->
++		<request>
++			<method>PROPPATCH</method>
++			<ruri>$calendarpath1:/</ruri>
++			<data>
++				<content-type>text/xml; charset=utf-8</content-type>
++				<filepath>../../suites/CalDAV/floating-default-utc.xml</filepath>
++			</data>
++		</request>
+ 		<request end-delete="yes">
+ 			<method>MKCALENDAR</method>
+ 			<ruri>$calendarhome1:/calendar-none/</ruri>

@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
@@ -28,10 +29,11 @@ public sealed class AuthAttemptThrottleSeamTests
     public AuthAttemptThrottleSeamTests()
     {
         store.Setup(s => s.GetStateAsync(Uid, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DavCredentialState(true, true, null));
+            .ReturnsAsync(new DavCredentialState(true, true, false, null));
         store.Setup(s => s.RegenerateAsync(Uid, It.IsAny<CancellationToken>()))
             .ReturnsAsync("ABCDEFGHIJKLMNOPQRST");
-        store.Setup(s => s.EnableAsync(Uid, It.IsAny<CancellationToken>()))
+        store.Setup(s => s.EnableAsync(Uid, It.IsAny<DavProtocol>(), It.IsAny<Func<Task>?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync("ABCDEFGHIJKLMNOPQRST");
     }
 

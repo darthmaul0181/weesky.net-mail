@@ -7,7 +7,6 @@ import RequirePrimary from './layouts/RequirePrimary'
 import RequireSieve from './layouts/RequireSieve'
 import AppShell from './layouts/AppShell'
 import LoginRoute from './pages/LoginRoute'
-import ComingSoon from './components/ComingSoon'
 import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
 import ConnectedAccountsPage from './modules/settings/accounts/ConnectedAccountsPage'
@@ -17,6 +16,7 @@ import GeneralPage from './modules/settings/general/GeneralPage'
 
 const MailLayout = lazy(() => import('./modules/mail/MailLayout'))
 const ContactsLayout = lazy(() => import('./modules/contacts/ContactsLayout'))
+const CalendarLayout = lazy(() => import('./modules/calendar/CalendarLayout'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage.jsx'))
 const IdentitiesPage = lazy(() => import('./modules/settings/identities/IdentitiesPage'))
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
@@ -39,7 +39,11 @@ export const routes: RouteObject[] = [
           { path: 'mail', element: <Suspense fallback={null}><MailLayout /></Suspense> },
           // The composer lives inside the mail module: same layout, list and reader replaced.
           { path: 'mail/compose', element: <Suspense fallback={null}><MailLayout /></Suspense> },
-          { path: 'calendar', element: <ComingSoon module="calendar" /> },
+          { path: 'calendar', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
+          // The event editor lives inside the calendar module: same layout, a surface over
+          // the grid. An event id is a GUID, so it travels safely in a route segment.
+          { path: 'calendar/new', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
+          { path: 'calendar/:id/edit', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
           { path: 'contacts', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
           // The editor lives inside the contacts module: same layout, the two content columns
           // replaced. A contact id is a GUID, so it travels safely in a route segment.

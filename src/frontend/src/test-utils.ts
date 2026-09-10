@@ -69,3 +69,48 @@ export function fireTouch(element: HTMLElement, type: string, y: number) {
   Object.defineProperty(event, 'touches', { value: [{ clientY: y }] })
   element.dispatchEvent(event)
 }
+
+/**
+ * jsdom carries no `PointerEvent` constructor and leaves the three capture calls undefined on
+ * every element. A `MouseEvent` with a `pointerId` is the whole of what a gesture reads, and the
+ * capture stubs are what stop `setPointerCapture` throwing under the first drag.
+ */
+class SyntheticPointerEvent extends MouseEvent {
+  pointerId: number
+
+  constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
+    super(type, init)
+    this.pointerId = init.pointerId ?? 1
+  }
+}
+
+export function installPointerEvents() {
+  const global = globalThis as { PointerEvent?: unknown }
+  global.PointerEvent ??= SyntheticPointerEvent
+  const proto = HTMLElement.prototype as unknown as Record<string, unknown>
+  proto.setPointerCapture ??= function setPointerCapture() {}
+  proto.releasePointerCapture ??= function releasePointerCapture() {}
+  proto.hasPointerCapture ??= function hasPointerCapture() { return true }
+}
+
+/** One move, release or cancellation of a gesture in flight — dispatched on `window`, which is
+    where every one of these hooks listens once the pointer is down. */
+export function firePointer(type: 'pointermove' | 'pointerup' | 'pointercancel', x = 0, y = 0) {
+  act(() => {
+    window.dispatchEvent(new SyntheticPointerEvent(type, { clientX: x, clientY: y }))
+  })
+}
+
+/** The React synthetic a `onPointerDown` prop is called with: the six fields the gestures read,
+    and nothing invented around them. */
+export function pointerDownOn(element: HTMLElement, x = 0, y = 0, target: HTMLElement = element) {
+  return {
+    button: 0, pointerId: 1, clientX: x, clientY: y, currentTarget: element, target,
+  } as unknown as import('react').PointerEvent
+}
+
+/** Escape as a gesture in flight hears it: on `document`, which is where each of them listens.
+    Wrapped like the pointer helpers, so the abandonment is on screen before it is asserted. */
+export function fireEscape() {
+  act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+}

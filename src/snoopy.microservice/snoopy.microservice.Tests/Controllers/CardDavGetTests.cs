@@ -1,6 +1,7 @@
 using System.Text;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -55,7 +56,7 @@ public sealed class CardDavGetTests : IAsyncLifetime
         Assert.Equal("text/vcard; charset=utf-8", response.Header("Content-Type"));
         // The same source as getlastmodified, so the two never disagree.
         Assert.Equal("Mon, 24 Aug 2026 13:05:00 GMT", response.Header("Last-Modified"));
-        // DavProperties' trap 1, on the header this time: UTF-8 BYTES, never characters. Kestrel
+        // CardDavProperties' trap 1, on the header this time: UTF-8 BYTES, never characters. Kestrel
         // aborts the write on a short Content-Length and leaves the client waiting on a long one.
         Assert.NotEqual(Accented.Length, Encoding.UTF8.GetByteCount(Accented));
         Assert.Equal("33", response.Header("Content-Length"));

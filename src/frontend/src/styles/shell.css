@@ -130,19 +130,6 @@
   margin: 0 7px 7px 0;
 }
 
-.coming-soon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  gap: 8px;
-  color: var(--text-muted);
-}
-
-.coming-soon h1 { color: var(--text); font-size: 22px; }
-.coming-soon-links a { color: var(--action-primary); }
-
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
 .topbar-logo { height: 26px; width: 26px; border-radius: 50%; }
 .topbar-wordmark { height: 16px; }
@@ -878,7 +865,8 @@ a.dropdown-item { text-decoration: none; }
 .mail-folders-scroll,
 .mail-list-scroll,
 .contacts-list-scroll,
-.contacts-scopes-scroll {
+.contacts-scopes-scroll,
+.calendar-sidebar-scroll {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
@@ -886,27 +874,32 @@ a.dropdown-item { text-decoration: none; }
 .mail-folders-scroll:hover,
 .mail-list-scroll:hover,
 .contacts-list-scroll:hover,
-.contacts-scopes-scroll:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
+.contacts-scopes-scroll:hover,
+.calendar-sidebar-scroll:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
 
 .mail-folders-scroll::-webkit-scrollbar,
 .mail-list-scroll::-webkit-scrollbar,
 .contacts-list-scroll::-webkit-scrollbar,
-.contacts-scopes-scroll::-webkit-scrollbar { width: 8px; }
+.contacts-scopes-scroll::-webkit-scrollbar,
+.calendar-sidebar-scroll::-webkit-scrollbar { width: 8px; }
 
 .mail-folders-scroll::-webkit-scrollbar-track,
 .mail-list-scroll::-webkit-scrollbar-track,
 .contacts-list-scroll::-webkit-scrollbar-track,
-.contacts-scopes-scroll::-webkit-scrollbar-track { background: transparent; }
+.contacts-scopes-scroll::-webkit-scrollbar-track,
+.calendar-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
 
 .mail-folders-scroll::-webkit-scrollbar-thumb,
 .mail-list-scroll::-webkit-scrollbar-thumb,
 .contacts-list-scroll::-webkit-scrollbar-thumb,
-.contacts-scopes-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.contacts-scopes-scroll::-webkit-scrollbar-thumb,
+.calendar-sidebar-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 
 .mail-folders-scroll:hover::-webkit-scrollbar-thumb,
 .mail-list-scroll:hover::-webkit-scrollbar-thumb,
 .contacts-list-scroll:hover::-webkit-scrollbar-thumb,
-.contacts-scopes-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
+.contacts-scopes-scroll:hover::-webkit-scrollbar-thumb,
+.calendar-sidebar-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
 
 /* ── Narrow tiers ─────────────────────────────────────────────────────────────
    Desktop is the unqualified base above. These two blocks only override it, the
@@ -958,6 +951,7 @@ a.dropdown-item { text-decoration: none; }
   /* The pane inside the drawer fills it: its own column width belongs to the desktop layout. */
   .context-drawer-panel > .mail-folders,
   .context-drawer-panel > .contacts-scopes-column,
+  .context-drawer-panel > .calendar-sidebar,
   .context-drawer-panel > .context-pane {
     width: auto;
     flex: 1;

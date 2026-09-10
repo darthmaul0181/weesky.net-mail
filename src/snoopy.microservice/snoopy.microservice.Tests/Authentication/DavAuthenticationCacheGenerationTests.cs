@@ -1,4 +1,4 @@
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -12,7 +12,7 @@ public sealed class DavAuthenticationCacheGenerationTests
 {
     private const string Fingerprint = "fingerprint-a";
     private static readonly DavIdentity Identity =
-        new(Guid.Parse("66666666-6666-6666-6666-666666666666"), true);
+        new(Guid.Parse("66666666-6666-6666-6666-666666666666"), true, true);
 
     private static DavAuthenticationCache Create() => new(new MutableTimeProvider());
 

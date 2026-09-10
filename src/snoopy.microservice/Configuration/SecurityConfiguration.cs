@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using weesky.Snoopy.Microservice.Authentication.Authorization;
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Services;
 using weesky.Snoopy.Microservice.Services;
@@ -25,8 +25,8 @@ internal static class SecurityConfiguration
         // Basic over TLS, carrying the synchronisation secret. Registered as a scheme of its own
         // so it is never the default: a secret opens /dav and nothing else.
         services.AddAuthentication()
-            .AddScheme<CardDavAuthenticationOptions, CardDavAuthenticationHandler>(
-                CardDavAuthenticationDefaults.AuthenticationScheme, _ => { });
+            .AddScheme<DavAuthenticationOptions, DavAuthenticationHandler>(
+                DavAuthenticationDefaults.AuthenticationScheme, _ => { });
 
         // No handler is registered here: the platform brings one, and a deployment whose platform
         // has no admin directory leaves the policy unsatisfiable — the right answer for the two
@@ -40,8 +40,8 @@ internal static class SecurityConfiguration
             // both would emit WWW-Authenticate: Bearer first, and the handler already delegates to
             // the JWT when no Basic header is present. Declared here rather than in slice 4c-ii so
             // the challenge shape is settled once, in the tranche that owns it.
-            options.AddPolicy(CardDavAuthenticationDefaults.PolicyName, policy => policy
-                .AddAuthenticationSchemes(CardDavAuthenticationDefaults.AuthenticationScheme)
+            options.AddPolicy(DavAuthenticationDefaults.PolicyName, policy => policy
+                .AddAuthenticationSchemes(DavAuthenticationDefaults.AuthenticationScheme)
                 .RequireAuthenticatedUser());
         });
 

@@ -1,0 +1,533 @@
+<!doctype html>
+<!--
+  Probe: the calendar views' geometry — the hour grid (week and day), the all-day band, the month
+  cell and the upcoming/search row. Real markup, real class names, real stylesheets in main.tsx's
+  order. jsdom computes no layout, so the pixel figures of `calendar.css` and `gridGeometry.ts`
+  can only be checked here. #out reports each box; document.title becomes 'probe-done'.
+
+  Read: HOUR_PX (56) must be the hour cell's height and the day column must be 24 of them; a
+  09:00-10:00 block must land at top 504 / height 56, which is minutesToPx(540); the gutter must
+  be GUTTER_PX (56) in the head, the band and the body alike, or the three rows do not line up.
+-->
+<html lang="en" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — calendar grid</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/selection.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/tooltip.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <link rel="stylesheet" href="/src/styles/calendar.css" />
+  <style>
+    body { margin: 0; font: 14px system-ui, sans-serif; }
+    .case { height: 460px; width: 1000px; border: 1px dashed #f0f; margin: 8px; }
+    .case.narrow { width: 380px; }
+    .case.short { height: 560px; }
+    .case.tiny { height: 300px; }
+    #out { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre; padding: 12px; }
+  </style>
+</head>
+<body>
+  <div class="case" id="case-week"></div>
+  <div class="case short" id="case-month"></div>
+  <div class="case tiny narrow" id="case-results"></div>
+  <div class="case tiny narrow" id="case-upcoming"></div>
+
+  <pre id="out">measuring…</pre>
+
+  <script type="module">
+    const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+    const HOURS = Array.from({ length: 24 }, (_, h) => h)
+    const el = (tag, cls, html) => {
+      const node = document.createElement(tag)
+      if (cls) node.className = cls
+      if (html !== undefined) node.innerHTML = html
+      return node
+    }
+    /** The real chain, since it is the chain the scroll depends on: the layout is the flex row,
+        the main column the band stack, and the stage the one band that gives. */
+    const mount = (id, view) => {
+      const stage = el('div', 'calendar-stage')
+      stage.append(view)
+      const main = el('div', 'calendar-main')
+      main.append(stage)
+      const layout = el('div', 'calendar-layout')
+      layout.append(main)
+      document.getElementById(id).append(layout)
+    }
+    const chip = (variant, rendering, title, style, time, extra = '') => {
+      const node = el('button', `event-chip is-${variant} is-${rendering}${extra}`)
+      node.type = 'button'
+      node.setAttribute('style', style)
+      // The order EventChip renders in: a column leads with its title, the band and the month
+      // cell with the hour. A fixture that is not the component's markup is not a guard.
+      if (variant === 'month') node.append(el('span', 'event-dot'))
+      if (variant === 'column') node.append(el('span', 'event-chip-title', title))
+      if (time) node.append(el('span', 'event-chip-time', time))
+      if (variant !== 'column') node.append(el('span', 'event-chip-title', title))
+      return node
+    }
+    /** The grip EventChip renders inside a column chip, and the outline a creation drag traces. */
+    const grip = node => {
+      const handle = el('span', 'event-resize-handle')
+      handle.setAttribute('aria-hidden', 'true')
+      node.append(handle)
+      return node
+    }
+
+    // ── The week grid ───────────────────────────────────────────────────────
+    const template = `grid-template-columns: 56px repeat(7, minmax(0, 1fr))`
+    const week = el('div', 'week-view')
+
+    const head = el('div', 'week-head')
+    head.setAttribute('style', template)
+    head.append(el('div', 'week-head-gutter', 'W38'))
+    DAYS.forEach((name, index) => {
+      const cell = el('div', `week-day-head${index === 2 ? ' is-today' : ''}`)
+      cell.append(el('span', 'week-day-name', name), el('span', 'week-day-number', String(14 + index)))
+      head.append(cell)
+    })
+    week.append(head)
+
+    const band = el('div', 'allday-band')
+    const days = el('div', 'allday-days')
+    days.setAttribute('style', 'height: 44px')
+    days.append(chip('band', 'busy', 'Leave', '--cal:#3b82c4; top: 0; left: calc(3 * 100% / 7); width: calc(2 * 100% / 7)'))
+    days.append(chip('band', 'free', 'Trip', '--cal:#c4763b; top: 22px; left: calc(0 * 100% / 7); width: calc(3 * 100% / 7)', '09:00'))
+    band.append(el('div', 'allday-label', 'All day'), days)
+    week.append(band)
+
+    const body = el('div', 'week-body')
+    body.setAttribute('style', template)
+    const hours = el('div', 'week-hours')
+    HOURS.forEach(h => {
+      const row = el('div', 'week-hour')
+      // Midnight carries no label, exactly as WeekView draws it.
+      if (h > 0) row.append(el('span', null, `${String(h).padStart(2, '0')}:00`))
+      hours.append(row)
+    })
+    body.append(hours)
+    DAYS.forEach((_, index) => {
+      const column = el('div', `day-column${index === 2 ? ' is-today' : ''}`)
+      HOURS.forEach(() => column.append(el('div', 'hour-cell')))
+      if (index === 2) {
+        column.append(chip('column', 'busy', 'Dentist',
+          '--cal:#3b82c4; top: 504px; height: 56px; left: calc(0 * 100% / 2); width: calc(100% / 2)', '09:00'))
+        column.append(chip('column', 'tentative', 'Review',
+          '--cal:#7a3bc4; top: 504px; height: 56px; left: calc(1 * 100% / 2); width: calc(100% / 2)', '09:00'))
+        column.append(grip(chip('column', 'free', 'Coffee',
+          '--cal:#3bb0c4; top: 672px; height: 28px; left: calc(0 * 100% / 1); width: calc(100% / 1)')))
+        const tall = chip('column', 'cancelled', 'Workshop',
+          '--cal:#c43b6e; top: 728px; height: 112px; left: calc(0 * 100% / 1); width: calc(100% / 1)', '13:00')
+        tall.append(el('span', 'event-chip-place', 'Room 3'))
+        column.append(tall)
+      }
+      if (index === 3) {
+        // The block under the pointer: translated by one column and ninety minutes, which is
+        // what DayColumn writes while a drag is live.
+        column.append(chip('column', 'busy', 'Retro',
+          '--cal:#3b82c4; top: 504px; height: 56px; left: calc(0 * 100% / 1); width: calc(100% / 1);'
+          + ' transform: translate(100%, 84px)', '09:00', ' is-dragging'))
+        const ghost = el('div', 'event-ghost')
+        ghost.setAttribute('style', 'top: 728px; height: 84px')
+        column.append(ghost)
+      }
+      body.append(column)
+    })
+    const line = el('div', 'now-line')
+    line.setAttribute('style', 'top: 616px')
+    const today = el('span', 'now-line-today')
+    today.setAttribute('style', 'left: calc(2 * 100% / 7); width: calc(100% / 7)')
+    line.append(today)
+    body.append(line)
+    week.append(body)
+
+    mount('case-week', week)
+
+    // ── The month ───────────────────────────────────────────────────────────
+    const month = el('div', 'month-view')
+    for (let row = 0; row < 6; row += 1) {
+      month.append(el('div', 'month-week-number', String(36 + row)))
+      for (let column = 0; column < 7; column += 1) {
+        const outside = row === 0 || row === 5
+        const cell = el('div', `month-cell${outside ? ' is-outside' : ''}${row === 2 && column === 2 ? ' is-today' : ''}`)
+        cell.append(el('span', 'month-day-number', String(1 + row * 7 + column)))
+        // MAX_PER_CELL is three, count included: a fourth chip here would measure a cell the
+        // component never draws. The four dots are shown across two cells instead.
+        if (row === 2 && column === 2) {
+          cell.append(chip('band', 'busy', 'Leave', '--cal:#3b82c4'))
+          cell.append(chip('month', 'busy', 'Dentist', '--cal:#3b82c4', '09:00'))
+          cell.append(chip('month', 'tentative', 'Review', '--cal:#7a3bc4', '10:00'))
+          const more = el('button', 'month-more', '+2 more')
+          more.type = 'button'
+          cell.append(more)
+        }
+        if (row === 2 && column === 3) {
+          cell.append(chip('month', 'free', 'Coffee', '--cal:#3bb0c4', '11:00'))
+          cell.append(chip('month', 'cancelled', 'Workshop', '--cal:#c43b6e', '13:00'))
+        }
+        month.append(cell)
+      }
+    }
+    mount('case-month', month)
+
+    // ── The upcoming list and the results band ──────────────────────────────
+    const row = (rendering, lead, trail, title, sub) => {
+      const node = el('button', `event-row is-${rendering}`)
+      node.type = 'button'
+      node.setAttribute('style', '--cal:#3b82c4')
+      const time = el('span', 'event-row-time')
+      time.append(el('span', null, lead), el('span', null, trail))
+      const bodyCell = el('span', 'event-row-body')
+      bodyCell.append(el('span', 'event-row-title', title), el('span', 'event-row-sub', sub))
+      node.append(time, el('span', 'event-row-bar'), bodyCell)
+      return node
+    }
+    const results = el('div', 'calendar-results')
+    const resultsBand = el('div', 'calendar-results-band')
+    const clear = el('button', 'btn', 'Clear')
+    clear.type = 'button'
+    resultsBand.append(el('span', 'calendar-results-count', '12 events found'), clear)
+    results.append(resultsBand)
+    results.append(el('p', 'calendar-results-capped', 'Only the first 200 results are shown'))
+    results.append(row('busy', '16 Sept', '09:00', 'Rendez-vous chez le dentiste', 'Rue de la Loi 16'))
+    results.append(row('free', '01 Oct', '11:00', 'Coffee', 'Personal'))
+    mount('case-results', results)
+
+    // UpcomingList's own containers, not the results box: `.upcoming-list` and `.upcoming-group`
+    // carry padding of their own, so a row measured inside the other box is measured elsewhere.
+    const upcoming = el('div', 'upcoming-list')
+    const group = el('section', 'upcoming-group')
+    group.append(el('h3', 'upcoming-day', 'Today · Wednesday 16 September'))
+    group.append(row('busy', '09:00', '10:00', 'Rendez-vous chez le dentiste', 'Rue de la Loi 16'))
+    group.append(row('free', '11:00', '11:30', 'Coffee', 'Personal'))
+    upcoming.append(group)
+    mount('case-upcoming', upcoming)
+
+
+    // -- The preview bubble --------------------------------------------------
+    // `position: fixed`, so it measures against the viewport exactly as it does in the app; the
+    // two coordinates are the ones `usePopoverPosition` computes for a chip ending at x=312.
+    const bubble = el('div', 'event-preview')
+    bubble.setAttribute('role', 'dialog')
+    bubble.setAttribute('style', '--cal:#3b82c4; left: 320px; top: 40px')
+    const bubbleHead = el('div', 'event-preview-head')
+    const bubbleClose = el('button', 'modal-close', 'X')
+    bubbleClose.type = 'button'
+    bubbleHead.append(el('span', 'event-preview-dot'),
+      el('span', 'event-preview-title', 'Rendez-vous chez le dentiste'), bubbleClose)
+    bubble.append(bubbleHead)
+    bubble.append(el('p', 'event-preview-when', 'Monday 14 September - 09:00 to 10:00'))
+    const previewRow = text => {
+      const node = el('p', 'event-preview-row', '<svg width="14" height="14"></svg>')
+      node.append(document.createTextNode(text))
+      return node
+    }
+    bubble.append(previewRow('Rue de la Loi 16'), previewRow('Reminder set'),
+      previewRow('Every 6 months'), previewRow('Personal'))
+    const bubbleActions = el('div', 'event-preview-actions')
+    const edit = el('button', 'btn btn-primary', 'Edit')
+    const drop = el('button', 'btn btn-ghost', 'Delete')
+    edit.type = drop.type = 'button'
+    bubbleActions.append(edit, drop)
+    bubble.append(bubbleActions)
+    document.body.append(bubble)
+
+    // -- The editor dialogue -------------------------------------------------
+    const fieldRow = (label, forId, ...controls) => {
+      const node = el('div', 'field-h')
+      const head = forId === null ? el('span', 'field-h-label', label) : el('label', null, label)
+      if (forId) head.setAttribute('for', forId)
+      node.append(head, ...controls)
+      return node
+    }
+    const box = (type, id, value) => {
+      const node = el('input')
+      node.type = type
+      if (id) node.id = id
+      if (value !== undefined) node.value = value
+      return node
+    }
+    const picker = (id, ...labels) => {
+      const node = el('select')
+      if (id) node.id = id
+      labels.forEach(one => node.append(el('option', null, one)))
+      return node
+    }
+
+    const overlay = el('div', 'modal-overlay')
+    const dialog = el('div', 'modal calendar-editor')
+    const header = el('div', 'modal-header')
+    const headerClose = el('button', 'modal-close', 'X')
+    headerClose.type = 'button'
+    header.append(el('span', 'modal-title', 'Edit event'), headerClose)
+    const form = el('form', 'calendar-editor-form')
+
+    form.append(fieldRow('Title', 'event-title',
+      box('text', 'event-title', 'Rendez-vous chez le dentiste')))
+    const swatch = el('span', 'calendar-swatch')
+    swatch.setAttribute('style', '--cal:#3b82c4')
+    form.append(fieldRow('Calendar', 'event-calendar', swatch,
+      picker('event-calendar', 'Personal', 'Work')))
+    const toggle = el('span', 'toggle-switch')
+    toggle.append(box('checkbox', 'event-allday'), el('span', 'toggle-track'))
+    form.append(fieldRow('All day', 'event-allday', toggle))
+    form.append(fieldRow('Start', 'event-start-date',
+      box('date', 'event-start-date', '2026-09-14'), box('time', null, '09:00')))
+    form.append(fieldRow('End', 'event-end-date',
+      box('date', 'event-end-date', '2026-09-14'), box('time', null, '10:00')))
+    form.append(el('p', 'editor-hint', 'Times in America/New_York'))
+    form.append(fieldRow('Repeat', 'event-repeat', picker('event-repeat', 'Custom...', 'Never')))
+    form.append(el('p', 'editor-hint', 'Every 6 months, on the last Friday'))
+
+    const recurrence = el('div', 'recurrence-editor')
+    recurrence.append(fieldRow('Every', 'repeat-interval',
+      box('number', 'repeat-interval', '6'), picker(null, 'months')))
+    const dayBoxes = el('div', 'recurrence-days')
+    DAYS.forEach(name => {
+      const label = el('label')
+      label.append(box('checkbox'), document.createTextNode(name))
+      dayBoxes.append(label)
+    })
+    recurrence.append(fieldRow('On', null, dayBoxes))
+    const ends = el('div', 'recurrence-end')
+    const endNames = ['Never', 'After', 'On']
+    endNames.forEach(name => {
+      const label = el('label')
+      label.append(box('radio'), document.createTextNode(name))
+      ends.append(label)
+    })
+    ends.append(box('number', null, '10'), el('span', null, 'times'))
+    recurrence.append(fieldRow('Ends', null, ends))
+    form.append(recurrence)
+
+    const reminders = el('div', 'reminder-list')
+    const reminderRow = el('div', 'reminder-row')
+    const removeBell = el('button', 'reminder-remove', 'X')
+    removeBell.type = 'button'
+    reminderRow.append(picker(null, '15 minutes before', 'At the time of the event'), removeBell)
+    const addBell = el('button', 'btn reminder-add', 'Add a reminder')
+    addBell.type = 'button'
+    const foreign = el('div', 'reminder-foreign')
+    foreign.append(el('span', null, 'Reminders this screen cannot change'),
+      el('span', null, 'EMAIL, 1 day before'))
+    reminders.append(reminderRow, addBell, foreign)
+    form.append(fieldRow('Reminder', null, reminders))
+
+    form.append(fieldRow('Location', 'event-location',
+      box('text', 'event-location', 'Rue de la Loi 16')))
+    const description = el('textarea')
+    description.id = 'event-description'
+    form.append(fieldRow('Description', 'event-description', description))
+    form.append(el('hr', 'editor-rule'))
+    const moreButton = el('button', 'editor-more', 'More options')
+    moreButton.type = 'button'
+    form.append(moreButton)
+
+    const seg = el('div', 'seg')
+    const availabilities = ['Busy', 'Tentative', 'Free']
+    availabilities.forEach(name => {
+      const label = el('label')
+      label.append(box('radio'), document.createTextNode(name))
+      seg.append(label)
+    })
+    form.append(fieldRow('Availability', null, seg))
+    form.append(fieldRow('Web address', 'event-url', box('url', 'event-url', '')))
+    const attendees = el('div', 'editor-attendees')
+    const attendee = el('span', 'editor-attendee')
+    attendee.append(el('span', 'editor-organizer'), el('span', null, 'boss@weesky.be'),
+      el('span', 'editor-partstat', 'ACCEPTED'))
+    attendees.append(attendee,
+      el('span', 'editor-hint', 'Read only until invitations are supported'))
+    form.append(fieldRow('Attendees', null, attendees))
+    form.append(el('p', 'editor-error', 'Could not save the event'))
+
+    const actions = el('div', 'editor-actions')
+    const deleteButton = el('button', 'btn btn-danger', 'Delete')
+    const saveButton = el('button', 'btn btn-primary', 'Save')
+    deleteButton.type = 'button'
+    saveButton.type = 'submit'
+    actions.append(deleteButton, saveButton)
+    form.append(actions)
+
+    dialog.append(header, form)
+    overlay.append(dialog)
+    document.body.append(overlay)
+
+    // -- The scope question --------------------------------------------------
+    const scopeOverlay = el('div', 'modal-overlay')
+    scopeOverlay.id = 'scope-overlay'
+    const scopeDialog = el('div', 'modal')
+    const scopeHeader = el('div', 'modal-header')
+    const scopeClose = el('button', 'modal-close', 'X')
+    scopeClose.type = 'button'
+    scopeHeader.append(el('span', 'modal-title', 'Save a recurring event'), scopeClose)
+    const choices = el('div', 'scope-choices')
+    const scopes = [['btn btn-primary', 'This occurrence only'],
+      ['btn', 'This and following occurrences'], ['btn', 'All occurrences']]
+    scopes.forEach(pair => {
+      const button = el('button', pair[0], pair[1])
+      button.type = 'button'
+      choices.append(button)
+    })
+    scopeDialog.append(scopeHeader,
+      el('p', null, 'Dentist repeats: every 6 months. What should the change apply to?'), choices)
+    scopeOverlay.append(scopeDialog)
+    document.body.append(scopeOverlay)
+
+    // ── Contrast, once per theme ────────────────────────────────────────────────
+    // A colour that clears the floor in one theme and fails in the other is exactly what this
+    // catches. Canvas resolves any CSS colour to sRGB, which getComputedStyle does not: an 18%
+    // color-mix() fill computes to oklab() and a naive parse reads its coordinates as channels.
+    const cv = document.createElement('canvas')
+    cv.width = cv.height = 1
+    const ctx = cv.getContext('2d', { willReadFrequently: true })
+    const srgb = css => {
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1, 1)
+      ctx.fillStyle = css; ctx.fillRect(0, 0, 1, 1)
+      const d = ctx.getImageData(0, 0, 1, 1).data
+      return [d[0], d[1], d[2]]
+    }
+    const lum = rgb => {
+      const c = rgb.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 })
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    }
+    const ratio = (a, b) => {
+      const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p)
+      return (x + 0.05) / (y + 0.05)
+    }
+    /** The first painted background up the chain. A tentative chip's stripes are the busy fill
+        and the surface, so the busy row is its worst case too and needs no case of its own. */
+    const bgOf = node => {
+      for (let n = node; n; n = n.parentElement) {
+        const paint = getComputedStyle(n).backgroundColor
+        if (paint && paint !== 'rgba(0, 0, 0, 0)') return srgb(paint)
+      }
+      return [255, 255, 255]
+    }
+    const CONTRAST = [
+      ['chip title on fill', '.day-column .event-chip.is-busy .event-chip-title'],
+      ['chip hour on fill', '.day-column .event-chip.is-busy .event-chip-time'],
+      ['chip place', '.day-column .event-chip .event-chip-place'],
+      ['cancelled title', '.day-column .event-chip.is-cancelled .event-chip-title'],
+      ['band title', '.allday-days .event-chip.is-busy .event-chip-title'],
+      ['hour label', '.week-hour > span'],
+      ['day name', '.week-day-name'],
+      ['month day outside', '.month-cell.is-outside .month-day-number'],
+      ['month chip title', '.event-chip.is-month .event-chip-title'],
+      ['month +N more', '.month-more'],
+      ['row time', '.event-row-time'],
+      ['row sub-line', '.event-row-sub'],
+      ['results count', '.calendar-results-count'],
+      ['capped note', '.calendar-results-capped'],
+      ['preview when', '.event-preview-when'],
+      ['preview row', '.event-preview-row'],
+      ['editor hint', '.editor-hint'],
+      ['editor more', '.editor-more'],
+      ['reminder foreign', '.reminder-foreign > span'],
+      ['attendee partstat', '.editor-partstat'],
+      ['editor error', '.editor-error'],
+    ]
+    const contrastIn = theme => {
+      document.documentElement.setAttribute('data-theme', theme)
+      return CONTRAST.map(([name, selector]) => {
+        const node = document.querySelector(selector)
+        return [name, ratio(srgb(getComputedStyle(node).color), bgOf(node))]
+      })
+    }
+    const inLight = contrastIn('light')
+    const inDark = contrastIn('dark')
+    document.documentElement.setAttribute('data-theme', 'light')
+    const contrast = ['contrast (4.5 is the floor for these sizes)'].concat(
+      inLight.map(([name, value], index) => {
+        const worst = Math.min(value, inDark[index][1])
+        return `  ${name.padEnd(19)} light ${value.toFixed(2).padEnd(6)} dark ${inDark[index][1].toFixed(2).padEnd(6)}${worst < 4.5 ? '  UNDER' : ''}`
+      }))
+
+    // ── Measure ─────────────────────────────────────────────────────────────
+    const rect = node => node.getBoundingClientRect()
+    const size = node => {
+      const r = rect(node)
+      return `${r.width.toFixed(1)} x ${r.height.toFixed(1)}`
+    }
+    /** Worst overhang past each edge of `box`, over every match of `inner`. `axis` is 'x' on a
+        box that scrolls vertically, where content past the bottom is the scroll rather than an
+        escape - scrollWidth alone cannot see a right-aligned row spilling LEFT. */
+    const escape = (box, inner, axis = 'both') => {
+      const outer = rect(box)
+      let worst = 0
+      for (const child of box.querySelectorAll(inner)) {
+        const r = rect(child)
+        worst = Math.max(worst, outer.left - r.left, r.right - outer.right)
+        if (axis === 'both') worst = Math.max(worst, outer.top - r.top, r.bottom - outer.bottom)
+      }
+      return worst.toFixed(1)
+    }
+    const q = selector => document.querySelector(selector)
+
+    // Every hour label's top against the scrolling body's own: a scroll container cannot be
+    // scrolled above its start, so a label reaching above it is cut and stays cut.
+    const bodyTop = rect(q('.week-body')).top - q('.week-body').scrollTop
+    const labelTop = Math.min(...[...document.querySelectorAll('.week-hour > span')]
+      .map(node => rect(node).top - bodyTop))
+
+    const dentist = [...document.querySelectorAll('.day-column .event-chip-title')]
+      .find(node => node.textContent === 'Dentist').closest('.event-chip')
+    const columnRect = rect(q('.day-column.is-today'))
+    const dentistRect = rect(dentist)
+
+    const lines = [
+      `hour cell          ${size(q('.hour-cell'))}            want 56 high`,
+      `day column         ${size(q('.day-column'))}           want 1344 high (24 x 56)`,
+      `head gutter        ${size(q('.week-head-gutter'))}     want 56 wide`,
+      `band gutter        ${size(q('.allday-label'))}         want 56 wide`,
+      `hours column       ${size(q('.week-hours'))}           want 56 wide`,
+      `today disc         ${size(q('.is-today .week-day-number'))}  want 26 x 26`,
+      `chip 09:00         top ${(dentistRect.top - columnRect.top).toFixed(1)}  height ${dentistRect.height.toFixed(1)}   want 504 / 56`,
+      `chip share         ${(dentistRect.width / columnRect.width * 100).toFixed(1)}% of the column   want 50%`,
+      `week body scroll   ${q('.week-body').scrollHeight} in ${Math.round(rect(q('.week-body')).height)}`,
+      `head escape        ${escape(q('.week-head'), '.week-day-head')}   want 0`,
+      `band escape        ${escape(q('.allday-band'), '.event-chip')}   want 0`,
+      `body escape        ${escape(q('.week-body'), '.event-chip', 'x')}   want 0 (x only: the body scrolls, and a dragged chip leaves its column on purpose)`,
+      `resize grip        ${size(q('.event-resize-handle'))}   want 6 high, the chip's own width`,
+      `dragged chip       ${(rect(q('.event-chip.is-dragging')).left - rect(q('.day-column.is-today')).left).toFixed(1)} right of today's column   want one column plus one`,
+      `create ghost       ${size(q('.event-ghost'))}   want 90 minutes of grid (84) high`,
+      `now line           ${size(q('.now-line'))} dot at ${(rect(q('.now-line-today')).left - rect(q('.now-line')).left).toFixed(1)}`,
+      `month gutter       ${size(q('.month-week-number'))}    want 36 wide`,
+      `month cell         ${size(q('.month-cell'))}`,
+      `month day disc     ${size(q('.month-cell.is-today .month-day-number'))}  want 18 x 18`,
+      `month escape       ${escape(q('.month-cell.is-today'), '.event-chip, .month-more')}   want 0`,
+      `hour label top     ${labelTop.toFixed(1)}   want >= 0 (midnight carries none: -8px would clip)`,
+      `results row time   ${size(q('.calendar-results .event-row-time'))}       want 44 wide`,
+      `results escape     ${escape(q('.calendar-results'), '.event-row, .calendar-results-band')}   want 0`,
+      `upcoming row time  ${size(q('.upcoming-list .event-row-time'))}       want 44 wide`,
+      `upcoming row bar   ${size(q('.upcoming-list .event-row-bar'))}        want 4 wide`,
+      `upcoming escape    ${escape(q('.upcoming-list'), '.event-row, .upcoming-day')}   want 0`,
+      `upcoming row       ${size(q('.upcoming-list .event-row'))}`,
+      `preview box        ${size(q('.event-preview'))}      want 300 wide`,
+      `preview escape     ${escape(q('.event-preview'), '.event-preview-row, .event-preview-actions, .event-preview-head')}   want 0`,
+      `preview action     ${size(q('.event-preview-actions > .btn'))}       want two equal halves`,
+      `editor box         ${size(q('.modal.calendar-editor'))}`,
+      `editor label col   ${size(q('.calendar-editor-form > .field-h > label'))}   want 110 wide`,
+      `editor group label ${size(q('.calendar-editor-form > .field-h > .field-h-label'))}   want 110 wide`,
+      `repeat counter     ${size(q('.recurrence-editor .field-h > input[type="number"]'))}   want ~5em, never 34ch`,
+      `nested counter     ${size(q('.recurrence-end input[type="number"]'))}   want ~5em`,
+      `editor time box    ${size(q('.calendar-editor-form input[type="time"]'))}   want ~8em`,
+      `editor escape      ${escape(q('.modal.calendar-editor'), '.field-h, .editor-actions, .recurrence-editor, .editor-hint', 'x')}   want 0`,
+      `scope box          ${size(q('#scope-overlay .modal'))}`,
+      `scope buttons      ${[...document.querySelectorAll('.scope-choices > .btn')].map(node => rect(node).width.toFixed(0)).join(' / ')}   want three equal`,
+      `scope escape       ${escape(q('#scope-overlay .modal'), '.scope-choices > .btn')}   want 0`,
+    ]
+    // The two overlays are `position: fixed` and cover the page: measured first, then taken away
+    // so the report under them can be read.
+    overlay.remove()
+    scopeOverlay.remove()
+    document.getElementById('out').textContent = [...lines, '', ...contrast].join('\n')
+    document.title = 'probe-done'
+  </script>
+</body>
+</html>

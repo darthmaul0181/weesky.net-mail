@@ -19,7 +19,7 @@ public sealed class DavCredentialsViewTests
     }
 
     private static DavCredentialsView View(string? password) => new(
-        "https://api.mail.weesky.net", "alice@weesky.be", true, true,
+        "https://api.mail.weesky.net", "alice@weesky.be", true, true, true,
         new DateTime(2026, 8, 23, 8, 0, 0, DateTimeKind.Utc), password);
 
     /// <summary>
@@ -31,6 +31,7 @@ public sealed class DavCredentialsViewTests
     [InlineData("username")]
     [InlineData("configured")]
     [InlineData("cardDavEnabled")]
+    [InlineData("calDavEnabled")]
     [InlineData("lastUsedAt")]
     [InlineData("password")]
     public void Serialize_NamesThePropertiesAsTheFrontendReadsThem(string property)

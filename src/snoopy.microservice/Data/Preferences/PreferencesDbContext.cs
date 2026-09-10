@@ -145,6 +145,41 @@ public class PreferencesDbContext : DbContext
             .HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Contact>().HasIndex(c => new { c.UserId, c.DavName }).IsUnique();
+
+        modelBuilder.Entity<Calendar>().HasKey(c => c.Id);
+        modelBuilder.Entity<Calendar>().HasIndex(c => new { c.UserId, c.DavName }).IsUnique();
+        modelBuilder.Entity<Calendar>().HasOne<WebmailUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CalendarEvent>().HasKey(e => e.Id);
+        modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.CalendarId, e.Uid }).IsUnique();
+        modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.CalendarId, e.DavName }).IsUnique();
+        modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.UserId, e.FirstOccurrence, e.LastOccurrence });
+        modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.CalendarId, e.SyncSequence });
+        modelBuilder.Entity<CalendarEvent>().HasOne<Calendar>().WithMany().HasForeignKey(e => e.CalendarId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CalendarEvent>().HasOne<WebmailUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CalendarAttendee>().HasKey(a => new { a.EventId, a.Position });
+        modelBuilder.Entity<CalendarAttendee>().HasOne<CalendarEvent>().WithMany().HasForeignKey(a => a.EventId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CalendarSyncState>().HasKey(s => s.CalendarId);
+        modelBuilder.Entity<CalendarSyncState>().HasOne<Calendar>().WithMany().HasForeignKey(s => s.CalendarId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CalendarTombstone>().HasKey(t => new { t.CalendarId, t.DavName });
+        modelBuilder.Entity<CalendarTombstone>().HasIndex(t => new { t.CalendarId, t.SyncSequence });
+        modelBuilder.Entity<CalendarTombstone>().HasOne<Calendar>().WithMany().HasForeignKey(t => t.CalendarId).OnDelete(DeleteBehavior.Cascade);
+
+        // No edge to calendars nor to calendar_events, and no FK in the schema either (décision 2):
+        // deleting a calendar would cascade away the archive that very deletion just wrote.
+        modelBuilder.Entity<CalendarRevision>().HasKey(r => r.Id);
+        modelBuilder.Entity<CalendarRevision>().Property(r => r.Id).ValueGeneratedOnAdd();
+        modelBuilder.Entity<CalendarRevision>().HasIndex(r => new { r.UserId, r.ReplacedAt });
+        modelBuilder.Entity<CalendarRevision>().HasIndex(r => r.ReplacedAt);
+        modelBuilder.Entity<CalendarRevision>().HasIndex(r => new { r.CalendarId, r.Uid });
+        modelBuilder.Entity<CalendarRevision>().HasOne<WebmailUser>().WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CalendarRevision>()
+            .Property(r => r.Cause)
+            .HasConversion(v => v.ToString().ToLowerInvariant(), v => Enum.Parse<RevisionCause>(v, true))
+            .HasMaxLength(8);
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
@@ -182,4 +217,16 @@ public class PreferencesDbContext : DbContext
     public DbSet<ContactTombstone> ContactTombstones { get; set; }
 
     public DbSet<ContactRevision> ContactRevisions { get; set; }
+
+    public DbSet<Calendar> Calendars { get; set; }
+
+    public DbSet<CalendarEvent> CalendarEvents { get; set; }
+
+    public DbSet<CalendarAttendee> CalendarAttendees { get; set; }
+
+    public DbSet<CalendarSyncState> CalendarSyncStates { get; set; }
+
+    public DbSet<CalendarTombstone> CalendarTombstones { get; set; }
+
+    public DbSet<CalendarRevision> CalendarRevisions { get; set; }
 }

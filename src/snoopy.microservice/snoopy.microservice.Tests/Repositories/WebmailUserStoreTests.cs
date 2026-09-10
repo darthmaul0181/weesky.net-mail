@@ -1,4 +1,4 @@
-using weesky.Snoopy.Microservice.Authentication.CardDav;
+using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -199,7 +199,7 @@ public sealed class WebmailUserStoreTests
         var db = nameof(RotateSecurityStamp_ForgetsTheCachedSynchronisationIdentity);
         var cache = new DavAuthenticationCache(Clock);
         var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
-        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true),
+        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true, true),
             cache.Generation("mick@weesky.be"));
 
         await CreateStore(db, cache).RotateSecurityStampAsync("  Mick@WEESKY.be ", CancellationToken.None);
@@ -215,7 +215,7 @@ public sealed class WebmailUserStoreTests
         var db = nameof(DeleteByEmail_ForgetsTheCachedSynchronisationIdentity);
         var cache = new DavAuthenticationCache(Clock);
         var account = await CreateStore(db, cache).RegisterLoginAsync("mick@weesky.be", CancellationToken.None);
-        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true),
+        cache.Store("mick@weesky.be", "fingerprint", new DavIdentity(account.Id, true, true),
             cache.Generation("mick@weesky.be"));
 
         await CreateStore(db, cache).DeleteByEmailAsync("  Mick@WEESKY.be ", CancellationToken.None);

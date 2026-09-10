@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+<D:set>
+<D:prop>
+<C:calendar-timezone>
+BEGIN:VCALENDAR
+CALSCALE:GREGORIAN
+PRODID:-//weesky.net//caldavtester harness//EN
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:UTC
+BEGIN:STANDARD
+DTSTART:19700101T000000
+TZOFFSETFROM:+0000
+TZOFFSETTO:+0000
+TZNAME:UTC
+END:STANDARD
+END:VTIMEZONE
+END:VCALENDAR
+</C:calendar-timezone>
+</D:prop>
+</D:set>
+</D:propertyupdate>

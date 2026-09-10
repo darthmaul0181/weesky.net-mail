@@ -6,9 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using weesky.Snoopy.Microservice.Data.Preferences;
-using weesky.Snoopy.Microservice.Models.Contacts;
+using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -42,7 +42,7 @@ public sealed class CardDavNoFiveHundredTests : IAsyncLifetime
     [InlineData(DavWriteStatus.UnsupportedVersion, 403, "supported-address-data")]
     [InlineData(DavWriteStatus.UidConflict, 403, "no-uid-conflict")]
     [InlineData(DavWriteStatus.TooLarge, 403, "max-resource-size")]
-    [InlineData(DavWriteStatus.BookFull, 507, null)]
+    [InlineData(DavWriteStatus.CollectionFull, 507, null)]
     [InlineData(DavWriteStatus.Busy, 503, null)]
     [InlineData(DavWriteStatus.AlreadyExists, 412, null)]
     [InlineData(DavWriteStatus.NotFound, 404, null)]

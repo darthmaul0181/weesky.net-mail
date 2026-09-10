@@ -1374,7 +1374,7 @@ pour qu'un déploiement sans les routes `/dav` n'affiche pas un onglet mort.
 ```
 *        /.well-known/carddav                    301 → /dav/ · anonyme · toute méthode
 PROPFIND /                                       current-user-principal (l'hôte nu saisi tel quel)
-OPTIONS  /dav/…                                  DAV: 1, 3, access-control, addressbook · Allow
+OPTIONS  /dav/…                                  DAV: 1, 3, addressbook · Allow   (access-control retiré, seconde revue P1)
 PROPFIND /dav/                                   current-user-principal
 PROPFIND /dav/principals/{userId}/               addressbook-home-set, principal-URL
 REPORT   /dav/principals/{userId}/               expand-property (décision 13)

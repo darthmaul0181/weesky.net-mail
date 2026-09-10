@@ -1,17 +1,19 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using weesky.Snoopy.Microservice.Services.CardDav;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
 /// <summary>
-/// RFC 6764 § 6 discovery. Anonymous as a whole, and bound to no verb at all: DAVx⁵ and
-/// Thunderbird open discovery with a PROPFIND here, not a GET, and a redirect reserved for GET
-/// hands them a 405 on the very first gesture. Hidden from the API explorer for the reason
+/// RFC 6764 § 6 discovery, both well-knowns on the one action: the two templates combine on it,
+/// and the answer is the same address either way. Anonymous as a whole, and bound to no verb at
+/// all: DAVx⁵ and Thunderbird open discovery with a PROPFIND here, not a GET, and a redirect
+/// reserved for GET hands them a 405 on the very first gesture. Hidden from the API explorer for the reason
 /// <see cref="CardDavController"/> is — Swashbuckle has no operation type for a verbless action.
 /// </summary>
 [AllowAnonymous]
 [Route(".well-known/carddav")]
+[Route(".well-known/caldav")]
 [ApiExplorerSettings(IgnoreApi = true)]
 public sealed class WellKnownController : ControllerBase
 {

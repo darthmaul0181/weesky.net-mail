@@ -412,6 +412,8 @@
   "sync": {
     "carddav": "Contacts (CardDAV)",
     "carddavHint": "Sync your address book with your phone or Thunderbird. Turning this off stops every device; your password is kept.",
+    "caldav": "Calendar (CalDAV)",
+    "caldavHint": "Sync your calendars with your phone or Thunderbird. Turning this off stops every device; your password is kept.",
     "connection": "Connection",
     "serverUrl": "Server URL",
     "username": "Username",
@@ -425,7 +427,7 @@
     "regenerateTitle": "Regenerate the sync password?",
     "regenerateWarning": "Every device will stop syncing until you enter the new password. Turn syncing off on your devices first, then enter the new one — repeated failures lock the account out for fifteen minutes.",
     "hidden": "Hidden — regenerate to get a new one",
-    "notConfigured": "Turn Contacts (CardDAV) on to get a password",
+    "notConfigured": "Turn Contacts (CardDAV) or Calendar (CalDAV) on to get a password",
     "loadFailed": "Could not load the sync settings",
     "unavailable": "This server does not offer synchronisation.",
     "saveFailed": "Could not save the change"

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 using weesky.Snoopy.Microservice.Services.Contacts;
+using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Services.CardDav;
 

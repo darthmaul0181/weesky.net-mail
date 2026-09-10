@@ -8,7 +8,7 @@ namespace weesky.Snoopy.Microservice.Data.Preferences;
 /// keyed otherwise would accept a second row nothing in this code creates — until a restore put
 /// one there.
 ///
-/// Absent row means never enabled; <see cref="CardDavEnabled"/> false means switched off but still
+/// Absent row means never enabled; a switch false means that service switched off but still
 /// configured, which is a different answer at the edge (403, never 401) and a different gesture on
 /// screen. The secret itself is never stored — only the salted digest of it.
 /// </summary>
@@ -18,9 +18,14 @@ public sealed class DavCredential
     [Column("user_id")]
     public Guid UserId { get; set; }
 
-    /// <summary>Per protocol, not per secret: CalDAV gets a column of its own, never a migration.</summary>
+    /// <summary>Per protocol, not per secret: one column each, never a migration.</summary>
     [Column("carddav_enabled")]
     public bool CardDavEnabled { get; set; } = true;
+
+    /// <summary>Born false on every row that predates 5c: the row already exists for accounts that
+    /// asked for nothing here.</summary>
+    [Column("caldav_enabled")]
+    public bool CalDavEnabled { get; set; }
 
     /// <summary>Lower-case hexadecimal SHA-256 of <c>salt ‖ UTF8(secret)</c>. 64 characters.</summary>
     [Column("secret_hash")]

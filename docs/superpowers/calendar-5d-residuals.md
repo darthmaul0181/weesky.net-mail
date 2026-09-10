@@ -1,0 +1,90 @@
+# Agenda 5d — ce que la tranche laisse derrière elle
+
+Le tri de fin de tranche, sur le modèle de `calendar-5c-residuals.md` (et de `calendar-5a-` /
+`calendar-5b-residuals.md` avant lui) : ce que la campagne de conformité a mesuré et n'a pas corrigé,
+ce que le triage de l'outil a trouvé et classé plutôt que corrigé, ce que les tests n'ont pas pu
+couvrir, et ce dont 5e hérite. Il existe pour que la tranche suivante n'ait pas à redécouvrir à ses
+frais ce qui a déjà coûté une mesure ou un arbitrage.
+
+Rappel de périmètre : 5d touche au serveur en deux temps, et mesure le reste. La **tâche zéro**
+(spec § 3, points 2, 6 et 7) est déployée **avant** la première mesure et change quatre réponses :
+un `supported-calendar-component-set` vide refuse désormais la création, le `Cache-Control:
+no-cache` est posé sur les refus de `MKCALENDAR`/`MKCOL` et plus seulement sur le `201`, et les
+refus de `resourcetype` et de `calendar-timezone` d'un `MKCOL` étendu sortent en
+`DAV:mkcol-response` à `propstat` plutôt qu'en `403` + `<D:error>` nu. Vient ensuite la vague de
+correctifs du rapport [`calendar-5d-conformance.md`](calendar-5d-conformance.md). Tout le reste est
+mesure, contre l'outil et contre des clients réels, de ce que 5a à 5c ont construit.
+
+## Ce qu'un client peut rencontrer, et qui n'est pas corrigé
+
+| Point | Où | Ce que ça donne, et pourquoi c'est resté |
+|---|---|---|
+| **`COPY` / `MOVE` en `405`** | `DavControllerBase` / `CalDavController` | RFC 4918 § 9.8 et § 9.9 en font un MUST sous le jeton `calendar-access` annoncé par `DavHeaders.ComplianceClasses`. Coûte rien aux trois clients visés (DAVx⁵, Agenda Samsung, Thunderbird n'écrivent ni l'un ni l'autre), tout à un outil WebDAV générique. Différée à 5e. |
+| **`limit-recurrence-set` / `limit-freebusy-set` non lus** | rapports CalDAV (`CalendarQueryReport`, `FreeBusyQueryReport`) | RFC 4791 § 9.6.6 et § 9.6.7. Aucun client visé ne les envoie. Différée à 5e. |
+| **`time-range` d'un `VALARM` fermé à cinq ans, `free-busy-query` qui refuse une borne absente, fenêtre à deux bornes de plus de cinq ans refusée** | `OccurrenceExpander`, `FreeBusyQueryReport` | RFC 4791 § 9.9 et § 7.10. Aucun client visé ne l'exerce. Résidu propre à 5d. |
+| **Une exception de la bibliothèque, dans la marche, devient « aucune occurrence »** | `Services/Calendar/OccurrenceExpander.cs`, `Expansion.Run` | Le `catch (Exception) { return []; }` qui borde la marche rend une **mauvaise réponse plutôt qu'une erreur** : la ressource sort du `207` sans que rien, ni le client ni les journaux, ne le dise. Cas déclencheur mesuré en 5d : une marche ouverte sur `DateTime.MinValue` fait lever `ArgumentOutOfRangeException: un-representable DateTime` à Ical.Net 5.2.3 sur toute série récurrente — corrigé en amont (la tâche 7 pose un plancher pris du fichier lui-même), mais **la classe de panne reste** pour toute autre entrée que la bibliothèque refuse. Les deux sorties évidentes sont fermées : resserrer le `catch` sur une liste de types ferait remonter le premier type non prévu en `500` sur la surface DAV, que `CalDavNoFiveHundredTests` interdit, et journaliser sur place contredit le contrat écrit de la classe (« pure, static and total … the store is the layer that has a logger »). Le vrai correctif est un joint de journalisation au niveau du magasin, qui tient déjà un `ILogger`. Différé à 5e. |
+| **Le plafond d'occurrences peut tronquer une marche narrowée à un composant** | `Services/Calendar/OccurrenceExpander.cs`, `Expansion.Cap` | Depuis la tâche 7, une borne de début absente fait partir la marche du premier instant du **fichier** au lieu de `fin − 5 ans`. Un `time-range` accompagné d'un `prop-filter` narrowe la marche à un composant, donc elle ne peut plus s'arrêter à la première instance trouvée et parcourt la fenêtre entière, bornée à `CapFor` (60 001). Cas déclencheur : une série **à la fois très dense et très ancienne** — horaire depuis 1990, disons — avec une borne de début absente et un `prop-filter` : le plafond est épuisé avant que la marche n'atteigne l'instance cherchée, là où l'ancienne fenêtre refermée à cinq ans l'aurait trouvée. Réponse incomplète, jamais fausse au point d'inventer, jamais un `500`, et bornée. C'est la contrepartie du « le plafond croît avec la fenêtre » déjà écrit dans le code, mais elle est neuve et aucun client visé ne la produit. **Portée réduite par la ronde finale** : le `prop-filter` est désormais évalué avant la marche et celle-ci s'arrête à la première instance du composant narrowé, si bien qu'il ne reste que le cas d'une **surcharge posée au-delà du plafond** — la série ordinaire ne l'atteint plus. |
+| **Les deux premiers jours de l'an 1 sont hors d'atteinte de la marche** | `Services/Calendar/OccurrenceExpander.cs`, `FloorOf` | Ical.Net 5.2.3 lève « un-representable DateTime » sur une marche ouverte à `DateTime.MinValue` : mesuré, un plancher à `min+0d` et `min+1d` jette, `min+2d` marche. `FloorOf` garde donc deux marges au-dessus du plancher du type — la sienne et celle que `Periods` ajoute — ce qui met les instances des deux premiers jours de l'an 1 hors de portée d'une borne de début absente. Limite du moteur, pas choix de conception, et antérieure à 5d : aucune fenêtre représentable ne les atteignait déjà. Cas déclencheur : un `DTSTART:00010101` (ou `00010102`) et un `time-range` sans `start`. Aucun agenda réel ne l'écrit ; épinglé à l'envers par `AnAbsentStart_OnAFileAtTheEdgeOfTime_StillWalks`, qui tient le fait que la ressource répond quand même. |
+| **L'asymétrie du `remove` de `CalendarPropertyUpdate.Judge`** | `Services/CalDav/CalendarPropertyUpdate.cs` | Seule `calendar-description` accepte l'effacement (`DAV:remove` → `200`) ; les quatre autres propriétés inscriptibles (`displayname`, `calendar-color`, `calendar-order`, `calendar-timezone`) répondent `403`, comme pour toute propriété non écrivable. Un `remove` d'une `calendar-description` jamais renseignée répond aussi `200` — `Judge` ne consulte pas l'état stocké, il accepte l'effacement de la description sans condition. Aucun test de l'outil n'atteint cette branche (`proppatch.xml` ne pose jamais deux `remove` de suite sur la même propriété, et aucun client visé n'envoie de `DAV:remove` sur un agenda). |
+| **Le refus § 15 d'un `DAV:remove` dépend de l'arbre — assumé, pas corrigé** | `Services/CalDav/CalendarPropertyValue.cs` (`Protected`), `Controllers/Dav/DavControllerBase.cs` | `Protected` (RFC 4918 § 15 : `getetag`, `getcontentlength`, `getcontenttype`, `getlastmodified`, `creationdate`, `lockdiscovery`, `supportedlock`) n'est consultée que par l'agenda — `CalendarPropertyUpdate.Judge` à la suppression, `MkCalendarRequest` à la création. Le chemin de refus partagé (`DavControllerBase.ProppatchAsync`, qui sert le carnet, le home d'agendas et le principal) ne juge que sur la table que `Resolve` sert, où aucune des sept ne figure. **Cas déclencheur** : un `DAV:remove` de `supportedlock` (ou de n'importe laquelle des six autres) répond `403 Forbidden` sur un agenda et `200 OK` sur le carnet, sur le home d'agendas et sur le principal — mesuré sur le carnet et sur le home ; même forme que l'asymétrie `{calendarserver}getctag` corrigée par cette tâche, mais celle-ci est un choix ouvert, pas une fuite. **Les deux lectures** : § 14.23 (« supprimer ce qui n'existe pas n'est pas une erreur ») plaide pour `200` sur les trois arbres qui ne servent jamais ces propriétés ; § 15 (protégées dans l'absolu, quel que soit ce que sert la ressource) plaide pour `403` partout. Non tranché ici à dessein : redessiner la frontière du chemin partagé en toute fin de vague, sur un seul cas mesuré nulle part, risquait une cicatrice tardive sur une surface qui vient d'être rendue propre. |
+| **Un `TZID` que seul le fichier définit dé-juge la ressource entière** (`CheckOverrides`, `IcsGuards.cs`) | `Services/Calendar/IcsGuards.cs` | La garde des `RECURRENCE-ID` ne juge que ce qu'elle peut marcher : une ressource portant un fuseau du **troisième palier** — un `TZID` qu'aucune base ne résout et que seul le `VTIMEZONE` du fichier définit — est marchée en heure flottante, donc dans un repère que ses instants ne partagent plus avec une surcharge en forme `Z`. Elle n'est donc pas jugée du tout. **Le coût est plus large que sa cause** : `IcsTimeZones.Expandable` inspecte `DTSTART`, `DTEND`, `RECURRENCE-ID`, `RDATE` et `EXDATE` de **tous** les composants, si bien qu'un tel `TZID` posé sur le seul `DTEND` de la surcharge — un champ que cette garde ne lit jamais — suffit à dé-juger la maîtresse avec. Cas déclencheur : une série hebdomadaire ordinaire en UTC, un `RECURRENCE-ID` fautif, et un `DTEND;TZID="Canberra, Melbourne, Sydney"` sur la surcharge : acceptée. C'est une sur-acceptation assumée, jamais un faux refus — la règle de la tâche est « ne refuser que ce qu'un MUST nomme, et sur le doute, accepter ». |
+| **`IcsProjector.Earliest` ignore un `RDATE;VALUE=PERIOD`** | `Services/Calendar/IcsProjector.cs:117` | Le projecteur calcule le premier instant d'une ressource sans regarder les périodes de récurrence, là où le plancher de la marche les lit depuis la tâche 7. Cas déclencheur mesuré par la revue finale : une série **sans fin** portant un `RDATE;VALUE=PERIOD` **antérieur** à son `DTSTART` — `CalendarQueryFilter.Matches` répond `True`, mais la ligne est écartée de la présélection et la ressource sort du `207` sans un mot. C'est la classe de F1, sur un lecteur que la vague n'a pas touché : **préexistant, vivant, et silencieux**. À corriger en 5e avec les quatre autres lecteurs aveugles aux périodes que la ronde finale a nommés sans y toucher. |
+| **`IcsResources.Dates` perd un `VTIMEZONE` que seule une période cite** | `Services/Calendar/IcsResources.cs:57` | Le découpage d'un import en ressources ne rattache pas un bloc `VTIMEZONE` dont le seul référent est un `RDATE;VALUE=PERIOD`. La ressource découpée porte alors un `TZID` que plus aucun bloc ne définit. **Portée réduite depuis l'assouplissement de `IcsGuards.CheckZones`** : la garde n'exige plus qu'un `VTIMEZONE` du fichier définisse le `TZID`, elle ne refuse que celui que **rien** ne résout — un identifiant que notre propre base connaît (IANA, ou un nom Windows via la table CLDR) est accepté sans bloc, c'est-à-dire le fuseau **par référence** de la RFC 7809, la forme qu'un export macOS Calendar produit réellement (`DTSTART;TZID=America/Los_Angeles` sans le moindre bloc). Le faux refus ne subsiste donc que pour un fuseau du **troisième palier**, celui qu'aucune base ne connaît et que seul le fichier définissait : le bloc perdu le rend illisible pour de bon, et il est refusé. Classe de F3, mesurée par la revue finale. Aucun client visé n'exporte cette forme ; un import de fichier composite le pourrait. |
+| **Le plafond de densité tronque la fenêtre de la garde des surcharges** | `Services/Calendar/IcsGuards.cs`, `InstanceInstants` | La marche s'arrête à `MaxInstancesPerYear` (10 000) instances. Si elle n'a pas dépassé la dernière surcharge avant ce plafond, l'ensemble est incomplet et **rien n'est jugé** : un identifiant que la fenêtre n'a jamais atteint n'est pas un identifiant que cette garde peut déclarer absent. Cas déclencheur : une règle quotidienne (10 000 instances ≈ 27 ans) et une surcharge au-delà — `RECURRENCE-ID` fautif accepté. Élargir la fenêtre coûterait la marche que le plafond existe pour borner ; l'alternative — refuser dans le doute — est exactement ce que la règle interdit. |
+| **Un `CALDAV:timezone` dont le `TZID` n'est connu ni de TZDB ni de la table Windows est refusé** | `Services/CalDav/CalendarRequestTimeZone.cs`, `CalendarPropertyValue.Zone` | Depuis la tâche 8, le `<C:timezone>` d'un `calendar-query` est lu et prime sur `calendar-timezone` (RFC 4791 § 9.8). Le bloc est jugé par le même juge que la propriété : son `TZID` doit se résoudre en identifiant IANA, sinon `403 valid-calendar-data` — alors que § 9.8 ne demande qu'un objet iCalendar bien formé à un seul `VTIMEZONE`, et que le bloc porte ses propres observances. Cas déclencheurs : un `TZID` préfixé à la libical (`/freeassociation.sourceforge.net/Europe/Brussels`) ou à la Mozilla (`/mozilla.org/20070129_1/Europe/Brussels`), ou un fuseau maison (`TZID:Bureau`). Refus honnête plutôt que jour silencieusement faux, et cohérent avec l'écriture (`MKCALENDAR`/`PROPPATCH` refusent le même corps). Lire les observances du bloc lui-même — le troisième palier, `IcsTimeZones.OffsetOf` — supposerait de faire passer une abstraction de fuseau dans `Span` et dans l'expansion : une tâche à part. L'élargissement le moins cher, le jour où un client visé l'exigera : dépouiller les préfixes libical/Mozilla dans `IcsTimeZones.ResolveIana` avant la recherche TZDB. |
+| **Une contre-oblique brute dans un `UID` ou un `PRODID` est refusée** | `Services/Calendar/IcsGuards.cs`, `CheckTextEscapes` | Depuis la tâche 3, la garde des échappements (RFC 5545 § 3.3.11 : une contre-oblique n'introduit que `\\`, `\;`, `\,`, `\n` ou `\N`) juge toutes les propriétés de type TEXT, et `UID` (§ 3.8.4.7) comme `PRODID` (§ 3.7.3) en sont. Conséquence assumée, et c'est le seul **refus** parmi les coûts nommés de la vague : un exportateur exotique qui écrit un identifiant contenant une contre-oblique nue — `UID:dossier\2026\réunion`, disons — est refusé en `403 valid-calendar-data` à la porte CalDAV **et** à l'import `.ics` du webmail, là où 5c l'acceptait. Une règle, deux portes : restreindre la garde à la seule porte DAV ferait stocker par l'import ce que notre propre surface refuse. Le message nomme la propriété fautive. |
+| **Un `RECURRENCE-ID` d'un autre type de valeur que le `DTSTART` de sa maîtresse n'est pas jugé** | `Services/Calendar/IcsGuards.cs`, `CheckOverrides` | Reprise de `IcsComposer.IsAt` : une date et un horodatage ne se comparent pas, et la garde passe son tour (`at.HasTime != master.DtStart.HasTime`). Cas déclencheurs : une maîtresse tout-journée (`DTSTART;VALUE=DATE`) surchargée par un `RECURRENCE-ID:20260914T090000Z`, et le miroir, une maîtresse horaire surchargée par un `RECURRENCE-ID;VALUE=DATE:20260914`. Les deux sont acceptés sans examen. |
+
+## Dette de forme
+
+À compléter à la clôture, sur la base du triage de l'outil (section 2 du rapport) et de la revue des
+correctifs de la vague.
+
+## Ce que les tests n'ont pas couvert
+
+À compléter à la clôture, sur la base du triage de l'outil et des scénarios clients réels non
+joués ou non applicables.
+
+## L'outil de mesure n'a pas de contrepoids, et litmus n'en est pas un
+
+**La question, posée pendant la clôture** : notre seul juge est `ccs-caldavtester`, écrit par Apple
+pour tester **son propre** serveur. Ses attentes mélangent donc ce que la norme exige et ce que
+CalendarServer a choisi de faire, sans les distinguer — sur 212 échecs du passage initial, 59 étaient
+des défauts de l'outil, c'est-à-dire des tests qu'aucun serveur conforme ne peut passer. Existe-t-il
+un équivalent qui suive la norme plutôt qu'une implémentation ?
+
+**Pour la couche CalDAV : non.** `ccs-caldavtester` est seul sur ce créneau, et il est **archivé
+depuis février 2024** (dernier commit amont `bed21e59`, « Archival message »). Les autres serveurs du
+domaine s'y confrontent tous, faute de mieux.
+
+**Pour la couche WebDAV en dessous : `litmus` existe** — la suite de conformité historique du
+protocole, écrite indépendamment de tout éditeur, **toujours maintenue** par Joe Orton (l'auteur de
+neon) sur `github.com/notroj/litmus`, et à jour au point d'embarquer un test pour une faille de 2026.
+
+**Évalué le 2026-09-09, et écarté.** Ce n'est pas une question de coût d'installation (C, chaîne
+autotools, donc WSL ou conteneur sur nos postes Windows) : c'est que **litmus teste un serveur de
+fichiers génériques** et que nous servons un **magasin typé**.
+
+| Ce que litmus exerce | Ce que ça donne ici |
+|---|---|
+| déposer un contenu quelconque à un chemin quelconque, le relire et **comparer octet par octet** | `IcsGuards` refuse tout ce qui n'est pas de l'iCalendar — l'échec tombe à la **première étape**, et tout le reste en cascade |
+| `COPY` / `MOVE` | `405` : c'est notre non-conformité nº 1, déjà écrite et déjà arbitrée |
+| verrouillage | non implémenté, et **non annoncé** (`DavHeaders.ComplianceClasses` porte `1, 3`, pas `2`) |
+| propriétés | la suite crée d'abord sa ressource par un dépôt, donc bute sur la première ligne |
+
+Reste exploitable : les vérifications sur l'en-tête d'annonce des capacités. Une poignée, pour
+lesquelles un test chez nous coûte moins cher que d'installer l'outil.
+
+**Ce qui tient lieu de contrepoids, et qu'il faut savoir avant de rouvrir la question** : le triage
+de 5d n'a pas pris les verdicts de l'outil pour argent comptant. Les 212 échecs ont été jugés **un
+par un contre le texte des RFC**, article cité à chaque fois, et c'est ce qui a produit les quatre
+catégories du rapport. Le filtre « norme » que ni Apple ni litmus ne donnent a donc été fabriqué à la
+main, une fois, et il est écrit.
+
+**Quand rouvrir** : le jour où le serveur exposerait une collection acceptant du contenu libre, ou
+implémenterait `COPY`/`MOVE` (différés à 5e) — litmus redeviendrait alors un juge indépendant utile
+sur cette couche-là.
+
+## Ce dont 5e hérite
+
+À compléter à la clôture.
