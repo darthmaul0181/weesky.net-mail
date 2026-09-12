@@ -362,11 +362,15 @@ internal sealed class CalendarEventStore(
         if (eventIds.Count == 0 || ownAddresses.Count == 0) return new Dictionary<Guid, string>();
         var mine = ownAddresses.Select(a => a.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
         var lines = await context.CalendarAttendees.AsNoTracking()
-            .Where(a => eventIds.Contains(a.EventId) && a.RecurrenceId == null && !a.IsOrganizer && a.PartStat != null)
-            .Join(context.CalendarEvents, a => a.EventId, e => e.Id, (a, e) => new { a.EventId, a.Email, a.PartStat, e.UserId })
+            .Where(a => eventIds.Contains(a.EventId) && a.RecurrenceId == null && (a.IsOrganizer || a.PartStat != null))
+            .Join(context.CalendarEvents, a => a.EventId, e => e.Id, (a, e) => new { a.EventId, a.Email, a.PartStat, a.IsOrganizer, e.UserId })
             .Where(x => x.UserId == userId)
             .ToListAsync(cancellationToken);
-        return lines.Where(l => mine.Contains(l.Email.Trim().ToLowerInvariant()))
+        // An answer is only an answer to someone else's invitation: the organizer's own guest line
+        // (Google and Apple write one) says nothing about their availability.
+        var own = lines.Where(l => mine.Contains(l.Email.Trim().ToLowerInvariant())).ToList();
+        var organized = own.Where(l => l.IsOrganizer).Select(l => l.EventId).ToHashSet();
+        return own.Where(l => !l.IsOrganizer && !organized.Contains(l.EventId))
             .GroupBy(l => l.EventId)
             .ToDictionary(g => g.Key, g => g.First().PartStat!);
     }

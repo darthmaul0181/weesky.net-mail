@@ -708,4 +708,23 @@ public sealed class CalendarEventStoreTests
         Assert.Empty(await store.OwnPartStatsAsync(Guid.NewGuid(), [mine], ["alice@weesky.be"], CancellationToken.None));
         Assert.Empty(await store.OwnPartStatsAsync(user, [], ["alice@weesky.be"], CancellationToken.None));
     }
+
+    /// <summary>Google and Apple list the organizer among the guests, ACCEPTED: that line is not
+    /// an answer to an invitation, and reading it as one would let it outrank the STATUS the
+    /// user chose for their own event.</summary>
+    [Fact]
+    public async Task OwnPartStats_SaysNothing_WhenTheUserIsTheOrganizer()
+    {
+        var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var store = CalendarStoreTestFactory.Events(db);
+        var own = (await store.CreateAsync(user, CalendarStoreTestFactory.Write(calendar, summary: "Réunion"), CancellationToken.None)).Value;
+        var context = new PreferencesTestDbContext(db);
+        context.CalendarAttendees.AddRange(
+            new CalendarAttendee { EventId = own, Position = 0, Email = "Alice@Weesky.net", IsOrganizer = true },
+            new CalendarAttendee { EventId = own, Position = 1, Email = "alice@weesky.be", PartStat = "ACCEPTED" },
+            new CalendarAttendee { EventId = own, Position = 2, Email = "marc@example.org", PartStat = "TENTATIVE" });
+        await context.SaveChangesAsync();
+
+        Assert.Empty(await store.OwnPartStatsAsync(user, [own], ["alice@weesky.be", "alice@weesky.net"], CancellationToken.None));
+    }
 }
