@@ -316,7 +316,6 @@ export default function EventEditor({
                         <span className="editor-organizer" title={t('editor.organizer')} />
                       )}
                       <span>{one.name || one.email}</span>
-                      {one.partStat && <span className="editor-partstat">{one.partStat}</span>}
                     </span>
                   ))}
                   <span className="editor-hint">{t('editor.attendeesReadOnly')}</span>

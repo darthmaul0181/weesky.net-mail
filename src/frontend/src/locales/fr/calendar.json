@@ -50,7 +50,8 @@
     "delete": "Supprimer",
     "close": "Fermer",
     "reminderSet": "Rappel activé",
-    "repeatsGeneric": "Se répète"
+    "repeatsGeneric": "Se répète",
+    "organizedBy": "Organisé par {{name}}"
   },
   "search": {
     "capped": "Seuls les {{max}} premiers résultats sont affichés"

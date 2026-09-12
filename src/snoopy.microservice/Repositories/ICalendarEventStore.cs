@@ -46,6 +46,10 @@ public interface ICalendarEventStore
     Task<IReadOnlyList<EventOccurrence>> SearchAsync(
         Guid userId, string text, CancellationToken cancellationToken);
 
+    /// <summary>Every event of the user carrying this UID, the default calendar's first, then the
+    /// sidebar's order — a UID is unique per calendar, not per user (RFC 4791 § 4.1).</summary>
+    Task<IReadOnlyList<StoredEventRef>> FindByUidAsync(Guid userId, string uid, CancellationToken cancellationToken);
+
     /// <summary>
     /// One file in, grouped by UID into resources (fonctionnalité 6). An existing UID is replaced
     /// whole and its previous bytes archived; VTODO and VJOURNAL are counted, never stored.

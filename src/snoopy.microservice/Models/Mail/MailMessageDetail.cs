@@ -65,4 +65,11 @@ public sealed class MailMessageDetail
     public bool Truncated { get; set; }
 
     public List<MailAttachmentInfo> Attachments { get; set; } = new();
+
+    /// <summary>Filled when the message carries a REQUEST or CANCEL calendar part (spec 5e, décision 1).</summary>
+    public MailInvitation? Invitation { get; set; }
+
+    /// <summary>Transport only: the part the reader fills <see cref="Invitation"/> from.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public MailCalendarPart? CalendarPart { get; set; }
 }

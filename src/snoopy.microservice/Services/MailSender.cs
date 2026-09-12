@@ -15,8 +15,7 @@ internal sealed class MailSender(
     IOutgoingMessageFactory factory,
     IStagedAttachmentStore staged,
     ISmtpConnectionFactory smtpFactory,
-    IMailFolderRepository folders,
-    IFolderRoleStore roles,
+    IRoleFolderLocator locator,
     IMailMessageRepository messages,
     ILogger<MailSender> logger) : IMailSender
 {
@@ -25,12 +24,23 @@ internal sealed class MailSender(
     {
         if (user == null) throw new ArgumentNullException(nameof(user));
 
-        var userId = user.WebmailUid;
         var stagedScope = connection.StagedScope(user);
 
         var built = await factory.CreateAsync(user, connection, request, cancellationToken);
         if (built.IsFailure) return Result.Failure<SendMessageResult>(built.Error);
-        var message = built.Value;
+
+        var sent = await SendBuiltAsync(user, connection, built.Value, cancellationToken);
+        if (sent.IsFailure) return sent;
+
+        foreach (var id in request.AttachmentIds) staged.Delete(stagedScope, id);
+
+        return sent;
+    }
+
+    public async Task<Result<SendMessageResult>> SendBuiltAsync(
+        User user, MailAccountConnection connection, MimeMessage message, CancellationToken cancellationToken)
+    {
+        if (user == null) throw new ArgumentNullException(nameof(user));
 
         var smtp = await smtpFactory.OpenAsync(connection, cancellationToken);
         if (smtp.IsFailure) return Result.Failure<SendMessageResult>(smtp.Error);
@@ -40,28 +50,21 @@ internal sealed class MailSender(
             if (sent.IsFailure) return Result.Failure<SendMessageResult>(sent.Error);
         }
 
-        var appended = await AppendToSentAsync(user, connection, userId, message, cancellationToken);
-
-        foreach (var id in request.AttachmentIds) staged.Delete(stagedScope, id);
+        var appended = await AppendToSentAsync(user, connection, message, cancellationToken);
 
         return Result.Success(new SendMessageResult(appended));
     }
 
     /// <summary>Best-effort by design: the mail is already gone, so every failure degrades to false.</summary>
     private async Task<bool> AppendToSentAsync(
-        User user, MailAccountConnection connection, Guid userId, MimeMessage message, CancellationToken cancellationToken)
+        User user, MailAccountConnection connection, MimeMessage message, CancellationToken cancellationToken)
     {
         try
         {
-            var tree = await folders.GetTreeAsync(user, connection, cancellationToken);
-            if (tree.IsFailure) { logger.LogWarning("No Sent copy: folder tree unavailable"); return false; }
+            var sent = await locator.FindAsync(user, connection, "sent", cancellationToken);
+            if (sent is null) { logger.LogWarning("No Sent copy: no folder holds the sent role"); return false; }
 
-            var overrides = await roles.GetAsync(userId, connection.StorageAccountId, cancellationToken);
-            var sent = FolderRoleResolver.Resolve(tree.Value, overrides).Roles
-                .FirstOrDefault(r => r.Role == "sent" && r.FolderPath != null);
-            if (sent == null) { logger.LogWarning("No Sent copy: no folder holds the sent role"); return false; }
-
-            var appended = await messages.AppendAsync(user, connection, sent.FolderPath!, message, seen: true, cancellationToken);
+            var appended = await messages.AppendAsync(user, connection, sent, message, seen: true, cancellationToken);
             if (appended.IsFailure) logger.LogWarning("No Sent copy: {Error}", appended.Error);
             return appended.IsSuccess;
         }
@@ -69,7 +72,7 @@ internal sealed class MailSender(
         {
             // The mail is already sent; a raw throw here (e.g. preferences DB down) must never
             // fail the request, or the user resends and duplicates it.
-            logger.LogError(ex, "No Sent copy: filing the sent message threw for {UserId}", userId);
+            logger.LogError(ex, "No Sent copy: filing the sent message threw for {UserId}", user.WebmailUid);
             return false;
         }
     }

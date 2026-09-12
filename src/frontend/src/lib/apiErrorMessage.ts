@@ -34,6 +34,18 @@ const CODES = {
   address_too_long: 'errors:addressTooLong',
   password_required: 'errors:passwordRequired',
   password_too_long: 'errors:passwordTooLong',
+  invitation_stale: 'errors:invitationStale',
+  invitation_not_addressed: 'errors:invitationNotAddressed',
+  invitation_occurrence_only: 'errors:invitationOccurrenceOnly',
+  invitation_incompatible_answer: 'errors:invitationIncompatibleAnswer',
+  invitation_not_in_calendar: 'errors:invitationNotInCalendar',
+  invitation_unknown_answer: 'errors:invitationUnknownAnswer',
+  invitation_unreadable: 'errors:invitationUnreadable',
+  invitation_too_large: 'errors:invitationTooLarge',
+  invitation_no_calendar: 'errors:invitationNoCalendar',
+  calendar_conflict: 'errors:calendarConflict',
+  calendar_busy: 'errors:calendarBusy',
+  calendar_refused: 'errors:calendarRefused',
 } as const
 
 export function apiErrorMessage(error: unknown, fallback: string): string {

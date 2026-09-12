@@ -16,4 +16,9 @@ public sealed class MailAttachmentContent
 
     public string FileName { get; set; } = "attachment";
     public string ContentType { get; set; } = "application/octet-stream";
+
+    /// <summary>The part's <c>charset</c> parameter, null when it names none. A caller reading the
+    /// bytes as text needs it: the bare MIME type above does not carry it, and guessing UTF-8 turns
+    /// an <c>iso-8859-1</c> invitation into mojibake.</summary>
+    public string? Charset { get; set; }
 }

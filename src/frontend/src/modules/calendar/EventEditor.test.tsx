@@ -216,6 +216,7 @@ describe('EventEditor', () => {
     expect(screen.getByText('Boss')).toBeInTheDocument()
     expect(screen.getByText('me@weesky.be')).toBeInTheDocument()
     expect(screen.getByText('Read only until invitations are supported')).toBeInTheDocument()
+    expect(screen.queryByText('ACCEPTED')).toBeNull()
   })
 
   it('hands the whole form to the save, with no scope of its own', async () => {

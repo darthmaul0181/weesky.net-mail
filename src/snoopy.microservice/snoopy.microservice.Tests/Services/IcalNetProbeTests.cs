@@ -4,6 +4,7 @@ using Ical.Net.CalendarComponents;
 using Ical.Net.DataTypes;
 using Ical.Net.Serialization;
 using Xunit;
+using IcsCalendar = Ical.Net.Calendar;
 
 namespace weesky.Snoopy.Microservice.Tests.Services;
 
@@ -73,8 +74,8 @@ public sealed class IcalNetProbeTests
     [Fact]
     public void Load_AnswersNullOnEmpty_AndThrowsOnGarbage()
     {
-        Assert.Null(Calendar.Load(string.Empty));
-        Assert.Throws<SerializationException>(() => Calendar.Load("not an icalendar at all"));
+        Assert.Null(IcsCalendar.Load(string.Empty));
+        Assert.Throws<SerializationException>(() => IcsCalendar.Load("not an icalendar at all"));
     }
 
     [Fact]
@@ -127,7 +128,7 @@ public sealed class IcalNetProbeTests
     [Fact]
     public void VTimeZone_FromTzdb_CarriesTransitionRules()
     {
-        var calendar = new Calendar();
+        var calendar = new IcsCalendar();
         calendar.AddTimeZone(VTimeZone.FromDateTimeZone("Europe/Brussels", new DateTime(2026, 1, 1), false));
 
         var text = new CalendarSerializer().SerializeToString(calendar);
@@ -168,14 +169,14 @@ public sealed class IcalNetProbeTests
         Assert.Equal(9, StartOf(day28).Hour);
     }
 
-    private static Calendar Load(string ics)
+    private static IcsCalendar Load(string ics)
     {
-        var calendar = Calendar.Load(ics);
+        var calendar = IcsCalendar.Load(ics);
         Assert.NotNull(calendar);
         return calendar;
     }
 
-    private static CalendarEvent Master(Calendar calendar) =>
+    private static CalendarEvent Master(IcsCalendar calendar) =>
         calendar.Events.Single(e => e.RecurrenceIdentifier is null);
 
     private static CalDateTime StartOf(Occurrence occurrence)

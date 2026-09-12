@@ -64,14 +64,43 @@ public sealed class MailSenderTests
         // The real factory, not a mock: these tests assert on the built message's wire form.
         var factory = new OutgoingMessageFactory(_directory.Object, _profiles.Object, _identities.Object,
             _sanitizer.Object, _staged.Object, NullLogger<OutgoingMessageFactory>.Instance);
-        return new MailSender(factory, _staged.Object, _smtpFactory.Object, _folders.Object,
-            _roles.Object, _messages.Object, NullLogger<MailSender>.Instance);
+        return new MailSender(factory, _staged.Object, _smtpFactory.Object,
+            new RoleFolderLocator(_folders.Object, _roles.Object), _messages.Object, NullLogger<MailSender>.Instance);
     }
 
     private static SendMessageRequest Request() => new()
     {
         To = ["alice@example.com"], Bcc = ["hidden@example.com"], Subject = "Hi", HtmlBody = "<div>hi</div>"
     };
+
+    [Fact]
+    public async Task SendBuilt_SendsAsIs_AndFilesACopyInSent()
+    {
+        var sender = CreateSender();
+        var message = new MimeMessage { Subject = "Accepté : Dîner" };
+        message.From.Add(new MailboxAddress("", "mick@weesky.be"));
+        message.To.Add(new MailboxAddress("", "marc@example.org"));
+
+        var result = await sender.SendBuiltAsync(_user, Conn, message, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.AppendedToSent);
+        _smtp.Verify(s => s.SendAsync(message, It.IsAny<CancellationToken>()), Times.Once);
+        _messages.Verify(m => m.AppendAsync(_user, Conn, "Sent", message, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendBuilt_WhenSmtpRefuses_FailsWithItsError_AndFilesNothing()
+    {
+        var sender = CreateSender();
+        _smtp.Setup(s => s.SendAsync(It.IsAny<MimeMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure("smtp_down"));
+
+        var result = await sender.SendBuiltAsync(_user, Conn, new MimeMessage(), CancellationToken.None);
+
+        Assert.Equal("smtp_down", result.Error);
+        _messages.Verify(m => m.AppendAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<MimeMessage>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     [Fact]
     public async Task SendAsync_BuildsFromBodyAndBccAndAppendsSeen()

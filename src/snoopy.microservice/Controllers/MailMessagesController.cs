@@ -5,6 +5,7 @@ using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
@@ -21,6 +22,7 @@ public sealed class MailMessagesController(
     IMailMessageRepository messages,
     IAccountConnectionResolver connections,
     ITrustedSenderStore trustedSenders,
+    IInvitationReader invitations,
     ILogger<MailMessagesController> logger) : MailControllerBase(connections)
 {
     /// <summary>
@@ -30,6 +32,9 @@ public sealed class MailMessagesController(
     /// dropped into a &lt;pre&gt;.
     /// </summary>
     private const int MaxSourceBytes = 1024 * 1024;
+
+    /// <summary>The reason the card shows when the invitation could not even be judged.</summary>
+    internal const string Unavailable = "invitation_unavailable";
 
     /// <summary>
     /// One page of a folder, newest message first. The folder path travels in the query
@@ -115,10 +120,32 @@ public sealed class MailMessagesController(
 
         if (result.IsSuccess)
         {
+            if (result.Value.CalendarPart is { } part)
+                result.Value.Invitation = await ReadInvitationAsync(connection, part, cancellationToken);
+
             await RecordSenderUseAsync(result.Value.FromAddress, cancellationToken);
         }
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// Never fails the read: the invitation reaches the identity and the calendar stores, and a
+    /// message that is otherwise readable must not become a 500 because one of them is down. The
+    /// card then draws its unreadable state, exactly as it does for a file it cannot parse.
+    /// </summary>
+    private async Task<MailInvitation?> ReadInvitationAsync(
+        MailAccountConnection connection, MailCalendarPart part, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await invitations.ReadAsync(AuthenticatedUser, connection, part, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not read the invitation in part {Part}", part.Part);
+            return new MailInvitation { Part = part.Part, Unreadable = true, Reason = Unavailable };
+        }
     }
 
     /// <summary>

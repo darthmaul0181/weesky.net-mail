@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  dateLocaleOf, dayNames, formatRangeTitle, formatTime, hourCycleOf, monthGrid, startOfWeek,
-  weekdayNameOf, weekInfoOf, weekNumberOf, weekRulesOf,
+  dateLocaleOf, dayNames, formatLongDayRange, formatRangeTitle, formatTime, hourCycleOf,
+  monthGrid, startOfWeek, weekdayNameOf, weekInfoOf, weekNumberOf, weekRulesOf,
 } from './calendarLocale'
 
 const ISO = { firstDay: 1, minimalDays: 4 } as const
@@ -128,6 +128,13 @@ describe('formatRangeTitle', () => {
   it('follows the interface language', () => {
     expect(formatRangeTitle('2026-08-31', '2026-10-11', 'month', 'fr', 'en-US'))
       .toBe('septembre 2026')
+  })
+})
+
+describe('formatLongDayRange', () => {
+  it('leaves the year out by default, and carries it when asked', () => {
+    expect(formatLongDayRange('2026-11-01', '2026-11-03', 'en-GB')).not.toContain('2026')
+    expect(formatLongDayRange('2026-11-01', '2026-11-03', 'en-GB', true)).toContain('2026')
   })
 })
 

@@ -611,6 +611,35 @@ public sealed class CalendarEventStoreTests
         Assert.Equal(["EMAIL, 15 minutes before"], alarmed.ForeignAlarms);
     }
 
+    [Fact]
+    public async Task FindByUid_ListsTheDefaultCalendarFirst()
+    {
+        var (db, user, defaultCalendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var calendars = CalendarStoreTestFactory.Calendars(db);
+        var other = (await calendars.CreateAsync(user,
+            new CalendarWrite("Travail", "", "#0000ff", null, "Europe/Brussels"), "Europe/Brussels", None)).Value;
+        var store = CalendarStoreTestFactory.Events(db);
+        var write = CalendarStoreTestFactory.Write(other, summary: "Réunion");
+        await store.CreateAsync(user, write, None);
+        var context = new PreferencesTestDbContext(db);
+        var inOther = await context.CalendarEvents.SingleAsync();
+        // The same UID in the default calendar, as a phone would have put it.
+        context.CalendarEvents.Add(new CalendarEvent
+        {
+            Id = Guid.NewGuid(), CalendarId = defaultCalendar, UserId = user, Uid = inOther.Uid,
+            DavName = "phone-name.ics", IcsRaw = inOther.IcsRaw, StartsAt = inOther.StartsAt, EndsAt = inOther.EndsAt,
+            FirstOccurrence = inOther.FirstOccurrence, LastOccurrence = inOther.LastOccurrence,
+        });
+        await context.SaveChangesAsync();
+
+        var found = await store.FindByUidAsync(user, inOther.Uid, None);
+
+        Assert.Equal(2, found.Count);
+        Assert.Equal(defaultCalendar, found[0].CalendarId);
+        Assert.Equal("phone-name.ics", found[0].DavName);
+        Assert.Empty(await store.FindByUidAsync(Guid.NewGuid(), inOther.Uid, None));
+    }
+
     private static int Occurrences(string text, string needle) =>
         text.Split(needle).Length - 1;
 

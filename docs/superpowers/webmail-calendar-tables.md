@@ -57,6 +57,7 @@ CREATE TABLE `calendar_events` (
   UNIQUE KEY `ux_calendar_events_dav_name` (`calendar_id`, `dav_name`),
   KEY `ix_calendar_events_window` (`user_id`, `first_occurrence`, `last_occurrence`),
   KEY `ix_calendar_events_seq` (`calendar_id`, `sync_sequence`),
+  KEY `ix_calendar_events_user_uid` (`user_id`, `uid`),
   CONSTRAINT `fk_calendar_events_calendar` FOREIGN KEY (`calendar_id`) REFERENCES `calendars` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_calendar_events_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
@@ -115,6 +116,15 @@ CREATE TABLE `calendar_revisions` (
 
 Aucun `GRANT` à rejouer : les utilisateurs `snoopy_webmail`/`snoopy_webmail_dev` ont déjà
 `SELECT, INSERT, UPDATE, DELETE` sur toute la base.
+
+## Tranche 5e1 — un index
+
+Le lecteur d'invitations cherche un `UID` reçu par mail dans tous les agendas de l'utilisateur
+(spec 5e, décision 3). L'index unique `(calendar_id, uid)` ne sert pas cette recherche.
+
+```sql
+ALTER TABLE `calendar_events` ADD KEY `ix_calendar_events_user_uid` (`user_id`, `uid`);
+```
 
 ## Trois écarts par rapport au DDL du plan
 

@@ -1043,6 +1043,54 @@
 .attachment-split-more:hover { background: var(--action-primary-hover); }
 .banner-split-more { padding: 0 7px; }
 
+/* The invitation card: the reader's own preview of an event, on the same sunken band the
+   truncation and blocked-image notices sit on, between the header and the body. */
+.invitation-card {
+  margin: 12px 22px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.invitation-card-head { display: flex; align-items: center; gap: 8px; }
+.invitation-card-title { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.invitation-card-badge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in oklab, var(--action-primary) 15%, var(--surface));
+  color: var(--action-primary);
+}
+.invitation-card-badge.is-cancel {
+  background: color-mix(in oklab, var(--danger) 15%, var(--surface));
+  color: var(--danger);
+}
+.invitation-card-context,
+.invitation-card-hint { margin: 0; color: var(--text-muted); }
+/* max-content on the labels is what keeps Quand/Ou/Organisateur/Invites on one column whatever
+   the language writes them as; 1fr and min-width:0 let a long value wrap instead of widening it. */
+.invitation-card-rows { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+.invitation-card-rows dt { color: var(--text-muted); }
+.invitation-card-rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.invitation-card-repeats { color: var(--text-muted); }
+.invitation-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.invitation-card-actions.is-answered { justify-content: space-between; }
+.invitation-card-answer { font-weight: 600; }
+.invitation-card-others { display: flex; gap: 6px; }
+.invitation-card-others .btn { font-size: 12px; padding: 2px 8px; background: transparent; }
+.invitation-card-calendar { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--text-muted); }
+.invitation-card .btn[aria-pressed="true"] { outline: 2px solid var(--action-primary); outline-offset: 1px; }
+.invitation-card-error { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--danger); }
+@media (max-width: 639px) {
+  .invitation-card { margin: 10px 12px 0; }
+}
+
 /* The article carries the column layout so the body can claim the leftover height. Without
    this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
    leaving the bottom of the panel empty while the message scrolls in a short window. */

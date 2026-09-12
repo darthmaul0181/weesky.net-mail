@@ -49,7 +49,8 @@ import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 import { substituteInlineImages } from './inlineImages'
-import { isImageType } from './mediaType'
+import { isCalendarType, isImageType } from './mediaType'
+import InvitationCard from './InvitationCard'
 import { bodyInlineParts, useInlineImages } from './useInlineImages'
 import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
@@ -198,10 +199,14 @@ export default function MessageReader(
   const seen = summary?.seen ?? true
   const flagged = summary?.flagged ?? false
 
-  // Two ways a part is not an attachment to offer: the server calls it inline, or the body
-  // displays it — a cid-referenced image often arrives with an attachment disposition.
+  // Three ways a part is not an attachment to offer: the server calls it inline, the body
+  // displays it — a cid-referenced image often arrives with an attachment disposition — or the
+  // card below is already showing what the calendar file says. An unreadable one keeps its chip,
+  // since the card then has nothing to show and the file is all there is.
+  const cardShown = !!data.invitation && !data.invitation.unreadable
   const attachments = data.attachments.filter(
-    attachment => !attachment.isInline && !displayedParts.has(attachment.part))
+    attachment => !attachment.isInline && !displayedParts.has(attachment.part)
+      && !(cardShown && isCalendarType(attachment.contentType, attachment.fileName)))
   // One list for the split chips and the viewer's navigation — the two can never disagree.
   const imageAttachments = attachments.filter(a => isImageType(a.contentType))
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
@@ -439,6 +444,18 @@ export default function MessageReader(
             />
           </span>
         </div>
+      )}
+
+      {/* Keyed on the message: a card carries the answer it was given in its own state, and a
+          second message must not open on the first one's. */}
+      {data.invitation && (
+        <InvitationCard
+          key={`${folderPath}:${uid}`}
+          invitation={data.invitation}
+          folderPath={folderPath!}
+          uid={uid!}
+          onTrashed={() => { leave([uid!], () => {}); onDeparted?.(uid!) }}
+        />
       )}
 
       {data.htmlBody ? (

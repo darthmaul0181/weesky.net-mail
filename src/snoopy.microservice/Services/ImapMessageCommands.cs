@@ -8,6 +8,7 @@ using MimeKit.IO;
 using MimeKit.Text;
 using MimeKit.Utils;
 using weesky.Snoopy.Microservice.Models.Mail;
+using weesky.Snoopy.Microservice.Services.Calendar;
 
 namespace weesky.Snoopy.Microservice.Services;
 
@@ -516,6 +517,14 @@ internal sealed class ImapMessageCommands(
                 });
             }
 
+            if (MailMessageMapper.CalendarPart(summary.BodyParts.OfType<BodyPartBasic>()) is { } calendar)
+            {
+                detail.CalendarPart = calendar.Octets > IcsGuards.MaxIcsBytes
+                    ? new MailCalendarPart(calendar.PartSpecifier, string.Empty, TooLarge: true)
+                    : new MailCalendarPart(calendar.PartSpecifier,
+                        await ReadPartTextAsync(folder, uniqueId, calendar, cancellationToken), TooLarge: false);
+            }
+
             return Result.Success(detail);
         },
             "Unable to read the message",
@@ -563,6 +572,23 @@ internal sealed class ImapMessageCommands(
             textPart.ContentType.Parameters[parameter.Name] = parameter.Value;
 
         return UnflowText(textPart);
+    }
+
+    /// <summary>
+    /// A non-text part decoded as text — the invite.ics an application/ics part carries. The
+    /// charset handling is <see cref="MailMessageMapper.DecodeText"/>'s, shared with the responder
+    /// that re-reads the very same part to answer it.
+    /// </summary>
+    private static async Task<string> ReadPartTextAsync(
+        IMailFolder folder, UniqueId uniqueId, BodyPartBasic part, CancellationToken cancellationToken)
+    {
+        using var encoded = await folder.GetStreamAsync(uniqueId, SectionOf(part), cancellationToken);
+        MimeUtils.TryParse(part.ContentTransferEncoding ?? string.Empty, out ContentEncoding encoding);
+
+        using var decoded = new MemoryStream();
+        await new MimeContent(encoded, encoding).DecodeToAsync(decoded, cancellationToken);
+
+        return MailMessageMapper.DecodeText(decoded.GetBuffer(), (int)decoded.Length, part.ContentType?.Charset);
     }
 
     /// <summary>
@@ -697,7 +723,8 @@ internal sealed class ImapMessageCommands(
             {
                 Content = decoded,
                 FileName = string.IsNullOrEmpty(part.FileName) ? "attachment" : part.FileName,
-                ContentType = part.ContentType?.MimeType ?? "application/octet-stream"
+                ContentType = part.ContentType?.MimeType ?? "application/octet-stream",
+                Charset = part.ContentType?.Charset
             });
         },
             "Unable to read the attachment",

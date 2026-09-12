@@ -15,14 +15,14 @@ internal sealed class DavCalendarWriter(
 {
     public async Task<DavWriteOutcome> PutAsync(Guid userId, Guid calendarId, string davName,
         string ics, CancellationToken cancellationToken, bool createOnly = false,
-        string? ifMatch = null)
+        string? ifMatch = null, RevisionCause cause = RevisionCause.Put)
     {
         if (IcsGuards.CheckAll(ics, out var parsed) is { } refused) return Refused(refused);
 
         try
         {
             return await GateAsync(userId, calendarId, davName, ics, parsed!, createOnly, ifMatch,
-                cancellationToken);
+                cause, cancellationToken);
         }
         // Before the DbUpdateException arm, which it would otherwise be swallowed by: EF wraps the
         // provider's 1205 inside one, and replaying a lock wait would only wait again.
@@ -44,7 +44,7 @@ internal sealed class DavCalendarWriter(
             try
             {
                 return await GateAsync(userId, calendarId, davName, ics, parsed!, createOnly,
-                    ifMatch, cancellationToken);
+                    ifMatch, cause, cancellationToken);
             }
             catch (DbUpdateException second)
             {
@@ -189,7 +189,7 @@ internal sealed class DavCalendarWriter(
     }
 
     private async Task<DavWriteOutcome> GateAsync(Guid userId, Guid calendarId, string davName,
-        string ics, IcsCalendar parsed, bool createOnly, string? ifMatch,
+        string ics, IcsCalendar parsed, bool createOnly, string? ifMatch, RevisionCause cause,
         CancellationToken cancellationToken)
     {
         var row = await FindAsync(userId, calendarId, davName, cancellationToken);
@@ -268,7 +268,7 @@ internal sealed class DavCalendarWriter(
                 // Archive before overwriting, in the same transaction — so under the same rank,
                 // and never without it.
                 await sync.ArchiveAsync(userId, calendarId, row.Id, row.Uid, row.DavName,
-                    row.IcsRaw, RevisionCause.Put, cancellationToken);
+                    row.IcsRaw, cause, cancellationToken);
             }
 
             await store.ApplyIcsAsync(row, calendar, ics, parsed, rank, cancellationToken);

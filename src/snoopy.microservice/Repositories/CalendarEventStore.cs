@@ -355,6 +355,16 @@ internal sealed class CalendarEventStore(
         return [.. found.OrderBy(At)];
     }
 
+    public async Task<IReadOnlyList<StoredEventRef>> FindByUidAsync(
+        Guid userId, string uid, CancellationToken cancellationToken) =>
+        await context.CalendarEvents.AsNoTracking()
+            .Where(e => e.UserId == userId && e.Uid == uid)
+            .Join(context.Calendars, e => e.CalendarId, c => c.Id, (e, c) => new { Event = e, Calendar = c })
+            .OrderBy(x => x.Calendar.DavName == CalendarStore.DefaultDavName ? 0 : 1)
+            .ThenBy(x => x.Calendar.Order).ThenBy(x => x.Calendar.DisplayName)
+            .Select(x => new StoredEventRef(x.Event.Id, x.Event.CalendarId, x.Event.DavName, x.Event.IcsRaw))
+            .ToListAsync(cancellationToken);
+
     public Task<CalendarImportOutcome> ImportAsync(
         Guid userId, Guid calendarId, string vcalendar, CancellationToken cancellationToken) =>
         Importer().ImportAsync(userId, calendarId, vcalendar, cancellationToken);
