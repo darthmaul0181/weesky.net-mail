@@ -274,7 +274,7 @@
       "answered": {
         "ACCEPTED": "You accepted",
         "TENTATIVE": "You answered tentatively",
-        "in": "{{answer}} · in {{calendar}}",
+        "in": "{{answer}} · in <b>{{calendar}}</b>",
         "added": "In your calendar · {{calendar}}"
       },
       "forwarded": "This invitation was not addressed to you. You can add it to your calendar without answering.",

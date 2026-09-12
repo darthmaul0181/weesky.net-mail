@@ -1043,11 +1043,12 @@
 .attachment-split-more:hover { background: var(--action-primary-hover); }
 .banner-split-more { padding: 0 7px; }
 
-/* The invitation card: the reader's own preview of an event, on the same sunken band the
-   truncation and blocked-image notices sit on, between the header and the body. */
+/* The invitation card (spec 5e, decision 6, the "Retenue" board of the mock-up): the event
+   preview's card on the reader's sunken band, between the header and the body. The rows and the
+   sentences are indented under the title by the icon's width plus its gap. */
 .invitation-card {
-  margin: 12px 22px 0;
-  padding: 12px 14px;
+  margin: 14px 22px 0;
+  padding: 14px 16px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
@@ -1057,36 +1058,58 @@
   font-size: 13px;
 }
 .invitation-card-head { display: flex; align-items: center; gap: 8px; }
-.invitation-card-title { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.invitation-card-head > svg { flex: none; color: var(--action-primary); }
+.invitation-card-title { font-weight: 700; font-size: 15px; line-height: 1.35; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .invitation-card-badge {
   flex: none;
   padding: 1px 8px;
+  border: 1px solid currentColor;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  background: color-mix(in oklab, var(--action-primary) 15%, var(--surface));
-  color: var(--action-primary);
+  font-size: 12px;
+  color: var(--text-muted);
 }
-.invitation-card-badge.is-cancel {
-  background: color-mix(in oklab, var(--danger) 15%, var(--surface));
-  color: var(--danger);
+.invitation-card-badge.is-cancel { color: var(--danger); }
+.invitation-card-context { margin: 0 0 0 24px; color: var(--text); }
+.invitation-card-hint { margin: 0 0 0 24px; color: var(--text-muted); }
+/* One right-aligned label column, at least the mock-up's 88px and never narrower than the
+   longest label; minmax(0, 1fr) lets a long value wrap instead of widening the card. */
+.invitation-card-rows {
+  display: grid;
+  grid-template-columns: minmax(88px, max-content) minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0 0 0 24px;
 }
-.invitation-card-context,
-.invitation-card-hint { margin: 0; color: var(--text-muted); }
-/* max-content on the labels is what keeps Quand/Ou/Organisateur/Invites on one column whatever
-   the language writes them as; 1fr and min-width:0 let a long value wrap instead of widening it. */
-.invitation-card-rows { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
-.invitation-card-rows dt { color: var(--text-muted); }
+.invitation-card-rows dt { color: var(--text-muted); text-align: right; }
 .invitation-card-rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .invitation-card-repeats { color: var(--text-muted); }
-.invitation-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.invitation-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 .invitation-card-actions.is-answered { justify-content: space-between; }
-.invitation-card-answer { font-weight: 600; }
-.invitation-card-others { display: flex; gap: 6px; }
-.invitation-card-others .btn { font-size: 12px; padding: 2px 8px; background: transparent; }
-.invitation-card-calendar { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--text-muted); }
+/* Every button is as wide as its label — the mock-up's btn-sm — whatever .btn-primary's form default. */
+.invitation-card .btn { width: auto; padding: 7px 12px; font-size: 13px; }
+.invitation-card-answer { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.invitation-card-answer.is-muted { color: var(--text-muted); }
+.invitation-card-answer b { font-weight: 600; }
+.invitation-card-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--success); color: #fff; font-size: 9px; font-weight: 700;
+}
+.invitation-card-others { display: inline-flex; gap: 8px; margin-left: auto; }
+/* The calendar combo: the calendar's own colour as a swatch beside a native select drawn bare,
+   the pair framed like the mock-up's field. */
+.invitation-card-calendar {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 4px 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text);
+}
+.invitation-card-swatch { flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--cal, var(--action-primary)); }
+.invitation-card-select {
+  appearance: auto; border: 0; padding: 0; background: transparent;
+  font-family: var(--font); font-size: 13px; color: inherit; cursor: pointer;
+}
 .invitation-card .btn[aria-pressed="true"] { outline: 2px solid var(--action-primary); outline-offset: 1px; }
-.invitation-card-error { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--danger); }
+.invitation-card-error { margin: 0 0 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--danger); }
 @media (max-width: 639px) {
   .invitation-card { margin: 10px 12px 0; }
 }

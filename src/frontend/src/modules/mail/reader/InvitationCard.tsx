@@ -1,6 +1,6 @@
-import { useMemo, useState, type JSX } from 'react'
+import { useMemo, useState, type CSSProperties, type JSX } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import CalendarIcon from '../../../icons/CalendarIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { ApiError } from '../../../api.js'
@@ -82,10 +82,12 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
 
   // The label is passed already translated rather than as a key: a key reaching `t()` through a
   // variable is invisible to both the typed `t` and `locales/keys.test.ts`.
-  const answerButton = (value: InvitationAnswer, label: string, partStat: string) => (
+  // The mock-up's shapes: the answer the organizer hopes for is the primary button, the two
+  // others are ghosts, and every button is as wide as its label.
+  const answerButton = (value: InvitationAnswer, label: string, partStat: string, primary = false) => (
     <button
       type="button"
-      className="btn"
+      className={primary ? 'btn btn-primary btn-auto' : 'btn btn-ghost'}
       disabled={busy}
       onClick={() => answer(value)}
       aria-pressed={state === 'updated' && invitation.savedPartStat === partStat ? true : undefined}
@@ -93,14 +95,30 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       {label}
     </button>
   )
-  const accept = () => answerButton('Accepted', t('reader.invitation.accept'), 'ACCEPTED')
+  const accept = () => answerButton('Accepted', t('reader.invitation.accept'), 'ACCEPTED', true)
   const tentative = () => answerButton('Tentative', t('reader.invitation.tentative'), 'TENTATIVE')
   const decline = () => answerButton('Declined', t('reader.invitation.decline'), 'DECLINED')
   const three = <>{accept()}{tentative()}{decline()}</>
   const addOnlyButton = (
-    <button type="button" className="btn" disabled={busy} onClick={() => answer('AddOnly')}>
+    <button type="button" className="btn btn-primary btn-auto" disabled={busy} onClick={() => answer('AddOnly')}>
       {t('reader.invitation.addOnly')}
     </button>
+  )
+  // The calendar a creation goes to: its colour as a swatch, its name in a native select, no
+  // text label — the mock-up's combo. Drawn only when there is a choice to make.
+  const chosenCalendar = calendarId ?? calendars?.find(c => c.isDefault)?.id ?? calendars?.[0]?.id
+  const calendarPicker = calendars && calendars.length > 1 && (
+    <span className="invitation-card-calendar" style={{ '--cal': calendars.find(c => c.id === chosenCalendar)?.color } as CSSProperties}>
+      <span className="invitation-card-swatch" aria-hidden="true" />
+      <select
+        className="invitation-card-select"
+        aria-label={t('reader.invitation.calendar')}
+        value={chosenCalendar}
+        onChange={event => setCalendarId(event.target.value)}
+      >
+        {calendars.map(c => <option key={c.id} value={c.id}>{c.displayName}</option>)}
+      </select>
+    </span>
   )
 
   // The three answers a card can name, each in both voices: `filed` is what the organizer recorded
@@ -130,18 +148,8 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
     case 'updated':
       foot = (
         <div className="invitation-card-actions">
+          {state === 'invite' && calendarPicker}
           {invitation.addressedTo ? three : addOnlyButton}
-          {state === 'invite' && calendars && calendars.length > 1 && (
-            <label className="invitation-card-calendar">
-              <span>{t('reader.invitation.calendar')}</span>
-              <select
-                value={calendarId ?? calendars.find(c => c.isDefault)?.id ?? calendars[0].id}
-                onChange={event => setCalendarId(event.target.value)}
-              >
-                {calendars.map(c => <option key={c.id} value={c.id}>{c.displayName}</option>)}
-              </select>
-            </label>
-          )}
         </div>
       )
       break
@@ -151,10 +159,16 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       foot = (
         <div className="invitation-card-actions is-answered">
           <span className="invitation-card-answer">
+            {answeredWord && <span className="invitation-card-check" aria-hidden="true">✓</span>}
             {answeredWord
-              ? t('reader.invitation.answered.in', {
-                answer: answeredWord, calendar: calendarName(invitation.calendarId),
-              })
+              ? (
+                <Trans
+                  ns="mail"
+                  i18nKey="reader.invitation.answered.in"
+                  values={{ answer: answeredWord, calendar: calendarName(invitation.calendarId) }}
+                  components={{ b: <b /> }}
+                />
+              )
               : t('reader.invitation.answered.added', { calendar: calendarName(invitation.calendarId) })}
           </span>
           {/* Only an attendee can change an answer: a forwarded invitation has nobody to tell. */}
@@ -170,14 +184,19 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       break
     }
     case 'forwarded':
-      foot = <div className="invitation-card-actions">{addOnlyButton}</div>
+      foot = <div className="invitation-card-actions">{calendarPicker}{addOnlyButton}</div>
       break
     case 'cancelled':
       foot = (
-        <div className="invitation-card-actions">
-          <button type="button" className="btn" disabled={busy} onClick={() => answer('Remove')}>
-            {t('reader.invitation.remove')}
-          </button>
+        <div className="invitation-card-actions is-answered">
+          <span className="invitation-card-answer is-muted">
+            {t('reader.invitation.answered.added', { calendar: calendarName(invitation.calendarId) })}
+          </span>
+          <span className="invitation-card-others">
+            <button type="button" className="btn btn-danger" disabled={busy} onClick={() => answer('Remove')}>
+              {t('reader.invitation.remove')}
+            </button>
+          </span>
         </div>
       )
       break
@@ -225,7 +244,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       {outcome && !outcome.replySent && outcome.replyError !== undefined && lastAnswer && (
         <p className="invitation-card-error">
           {t(lastAnswer === 'Declined' ? 'reader.invitation.replyFailed' : 'reader.invitation.addedReplyFailed')}
-          <button type="button" className="btn" disabled={busy} onClick={() => answer(lastAnswer)}>
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => answer(lastAnswer)}>
             {t('reader.invitation.resend')}
           </button>
         </p>
@@ -243,7 +262,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
           {error.gone && (
             <button
               type="button"
-              className="btn"
+              className="btn btn-ghost"
               onClick={() => queryClient.invalidateQueries({ queryKey: mailKeys.message(accountId, folderPath, uid) })}
             >
               {t('reader.invitation.reload')}

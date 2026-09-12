@@ -142,7 +142,9 @@ describe('InvitationCard', () => {
 
     resolve({ invitation: answered('ACCEPTED'), replySent: true, trashed: false })
 
-    expect(await screen.findByText('You accepted · in Personnel')).toBeInTheDocument()
+    // The calendar's name is bold, so the sentence spans two nodes: match the whole span's text.
+    await waitFor(() => expect(document.querySelector('.invitation-card-answer')?.textContent)
+      .toBe('✓You accepted · in Personnel'))
     // The two other answers stay, discreet.
     expect(screen.getByRole('button', { name: 'Tentative' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument()

@@ -16,20 +16,21 @@
                    the test is its height against one button's: `WRAP` at 900 is the regression.
                    At 400 a wrap is expected and is not a fault.
 
-  Measured in headless Edge, viewport 1366x1303, on the corrected probe:
+  Measured in headless Edge, viewport 1366x1403, on the card restyled after the mock-up (bold
+  15px title, outlined badge, right-aligned labels indented 24px, the calendar combo first in the
+  row, buttons as wide as their labels):
 
     escape    0 in all 28 readings — the fourteen cards (seven states, FR and EN) at 400 and at
               900. The card itself is 354 wide at 400 and 854 at 900.
-    libelles  one value per card — 151 (FR) / 135 (EN) at 400, 575 (FR) / 559 (EN) at 900.
-              The two languages differ because `Organisateur` is wider than `Organiser`, and the
-              label column is `max-content`; one card reporting two values is the regression.
-    actions   37 at 900 — one line, the three answers side by side — and WRAP at 400 on states 1
-              and 2 in French and state 1 in English, which is expected there and is not a fault.
+    libelles  one value per card — 188 at 400 and 612 at 900, the same in both languages since
+              the label column is `minmax(88px, max-content)` and both `Organisateur` and
+              `Organiser` fit the 88px; one card reporting two values is the regression.
+    actions   32-33 at 900 — one line, the combo and the three answers side by side — and WRAP
+              at 400 on states 1, 2 and 5, which is expected there and is not a fault.
 
-  The zeroes on state 1 are what the correction bought. The loop used to measure the calendar
-  `<select>`'s `<option>` elements, which the widget lays out and the page gives a zero-sized
-  rect at the origin: that alone read `escape 24` at 400 and `escape 448` at 900. The loop now
-  skips any node with no box.
+  The loop skips any node with no box: the calendar `<select>`'s `<option>` elements are laid
+  out by the widget and answer a zero-sized rect at the origin, which once read as an overhang
+  of 24 at 400 and 448 at 900 on state 1.
 
   Drive it in Chrome/Edge with device-metric emulation (the platform clamps --window-size), at a
   400px and a 900px reader column — the two `.mail-reader` widths this file lays out itself, so
@@ -103,8 +104,8 @@
       },
     }
 
-    const btn = (label, pressed) =>
-      `<button type="button" class="btn"${pressed ? ' aria-pressed="true"' : ''}>${label}</button>`
+    const btn = (label, pressed, kind = 'ghost') =>
+      `<button type="button" class="btn ${kind === 'primary' ? 'btn-primary btn-auto' : kind === 'danger' ? 'btn-danger' : 'btn-ghost'}"${pressed ? ' aria-pressed="true"' : ''}>${label}</button>`
 
     function rows(s) {
       return `<dl class="invitation-card-rows">
@@ -117,21 +118,23 @@
     // One entry per state of the mock-up: the badge it wears, the sentence above the rows, and
     // the footer under them.
     function states(s) {
-      const three = btn(s.accept) + btn(s.tentative) + btn(s.decline)
-      const picker = `<label class="invitation-card-calendar"><span>${s.calendar}</span>
-        <select><option>Personnel</option><option>Travail</option></select></label>`
+      const three = btn(s.accept, false, 'primary') + btn(s.tentative) + btn(s.decline)
+      const picker = `<span class="invitation-card-calendar" style="--cal: #2e7d5b"><span class="invitation-card-swatch"></span>
+        <select class="invitation-card-select" aria-label="${s.calendar}"><option>Personnel</option><option>Travail</option></select></span>`
+      const check = '<span class="invitation-card-check" aria-hidden="true">✓</span>'
       return [
-        ['1 invite', s.badge, 'request', null, `<div class="invitation-card-actions">${three}${picker}</div>`],
+        ['1 invite', s.badge, 'request', null, `<div class="invitation-card-actions">${picker}${three}</div>`],
         ['2 answered', s.badge, 'request', null,
           `<div class="invitation-card-actions is-answered">
-             <span class="invitation-card-answer">${s.answered}</span>
+             <span class="invitation-card-answer">${check}${s.answered}</span>
              <span class="invitation-card-others">${btn(s.tentative)}${btn(s.decline)}</span></div>`],
         ['3 forwarded', s.badge, 'request', s.forwarded,
-          `<div class="invitation-card-actions">${btn(s.addOnly)}</div>`],
+          `<div class="invitation-card-actions">${picker}${btn(s.addOnly, false, 'primary')}</div>`],
         ['4 updated', s.update, 'update', s.updated,
-          `<div class="invitation-card-actions">${btn(s.accept, true)}${btn(s.tentative)}${btn(s.decline)}</div>`],
+          `<div class="invitation-card-actions">${btn(s.accept, true, 'primary')}${btn(s.tentative)}${btn(s.decline)}</div>`],
         ['5 cancelled', s.cancel, 'cancel', s.cancelled,
-          `<div class="invitation-card-actions">${btn(s.remove)}</div>`],
+          `<div class="invitation-card-actions is-answered"><span class="invitation-card-answer is-muted">${s.answered}</span>
+             <span class="invitation-card-others">${btn(s.remove, false, 'danger')}</span></div>`],
         ['6 noAction', s.badge, 'request', null, `<p class="invitation-card-hint">${s.noAction}</p>`],
         ['7 unreadable', null, null, null, null],
       ]
