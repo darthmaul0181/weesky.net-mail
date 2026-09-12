@@ -32,6 +32,7 @@ function detailOf(fields: Partial<EventDetail> & { id: string }): EventDetail {
     reads anyway. */
 const anchors: HTMLElement[] = []
 const WIDTH = window.innerWidth
+const HEIGHT = window.innerHeight
 
 // The preview now always fetches the detail (Task 7); a case with nothing to say about it still
 // needs an answer, or the query settles on `undefined`, which react-query refuses to hold.
@@ -43,6 +44,7 @@ beforeEach(() => {
 // every case after it depend on the order they run in.
 afterEach(() => {
   window.innerWidth = WIDTH
+  window.innerHeight = HEIGHT
   anchors.splice(0).forEach(node => node.remove())
   vi.clearAllMocks()
 })
@@ -185,6 +187,20 @@ describe('EventPreview', () => {
   it('flips to the left when it would run off the screen', () => {
     window.innerWidth = 600
     expect(draw(DENTIST, anchorAt(400, 500))).toHaveStyle({ left: '92px' })
+  })
+
+  // A list row spans the window: no side is left for the bubble, so it hangs under the row,
+  // from the row's left edge — and above it when the screen has no room below.
+  it('hangs below a row that leaves no side free', () => {
+    window.innerWidth = 1200
+    window.innerHeight = 800
+    expect(draw(DENTIST, anchorAt(100, 1150))).toHaveStyle({ left: '100px', top: '138px' })
+  })
+
+  it('hangs above such a row when the screen has no room below it', () => {
+    window.innerWidth = 1200
+    window.innerHeight = 140
+    expect(draw(DENTIST, anchorAt(100, 1150))).toHaveStyle({ left: '100px', top: '92px' })
   })
 
   it('closes on Escape', async () => {
