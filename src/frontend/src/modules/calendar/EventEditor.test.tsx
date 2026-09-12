@@ -219,6 +219,15 @@ describe('EventEditor', () => {
     expect(screen.queryByText('ACCEPTED')).toBeNull()
   })
 
+  it('says what the user answered, and nothing when they are not invited', () => {
+    const attendees = [{ email: 'boss@weesky.be', name: 'Boss', isOrganizer: true }]
+    draw({ detail: detailOf({ attendees, myPartStat: 'ACCEPTED' }) })
+    expect(screen.getByText('You accepted')).toBeInTheDocument()
+    cleanup()
+    draw({ detail: detailOf({ attendees }) })
+    expect(screen.queryByText(/^You /)).toBeNull()
+  })
+
   it('hands the whole form to the save, with no scope of its own', async () => {
     const { onSave } = draw()
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))

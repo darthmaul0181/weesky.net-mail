@@ -44,6 +44,12 @@
     "clearSearch": "Effacer",
     "searchTooShort": "Tapez au moins {{min}} caractères pour lancer la recherche"
   },
+  "myAnswer": {
+    "accepted": "Vous avez accepté",
+    "tentative": "Vous avez répondu provisoire",
+    "declined": "Vous avez refusé",
+    "pending": "Vous n’avez pas encore répondu"
+  },
   "preview": {
     "allDay": "Journée entière",
     "edit": "Modifier",

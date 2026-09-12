@@ -5,10 +5,10 @@ namespace weesky.Snoopy.Microservice.Models.Calendar;
 public sealed record EventResponse(
     Guid Id, Guid CalendarId, string Uid, string IcsHash, EventWrite Fields, string? RecurrenceText,
     IReadOnlyList<AttendeeProjection> Attendees, string? Status, bool RepeatIsExact,
-    IReadOnlyList<string> ForeignAlarms)
+    IReadOnlyList<string> ForeignAlarms, string? MyPartStat)
 {
     internal static EventResponse From(EventDetail detail) =>
         new(detail.Id, detail.CalendarId, detail.Uid, detail.IcsHash, detail.Fields,
             detail.RecurrenceText, detail.Attendees, detail.Status, detail.RepeatIsExact,
-            detail.ForeignAlarms);
+            detail.ForeignAlarms, detail.MyPartStat);
 }

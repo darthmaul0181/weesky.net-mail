@@ -125,6 +125,38 @@ public sealed class CalendarEventsControllerTests
         Assert.Null(list.Single(o => o.EventId == other.EventId).MyPartStat);
     }
 
+    [Fact]
+    public async Task Search_CarriesTheUsersOwnAnswer()
+    {
+        var mine = Occurrence();
+        _store.Setup(s => s.SearchAsync(Uid, "dîner", It.IsAny<CancellationToken>())).ReturnsAsync([mine]);
+        var controller = CreateController();
+        _store.Setup(s => s.OwnPartStatsAsync(Uid, It.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(mine.EventId)),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, string> { [mine.EventId] = "ACCEPTED" });
+
+        var result = await controller.Search("dîner", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("ACCEPTED", Assert.IsType<OccurrenceListResponse>(ok.Value).Occurrences.Single().MyPartStat);
+    }
+
+    [Fact]
+    public async Task Get_CarriesTheUsersOwnAnswer()
+    {
+        var id = Guid.NewGuid();
+        _store.Setup(s => s.GetAsync(Uid, id, It.IsAny<CancellationToken>())).ReturnsAsync(Detail(id: id));
+        var controller = CreateController();
+        _store.Setup(s => s.OwnPartStatsAsync(Uid, It.Is<IReadOnlyCollection<Guid>>(ids => ids.Single() == id),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, string> { [id] = "TENTATIVE" });
+
+        var result = await controller.Get(id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("TENTATIVE", Assert.IsType<EventResponse>(ok.Value).MyPartStat);
+    }
+
     // The reviewer's exact reproduction: a non-UTC offset must convert to the same instant,
     // never get relabelled as if its wall-clock digits were already UTC.
     [Fact]

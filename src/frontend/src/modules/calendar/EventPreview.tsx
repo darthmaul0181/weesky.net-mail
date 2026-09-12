@@ -14,6 +14,7 @@ import type { Calendar, Occurrence } from './calendarTypes'
 import { wallClockOf } from './multiDay'
 import { colorOf } from './occurrenceStyle'
 import { addDays, utcOfLocalTime, type PlainDate } from './plainDate'
+import { myAnswerOf } from './myAnswer'
 import { useEvent } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
@@ -112,6 +113,8 @@ export default function EventPreview({
   const master = (detail?.attendees ?? []).filter(a => !a.recurrenceId)
   const organizer = master.find(a => a.isOrganizer)
   const guests = master.filter(a => !a.isOrganizer)
+  // The one state that is true here: the user's own, read off the occurrence the server stamped.
+  const myAnswer = myAnswerOf(occurrence.myPartStat, t)
 
   return (
     <div className="event-preview" role="dialog" aria-label={title} ref={ref}
@@ -153,6 +156,11 @@ export default function EventPreview({
       {guests.length > 0 && (
         <p className="event-preview-row event-preview-attendees">
           <PeopleIcon size={14} />{guests.map(a => a.name || a.email).join(', ')}
+        </p>
+      )}
+      {myAnswer && (
+        <p className="event-preview-row event-preview-answer">
+          <UserIcon size={14} />{myAnswer}
         </p>
       )}
 

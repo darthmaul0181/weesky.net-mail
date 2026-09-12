@@ -98,6 +98,9 @@ export interface EventDetail {
   /** The alarms the bell cannot show, one sentence each ("EMAIL, 1 day before"). Kept through a
       save; listed so the editor can say they are there. */
   foreignAlarms: string[]
+  /** The user's own answer to an invitation (their ATTENDEE's PARTSTAT); absent when the event
+      does not invite them. */
+  myPartStat?: string
 }
 
 /** Body of `PUT /api/Calendar/Events/{id}`. `scope` says how far the edit reaches, `instanceId`

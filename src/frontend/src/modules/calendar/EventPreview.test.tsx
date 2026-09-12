@@ -238,6 +238,11 @@ describe('EventPreview', () => {
       expect(screen.queryByText('ACCEPTED')).toBeNull()
     })
 
+  it('says what the user answered, off the occurrence the server stamped', async () => {
+    draw({ eventId: 'e1', summary: 'Dentist', myPartStat: 'TENTATIVE' })
+    expect(await screen.findByText('You answered tentatively')).toBeInTheDocument()
+  })
+
   it('an event without attendees shows neither line', async () => {
     api.getEvent.mockResolvedValue(detailOf({ id: 'e1' }))
     const bubble = draw()
