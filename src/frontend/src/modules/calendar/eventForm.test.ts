@@ -38,6 +38,18 @@ const allDayFields = fields({
   startDate: '2026-09-14', endDateInclusive: '2026-09-16',
 })
 
+describe('formOf', () => {
+  // The editor's availability is the user's own answer once there is one: « provisoire » reads
+  // tentative whatever STATUS the organizer wrote, and an acceptance reads busy — or free, when
+  // the entry is transparent — even over a STATUS:TENTATIVE left in the file.
+  it('seeds the availability from the user’s own answer', () => {
+    expect(formOf(detailOf({ myPartStat: 'TENTATIVE' }), null, TZ).availability).toBe('Tentative')
+    expect(formOf(detailOf({ fields: fields({ availability: 'Tentative' }), myPartStat: 'ACCEPTED' }), null, TZ).availability).toBe('Busy')
+    expect(formOf(detailOf({ fields: fields({ availability: 'Free' }), myPartStat: 'accepted' }), null, TZ).availability).toBe('Free')
+    expect(formOf(detailOf({ fields: fields({ availability: 'Tentative' }) }), null, TZ).availability).toBe('Tentative')
+  })
+})
+
 describe('newEventForm', () => {
   it('reads the slot the user dragged, in the zone the screen is on', () => {
     const form = newEventForm(

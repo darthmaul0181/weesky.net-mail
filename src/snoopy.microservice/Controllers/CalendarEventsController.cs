@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Services.Calendar;
 
 namespace weesky.Snoopy.Microservice.Controllers;
@@ -12,7 +13,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/Calendar/Events")]
 [ApiController]
 [Authorize]
-public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBaseController
+public sealed class CalendarEventsController(ICalendarEventStore store, IUserAddresses addresses) : ApiBaseController
 {
     private static readonly TimeSpan MaxWindow = TimeSpan.FromDays(365.2425 * OccurrenceExpander.MaxYears);
 
@@ -49,9 +50,8 @@ public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBas
             return BadRequestEnveloppe($"The window cannot span more than {OccurrenceExpander.MaxYears} years");
 
         var occurrences = await store.WindowAsync(AuthenticatedUser.WebmailUid, fromUtc, toUtc, tz, cancellationToken);
-        return occurrences.IsFailure
-            ? BadRequestEnveloppe(occurrences.Error)
-            : Ok(new OccurrenceListResponse(occurrences.Value));
+        if (occurrences.IsFailure) return BadRequestEnveloppe(occurrences.Error);
+        return Ok(await AnsweredAsync(occurrences.Value, cancellationToken));
     }
 
     /// <summary>Fonctionnalité 5: one result per event, at the occurrence that comes next.</summary>
@@ -65,7 +65,7 @@ public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBas
     public async Task<ActionResult<OccurrenceListResponse>> Search(string q, CancellationToken cancellationToken)
     {
         var occurrences = await store.SearchAsync(AuthenticatedUser.WebmailUid, q ?? string.Empty, cancellationToken);
-        return Ok(new OccurrenceListResponse(occurrences));
+        return Ok(await AnsweredAsync(occurrences, cancellationToken));
     }
 
     /// <summary>One resource as the editor opens it.</summary>
@@ -81,7 +81,24 @@ public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBas
     public async Task<ActionResult<EventResponse>> Get(Guid id, CancellationToken cancellationToken)
     {
         var detail = await store.GetAsync(AuthenticatedUser.WebmailUid, id, cancellationToken);
-        return detail == null ? NotFoundEnveloppe(CalendarEventStore.NotFound) : Ok(EventResponse.From(detail));
+        if (detail == null) return NotFoundEnveloppe(CalendarEventStore.NotFound);
+        var mine = await OwnAnswersAsync([id], cancellationToken);
+        return Ok(EventResponse.From(mine.TryGetValue(id, out var answer) ? detail with { MyPartStat = answer } : detail));
+    }
+
+    /// <summary>The user's own answers, stamped here and not in the store: only the controller
+    /// holds the principal the address list is read for (spec 5e).</summary>
+    private async Task<IReadOnlyDictionary<Guid, string>> OwnAnswersAsync(
+        IEnumerable<Guid> eventIds, CancellationToken cancellationToken) =>
+        await store.OwnPartStatsAsync(AuthenticatedUser.WebmailUid, [.. eventIds.Distinct()],
+            await addresses.ForPrincipalAsync(AuthenticatedUser, cancellationToken), cancellationToken);
+
+    private async Task<OccurrenceListResponse> AnsweredAsync(
+        IReadOnlyList<EventOccurrence> occurrences, CancellationToken cancellationToken)
+    {
+        var mine = await OwnAnswersAsync(occurrences.Select(o => o.EventId), cancellationToken);
+        return new OccurrenceListResponse([.. occurrences
+            .Select(o => mine.TryGetValue(o.EventId, out var answer) ? o with { MyPartStat = answer } : o)]);
     }
 
     /// <summary>Creates an event and answers its id.</summary>

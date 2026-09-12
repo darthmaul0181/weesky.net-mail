@@ -355,6 +355,38 @@ internal sealed class CalendarEventStore(
         return [.. found.OrderBy(At)];
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> OwnPartStatsAsync(
+        Guid userId, IReadOnlyCollection<Guid> eventIds, IReadOnlyCollection<string> ownAddresses,
+        CancellationToken cancellationToken)
+    {
+        if (eventIds.Count == 0 || ownAddresses.Count == 0) return new Dictionary<Guid, string>();
+        var mine = ownAddresses.Select(a => a.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
+        var lines = await context.CalendarAttendees.AsNoTracking()
+            .Where(a => eventIds.Contains(a.EventId) && a.RecurrenceId == null && (a.IsOrganizer || a.PartStat != null))
+            .Join(context.CalendarEvents, a => a.EventId, e => e.Id, (a, e) => new { a.EventId, a.Email, a.PartStat, a.IsOrganizer, e.UserId })
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken);
+        // The organizer's own guest line — Google and Apple write one, under the very address of
+        // ORGANIZER — is not an answer. One from another of the user's addresses is: an invitation
+        // sent from a second account of theirs was received and answered like any other.
+        var own = lines.Select(l => (l.EventId, Email: l.Email.Trim().ToLowerInvariant(), l.PartStat, l.IsOrganizer))
+            .Where(l => mine.Contains(l.Email)).ToList();
+        var organizers = own.Where(l => l.IsOrganizer).Select(l => (l.EventId, l.Email)).ToHashSet();
+        return own.Where(l => !l.IsOrganizer && !organizers.Contains((l.EventId, l.Email)))
+            .GroupBy(l => l.EventId)
+            .ToDictionary(g => g.Key, g => g.First().PartStat!);
+    }
+
+    public async Task<IReadOnlyList<StoredEventRef>> FindByUidAsync(
+        Guid userId, string uid, CancellationToken cancellationToken) =>
+        await context.CalendarEvents.AsNoTracking()
+            .Where(e => e.UserId == userId && e.Uid == uid)
+            .Join(context.Calendars, e => e.CalendarId, c => c.Id, (e, c) => new { Event = e, Calendar = c })
+            .OrderBy(x => x.Calendar.DavName == CalendarStore.DefaultDavName ? 0 : 1)
+            .ThenBy(x => x.Calendar.Order).ThenBy(x => x.Calendar.DisplayName)
+            .Select(x => new StoredEventRef(x.Event.Id, x.Event.CalendarId, x.Event.DavName, x.Event.IcsRaw))
+            .ToListAsync(cancellationToken);
+
     public Task<CalendarImportOutcome> ImportAsync(
         Guid userId, Guid calendarId, string vcalendar, CancellationToken cancellationToken) =>
         Importer().ImportAsync(userId, calendarId, vcalendar, cancellationToken);

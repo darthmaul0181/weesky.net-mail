@@ -255,4 +255,57 @@ public sealed class MailMessageMapperTests
     {
         Assert.False(MailMessageMapper.IsListedPart(Part(contentId: "<>")));
     }
+
+    // ── Which calendar part the detail downloads ─────────────────────
+    //
+    // Same seam again: BODYSTRUCTURE comes off a live FETCH, the choice it feeds does not.
+
+    private static BodyPartBasic IcsPart(
+        string specifier, string mediaType, string mediaSubtype, string? method = null, string? name = null)
+    {
+        var contentType = new ContentType(mediaType, mediaSubtype);
+        if (method is not null) contentType.Parameters.Add("method", method);
+        if (name is not null) contentType.Name = name;
+        return new BodyPartBasic(contentType, specifier);
+    }
+
+    [Fact]
+    public void CalendarPart_PrefersAPartWhoseMethodIsHandled_ThenOneWithoutMethod_NeverAnotherMethod()
+    {
+        var reply = IcsPart("1", "text", "calendar", method: "REPLY");
+        var plain = IcsPart("2", "application", "ics", name: "invite.ics");
+        var request = IcsPart("3", "text", "calendar", method: "REQUEST");
+        var text = IcsPart("4", "text", "plain");
+
+        Assert.Same(request, MailMessageMapper.CalendarPart([reply, plain, request, text]));
+        Assert.Same(plain, MailMessageMapper.CalendarPart([reply, plain, text]));
+        Assert.Null(MailMessageMapper.CalendarPart([reply, text]));
+    }
+
+    [Fact]
+    public void CalendarPart_TakesACancelAsWillingly_AndReadsTheMethodCaseInsensitively()
+    {
+        var cancel = IcsPart("1", "text", "calendar", method: " cancel ");
+        var plain = IcsPart("2", "text", "calendar");
+
+        Assert.Same(cancel, MailMessageMapper.CalendarPart([plain, cancel]));
+    }
+
+    /// <summary>A single-part message: the calendar file is the body itself, specifier and all.</summary>
+    [Fact]
+    public void CalendarPart_TakesTheWholeBodyWhenTheMessageIsTheInvitation()
+    {
+        var body = IcsPart(string.Empty, "text", "calendar", method: "REQUEST");
+
+        Assert.Same(body, MailMessageMapper.CalendarPart([body]));
+    }
+
+    [Fact]
+    public void IsCalendarPart_ByTypeOrByName()
+    {
+        Assert.True(MailMessageMapper.IsCalendarPart(IcsPart("1", "text", "calendar")));
+        Assert.True(MailMessageMapper.IsCalendarPart(IcsPart("1", "application", "ics")));
+        Assert.True(MailMessageMapper.IsCalendarPart(IcsPart("1", "application", "octet-stream", name: "Invite.ICS")));
+        Assert.False(MailMessageMapper.IsCalendarPart(IcsPart("1", "text", "plain", name: "notes.txt")));
+    }
 }

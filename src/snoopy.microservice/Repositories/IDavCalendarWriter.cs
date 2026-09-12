@@ -1,3 +1,4 @@
+using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Dav;
 
 namespace weesky.Snoopy.Microservice.Repositories;
@@ -21,9 +22,12 @@ public interface IDavCalendarWriter
     /// replaced bytes archived, any tombstone on the name lifted. Never throws for a refusable
     /// file: each refusal comes back as its own
     /// <see cref="DavWriteStatus"/>, an invalid one carrying the precondition it broke.
+    /// <paramref name="cause"/> names the door for the archive — the webmail's invitation writes
+    /// pass <c>Webmail</c>.
     /// </summary>
     Task<DavWriteOutcome> PutAsync(Guid userId, Guid calendarId, string davName, string ics,
-        CancellationToken cancellationToken, bool createOnly = false, string? ifMatch = null);
+        CancellationToken cancellationToken, bool createOnly = false, string? ifMatch = null,
+        RevisionCause cause = RevisionCause.Put);
 
     /// <summary>
     /// Deletes it, archives its file and places a tombstone. <paramref name="ifMatch"/> guards it

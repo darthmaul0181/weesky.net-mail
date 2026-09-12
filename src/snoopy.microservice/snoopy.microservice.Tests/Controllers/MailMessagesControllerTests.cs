@@ -8,6 +8,7 @@ using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -21,13 +22,14 @@ public sealed class MailMessagesControllerTests
     private readonly Mock<IMailMessageRepository> _messages = new();
     private readonly Mock<IAccountConnectionResolver> _connections = new();
     private readonly Mock<ITrustedSenderStore> _trustedSenders = new();
+    private readonly Mock<IInvitationReader> _invitations = new();
 
     private MailMessagesController CreateController()
     {
         ResolveTo(Conn);
 
         return new MailMessagesController(_messages.Object, _connections.Object, _trustedSenders.Object,
-                                          NullLogger<MailMessagesController>.Instance)
+                                          _invitations.Object, NullLogger<MailMessagesController>.Instance)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
@@ -225,6 +227,51 @@ public sealed class MailMessagesControllerTests
         var result = await controller.GetMessage("INBOX", 42, CancellationToken.None);
 
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetMessage_FillsTheInvitationFromTheCalendarPart()
+    {
+        var detail = new MailMessageDetail { Uid = 7, CalendarPart = new MailCalendarPart("2", "BEGIN:VCALENDAR", false) };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), Conn, "INBOX", 7u, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+        var block = new MailInvitation { Uid = "u", Part = "2" };
+        _invitations.Setup(i => i.ReadAsync(It.IsAny<User>(), Conn, detail.CalendarPart!, It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(block);
+
+        var result = await CreateController().GetMessage("INBOX", 7, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(block, Assert.IsType<MailMessageDetail>(ok.Value).Invitation);
+    }
+
+    [Fact]
+    public async Task GetMessage_WhenTheInvitationReaderThrows_StillServesTheMessage()
+    {
+        var detail = new MailMessageDetail { Uid = 7, CalendarPart = new MailCalendarPart("2", "BEGIN:VCALENDAR", false) };
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), Conn, "INBOX", 7u, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(detail));
+        _invitations.Setup(i => i.ReadAsync(It.IsAny<User>(), Conn, detail.CalendarPart!, It.IsAny<CancellationToken>()))
+                    .ThrowsAsync(new InvalidOperationException("the calendar store is down"));
+
+        var result = await CreateController().GetMessage("INBOX", 7, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var invitation = Assert.IsType<MailMessageDetail>(ok.Value).Invitation;
+        Assert.True(invitation!.Unreadable);
+        Assert.Equal("2", invitation.Part);
+        Assert.Equal(MailMessagesController.Unavailable, invitation.Reason);
+    }
+
+    [Fact]
+    public async Task GetMessage_WithoutACalendarPart_NeverAsksTheReader()
+    {
+        _messages.Setup(m => m.GetAsync(It.IsAny<User>(), Conn, "INBOX", 7u, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(new MailMessageDetail { Uid = 7 }));
+
+        await CreateController().GetMessage("INBOX", 7, CancellationToken.None);
+
+        _invitations.Verify(i => i.ReadAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<MailCalendarPart>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Message source ──────────────────────────────────────────────────

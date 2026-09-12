@@ -56,7 +56,7 @@ réel a été l'inverse, et le carnet a occupé deux sous-projets, d'où l'agend
 | 5b | Les écrans | à écrire | à venir |
 | 5c | Le serveur CalDAV | à écrire | à venir |
 | 5d | La conformité clients, iOS compris | à écrire | à venir |
-| 5e | Les invitations | envisagée | à venir |
+| 5e | Les invitations, en deux phases : recevoir (5e1), inviter (5e2) | [5e](2026-09-12-webmail-calendar-5e-invitations-design.md) | à venir |
 
 Les specs sans numéro sont des améliorations transversales, livrées au fil de l'eau entre deux
 tranches : palettes, notifications, rafraîchissement périodique, en-tête et actions du lecteur,

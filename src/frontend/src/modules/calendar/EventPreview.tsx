@@ -4,14 +4,17 @@ import BellIcon from '../../icons/BellIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
 import MapPinIcon from '../../icons/MapPinIcon'
 import PencilIcon from '../../icons/PencilIcon.jsx'
+import PeopleIcon from '../../icons/PeopleIcon'
 import RepeatIcon from '../../icons/RepeatIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
+import UserIcon from '../../icons/UserIcon'
 import { useCalendar } from './calendarContext'
 import { dateLocaleOf, formatLongDay, formatLongDayRange, formatTime } from './calendarLocale'
 import type { Calendar, Occurrence } from './calendarTypes'
 import { wallClockOf } from './multiDay'
 import { colorOf } from './occurrenceStyle'
 import { addDays, utcOfLocalTime, type PlainDate } from './plainDate'
+import { myAnswerOf } from './myAnswer'
 import { useEvent } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
@@ -75,10 +78,9 @@ export default function EventPreview({
     }
   }, [anchor, onClose])
 
-  // Fetched only for a repeating occurrence — `EventDetail.fields.repeat` and `repeatIsExact` are
-  // what a rule can be worded from, and the bubble carries neither. Follows `ContactCard`'s
-  // `useContact`: the preview reads what the list already knows, then fetches the rest itself.
-  const { data: detail } = useEvent(occurrence.recurrenceText ? occurrence.eventId : null)
+  // Always fetched, one request per opening (`ContactCard`'s `useContact` pattern): the bubble
+  // carries neither a repeating event's rule nor its participants, and the detail holds both.
+  const { data: detail } = useEvent(occurrence.eventId)
   const rule = detail?.repeatIsExact ? detail.fields.repeat : undefined
   // The raw RRULE must never reach the screen: loading, a failed fetch and a rule too rich for
   // the picker (repeatIsExact false) all fall back to the same generic label as a save-in-flight.
@@ -105,6 +107,14 @@ export default function EventPreview({
 
   const title = occurrence.summary || t('views.noTitle')
   const color = colorOf(occurrence, calendarById)
+
+  // Décision 7: names only. The PARTSTAT a received file carries is the organizer's snapshot at
+  // send time, almost always empty or stale here — the user's own answer lives in the mail's card.
+  const master = (detail?.attendees ?? []).filter(a => !a.recurrenceId)
+  const organizer = master.find(a => a.isOrganizer)
+  const guests = master.filter(a => !a.isOrganizer)
+  // The one state that is true here: the user's own, read off the occurrence the server stamped.
+  const myAnswer = myAnswerOf(occurrence.myPartStat, t)
 
   return (
     <div className="event-preview" role="dialog" aria-label={title} ref={ref}
@@ -136,6 +146,21 @@ export default function EventPreview({
       {calendar && (
         <p className="event-preview-row">
           <CalendarIcon size={14} />{calendar.displayName}
+        </p>
+      )}
+      {organizer && (
+        <p className="event-preview-row">
+          <UserIcon size={14} />{t('preview.organizedBy', { name: organizer.name || organizer.email })}
+        </p>
+      )}
+      {guests.length > 0 && (
+        <p className="event-preview-row event-preview-attendees">
+          <PeopleIcon size={14} />{guests.map(a => a.name || a.email).join(', ')}
+        </p>
+      )}
+      {myAnswer && (
+        <p className="event-preview-row event-preview-answer">
+          <UserIcon size={14} />{myAnswer}
         </p>
       )}
 

@@ -62,9 +62,14 @@ internal static class IcsGuards
         if (CheckSize(ics) is { } tooLarge) return tooLarge;
 
         parsed = IcsDocument.TryLoad(ics);
-        return Check(ics, parsed) ?? CheckDensity(parsed!) ?? CheckExpansion(parsed!)
-            ?? CheckOverrides(parsed!) ?? CheckStart(parsed!);
+        return CheckParsed(ics, parsed);
     }
+
+    /// <summary>Everything <see cref="CheckAll"/> judges after the parse, for a caller that already
+    /// holds the model — the invitation reader, which reads METHOD before it judges the rest.</summary>
+    internal static IcsProblem? CheckParsed(string ics, IcsCalendar? parsed) =>
+        Check(ics, parsed) ?? CheckDensity(parsed!) ?? CheckExpansion(parsed!)
+        ?? CheckOverrides(parsed!) ?? CheckStart(parsed!);
 
     internal static IcsProblem? Check(string ics, IcsCalendar? parsed)
     {

@@ -7,6 +7,7 @@ using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Configuration;
@@ -98,6 +99,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IRequestIdentity>(sp => sp.GetRequiredService<RequestIdentity>());
         services.AddScoped<IAccountConnectionResolver, AccountConnectionResolver>();
         services.AddScoped<IOutgoingMessageFactory, OutgoingMessageFactory>();
+        services.AddScoped<IRoleFolderLocator, RoleFolderLocator>();
         services.AddScoped<IMailSender, MailSender>();
         services.AddScoped<IDraftSaver, DraftSaver>();
 
@@ -163,6 +165,12 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<ICalendarSyncStore, CalendarSyncStore>();
         services.AddScoped<IDavCalendarReader, DavCalendarReader>();
         services.AddScoped<IDavCalendarWriter, DavCalendarWriter>();
+        services.AddScoped<IUserAddresses, UserAddresses>();
+        // The responder takes the concrete reader — it calls ResolveAsync, which the card's
+        // interface does not carry — so both resolutions must be the one scoped instance.
+        services.AddScoped<InvitationReader>();
+        services.AddScoped<IInvitationReader>(provider => provider.GetRequiredService<InvitationReader>());
+        services.AddScoped<IInvitationResponder, InvitationResponder>();
 
         return services;
     }

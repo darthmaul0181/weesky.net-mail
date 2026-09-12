@@ -411,6 +411,11 @@ export const api = {
   getMailMessage: (folder, uid, options) =>
     request('GET', `/api/Mail/Messages/Detail?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
 
+  // A calendar route reached from the reader: it answers the organiser and files the event, and
+  // it names the message the block was read from, so it lives beside the message calls.
+  respondInvitation: (body, options) =>
+    request('POST', '/api/Calendar/Invitations/Respond', body, options),
+
   getMessageSource: (folder, uid, options) =>
     request('GET', `/api/Mail/Messages/Source?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
 

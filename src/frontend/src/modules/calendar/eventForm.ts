@@ -8,6 +8,7 @@ import {
   type PlainDate, plainDateOf, utcOfLocalTime,
 } from './plainDate'
 import { WEEKDAY_TOKENS } from './calendarLocale'
+import { isTentative } from './occurrenceStyle'
 
 /** What the repeat picker can say. Anything richer a phone wrote comes back as `custom`, rule
     and all, so nothing is narrowed by being opened in an editor that cannot draw it. */
@@ -129,9 +130,18 @@ export function formOf(
     startDate, startTime, endDate, endTime, timeZone,
     repeat: repeatChoiceOf(f.repeat), reminders: [...f.reminderMinutesBefore],
     location: f.location ?? '', description: f.description ?? '',
-    availability: f.availability, visibility: f.visibility, url: f.url ?? '',
+    availability: availabilityOf(detail), visibility: f.visibility, url: f.url ?? '',
     keepRepeat: !detail.repeatIsExact || beyondTheBlock(f.repeat), foreignAlarms: detail.foreignAlarms,
   }
+}
+
+/** The grid's rule, in the editor's words: the user's own answer is their availability once
+    there is one, so an acceptance shows busy — or free, the entry transparent — over any
+    STATUS:TENTATIVE the file kept, and « provisoire » shows tentative over a CONFIRMED. The
+    `Tentative` availability *is* the STATUS, which is what `isTentative` reads it as. */
+function availabilityOf({ fields: { availability }, myPartStat }: EventDetail): Availability {
+  if (isTentative(availability, myPartStat)) return 'Tentative'
+  return availability === 'Tentative' ? 'Busy' : availability
 }
 
 /** The days and clocks the editor is sown with: the occurrence's own when one is opened, the

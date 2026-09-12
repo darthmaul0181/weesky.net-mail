@@ -44,13 +44,20 @@
     "clearSearch": "Clear",
     "searchTooShort": "Type at least {{min}} characters to search"
   },
+  "myAnswer": {
+    "accepted": "You accepted",
+    "tentative": "You answered tentatively",
+    "declined": "You declined",
+    "pending": "You have not answered yet"
+  },
   "preview": {
     "allDay": "All day",
     "edit": "Edit",
     "delete": "Delete",
     "close": "Close",
     "reminderSet": "Reminder set",
-    "repeatsGeneric": "Repeats"
+    "repeatsGeneric": "Repeats",
+    "organizedBy": "Organised by {{name}}"
   },
   "search": {
     "capped": "Only the first {{max}} results are shown"

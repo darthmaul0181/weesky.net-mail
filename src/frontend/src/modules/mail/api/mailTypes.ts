@@ -104,6 +104,81 @@ export interface MailSpamScore {
   raw: string
 }
 
+/** What the organiser's block asks for: a date to answer, or the word that it is off. */
+export type InvitationMethod = 'Request' | 'Cancel'
+
+/** How the event the block names stands in the user's own calendar. `Outdated` is a copy the
+    organiser has since revised, `Newer` one the calendar already holds a later version of. */
+export type InvitationPresence = 'Absent' | 'Current' | 'Outdated' | 'Newer' | 'Cancelled'
+
+/** What the reader can do about it. `AddOnly` files the event and mails nobody — a forwarded
+    invitation has no answer to give — and `Remove` drops a cancelled one from the calendar. */
+export type InvitationAnswer = 'Accepted' | 'Tentative' | 'Declined' | 'AddOnly' | 'Remove'
+
+export interface InvitationPerson {
+  email: string
+  /** The display name the block carried; absent when it named an address alone. */
+  name?: string
+}
+
+/** The invitation a message carries, read by the backend so the reader never parses iCalendar. */
+export interface MailInvitation {
+  method: InvitationMethod
+  /** The event's own identifier, and the revision the organiser stamped this block with. */
+  uid: string
+  sequence: number
+  summary?: string
+  /** A timed event's two instants, in UTC. Absent on a whole-day one. */
+  start?: string
+  end?: string
+  /** A whole-day event's first day, and the day after its last — iCalendar's half-open range. */
+  startDate?: string
+  endDateExclusive?: string
+  isAllDay: boolean
+  location?: string
+  /** The event is one of a series: answering here answers the whole of it. */
+  repeats: boolean
+  organizer?: InvitationPerson
+  attendees: InvitationPerson[]
+  /** The account address the block lists as an attendee. Absent when the invitation reached the
+      user by forwarding: there is then nobody to answer for, only an event to file. */
+  addressedTo?: string
+  /** The answer the file records for that address, and the one the calendar copy holds. */
+  filePartStat?: string
+  savedPartStat?: string
+  inCalendar: InvitationPresence
+  /** The calendar holding the copy, when the event is in one. */
+  calendarId?: string
+  /** The block carries a single date of a series: nothing here can be answered as a whole. */
+  occurrenceOnly: boolean
+  /** The MIME part the block was read from — what an answer names back. */
+  part: string
+  /** The block could not be read, `reason` says why: the file stays an ordinary attachment. */
+  unreadable: boolean
+  reason?: string
+}
+
+/** An answer's outcome: the block as it now stands, whether the reply reached the organiser,
+    and whether the message itself left for the trash. */
+export interface InvitationResponse {
+  invitation: MailInvitation
+  replySent: boolean
+  replyError?: string
+  trashed: boolean
+}
+
+/** `language` and `timeZone` word and place the reply mail the backend sends on the user's
+    behalf — the organiser reads it, not the user, so neither can be inferred server-side. */
+export interface RespondInvitationArgs {
+  folder: string
+  uid: number
+  part: string
+  answer: InvitationAnswer
+  calendarId?: string
+  language: string
+  timeZone: string
+}
+
 export interface MailMessageDetail {
   uid: number
   folderPath: string
@@ -138,6 +213,8 @@ export interface MailMessageDetail {
   /** The backend cut the body at one of its ceilings: what is shown is not the whole message. */
   truncated: boolean
   attachments: MailAttachmentInfo[]
+  /** The calendar invitation the message carries, when it carries one the reader can act on. */
+  invitation?: MailInvitation
 }
 
 /**

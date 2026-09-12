@@ -2,6 +2,7 @@ using Ical.Net;
 using Ical.Net.CalendarComponents;
 using weesky.Snoopy.Microservice.Services.Calendar;
 using Xunit;
+using IcsCalendar = Ical.Net.Calendar;
 
 namespace weesky.Snoopy.Microservice.Tests.Services;
 
@@ -78,9 +79,9 @@ public sealed class IcsTimeZonesTests
         Assert.Equal(TimeSpan.FromHours(standardHours), standard.OffsetTo?.Offset);
     }
 
-    private static Calendar WithZone(VTimeZone zone)
+    private static IcsCalendar WithZone(VTimeZone zone)
     {
-        var calendar = new Calendar();
+        var calendar = new IcsCalendar();
         calendar.AddTimeZone(zone);
         return calendar;
     }

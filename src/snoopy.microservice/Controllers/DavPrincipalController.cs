@@ -6,7 +6,7 @@ using weesky.Snoopy.Microservice.Controllers.Dav;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Platform;
-using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Services.CalDav;
 using weesky.Snoopy.Microservice.Services.CardDav;
 using weesky.Snoopy.Microservice.Services.Dav;
@@ -19,8 +19,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 /// </summary>
 public sealed class DavPrincipalController(
     PreferencesDbContext preferences,
-    IAccountInfoProvider accounts,
-    ISendingIdentityStore identities,
+    IUserAddresses addresses,
     TimeProvider clock,
     ILogger<DavPrincipalController> logger) : DavControllerBase(preferences, logger)
 {
@@ -156,26 +155,7 @@ public sealed class DavPrincipalController(
                 || request.Names.Contains(DavPrincipalProperties.CalendarUserAddressSet));
         if (!asked || kind is not (DavResourceKind.Principal or DavResourceKind.PrincipalCollection))
             return null;
-
-        List<string> addresses = [user.Email];
-        var account = await accounts.GetAccountInfoAsync(user, cancellationToken);
-        if (account.IsSuccess)
-        {
-            addresses.AddRange(account.Value.Domains
-                .Where(domain => !string.Equals(domain.Name, user.Domain, StringComparison.OrdinalIgnoreCase))
-                .Select(domain => $"{user.Name}@{domain.Name}"));
-        }
-        else
-        {
-            Logger.LogWarning(
-                "The account's domains were unavailable ({Reason}); the principal announces its primary address alone",
-                account.Error);
-        }
-
-        addresses.AddRange(
-            (await identities.GetAllAsync(user.WebmailUid, cancellationToken)).Select(i => i.Address));
-        return [.. addresses.Select(address => address.ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)];
+        return await addresses.ForPrincipalAsync(user, cancellationToken);
     }
 
     /// <summary>

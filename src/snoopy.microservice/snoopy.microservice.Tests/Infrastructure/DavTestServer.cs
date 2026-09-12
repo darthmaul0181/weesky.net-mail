@@ -18,6 +18,7 @@ using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 
 namespace weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -191,11 +192,12 @@ internal sealed class DavTestServer : IAsyncDisposable
         services.AddScoped<ICalendarStore>(provider => provider.GetRequiredService<CalendarStore>());
         services.AddScoped<CalendarEventStore>();
         services.AddScoped<IDavCalendarWriter, DavCalendarWriter>();
-        // The principal reads its addresses through these two. Answered by default with the
-        // account's own domain and no curated identity, so no CardDAV test changes shape; a test
-        // that cares replaces them through `overrides`.
+        // The principal reads its addresses through these two, behind the shared UserAddresses
+        // service. Answered by default with the account's own domain and no curated identity, so
+        // no CardDAV test changes shape; a test that cares replaces them through `overrides`.
         services.AddSingleton(DefaultAccounts(user));
         services.AddSingleton(EmptyIdentities());
+        services.AddScoped<IUserAddresses, UserAddresses>();
     }
 
     private static IAccountInfoProvider DefaultAccounts(DavTestUser user)

@@ -3,12 +3,19 @@ import type { Calendar, Occurrence } from './calendarTypes'
 
 export type Rendering = 'busy' | 'free' | 'tentative' | 'cancelled'
 
+/** Whether the entry is tentative: the user's own answer once the invitation has one — it is
+    what « provisoire » means to them, and it outranks a STATUS:TENTATIVE the file still carries,
+    the organizer's or an earlier save's — and the event's own STATUS otherwise (spec 5e). */
+export function isTentative(status: string | undefined, myPartStat: string | undefined): boolean {
+  return (myPartStat ?? status)?.toUpperCase() === 'TENTATIVE'
+}
+
 /** The four renderings the mockup fixes. A cancellation is read first: an event called off is
     called off whatever it was going to be, and drawing it as tentative would say the opposite. */
-export function renderingOf(o: Pick<Occurrence, 'status' | 'transparency'>): Rendering {
+export function renderingOf(o: Pick<Occurrence, 'status' | 'transparency' | 'myPartStat'>): Rendering {
   const status = o.status?.toUpperCase()
   if (status === 'CANCELLED') return 'cancelled'
-  if (status === 'TENTATIVE') return 'tentative'
+  if (isTentative(status, o.myPartStat)) return 'tentative'
   return o.transparency?.toUpperCase() === 'TRANSPARENT' ? 'free' : 'busy'
 }
 

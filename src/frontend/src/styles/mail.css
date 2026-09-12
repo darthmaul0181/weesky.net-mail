@@ -1043,6 +1043,69 @@
 .attachment-split-more:hover { background: var(--action-primary-hover); }
 .banner-split-more { padding: 0 7px; }
 
+/* The invitation card (spec 5e, decision 6, the "Retenue" board of the mock-up): the event
+   preview's card on the reader's sunken band, between the header and the body. The rows and the
+   sentences are indented under the title by the icon's width plus its gap. */
+.invitation-card {
+  margin: 14px 22px 0;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.invitation-card-head { display: flex; align-items: center; gap: 8px; }
+.invitation-card-head > svg { flex: none; color: var(--action-primary); }
+.invitation-card-title { font-weight: 700; font-size: 15px; line-height: 1.35; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.invitation-card-badge {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.invitation-card-badge.is-cancel { color: var(--danger); }
+.invitation-card-context { margin: 0 0 0 24px; color: var(--text); }
+.invitation-card-hint { margin: 0 0 0 24px; color: var(--text-muted); }
+/* One right-aligned label column, at least the mock-up's 88px and never narrower than the
+   longest label; minmax(0, 1fr) lets a long value wrap instead of widening the card. */
+.invitation-card-rows {
+  display: grid;
+  grid-template-columns: minmax(88px, max-content) minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0 0 0 24px;
+}
+.invitation-card-rows dt { color: var(--text-muted); text-align: right; }
+.invitation-card-rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.invitation-card-repeats { color: var(--text-muted); }
+.invitation-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.invitation-card-actions.is-answered { justify-content: space-between; }
+/* Every button is as wide as its label — the mock-up's btn-sm — whatever .btn-primary's form default. */
+.invitation-card .btn { width: auto; padding: 7px 12px; font-size: 13px; }
+.invitation-card-answer { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.invitation-card-answer.is-muted { color: var(--text-muted); }
+.invitation-card-answer b { font-weight: 600; }
+.invitation-card-check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--success); color: #fff; font-size: 9px; font-weight: 700;
+}
+.invitation-card-others { display: inline-flex; gap: 8px; margin-left: auto; }
+/* The calendar picker is the event editor's own (CalendarSelect); here it is one control among
+   the buttons, as wide as its name and as tall as they are, its menu opening under its left edge. */
+.invitation-card .dropdown-root { flex: none; }
+.invitation-card .calendar-select { width: auto; padding: 6px 10px; font-size: 13px; }
+.invitation-card .dropdown-menu { left: 0; right: auto; }
+.invitation-card .btn[aria-pressed="true"] { outline: 2px solid var(--action-primary); outline-offset: 1px; }
+.invitation-card-error { margin: 0 0 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--danger); }
+@media (max-width: 639px) {
+  .invitation-card { margin: 10px 12px 0; }
+}
+
 /* The article carries the column layout so the body can claim the leftover height. Without
    this the iframe's flex:1 resolves against a plain block and it collapses to min-height,
    leaving the bottom of the panel empty while the message scrolls in a short window. */

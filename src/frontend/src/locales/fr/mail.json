@@ -253,6 +253,51 @@
       "security": "Sécurité :",
       "tls": "Chiffrement standard (TLS)",
       "noTls": "Aucun chiffrement"
+    },
+    "invitation": {
+      "badgeRequest": "Invitation",
+      "badgeUpdate": "Mise à jour",
+      "badgeCancel": "Annulé",
+      "when": "Quand",
+      "where": "Où",
+      "organizer": "Organisateur",
+      "attendees": "Invités",
+      "allDay": "Journée entière",
+      "repeats": "Se répète",
+      "accept": "Accepter",
+      "tentative": "Provisoire",
+      "decline": "Refuser",
+      "addOnly": "Ajouter à l’agenda",
+      "remove": "Retirer de mon agenda",
+      "resend": "Renvoyer",
+      "calendar": "Agenda",
+      "answered": {
+        "ACCEPTED": "Vous avez accepté",
+        "TENTATIVE": "Vous avez répondu provisoire",
+        "in": "{{answer}} · dans <b>{{calendar}}</b>",
+        "added": "Dans votre agenda · {{calendar}}"
+      },
+      "forwarded": "Cette invitation ne vous était pas adressée. Vous pouvez l’ajouter à votre agenda sans y répondre.",
+      "alreadyAnswered": "L’organisateur vous a noté comme ayant {{answer}}.",
+      "partstat": {
+        "ACCEPTED": "accepté",
+        "TENTATIVE": "répondu provisoire",
+        "DECLINED": "refusé"
+      },
+      "updated": "L’organisateur a modifié ce rendez-vous. Votre réponse précédente est surlignée.",
+      "cancelled": "L’organisateur a annulé ce rendez-vous.",
+      "noAction": {
+        "occurrenceOnly": "Cette invitation ne porte que sur une date de la série. Corrigez le rendez-vous dans votre agenda.",
+        "newer": "Votre agenda porte une version plus récente de ce rendez-vous.",
+        "cancelAbsent": "Ce rendez-vous n’est pas dans votre agenda."
+      },
+      "unreadable": "Invitation illisible",
+      "unreadableHint": "Le fichier d’agenda n’a pas pu être lu. Il reste disponible en pièce jointe.",
+      "replyFailed": "La réponse n’a pas pu être envoyée.",
+      "addedReplyFailed": "Ajouté à l’agenda. La réponse n’a pas pu être envoyée.",
+      "failed": "La réponse n’a pas pu être enregistrée.",
+      "reload": "Recharger le message",
+      "declinedStays": "Refusé. Le message reste ici."
     }
   },
   "viewer": {

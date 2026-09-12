@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   trustSender: vi.fn(),
   untrustSender: vi.fn(),
   getContacts: vi.fn(),
+  respondInvitation: vi.fn(),
+  getCalendars: vi.fn(),
   // The same class queries.ts imports from the mocked module, so its `instanceof ApiError`
   // holds against what these tests throw. A locally-declared twin would fail that check and
   // silently route every case to the generic branch.
@@ -54,6 +56,8 @@ vi.mock('../../../api.js', () => ({
     trustSender: mocks.trustSender,
     untrustSender: mocks.untrustSender,
     getContacts: mocks.getContacts,
+    respondInvitation: mocks.respondInvitation,
+    getCalendars: mocks.getCalendars,
   },
   ApiError: mocks.ApiError,
   requestBlob: mocks.requestBlob,
@@ -140,6 +144,25 @@ const blockedBackground = {
   htmlBody: '<div data-blocked-bg="https://cdn.example/hero.png" style="background-color: #ffffff">x</div>',
 }
 
+const invitation = {
+  method: 'Request', uid: 'evt-1', sequence: 0, isAllDay: false, repeats: false,
+  attendees: [{ email: 'mick@weesky.be' }], organizer: { email: 'alice@x.be', name: 'Alice Martin' },
+  addressedTo: 'mick@weesky.be', filePartStat: 'NEEDS-ACTION', inCalendar: 'Absent',
+  occurrenceOnly: false, part: '3', unreadable: false,
+  summary: 'Point projet', start: '2026-07-20T09:00:00Z', end: '2026-07-20T10:00:00Z',
+}
+
+const icsPart = {
+  part: '3', fileName: 'invite.ics', contentType: 'text/calendar', size: 512,
+  isInline: false, contentId: null,
+}
+
+const invited = {
+  ...detail,
+  attachments: [...detail.attachments, icsPart],
+  invitation,
+}
+
 // Seeds the list cache the reader's flag labels read at render time — findCachedSummary's
 // only source of seen/flagged, since MailMessageDetail carries neither.
 function renderWithCachedSummary(
@@ -200,6 +223,8 @@ describe('MessageReader', () => {
     mocks.trustSender.mockResolvedValue(undefined)
     mocks.untrustSender.mockResolvedValue(undefined)
     mocks.getContacts.mockResolvedValue({ contacts: [] })
+    mocks.getCalendars.mockResolvedValue({ calendars: [] })
+    mocks.respondInvitation.mockResolvedValue({ invitation: invitation, replySent: true, trashed: false })
   })
 
   it('prompts when nothing is selected', () => {
@@ -1826,6 +1851,70 @@ describe('MessageReader', () => {
 
       expect(container.querySelector('.reader-header .reader-actions')).not.toBeNull()
       expect(container.querySelector('.actionbar')).toBeNull()
+    })
+  })
+
+  describe('the invitation card', () => {
+    type ReaderProps = Parameters<typeof MessageReader>[0]
+
+    function renderReader(props: Partial<ReaderProps> = {}) {
+      render(
+        <QueryClientProvider client={makeClient()}>
+          <MemoryRouter>
+            <MessageReader folderPath="INBOX" uid={2} {...props} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      )
+    }
+
+    // The card already says everything the file says; a chip beside it offers the same event a
+    // second time, as bytes.
+    it('keeps the calendar part out of the attachments while the card is shown', async () => {
+      mocks.getMailMessage.mockResolvedValue(invited)
+      renderReader()
+
+      expect(await screen.findByText('Point projet')).toBeInTheDocument()
+      expect(screen.getByText('report.pdf')).toBeInTheDocument()
+      expect(screen.queryByText('invite.ics')).toBeNull()
+    })
+
+    it('leaves the chip in place when the block could not be read', async () => {
+      mocks.getMailMessage.mockResolvedValue({
+        ...invited, invitation: { ...invitation, unreadable: true, reason: 'not an invitation' },
+      })
+      renderReader()
+
+      expect(await screen.findByText('Unreadable invitation')).toBeInTheDocument()
+      expect(screen.getByText('invite.ics')).toBeInTheDocument()
+    })
+
+    it('departs the message when the decline left it for the trash', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(invited)
+      mocks.respondInvitation.mockResolvedValue({
+        invitation: { ...invitation, inCalendar: 'Absent' }, replySent: true, trashed: true,
+      })
+      renderReader({ onDeparted })
+      await screen.findByText('Point projet')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+
+      await waitFor(() => expect(onDeparted).toHaveBeenCalledWith(2))
+    })
+
+    it('stays put when the decline left the message where it was', async () => {
+      const onDeparted = vi.fn()
+      mocks.getMailMessage.mockResolvedValue(invited)
+      mocks.respondInvitation.mockResolvedValue({
+        invitation: { ...invitation, inCalendar: 'Absent' }, replySent: true, trashed: false,
+      })
+      renderReader({ onDeparted })
+      await screen.findByText('Point projet')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+
+      await waitFor(() => expect(mocks.respondInvitation).toHaveBeenCalled())
+      expect(onDeparted).not.toHaveBeenCalled()
     })
   })
 })

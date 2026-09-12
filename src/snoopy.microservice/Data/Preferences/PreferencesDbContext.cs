@@ -155,6 +155,7 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.CalendarId, e.DavName }).IsUnique();
         modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.UserId, e.FirstOccurrence, e.LastOccurrence });
         modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.CalendarId, e.SyncSequence });
+        modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.UserId, e.Uid });
         modelBuilder.Entity<CalendarEvent>().HasOne<Calendar>().WithMany().HasForeignKey(e => e.CalendarId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<CalendarEvent>().HasOne<WebmailUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
 

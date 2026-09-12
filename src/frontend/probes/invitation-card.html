@@ -1,0 +1,203 @@
+<!doctype html>
+<!--
+  Probe: the invitation card in the reader, in its seven states (spec 5e, décision 3), FR and EN.
+
+  What no test in this repo can see. The card is a labelled grid inside a column that is
+  `overflow: hidden`, so a value too wide for it is cut off rather than scrollable, and jsdom
+  computes no layout at all. Three things are read here:
+
+    escape 0     — the card never overhangs the reader column, at 400px of column as at 900.
+                   `.invitation-card` is the box, but the number is the worst overhang of ANY
+                   descendant: the box that escapes is rarely the container a rule names.
+    libelles     — the four labelled rows share ONE label column. `.invitation-card-rows` is
+                   `grid-template-columns: max-content 1fr`, so every `dd` must start at the same
+                   x; a second number there means a row escaped the grid.
+    actions      — the three answers are one line from 480px up. The row wraps (`flex-wrap`), so
+                   the test is its height against one button's: `WRAP` at 900 is the regression.
+                   At 400 a wrap is expected and is not a fault.
+
+  Measured in headless Edge, viewport 1366x1403, on the card restyled after the mock-up (bold
+  15px title, outlined badge, right-aligned labels indented 24px, the calendar combo first in the
+  row, buttons as wide as their labels):
+
+    escape    0 in all 28 readings — the fourteen cards (seven states, FR and EN) at 400 and at
+              900. The card itself is 354 wide at 400 and 854 at 900.
+    libelles  one value per card — 188 at 400 and 612 at 900, the same in both languages since
+              the label column is `minmax(88px, max-content)` and both `Organisateur` and
+              `Organiser` fit the 88px; one card reporting two values is the regression.
+    actions   32-33 at 900 — one line, the combo and the three answers side by side — and WRAP
+              at 400 on states 1, 2 and 5, which is expected there and is not a fault.
+
+  The loop skips any node with no box: the calendar `<select>`'s `<option>` elements are laid
+  out by the widget and answer a zero-sized rect at the origin, which once read as an overhang
+  of 24 at 400 and 448 at 900 on state 1.
+
+  Drive it in Chrome/Edge with device-metric emulation (the platform clamps --window-size), at a
+  400px and a 900px reader column — the two `.mail-reader` widths this file lays out itself, so
+  one run at any window ≥ 1360 reads both. `document.title` becomes 'probe-done'.
+-->
+<html lang="fr" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — invitation card</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <link rel="stylesheet" href="/src/styles/calendar.css" />
+  <style>
+    body { display: flex; gap: 24px; padding: 24px; align-items: flex-start; background: var(--bg); }
+    /* The reader column as MailLayout draws it: a band stack that hides its overflow. */
+    .mail-reader { background: var(--surface); border: 1px solid var(--border); overflow: hidden; }
+    .col-400 .mail-reader { width: 400px; }
+    .col-900 .mail-reader { width: 900px; }
+    .col-label { font: 600 12px system-ui; margin-bottom: 6px; color: var(--text); }
+    #out { position: fixed; right: 0; bottom: 0; z-index: 9;
+           white-space: pre; font-family: ui-monospace, monospace; font-size: 11px;
+           background: #fff; color: #000; padding: 8px; max-height: 60vh; overflow: auto; }
+  </style>
+</head>
+<body>
+  <div class="col-400"><div class="col-label">reader column 400px</div><div class="mail-reader"></div></div>
+  <div class="col-900"><div class="col-label">reader column 900px</div><div class="mail-reader"></div></div>
+  <div id="out"></div>
+
+  <script>
+    const ICON = `<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+      <rect x="2.5" y="3.5" width="15" height="14" rx="2" /><path d="M2.5 8h15" stroke-linecap="round" />
+      <path d="M6 2v3" stroke-linecap="round" /><path d="M14 2v3" stroke-linecap="round" /></svg>`
+
+    const L = {
+      fr: {
+        badge: 'Invitation', update: 'Mise à jour', cancel: 'Annulé',
+        when: 'Quand', where: 'Où', organizer: 'Organisateur', attendees: 'Invités',
+        accept: 'Accepter', tentative: 'Provisoire', decline: 'Refuser',
+        addOnly: 'Ajouter à l’agenda', remove: 'Retirer de mon agenda', calendar: 'Agenda',
+        title: 'Revue trimestrielle des comptes fournisseurs',
+        date: 'samedi 10 octobre 2026, 19:30 – 22:30',
+        place: 'Salle Mercure, 14 rue de la Longue-Haie, 1000 Bruxelles',
+        who: 'Marc Dupont', guests: 'Alice Martin, Benoît Lefèvre, Chloé Vandersteen, Dominique Peeters',
+        answered: 'Vous avez accepté · dans Personnel',
+        forwarded: 'Cette invitation ne vous était pas adressée. Vous pouvez l’ajouter à votre agenda sans y répondre.',
+        updated: 'L’organisateur a modifié ce rendez-vous. Votre réponse précédente est surlignée.',
+        cancelled: 'L’organisateur a annulé ce rendez-vous.',
+        noAction: 'Votre agenda porte une version plus récente de ce rendez-vous.',
+        unreadable: 'Invitation illisible',
+        unreadableHint: 'Le fichier d’agenda n’a pas pu être lu. Il reste disponible en pièce jointe.',
+      },
+      en: {
+        badge: 'Invitation', update: 'Update', cancel: 'Cancelled',
+        when: 'When', where: 'Where', organizer: 'Organiser', attendees: 'Attendees',
+        accept: 'Accept', tentative: 'Tentative', decline: 'Decline',
+        addOnly: 'Add to calendar', remove: 'Remove from my calendar', calendar: 'Calendar',
+        title: 'Quarterly review of the supplier accounts',
+        date: 'Saturday, 10 October 2026, 19:30 – 22:30',
+        place: 'Mercury room, 14 rue de la Longue-Haie, 1000 Brussels',
+        who: 'Marc Dupont', guests: 'Alice Martin, Benoît Lefèvre, Chloé Vandersteen, Dominique Peeters',
+        answered: 'You accepted · in Personnel',
+        forwarded: 'This invitation was not addressed to you. You can add it to your calendar without answering.',
+        updated: 'The organiser changed this event. Your previous answer is highlighted.',
+        cancelled: 'The organiser cancelled this event.',
+        noAction: 'Your calendar holds a newer version of this event.',
+        unreadable: 'Unreadable invitation',
+        unreadableHint: 'The calendar file could not be read. It stays available as an attachment.',
+      },
+    }
+
+    const btn = (label, pressed, kind = 'ghost') =>
+      `<button type="button" class="btn ${kind === 'primary' ? 'btn-primary btn-auto' : kind === 'danger' ? 'btn-danger' : 'btn-ghost'}"${pressed ? ' aria-pressed="true"' : ''}>${label}</button>`
+
+    function rows(s) {
+      return `<dl class="invitation-card-rows">
+        <dt>${s.when}</dt><dd>${s.date}</dd>
+        <dt>${s.where}</dt><dd>${s.place}</dd>
+        <dt>${s.organizer}</dt><dd>${s.who}</dd>
+        <dt>${s.attendees}</dt><dd>${s.guests}</dd></dl>`
+    }
+
+    // One entry per state of the mock-up: the badge it wears, the sentence above the rows, and
+    // the footer under them.
+    function states(s) {
+      const three = btn(s.accept, false, 'primary') + btn(s.tentative) + btn(s.decline)
+      const picker = `<div class="dropdown-root is-left"><button type="button" class="calendar-select" aria-label="${s.calendar}" aria-expanded="false"><span class="calendar-swatch" aria-hidden="true" style="--cal: #2e7d5b"></span><span class="calendar-select-name">Personnel</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>`
+      const check = '<span class="invitation-card-check" aria-hidden="true">✓</span>'
+      return [
+        ['1 invite', s.badge, 'request', null, `<div class="invitation-card-actions">${picker}${three}</div>`],
+        ['2 answered', s.badge, 'request', null,
+          `<div class="invitation-card-actions is-answered">
+             <span class="invitation-card-answer">${check}${s.answered}</span>
+             <span class="invitation-card-others">${btn(s.tentative)}${btn(s.decline)}</span></div>`],
+        ['3 forwarded', s.badge, 'request', s.forwarded,
+          `<div class="invitation-card-actions">${picker}${btn(s.addOnly, false, 'primary')}</div>`],
+        ['4 updated', s.update, 'update', s.updated,
+          `<div class="invitation-card-actions">${btn(s.accept, true, 'primary')}${btn(s.tentative)}${btn(s.decline)}</div>`],
+        ['5 cancelled', s.cancel, 'cancel', s.cancelled,
+          `<div class="invitation-card-actions is-answered"><span class="invitation-card-answer is-muted">${s.answered}</span>
+             <span class="invitation-card-others">${btn(s.remove, false, 'danger')}</span></div>`],
+        ['6 noAction', s.badge, 'request', null, `<p class="invitation-card-hint">${s.noAction}</p>`],
+        ['7 unreadable', null, null, null, null],
+      ]
+    }
+
+    function card(lang, [name, badge, kind, context, foot]) {
+      const s = L[lang]
+      const el = document.createElement('section')
+      el.className = 'invitation-card' + (foot === null ? ' is-unreadable' : '')
+      el.dataset.case = `${lang} ${name}`
+      el.innerHTML = foot === null
+        ? `<div class="invitation-card-head">${ICON}
+             <span class="invitation-card-title">${s.unreadable}</span></div>
+           <p class="invitation-card-hint">${s.unreadableHint}</p>`
+        : `<div class="invitation-card-head">${ICON}
+             <span class="invitation-card-title">${s.title}</span>
+             <span class="invitation-card-badge is-${kind}">${badge}</span></div>
+           ${context ? `<p class="invitation-card-context">${context}</p>` : ''}
+           ${rows(s)}${foot}`
+      return el
+    }
+
+    for (const column of document.querySelectorAll('.mail-reader'))
+      for (const lang of ['fr', 'en'])
+        for (const state of states(L[lang])) column.append(card(lang, state))
+
+    const ceil = n => Math.ceil(n)
+    const report = { viewport: `${window.innerWidth} x ${window.innerHeight}` }
+
+    for (const column of document.querySelectorAll('.mail-reader')) {
+      const width = ceil(column.getBoundingClientRect().width)
+      for (const el of column.querySelectorAll('.invitation-card')) {
+        const box = el.getBoundingClientRect()
+        const inner = column.getBoundingClientRect()
+        // Every descendant, not the card alone: a value that escapes does so on its own. A node
+        // with no box is skipped — an `<option>` is laid out by the widget and not by the page,
+        // and its zero-width rect at the origin read as a 448px escape on the state-1 card.
+        let escape = 0
+        for (const node of [el, ...el.querySelectorAll('*')]) {
+          const r = node.getBoundingClientRect()
+          if (r.width === 0 || r.height === 0) continue
+          escape = Math.max(escape, ceil(r.right - inner.right), ceil(inner.left - r.left))
+        }
+        // One label column: every dd starts at the same x, or the grid was escaped.
+        const starts = [...el.querySelectorAll('.invitation-card-rows dd')]
+          .map(dd => ceil(dd.getBoundingClientRect().left))
+        const unique = [...new Set(starts)]
+        const actions = el.querySelector('.invitation-card-actions')
+        const button = el.querySelector('.btn')
+        let line = `escape ${Math.max(0, escape)}  carte ${ceil(box.width)}x${ceil(box.height)}`
+        line += `  libelles ${unique.length ? unique.join('/') : '-'}`
+          + (unique.length > 1 ? ' DESALIGNE' : '')
+        if (actions && button) {
+          const tall = actions.getBoundingClientRect().height > button.getBoundingClientRect().height + 4
+          line += `  actions ${ceil(actions.getBoundingClientRect().height)}` + (tall ? ' WRAP' : '')
+        }
+        report[`${width} ${el.dataset.case}`] = line
+      }
+    }
+
+    document.getElementById('out').textContent =
+      Object.entries(report).map(([k, v]) => k.padEnd(22) + v).join('\n')
+    document.title = 'probe-done'
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
 import EventPreview from './EventPreview'
 import type { EventDetail, Occurrence } from './calendarTypes'
@@ -32,11 +32,19 @@ function detailOf(fields: Partial<EventDetail> & { id: string }): EventDetail {
     reads anyway. */
 const anchors: HTMLElement[] = []
 const WIDTH = window.innerWidth
+const HEIGHT = window.innerHeight
+
+// The preview now always fetches the detail (Task 7); a case with nothing to say about it still
+// needs an answer, or the query settles on `undefined`, which react-query refuses to hold.
+beforeEach(() => {
+  api.getEvent.mockResolvedValue(detailOf({ id: 'e1' }))
+})
 
 // The window's width and the anchors are global state; a file that left either behind would make
 // every case after it depend on the order they run in.
 afterEach(() => {
   window.innerWidth = WIDTH
+  window.innerHeight = HEIGHT
   anchors.splice(0).forEach(node => node.remove())
   vi.clearAllMocks()
 })
@@ -181,6 +189,20 @@ describe('EventPreview', () => {
     expect(draw(DENTIST, anchorAt(400, 500))).toHaveStyle({ left: '92px' })
   })
 
+  // A list row spans the window: no side is left for the bubble, so it hangs under the row,
+  // from the row's left edge — and above it when the screen has no room below.
+  it('hangs below a row that leaves no side free', () => {
+    window.innerWidth = 1200
+    window.innerHeight = 800
+    expect(draw(DENTIST, anchorAt(100, 1150))).toHaveStyle({ left: '100px', top: '138px' })
+  })
+
+  it('hangs above such a row when the screen has no room below it', () => {
+    window.innerWidth = 1200
+    window.innerHeight = 140
+    expect(draw(DENTIST, anchorAt(100, 1150))).toHaveStyle({ left: '100px', top: '92px' })
+  })
+
   it('closes on Escape', async () => {
     const onClose = vi.fn()
     draw(DENTIST, anchorAt(200, 300), { onClose })
@@ -215,5 +237,57 @@ describe('EventPreview', () => {
   it('is a dialog named after the event', () => {
     draw()
     expect(screen.getByRole('dialog', { name: 'Dentist' })).toBeInTheDocument()
+  })
+
+  it('a received event says who organises it and names the attendees, without their state',
+    async () => {
+      api.getEvent.mockResolvedValue(detailOf({
+        id: 'e1', attendees: [
+          { email: 'marc@example.org', name: 'Marc Dupont', isOrganizer: true },
+          { email: 'alice@weesky.be', name: 'Alice', partStat: 'ACCEPTED', isOrganizer: false },
+          { email: 'jean@example.net', partStat: 'NEEDS-ACTION', isOrganizer: false },
+        ],
+      }))
+      draw()
+      expect(await screen.findByText('Organised by Marc Dupont')).toBeInTheDocument()
+      expect(screen.getByText('Alice, jean@example.net')).toBeInTheDocument()
+      expect(screen.queryByText('ACCEPTED')).toBeNull()
+    })
+
+  it('says what the user answered, off the occurrence the server stamped', async () => {
+    draw({ eventId: 'e1', summary: 'Dentist', myPartStat: 'TENTATIVE' })
+    expect(await screen.findByText('You answered tentatively')).toBeInTheDocument()
+  })
+
+  it('an event without attendees shows neither line', async () => {
+    api.getEvent.mockResolvedValue(detailOf({ id: 'e1' }))
+    const bubble = draw()
+    // Not just "called" — the promise must actually have resolved and the re-render landed,
+    // or the assertion below would pass just as trivially on the still-pending state.
+    await waitFor(() => expect(api.getEvent).toHaveResolvedTimes(1))
+    expect(bubble.textContent).not.toMatch(/Organised by/)
+    expect(bubble.querySelector('.event-preview-attendees')).toBeNull()
+  })
+
+  // Décision 7: an override's own ATTENDEE lines (its `recurrenceId` set) describe one instance's
+  // answer, not the series — the bubble shows the master's organizer and guests regardless.
+  it('reads the master\'s attendees, never an override\'s', async () => {
+    api.getEvent.mockResolvedValue(detailOf({
+      id: 'e1', attendees: [
+        { email: 'marc@example.org', name: 'Marc Dupont', isOrganizer: true },
+        {
+          email: 'marc@example.org', name: 'Marc Dupont', isOrganizer: true,
+          recurrenceId: '20260914T070000Z',
+        },
+        { email: 'alice@weesky.be', name: 'Alice', isOrganizer: false },
+        {
+          email: 'alice@weesky.be', name: 'Alice', partStat: 'DECLINED', isOrganizer: false,
+          recurrenceId: '20260914T070000Z',
+        },
+      ],
+    }))
+    draw()
+    expect(await screen.findByText('Organised by Marc Dupont')).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
   })
 })

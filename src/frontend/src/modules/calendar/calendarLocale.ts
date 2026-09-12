@@ -122,9 +122,12 @@ export function formatLongDay(day: PlainDate, locale: string, withYear = false):
   return longDayFormat(locale, withYear).format(utcMidnightOf(day))
 }
 
-/** The same, as the range a whole day of several days spans. */
-export function formatLongDayRange(from: PlainDate, to: PlainDate, locale: string): string {
-  return longDayFormat(locale, false).formatRange(utcMidnightOf(from), utcMidnightOf(to))
+/** The same, as the range a whole day of several days spans. `withYear` mirrors `formatLongDay`'s,
+    so one caller cannot name a single day with its year and a range of days without. */
+export function formatLongDayRange(
+  from: PlainDate, to: PlainDate, locale: string, withYear = false,
+): string {
+  return longDayFormat(locale, withYear).formatRange(utcMidnightOf(from), utcMidnightOf(to))
 }
 
 /** The toolbar's title. A month is named by itself rather than by the grid it spans — that

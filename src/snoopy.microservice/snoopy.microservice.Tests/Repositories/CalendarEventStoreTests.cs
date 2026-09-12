@@ -611,6 +611,35 @@ public sealed class CalendarEventStoreTests
         Assert.Equal(["EMAIL, 15 minutes before"], alarmed.ForeignAlarms);
     }
 
+    [Fact]
+    public async Task FindByUid_ListsTheDefaultCalendarFirst()
+    {
+        var (db, user, defaultCalendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var calendars = CalendarStoreTestFactory.Calendars(db);
+        var other = (await calendars.CreateAsync(user,
+            new CalendarWrite("Travail", "", "#0000ff", null, "Europe/Brussels"), "Europe/Brussels", None)).Value;
+        var store = CalendarStoreTestFactory.Events(db);
+        var write = CalendarStoreTestFactory.Write(other, summary: "Réunion");
+        await store.CreateAsync(user, write, None);
+        var context = new PreferencesTestDbContext(db);
+        var inOther = await context.CalendarEvents.SingleAsync();
+        // The same UID in the default calendar, as a phone would have put it.
+        context.CalendarEvents.Add(new CalendarEvent
+        {
+            Id = Guid.NewGuid(), CalendarId = defaultCalendar, UserId = user, Uid = inOther.Uid,
+            DavName = "phone-name.ics", IcsRaw = inOther.IcsRaw, StartsAt = inOther.StartsAt, EndsAt = inOther.EndsAt,
+            FirstOccurrence = inOther.FirstOccurrence, LastOccurrence = inOther.LastOccurrence,
+        });
+        await context.SaveChangesAsync();
+
+        var found = await store.FindByUidAsync(user, inOther.Uid, None);
+
+        Assert.Equal(2, found.Count);
+        Assert.Equal(defaultCalendar, found[0].CalendarId);
+        Assert.Equal("phone-name.ics", found[0].DavName);
+        Assert.Empty(await store.FindByUidAsync(Guid.NewGuid(), inOther.Uid, None));
+    }
+
     private static int Occurrences(string text, string needle) =>
         text.Split(needle).Length - 1;
 
@@ -654,5 +683,58 @@ public sealed class CalendarEventStoreTests
             Id = id, CalendarId = calendar, UserId = user, Uid = id.ToString(),
             DavName = $"{id}.ics", IcsRaw = string.Empty, IcsHash = string.Empty
         };
+    }
+
+    [Fact]
+    public async Task OwnPartStats_ReadsTheUsersOwnAnswer_OnTheMaster_WithoutCase_NeverTheOrganizers()
+    {
+        var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var store = CalendarStoreTestFactory.Events(db);
+        var write = CalendarStoreTestFactory.Write(calendar, summary: "Dîner");
+        var mine = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var other = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var context = new PreferencesTestDbContext(db);
+        context.CalendarAttendees.AddRange(
+            new CalendarAttendee { EventId = mine, Position = 0, Email = "marc@example.org", PartStat = "ACCEPTED", IsOrganizer = true },
+            new CalendarAttendee { EventId = mine, Position = 1, Email = "Alice@Weesky.be", PartStat = "TENTATIVE" },
+            new CalendarAttendee { EventId = mine, Position = 2, RecurrenceId = "20261017T193000", Email = "alice@weesky.be", PartStat = "DECLINED" },
+            new CalendarAttendee { EventId = other, Position = 0, Email = "jean@example.net", PartStat = "NEEDS-ACTION" });
+        await context.SaveChangesAsync();
+
+        var answers = await store.OwnPartStatsAsync(user, [mine, other], ["alice@weesky.be", "alice@weesky.net"], CancellationToken.None);
+
+        Assert.Equal("TENTATIVE", answers[mine]);
+        Assert.False(answers.ContainsKey(other));
+        Assert.Empty(await store.OwnPartStatsAsync(Guid.NewGuid(), [mine], ["alice@weesky.be"], CancellationToken.None));
+        Assert.Empty(await store.OwnPartStatsAsync(user, [], ["alice@weesky.be"], CancellationToken.None));
+    }
+
+    /// <summary>Google and Apple list the organizer among the guests, ACCEPTED, under the very
+    /// address of ORGANIZER: that line is not an answer, and reading it as one would let it
+    /// outrank the STATUS the user chose for their own event. An invitation from another of the
+    /// user's own addresses — a connected account — was received and answered like any other.</summary>
+    [Fact]
+    public async Task OwnPartStats_IgnoresTheOrganizersOwnGuestLine_ButReadsAnAnswerToAnotherOwnAddress()
+    {
+        var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var store = CalendarStoreTestFactory.Events(db);
+        var write = CalendarStoreTestFactory.Write(calendar, summary: "Réunion");
+        var own = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var fromMyOtherAccount = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var context = new PreferencesTestDbContext(db);
+        context.CalendarAttendees.AddRange(
+            new CalendarAttendee { EventId = own, Position = 0, Email = "Alice@Weesky.be", IsOrganizer = true },
+            new CalendarAttendee { EventId = own, Position = 1, Email = "alice@weesky.be", PartStat = "ACCEPTED" },
+            new CalendarAttendee { EventId = own, Position = 2, Email = "marc@example.org", PartStat = "TENTATIVE" },
+            new CalendarAttendee { EventId = fromMyOtherAccount, Position = 0, Email = "alice@gmail.com", IsOrganizer = true },
+            new CalendarAttendee { EventId = fromMyOtherAccount, Position = 1, Email = "alice@gmail.com", PartStat = "ACCEPTED" },
+            new CalendarAttendee { EventId = fromMyOtherAccount, Position = 2, Email = "alice@weesky.be", PartStat = "TENTATIVE" });
+        await context.SaveChangesAsync();
+
+        var answers = await store.OwnPartStatsAsync(
+            user, [own, fromMyOtherAccount], ["alice@weesky.be", "alice@gmail.com"], CancellationToken.None);
+
+        Assert.False(answers.ContainsKey(own));
+        Assert.Equal("TENTATIVE", answers[fromMyOtherAccount]);
     }
 }

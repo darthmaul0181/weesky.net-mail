@@ -225,11 +225,12 @@ public sealed class CalDavNoFiveHundredTests : IAsyncLifetime
         if (putOnly)
         {
             Writer.Setup(w => w.PutAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(),
-                    It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), It.IsAny<string?>()))
+                    It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), It.IsAny<string?>(),
+                    It.IsAny<RevisionCause>()))
                 .Returns((Guid user, Guid calendar, string name, string ics, CancellationToken token,
-                        bool createOnly, string? ifMatch) =>
+                        bool createOnly, string? ifMatch, RevisionCause cause) =>
                     WithRealWriter(new LockedOutDbContext(server.DatabaseName, number, on),
-                        real => real.PutAsync(user, calendar, name, ics, token, createOnly, ifMatch)));
+                        real => real.PutAsync(user, calendar, name, ics, token, createOnly, ifMatch, cause)));
             return;
         }
 
@@ -243,11 +244,12 @@ public sealed class CalDavNoFiveHundredTests : IAsyncLifetime
     private void DelegateToTheRealWriter()
     {
         Writer.Setup(w => w.PutAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(),
-                It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), It.IsAny<string?>()))
+                It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), It.IsAny<string?>(),
+                It.IsAny<RevisionCause>()))
             .Returns((Guid user, Guid calendar, string name, string ics, CancellationToken token,
-                    bool createOnly, string? ifMatch) =>
+                    bool createOnly, string? ifMatch, RevisionCause cause) =>
                 WithRealWriter(server.CreateContext(),
-                    real => real.PutAsync(user, calendar, name, ics, token, createOnly, ifMatch)));
+                    real => real.PutAsync(user, calendar, name, ics, token, createOnly, ifMatch, cause)));
         Writer.Setup(w => w.DeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<CancellationToken>(), It.IsAny<string?>()))
             .Returns((Guid user, Guid calendar, string name, CancellationToken token, string? ifMatch) =>

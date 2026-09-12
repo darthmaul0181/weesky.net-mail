@@ -556,7 +556,7 @@
 .editor-attendees { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .editor-attendee { display: flex; align-items: center; gap: 8px; }
 .editor-organizer { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
-.editor-partstat { color: var(--text-muted); font-size: 12px; }
+.editor-my-answer { font-weight: 600; }
 .editor-error {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px;
   color: var(--danger); font-size: 13px;

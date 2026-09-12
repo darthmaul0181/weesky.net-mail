@@ -6,11 +6,12 @@ import i18next from 'i18next'
 import { useCallback } from 'react'
 import { ApiError, api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
+import { calendarKeys } from '../calendar/queries'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSource, MailMessageSummary,
   MailSearchPage, FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote,
-  QuotePurpose, SavedDraft, OpenedDraft, MailPriority,
+  QuotePurpose, SavedDraft, OpenedDraft, MailPriority, InvitationResponse, RespondInvitationArgs,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -164,6 +165,35 @@ export function useMessage(folderPath: string | null, uid: number | null) {
     queryKey: mailKeys.message(accountId, folderPath ?? '', uid ?? 0),
     queryFn: ({ signal }) => api.getMailMessage(folderPath, uid, { signal, accountId }),
     enabled: folderPath !== null && uid !== null,
+  })
+}
+
+/**
+ * One answer to an invitation. The card redraws from the answer it is handed, and the message
+ * query is refreshed so a reopen agrees with what is on screen. A decline the server filed in the
+ * trash is a move that happened elsewhere: the row has to leave the list caches and the counters
+ * have to move, exactly as `useMoveMessages` does it — otherwise the declined mail stays listed
+ * (opening it 404s) and the badges lie until the next poll. The folder tree is invalidated on top
+ * of the patch, since only the server knows what the trash now holds.
+ */
+export function useRespondInvitation() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation<InvitationResponse, ApiError, RespondInvitationArgs>({
+    mutationKey: mailKeys.writes(accountId),
+    mutationFn: args => api.respondInvitation(args, { accountId }) as Promise<InvitationResponse>,
+    onSuccess: (answer, args) => {
+      queryClient.invalidateQueries({ queryKey: mailKeys.message(accountId, args.folder, args.uid) })
+      // The calendar changed under the mail: its root key reaches the grid, the open event and
+      // any search, which would otherwise keep the answer before this one.
+      queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
+      if (!answer.trashed) return
+      const source = removeFromFolderCaches(queryClient, accountId, args.folder, [args.uid])
+      patchTreeCounts(queryClient, accountId,
+        [[args.folder, { total: -source.removed, unread: -source.removedUnread }]])
+      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+    },
   })
 }
 

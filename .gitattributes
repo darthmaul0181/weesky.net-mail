@@ -10,6 +10,12 @@
 *.vcf   text eol=crlf
 
 ###############################################################################
+# iCalendar fixtures: RFC 5545 § 3.1 says CRLF, and the invitation rewriter
+# folds and compares physical lines. text=auto alone would hand a Linux CI LF.
+###############################################################################
+*.ics   text eol=crlf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

@@ -253,6 +253,51 @@
       "security": "Security:",
       "tls": "Standard encryption (TLS)",
       "noTls": "No encryption"
+    },
+    "invitation": {
+      "badgeRequest": "Invitation",
+      "badgeUpdate": "Update",
+      "badgeCancel": "Cancelled",
+      "when": "When",
+      "where": "Where",
+      "organizer": "Organiser",
+      "attendees": "Attendees",
+      "allDay": "All day",
+      "repeats": "Repeats",
+      "accept": "Accept",
+      "tentative": "Tentative",
+      "decline": "Decline",
+      "addOnly": "Add to calendar",
+      "remove": "Remove from my calendar",
+      "resend": "Resend",
+      "calendar": "Calendar",
+      "answered": {
+        "ACCEPTED": "You accepted",
+        "TENTATIVE": "You answered tentatively",
+        "in": "{{answer}} · in <b>{{calendar}}</b>",
+        "added": "In your calendar · {{calendar}}"
+      },
+      "forwarded": "This invitation was not addressed to you. You can add it to your calendar without answering.",
+      "alreadyAnswered": "The organiser recorded you as having {{answer}}.",
+      "partstat": {
+        "ACCEPTED": "accepted",
+        "TENTATIVE": "answered tentatively",
+        "DECLINED": "declined"
+      },
+      "updated": "The organiser changed this event. Your previous answer is highlighted.",
+      "cancelled": "The organiser cancelled this event.",
+      "noAction": {
+        "occurrenceOnly": "This invitation only concerns one date of the series. Edit the event in your calendar.",
+        "newer": "Your calendar holds a newer version of this event.",
+        "cancelAbsent": "This event is not in your calendar."
+      },
+      "unreadable": "Unreadable invitation",
+      "unreadableHint": "The calendar file could not be read. It stays available as an attachment.",
+      "replyFailed": "The reply could not be sent.",
+      "addedReplyFailed": "Added to your calendar. The reply could not be sent.",
+      "failed": "The answer could not be recorded.",
+      "reload": "Reload the message",
+      "declinedStays": "Declined. The message stays here."
     }
   },
   "viewer": {

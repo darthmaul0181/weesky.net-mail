@@ -1,3 +1,4 @@
+using System.Text;
 using MailKit;
 using MimeKit;
 using weesky.Snoopy.Microservice.Models.Mail;
@@ -71,4 +72,41 @@ internal static class MailMessageMapper
         part.IsAttachment
         || !string.IsNullOrEmpty(part.FileName)
         || !string.IsNullOrEmpty(TrimAngleBrackets(part.ContentId));
+
+    /// <summary>
+    /// The decoded bytes of a non-text part read as text — the invite.ics an application/ics part
+    /// carries. The charset parameter rules, UTF-8 when it names none or names one this platform
+    /// does not hold, as RFC 5545 § 3.1.4 defaults. A leading byte-order mark is part of the
+    /// encoding, not of the file: left in, it sits before BEGIN:VCALENDAR and the whole invitation
+    /// reads as unparsable. The one decode, so the part that showed the card and the part the
+    /// responder re-reads can never disagree on what the file says.
+    /// </summary>
+    internal static string DecodeText(byte[] decoded, int length, string? charset)
+    {
+        Encoding encoding;
+        try { encoding = string.IsNullOrWhiteSpace(charset) ? Encoding.UTF8 : Encoding.GetEncoding(charset); }
+        catch (ArgumentException) { encoding = Encoding.UTF8; }
+        return encoding.GetString(decoded, 0, length).TrimStart('\uFEFF');
+    }
+
+    /// <summary>A calendar part by type or by name: Google and Outlook slip the invitation into the
+    /// multipart/alternative as text/calendar with no name, and attach an invite.ics besides.</summary>
+    internal static bool IsCalendarPart(BodyPartBasic part) =>
+        part.ContentType is { } type && (type.IsMimeType("text", "calendar") || type.IsMimeType("application", "ics"))
+        || part.FileName is { } name && name.EndsWith(".ics", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The one calendar part worth downloading (décision 1): a part whose Content-Type
+    /// announces a handled method wins, then one announcing none; a part announcing another method
+    /// (REPLY, PUBLISH…) is never it. Document order otherwise.</summary>
+    internal static BodyPartBasic? CalendarPart(IEnumerable<BodyPartBasic> parts)
+    {
+        BodyPartBasic? unannounced = null;
+        foreach (var part in parts.Where(IsCalendarPart))
+        {
+            var method = part.ContentType?.Parameters["method"]?.Trim().ToUpperInvariant();
+            if (method is "REQUEST" or "CANCEL") return part;
+            if (method is null) unannounced ??= part;
+        }
+        return unannounced;
+    }
 }

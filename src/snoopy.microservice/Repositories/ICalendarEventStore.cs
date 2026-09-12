@@ -21,6 +21,16 @@ public interface ICalendarEventStore
         Guid userId, DateTime fromUtc, DateTime toUtc, string viewTimeZone,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The user's own answer on each of these events — the PARTSTAT of the master's ATTENDEE whose
+    /// address is one of <paramref name="ownAddresses"/>, compared without case — keyed by event id;
+    /// an event with no such line is absent, and a guest line under the ORGANIZER's own address is
+    /// not an answer. Events of another user are never answered for.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> OwnPartStatsAsync(
+        Guid userId, IReadOnlyCollection<Guid> eventIds, IReadOnlyCollection<string> ownAddresses,
+        CancellationToken cancellationToken);
+
     /// <summary>One resource as the editor opens it, or null — a resource of another user is
     /// indistinguishable from one that does not exist.</summary>
     Task<EventDetail?> GetAsync(Guid userId, Guid eventId, CancellationToken cancellationToken);
@@ -45,6 +55,10 @@ public interface ICalendarEventStore
     /// last one it ever had, for a series already over.</summary>
     Task<IReadOnlyList<EventOccurrence>> SearchAsync(
         Guid userId, string text, CancellationToken cancellationToken);
+
+    /// <summary>Every event of the user carrying this UID, the default calendar's first, then the
+    /// sidebar's order — a UID is unique per calendar, not per user (RFC 4791 § 4.1).</summary>
+    Task<IReadOnlyList<StoredEventRef>> FindByUidAsync(Guid userId, string uid, CancellationToken cancellationToken);
 
     /// <summary>
     /// One file in, grouped by UID into resources (fonctionnalité 6). An existing UID is replaced

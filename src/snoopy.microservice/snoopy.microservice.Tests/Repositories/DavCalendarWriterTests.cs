@@ -92,6 +92,18 @@ public sealed class DavCalendarWriterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PuttingWithACause_ArchivesTheReplacedVersionUnderIt()
+    {
+        await writer.PutAsync(userId, calendarId, "a.ics", Event("u1", "Standup"), None);
+
+        await writer.PutAsync(userId, calendarId, "a.ics", Event("u1", "Standup, moved"), None,
+            cause: RevisionCause.Webmail);
+
+        var revision = await context.CalendarRevisions.SingleAsync(r => r.DavName == "a.ics");
+        Assert.Equal(RevisionCause.Webmail, revision.Cause);
+    }
+
+    [Fact]
     public async Task AByteIdenticalRePut_TakesNoRankAndKeepsItsEtag()
     {
         var ics = Event("u1", "Ada");

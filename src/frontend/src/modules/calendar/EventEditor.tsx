@@ -13,6 +13,7 @@ import {
 } from './eventForm'
 import { addDays, clockOf, daysBetween, isPlainDate, MINUTES_PER_DAY } from './plainDate'
 import RecurrenceEditor from './RecurrenceEditor'
+import { myAnswerOf } from './myAnswer'
 import { recurrenceSummary } from './recurrenceSummary'
 import ReminderList from './ReminderList'
 import { convertReminder } from './reminderPresets'
@@ -316,9 +317,11 @@ export default function EventEditor({
                         <span className="editor-organizer" title={t('editor.organizer')} />
                       )}
                       <span>{one.name || one.email}</span>
-                      {one.partStat && <span className="editor-partstat">{one.partStat}</span>}
                     </span>
                   ))}
+                  {myAnswerOf(detail.myPartStat, t) && (
+                    <span className="editor-my-answer">{myAnswerOf(detail.myPartStat, t)}</span>
+                  )}
                   <span className="editor-hint">{t('editor.attendeesReadOnly')}</span>
                 </div>
               </div>

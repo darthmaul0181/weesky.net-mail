@@ -63,6 +63,9 @@ beforeEach(() => {
   api.getCalendars.mockResolvedValue({ calendars: CALENDARS })
   api.getOccurrences.mockResolvedValue({ occurrences: [] })
   api.searchEvents.mockResolvedValue({ occurrences: [] })
+  // The preview now always fetches the detail (Task 7); a test with nothing to say about it
+  // still needs an answer, or the query settles on the undefined react-query refuses to hold.
+  api.getEvent.mockResolvedValue(detail())
 })
 
 function occurrence(eventId: string, summary: string) {

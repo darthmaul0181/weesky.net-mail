@@ -5,6 +5,7 @@ using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
 using Xunit;
 
@@ -18,10 +19,15 @@ public sealed class CalendarEventsControllerTests
     private const string Zone = "Europe/Brussels";
 
     private readonly Mock<ICalendarEventStore> _store = new();
+    private readonly Mock<IUserAddresses> _addresses = new();
 
     private CalendarEventsController CreateController()
     {
-        var controller = new CalendarEventsController(_store.Object);
+        _addresses.Setup(a => a.ForPrincipalAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["john@example.com"]);
+        _store.Setup(s => s.OwnPartStatsAsync(Uid, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string>());
+        var controller = new CalendarEventsController(_store.Object, _addresses.Object);
         controller.ControllerContext =
             ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com", Uid);
         return controller;
@@ -93,6 +99,62 @@ public sealed class CalendarEventsControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Single(Assert.IsType<OccurrenceListResponse>(ok.Value).Occurrences);
         _store.Verify(s => s.WindowAsync(Uid, From, to.UtcDateTime, Zone, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Spec 5e: the grid draws « provisoire » from the user's own PARTSTAT, read against every
+    // address the principal answers to, never from the organizer's STATUS.
+    [Fact]
+    public async Task Window_CarriesTheUsersOwnAnswer()
+    {
+        var mine = Occurrence();
+        var other = Occurrence();
+        var to = FromOffset.AddDays(1);
+        _store.Setup(s => s.WindowAsync(Uid, From, to.UtcDateTime, Zone, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Found(mine, other));
+        var controller = CreateController();
+        _store.Setup(s => s.OwnPartStatsAsync(Uid,
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(mine.EventId) && ids.Contains(other.EventId)),
+                It.Is<IReadOnlyCollection<string>>(a => a.Contains("john@example.com")), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, string> { [mine.EventId] = "TENTATIVE" });
+
+        var result = await controller.Window(FromOffset, to, Zone, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var list = Assert.IsType<OccurrenceListResponse>(ok.Value).Occurrences;
+        Assert.Equal("TENTATIVE", list.Single(o => o.EventId == mine.EventId).MyPartStat);
+        Assert.Null(list.Single(o => o.EventId == other.EventId).MyPartStat);
+    }
+
+    [Fact]
+    public async Task Search_CarriesTheUsersOwnAnswer()
+    {
+        var mine = Occurrence();
+        _store.Setup(s => s.SearchAsync(Uid, "dîner", It.IsAny<CancellationToken>())).ReturnsAsync([mine]);
+        var controller = CreateController();
+        _store.Setup(s => s.OwnPartStatsAsync(Uid, It.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(mine.EventId)),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, string> { [mine.EventId] = "ACCEPTED" });
+
+        var result = await controller.Search("dîner", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("ACCEPTED", Assert.IsType<OccurrenceListResponse>(ok.Value).Occurrences.Single().MyPartStat);
+    }
+
+    [Fact]
+    public async Task Get_CarriesTheUsersOwnAnswer()
+    {
+        var id = Guid.NewGuid();
+        _store.Setup(s => s.GetAsync(Uid, id, It.IsAny<CancellationToken>())).ReturnsAsync(Detail(id: id));
+        var controller = CreateController();
+        _store.Setup(s => s.OwnPartStatsAsync(Uid, It.Is<IReadOnlyCollection<Guid>>(ids => ids.Single() == id),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, string> { [id] = "TENTATIVE" });
+
+        var result = await controller.Get(id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("TENTATIVE", Assert.IsType<EventResponse>(ok.Value).MyPartStat);
     }
 
     // The reviewer's exact reproduction: a non-UTC offset must convert to the same instant,
