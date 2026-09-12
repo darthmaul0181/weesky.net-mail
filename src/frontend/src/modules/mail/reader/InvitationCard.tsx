@@ -1,9 +1,10 @@
-import { useMemo, useState, type CSSProperties, type JSX } from 'react'
+import { useMemo, useState, type JSX } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Trans, useTranslation } from 'react-i18next'
 import CalendarIcon from '../../../icons/CalendarIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { ApiError } from '../../../api.js'
+import CalendarSelect from '../../calendar/CalendarSelect'
 import { hourCycleOf } from '../../calendar/calendarLocale'
 import { useCalendars } from '../../calendar/queries'
 import type { InvitationAnswer, InvitationResponse, MailInvitation } from '../api/mailTypes'
@@ -104,21 +105,11 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       {t('reader.invitation.addOnly')}
     </button>
   )
-  // The calendar a creation goes to: its colour as a swatch, its name in a native select, no
-  // text label — the mock-up's combo. Drawn only when there is a choice to make.
-  const chosenCalendar = calendarId ?? calendars?.find(c => c.isDefault)?.id ?? calendars?.[0]?.id
+  // The calendar a creation goes to: the editor's own picker, drawn only when there is a choice.
+  const chosenCalendar = calendarId ?? calendars?.find(c => c.isDefault)?.id ?? calendars?.[0]?.id ?? ''
   const calendarPicker = calendars && calendars.length > 1 && (
-    <span className="invitation-card-calendar" style={{ '--cal': calendars.find(c => c.id === chosenCalendar)?.color } as CSSProperties}>
-      <span className="invitation-card-swatch" aria-hidden="true" />
-      <select
-        className="invitation-card-select"
-        aria-label={t('reader.invitation.calendar')}
-        value={chosenCalendar}
-        onChange={event => setCalendarId(event.target.value)}
-      >
-        {calendars.map(c => <option key={c.id} value={c.id}>{c.displayName}</option>)}
-      </select>
-    </span>
+    <CalendarSelect label={t('reader.invitation.calendar')} calendars={calendars}
+      value={chosenCalendar} onChange={setCalendarId} />
   )
 
   // The three answers a card can name, each in both voices: `filed` is what the organizer recorded

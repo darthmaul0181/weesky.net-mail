@@ -1095,19 +1095,11 @@
   background: var(--success); color: #fff; font-size: 9px; font-weight: 700;
 }
 .invitation-card-others { display: inline-flex; gap: 8px; margin-left: auto; }
-/* The calendar combo: the calendar's own colour as a swatch beside a native select drawn bare,
-   the pair framed like the mock-up's field. */
-.invitation-card-calendar {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 32px; padding: 0 4px 0 10px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text);
-}
-.invitation-card-swatch { flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--cal, var(--action-primary)); }
-.invitation-card-select {
-  appearance: auto; border: 0; padding: 0; background: transparent;
-  font-family: var(--font); font-size: 13px; color: inherit; cursor: pointer;
-}
+/* The calendar picker is the event editor's own (CalendarSelect); here it is one control among
+   the buttons, as wide as its name and as tall as they are, its menu opening under its left edge. */
+.invitation-card .dropdown-root { flex: none; }
+.invitation-card .calendar-select { width: auto; padding: 6px 10px; font-size: 13px; }
+.invitation-card .dropdown-menu { left: 0; right: auto; }
 .invitation-card .btn[aria-pressed="true"] { outline: 2px solid var(--action-primary); outline-offset: 1px; }
 .invitation-card-error { margin: 0 0 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--danger); }
 @media (max-width: 639px) {

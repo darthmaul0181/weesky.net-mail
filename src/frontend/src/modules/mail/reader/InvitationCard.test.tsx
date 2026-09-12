@@ -121,7 +121,9 @@ describe('InvitationCard', () => {
     })
     renderCard()
 
-    fireEvent.change(await screen.findByLabelText('Calendar'), { target: { value: 'c2' } })
+    // The editor's own picker: a menu, not a native select.
+    fireEvent.click(await screen.findByLabelText('Calendar'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Travail' }))
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
 
     await waitFor(() => expect(mocks.respondInvitation).toHaveBeenCalledWith(
