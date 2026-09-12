@@ -31,6 +31,14 @@ describe('renderingOf', () => {
     expect(renderingOf({ status: 'CONFIRMED', transparency: 'OPAQUE', myPartStat: 'ACCEPTED' })).toBe('busy')
     expect(renderingOf({ status: 'CANCELLED', transparency: 'OPAQUE', myPartStat: 'TENTATIVE' })).toBe('cancelled')
   })
+
+  // Once answered, the answer is the availability: a STATUS:TENTATIVE the file still carries —
+  // the organizer's, or one an earlier save wrote — does not outlive an acceptance.
+  it('lets an acceptance beat a tentative status', () => {
+    expect(renderingOf({ status: 'TENTATIVE', transparency: 'OPAQUE', myPartStat: 'ACCEPTED' })).toBe('busy')
+    expect(renderingOf({ status: 'TENTATIVE', transparency: 'TRANSPARENT', myPartStat: 'accepted' })).toBe('free')
+    expect(renderingOf({ status: 'TENTATIVE', transparency: 'OPAQUE' })).toBe('tentative')
+  })
 })
 
 describe('occurrenceKey', () => {
