@@ -275,6 +275,19 @@ describe('InvitationCard', () => {
     expect(onTrashed).not.toHaveBeenCalled()
   })
 
+  // The answer changed what the calendar holds: its grid, sidebar, open event and searches are
+  // all read from one root key, and every one of them is stale the moment the write lands.
+  it('an answer recorded refreshes the message and the whole calendar', async () => {
+    mocks.respondInvitation.mockResolvedValue({ invitation: answered('TENTATIVE'), replySent: true, trashed: false })
+    const { client } = renderCard()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tentative' }))
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['calendar', 'primary'] }))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['mail', 'primary', 'message', 'INBOX', 7] })
+  })
+
   it('a 404 offers to reload the message, which refreshes its query', async () => {
     mocks.respondInvitation.mockRejectedValue(new mocks.ApiError('Message not found', 404, null))
     const { client } = renderCard()

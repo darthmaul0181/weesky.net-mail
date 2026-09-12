@@ -6,6 +6,7 @@ import i18next from 'i18next'
 import { useCallback } from 'react'
 import { ApiError, api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
+import { calendarKeys } from '../calendar/queries'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSource, MailMessageSummary,
@@ -184,6 +185,9 @@ export function useRespondInvitation() {
     mutationFn: args => api.respondInvitation(args, { accountId }) as Promise<InvitationResponse>,
     onSuccess: (answer, args) => {
       queryClient.invalidateQueries({ queryKey: mailKeys.message(accountId, args.folder, args.uid) })
+      // The calendar changed under the mail: its root key reaches the grid, the open event and
+      // any search, which would otherwise keep the answer before this one.
+      queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
       if (!answer.trashed) return
       const source = removeFromFolderCaches(queryClient, accountId, args.folder, [args.uid])
       patchTreeCounts(queryClient, accountId,
