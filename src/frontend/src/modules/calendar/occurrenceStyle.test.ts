@@ -22,6 +22,15 @@ describe('renderingOf', () => {
   it('lets a cancellation beat a tentative status', () => {
     expect(renderingOf({ status: 'CANCELLED', transparency: 'TRANSPARENT' })).toBe('cancelled')
   })
+
+  // The user's own answer to an invitation: « provisoire » is drawn as tentative whatever the
+  // organizer's STATUS says, and an acceptance changes nothing.
+  it('reads the user’s own tentative answer', () => {
+    expect(renderingOf({ status: 'CONFIRMED', transparency: 'OPAQUE', myPartStat: 'TENTATIVE' })).toBe('tentative')
+    expect(renderingOf({ transparency: 'OPAQUE', myPartStat: 'tentative' })).toBe('tentative')
+    expect(renderingOf({ status: 'CONFIRMED', transparency: 'OPAQUE', myPartStat: 'ACCEPTED' })).toBe('busy')
+    expect(renderingOf({ status: 'CANCELLED', transparency: 'OPAQUE', myPartStat: 'TENTATIVE' })).toBe('cancelled')
+  })
 })
 
 describe('occurrenceKey', () => {

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Services.Calendar;
 
 namespace weesky.Snoopy.Microservice.Controllers;
@@ -12,7 +13,7 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/Calendar/Events")]
 [ApiController]
 [Authorize]
-public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBaseController
+public sealed class CalendarEventsController(ICalendarEventStore store, IUserAddresses addresses) : ApiBaseController
 {
     private static readonly TimeSpan MaxWindow = TimeSpan.FromDays(365.2425 * OccurrenceExpander.MaxYears);
 
@@ -49,9 +50,15 @@ public sealed class CalendarEventsController(ICalendarEventStore store) : ApiBas
             return BadRequestEnveloppe($"The window cannot span more than {OccurrenceExpander.MaxYears} years");
 
         var occurrences = await store.WindowAsync(AuthenticatedUser.WebmailUid, fromUtc, toUtc, tz, cancellationToken);
-        return occurrences.IsFailure
-            ? BadRequestEnveloppe(occurrences.Error)
-            : Ok(new OccurrenceListResponse(occurrences.Value));
+        if (occurrences.IsFailure) return BadRequestEnveloppe(occurrences.Error);
+
+        // The user's own answers are stamped here, not in the store: only the controller holds the
+        // principal the address list is read for.
+        var mine = await store.OwnPartStatsAsync(AuthenticatedUser.WebmailUid,
+            [.. occurrences.Value.Select(o => o.EventId).Distinct()],
+            await addresses.ForPrincipalAsync(AuthenticatedUser, cancellationToken), cancellationToken);
+        return Ok(new OccurrenceListResponse([.. occurrences.Value
+            .Select(o => mine.TryGetValue(o.EventId, out var answer) ? o with { MyPartStat = answer } : o)]));
     }
 
     /// <summary>Fonctionnalité 5: one result per event, at the occurrence that comes next.</summary>

@@ -4,11 +4,12 @@ import type { Calendar, Occurrence } from './calendarTypes'
 export type Rendering = 'busy' | 'free' | 'tentative' | 'cancelled'
 
 /** The four renderings the mockup fixes. A cancellation is read first: an event called off is
-    called off whatever it was going to be, and drawing it as tentative would say the opposite. */
-export function renderingOf(o: Pick<Occurrence, 'status' | 'transparency'>): Rendering {
+    called off whatever it was going to be, and drawing it as tentative would say the opposite.
+    Tentative is the event's own STATUS or the user's own « provisoire » answer (spec 5e). */
+export function renderingOf(o: Pick<Occurrence, 'status' | 'transparency' | 'myPartStat'>): Rendering {
   const status = o.status?.toUpperCase()
   if (status === 'CANCELLED') return 'cancelled'
-  if (status === 'TENTATIVE') return 'tentative'
+  if (status === 'TENTATIVE' || o.myPartStat?.toUpperCase() === 'TENTATIVE') return 'tentative'
   return o.transparency?.toUpperCase() === 'TRANSPARENT' ? 'free' : 'busy'
 }
 

@@ -141,6 +141,9 @@ export interface Occurrence {
   class?: string
   hasAlarm: boolean
   recurrenceText?: string
+  /** The user's own answer to an invitation (their ATTENDEE's PARTSTAT); absent when the event
+      does not invite them. The grid draws « provisoire » from it, not from the organizer's STATUS. */
+  myPartStat?: string
 }
 
 export interface CalendarListResponse {

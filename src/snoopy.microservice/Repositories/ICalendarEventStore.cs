@@ -21,6 +21,15 @@ public interface ICalendarEventStore
         Guid userId, DateTime fromUtc, DateTime toUtc, string viewTimeZone,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The user's own answer on each of these events — the PARTSTAT of the master's ATTENDEE whose
+    /// address is one of <paramref name="ownAddresses"/>, compared without case — keyed by event id;
+    /// an event with no such line is absent. Events of another user are never answered for.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> OwnPartStatsAsync(
+        Guid userId, IReadOnlyCollection<Guid> eventIds, IReadOnlyCollection<string> ownAddresses,
+        CancellationToken cancellationToken);
+
     /// <summary>One resource as the editor opens it, or null — a resource of another user is
     /// indistinguishable from one that does not exist.</summary>
     Task<EventDetail?> GetAsync(Guid userId, Guid eventId, CancellationToken cancellationToken);

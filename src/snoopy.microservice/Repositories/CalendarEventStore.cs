@@ -355,6 +355,22 @@ internal sealed class CalendarEventStore(
         return [.. found.OrderBy(At)];
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> OwnPartStatsAsync(
+        Guid userId, IReadOnlyCollection<Guid> eventIds, IReadOnlyCollection<string> ownAddresses,
+        CancellationToken cancellationToken)
+    {
+        if (eventIds.Count == 0 || ownAddresses.Count == 0) return new Dictionary<Guid, string>();
+        var mine = ownAddresses.Select(a => a.Trim().ToLowerInvariant()).ToHashSet(StringComparer.Ordinal);
+        var lines = await context.CalendarAttendees.AsNoTracking()
+            .Where(a => eventIds.Contains(a.EventId) && a.RecurrenceId == null && !a.IsOrganizer && a.PartStat != null)
+            .Join(context.CalendarEvents, a => a.EventId, e => e.Id, (a, e) => new { a.EventId, a.Email, a.PartStat, e.UserId })
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken);
+        return lines.Where(l => mine.Contains(l.Email.Trim().ToLowerInvariant()))
+            .GroupBy(l => l.EventId)
+            .ToDictionary(g => g.Key, g => g.First().PartStat!);
+    }
+
     public async Task<IReadOnlyList<StoredEventRef>> FindByUidAsync(
         Guid userId, string uid, CancellationToken cancellationToken) =>
         await context.CalendarEvents.AsNoTracking()

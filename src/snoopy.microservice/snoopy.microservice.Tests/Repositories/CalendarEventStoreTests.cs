@@ -684,4 +684,28 @@ public sealed class CalendarEventStoreTests
             DavName = $"{id}.ics", IcsRaw = string.Empty, IcsHash = string.Empty
         };
     }
+
+    [Fact]
+    public async Task OwnPartStats_ReadsTheUsersOwnAnswer_OnTheMaster_WithoutCase_NeverTheOrganizers()
+    {
+        var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var store = CalendarStoreTestFactory.Events(db);
+        var write = CalendarStoreTestFactory.Write(calendar, summary: "Dîner");
+        var mine = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var other = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var context = new PreferencesTestDbContext(db);
+        context.CalendarAttendees.AddRange(
+            new CalendarAttendee { EventId = mine, Position = 0, Email = "marc@example.org", PartStat = "ACCEPTED", IsOrganizer = true },
+            new CalendarAttendee { EventId = mine, Position = 1, Email = "Alice@Weesky.be", PartStat = "TENTATIVE" },
+            new CalendarAttendee { EventId = mine, Position = 2, RecurrenceId = "20261017T193000", Email = "alice@weesky.be", PartStat = "DECLINED" },
+            new CalendarAttendee { EventId = other, Position = 0, Email = "jean@example.net", PartStat = "NEEDS-ACTION" });
+        await context.SaveChangesAsync();
+
+        var answers = await store.OwnPartStatsAsync(user, [mine, other], ["alice@weesky.be", "alice@weesky.net"], CancellationToken.None);
+
+        Assert.Equal("TENTATIVE", answers[mine]);
+        Assert.False(answers.ContainsKey(other));
+        Assert.Empty(await store.OwnPartStatsAsync(Guid.NewGuid(), [mine], ["alice@weesky.be"], CancellationToken.None));
+        Assert.Empty(await store.OwnPartStatsAsync(user, [], ["alice@weesky.be"], CancellationToken.None));
+    }
 }

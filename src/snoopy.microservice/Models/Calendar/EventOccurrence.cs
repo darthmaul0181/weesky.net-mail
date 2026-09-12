@@ -9,6 +9,9 @@ namespace weesky.Snoopy.Microservice.Models.Calendar;
 /// <c>InstanceId</c> is the RECURRENCE-ID a client would have to write to address this instance —
 /// the literal value in the master's DTSTART form, never the UTC instant, and "" for an event that
 /// does not repeat. <c>RecurrenceText</c> is the master's RRULE value, the same for every instance.
+/// <c>MyPartStat</c> is the user's own answer to an invitation (the PARTSTAT of the ATTENDEE that
+/// is one of their addresses), null when the event has no such line — the grid draws
+/// « provisoire » from it, not from the organizer's STATUS (spec 5e).
 ///
 /// <c>EventId</c> and <c>CalendarId</c> are the row the instance came from: a window spans every
 /// calendar of one user at once, and the client filters and colours by calendar without a second
@@ -35,4 +38,5 @@ public sealed record EventOccurrence(
     string Transparency,
     string? Class,
     bool HasAlarm,
-    string? RecurrenceText);
+    string? RecurrenceText,
+    string? MyPartStat = null);
