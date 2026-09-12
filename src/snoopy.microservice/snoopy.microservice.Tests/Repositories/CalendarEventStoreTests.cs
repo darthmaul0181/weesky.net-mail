@@ -709,22 +709,32 @@ public sealed class CalendarEventStoreTests
         Assert.Empty(await store.OwnPartStatsAsync(user, [], ["alice@weesky.be"], CancellationToken.None));
     }
 
-    /// <summary>Google and Apple list the organizer among the guests, ACCEPTED: that line is not
-    /// an answer to an invitation, and reading it as one would let it outrank the STATUS the
-    /// user chose for their own event.</summary>
+    /// <summary>Google and Apple list the organizer among the guests, ACCEPTED, under the very
+    /// address of ORGANIZER: that line is not an answer, and reading it as one would let it
+    /// outrank the STATUS the user chose for their own event. An invitation from another of the
+    /// user's own addresses — a connected account — was received and answered like any other.</summary>
     [Fact]
-    public async Task OwnPartStats_SaysNothing_WhenTheUserIsTheOrganizer()
+    public async Task OwnPartStats_IgnoresTheOrganizersOwnGuestLine_ButReadsAnAnswerToAnotherOwnAddress()
     {
         var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
         var store = CalendarStoreTestFactory.Events(db);
-        var own = (await store.CreateAsync(user, CalendarStoreTestFactory.Write(calendar, summary: "Réunion"), CancellationToken.None)).Value;
+        var write = CalendarStoreTestFactory.Write(calendar, summary: "Réunion");
+        var own = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var fromMyOtherAccount = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
         var context = new PreferencesTestDbContext(db);
         context.CalendarAttendees.AddRange(
-            new CalendarAttendee { EventId = own, Position = 0, Email = "Alice@Weesky.net", IsOrganizer = true },
+            new CalendarAttendee { EventId = own, Position = 0, Email = "Alice@Weesky.be", IsOrganizer = true },
             new CalendarAttendee { EventId = own, Position = 1, Email = "alice@weesky.be", PartStat = "ACCEPTED" },
-            new CalendarAttendee { EventId = own, Position = 2, Email = "marc@example.org", PartStat = "TENTATIVE" });
+            new CalendarAttendee { EventId = own, Position = 2, Email = "marc@example.org", PartStat = "TENTATIVE" },
+            new CalendarAttendee { EventId = fromMyOtherAccount, Position = 0, Email = "alice@gmail.com", IsOrganizer = true },
+            new CalendarAttendee { EventId = fromMyOtherAccount, Position = 1, Email = "alice@gmail.com", PartStat = "ACCEPTED" },
+            new CalendarAttendee { EventId = fromMyOtherAccount, Position = 2, Email = "alice@weesky.be", PartStat = "TENTATIVE" });
         await context.SaveChangesAsync();
 
-        Assert.Empty(await store.OwnPartStatsAsync(user, [own], ["alice@weesky.be", "alice@weesky.net"], CancellationToken.None));
+        var answers = await store.OwnPartStatsAsync(
+            user, [own, fromMyOtherAccount], ["alice@weesky.be", "alice@gmail.com"], CancellationToken.None);
+
+        Assert.False(answers.ContainsKey(own));
+        Assert.Equal("TENTATIVE", answers[fromMyOtherAccount]);
     }
 }

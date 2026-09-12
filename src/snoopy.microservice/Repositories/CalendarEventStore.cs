@@ -366,11 +366,13 @@ internal sealed class CalendarEventStore(
             .Join(context.CalendarEvents, a => a.EventId, e => e.Id, (a, e) => new { a.EventId, a.Email, a.PartStat, a.IsOrganizer, e.UserId })
             .Where(x => x.UserId == userId)
             .ToListAsync(cancellationToken);
-        // An answer is only an answer to someone else's invitation: the organizer's own guest line
-        // (Google and Apple write one) says nothing about their availability.
-        var own = lines.Where(l => mine.Contains(l.Email.Trim().ToLowerInvariant())).ToList();
-        var organized = own.Where(l => l.IsOrganizer).Select(l => l.EventId).ToHashSet();
-        return own.Where(l => !l.IsOrganizer && !organized.Contains(l.EventId))
+        // The organizer's own guest line — Google and Apple write one, under the very address of
+        // ORGANIZER — is not an answer. One from another of the user's addresses is: an invitation
+        // sent from a second account of theirs was received and answered like any other.
+        var own = lines.Select(l => (l.EventId, Email: l.Email.Trim().ToLowerInvariant(), l.PartStat, l.IsOrganizer))
+            .Where(l => mine.Contains(l.Email)).ToList();
+        var organizers = own.Where(l => l.IsOrganizer).Select(l => (l.EventId, l.Email)).ToHashSet();
+        return own.Where(l => !l.IsOrganizer && !organizers.Contains((l.EventId, l.Email)))
             .GroupBy(l => l.EventId)
             .ToDictionary(g => g.Key, g => g.First().PartStat!);
     }

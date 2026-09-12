@@ -24,8 +24,8 @@ public interface ICalendarEventStore
     /// <summary>
     /// The user's own answer on each of these events — the PARTSTAT of the master's ATTENDEE whose
     /// address is one of <paramref name="ownAddresses"/>, compared without case — keyed by event id;
-    /// an event with no such line is absent, and so is one the user organizes, whatever guest line
-    /// names them. Events of another user are never answered for.
+    /// an event with no such line is absent, and a guest line under the ORGANIZER's own address is
+    /// not an answer. Events of another user are never answered for.
     /// </summary>
     Task<IReadOnlyDictionary<Guid, string>> OwnPartStatsAsync(
         Guid userId, IReadOnlyCollection<Guid> eventIds, IReadOnlyCollection<string> ownAddresses,
