@@ -272,14 +272,25 @@ public sealed class MailMessageMapperTests
     [Fact]
     public void CalendarPart_PrefersAPartWhoseMethodIsHandled_ThenOneWithoutMethod_NeverAnotherMethod()
     {
-        var reply = IcsPart("1", "text", "calendar", method: "REPLY");
+        var publish = IcsPart("1", "text", "calendar", method: "PUBLISH");
         var plain = IcsPart("2", "application", "ics", name: "invite.ics");
         var request = IcsPart("3", "text", "calendar", method: "REQUEST");
         var text = IcsPart("4", "text", "plain");
 
-        Assert.Same(request, MailMessageMapper.CalendarPart([reply, plain, request, text]));
-        Assert.Same(plain, MailMessageMapper.CalendarPart([reply, plain, text]));
-        Assert.Null(MailMessageMapper.CalendarPart([reply, text]));
+        Assert.Same(request, MailMessageMapper.CalendarPart([publish, plain, request, text]));
+        Assert.Same(plain, MailMessageMapper.CalendarPart([publish, plain, text]));
+        Assert.Null(MailMessageMapper.CalendarPart([publish, text]));
+    }
+
+    /// <summary>Outlook.com answers with the announced part alone, no invite.ics beside it.</summary>
+    [Fact]
+    public void CalendarPart_TakesAnAnnouncedReply_OverAPartWithoutMethod()
+    {
+        var reply = IcsPart("3", "text", "calendar", method: "REPLY");
+        var plain = IcsPart("4", "application", "ics", name: "invite.ics");
+
+        Assert.Same(reply, MailMessageMapper.CalendarPart([IcsPart("1", "text", "plain"), reply]));
+        Assert.Same(reply, MailMessageMapper.CalendarPart([plain, reply]));
     }
 
     [Fact]

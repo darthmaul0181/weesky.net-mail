@@ -97,14 +97,14 @@ internal static class MailMessageMapper
 
     /// <summary>The one calendar part worth downloading (décision 1): a part whose Content-Type
     /// announces a handled method wins, then one announcing none; a part announcing another method
-    /// (REPLY, PUBLISH…) is never it. Document order otherwise.</summary>
+    /// (PUBLISH…) is never it. Document order otherwise.</summary>
     internal static BodyPartBasic? CalendarPart(IEnumerable<BodyPartBasic> parts)
     {
         BodyPartBasic? unannounced = null;
         foreach (var part in parts.Where(IsCalendarPart))
         {
             var method = part.ContentType?.Parameters["method"]?.Trim().ToUpperInvariant();
-            if (method is "REQUEST" or "CANCEL") return part;
+            if (method is "REQUEST" or "CANCEL" or "REPLY") return part;
             if (method is null) unannounced ??= part;
         }
         return unannounced;
