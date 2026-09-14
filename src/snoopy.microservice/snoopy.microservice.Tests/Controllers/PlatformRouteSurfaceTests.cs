@@ -98,5 +98,7 @@ public sealed class PlatformRouteSurfaceTests
         Assert.Contains("GET api/Account/Quota", generic);
         Assert.Contains("GET api/Mail/Folders", generic);
         Assert.Contains("GET api/Capabilities", generic);
+        Assert.Contains("GET api/SchedulingAccount", generic);
+        Assert.Contains("POST api/SchedulingAccount/Test", generic);
     }
 }

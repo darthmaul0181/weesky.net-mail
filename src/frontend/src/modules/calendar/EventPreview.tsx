@@ -9,6 +9,7 @@ import RepeatIcon from '../../icons/RepeatIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
 import UserIcon from '../../icons/UserIcon'
 import { useCalendar } from './calendarContext'
+import AttendeeStatusList from './AttendeeStatusList'
 import { dateLocaleOf, formatLongDay, formatLongDayRange, formatTime } from './calendarLocale'
 import type { Calendar, Occurrence } from './calendarTypes'
 import { wallClockOf } from './multiDay'
@@ -108,10 +109,11 @@ export default function EventPreview({
   const title = occurrence.summary || t('views.noTitle')
   const color = colorOf(occurrence, calendarById)
 
-  // Décision 7: names only. The PARTSTAT a received file carries is the organizer's snapshot at
-  // send time, almost always empty or stale here — the user's own answer lives in the mail's card.
+  // Décision 7: names only on a received event. The PARTSTAT it carries is the organizer's snapshot
+  // at send time, almost always empty or stale here — the user's own answer lives in the mail's
+  // card. On the user's own event the answers arrive here, so each guest wears one (décision 12).
   const master = (detail?.attendees ?? []).filter(a => !a.recurrenceId)
-  const organizer = master.find(a => a.isOrganizer)
+  const organizer = detail?.canInvite ? undefined : master.find(a => a.isOrganizer)
   const guests = master.filter(a => !a.isOrganizer)
   // The one state that is true here: the user's own, read off the occurrence the server stamped.
   const myAnswer = myAnswerOf(occurrence.myPartStat, t)
@@ -153,11 +155,13 @@ export default function EventPreview({
           <UserIcon size={14} />{t('preview.organizedBy', { name: organizer.name || organizer.email })}
         </p>
       )}
-      {guests.length > 0 && (
-        <p className="event-preview-row event-preview-attendees">
-          <PeopleIcon size={14} />{guests.map(a => a.name || a.email).join(', ')}
-        </p>
-      )}
+      {guests.length > 0 && (detail?.canInvite
+        ? <AttendeeStatusList guests={guests} />
+        : (
+          <p className="event-preview-row event-preview-attendees">
+            <PeopleIcon size={14} />{guests.map(a => a.name || a.email).join(', ')}
+          </p>
+        ))}
       {myAnswer && (
         <p className="event-preview-row event-preview-answer">
           <UserIcon size={14} />{myAnswer}

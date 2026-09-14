@@ -1,0 +1,233 @@
+<!doctype html>
+<!--
+  Probe: the event editor's Guests row and the answers under it (spec 5e, décision 8 and 12), FR
+  and EN, in the dialog (900px) and on the phone screen (400px).
+
+  What no test in this repo can see. `RecipientsField` renders its own `.field-h`, so the row
+  stands in the editor's label/control column unaided — nothing in calendar.css places it — and
+  jsdom computes no layout to prove that. Each case is an iframe of its own width, so the phone
+  block's media queries answer to that width rather than to this page's. Read:
+
+    ecart box     — `.recipients-box` left minus `#event-location` left: 0, the two controls share
+                    one column. `droite` is the same on the right edge.
+    ecart label   — the Guests label's left minus the Location label's left: 0.
+    etat          — `.attendee-status` left minus `.recipients-box` left: 0, the answers sit
+                    under the chips.
+    escape        — the worst overhang of any node of the two rows past the form's content box,
+                    either edge. 0, at 400 as at 900. `long` adds a 52-character address chip,
+                    `huge` a 96-character one, wider than the box at both widths.
+    glyphes       — the worst `scrollHeight - clientHeight` of any `.recipient-token-text`: 0, or the
+                    bottoms of g, j, p, q, y and @ are clipped by the text's own `overflow: hidden`.
+                    `jeton` is a chip's height, `haut` its top minus its box's (the row's alignment).
+    coupe         — the last chip's text is cut with an ellipsis (`cut`) or whole, and its ✕ ends
+                    inside the box (`x in`). `huge` must read `cut  x in`.
+    compose       — the composer's To row, the same RecipientsField, with the `huge` chip:
+                    escape 0 against `.compose-fields`, `cut  x in`.
+    label/box     — on the dialog the label is beside the box (same row); on the phone it is the
+                    line above (label bottom <= box top).
+
+  Measured in headless Edge 153 (`msedge --headless=new --disable-gpu --virtual-time-budget=15000
+  --dump-dom http://localhost:5178/probes/event-attendees.html`, the Vite dev server started with
+  `npx vite --port 5178 --strictPort`), on 2026-09-13, a fresh profile with no extension:
+
+    900 fr/en       ecart box 0  droite 0  ecart label 0  etat 0  escape 0  beside  box 498.1x55  form 624.1  modale 674.1  glyphes 0  jeton 22  haut 5
+    900 fr/en long  ecart box 0  droite 0  ecart label 0  etat 0  escape 0  beside  box 498.1x81  form 624.1  modale 674.1  glyphes 0  jeton 22  haut 5  whole  x in
+    900 fr/en huge  ecart box 0  droite 0  ecart label 0  etat 0  escape 0  beside  box 498.1x81  form 624.1  modale 674.1  glyphes 0  jeton 22  haut 5  cut  x in
+    900 compose     escape 0  whole  x in  box 690  glyphes 0  jeton 22  haut 5
+    400 fr/en       ecart box 0  droite 0  ecart label 0  etat 0  escape 0  above   box 370x58    form 370  glyphes 0  jeton 22  haut 5
+    400 fr/en long  ecart box 0  droite 0  ecart label 0  etat 0  escape 0  above   box 370x107   form 370  glyphes 0  jeton 22  haut 5  cut  x in
+    400 fr/en huge  ecart box 0  droite 0  ecart label 0  etat 0  escape 0  above   box 370x107   form 370  glyphes 0  jeton 22  haut 5  cut  x in
+    400 compose     escape 0  cut  x in  box 304  glyphes 0  jeton 22  haut 5
+
+  Review round 2: `glyphes` read 2 everywhere (scrollHeight 16 over clientHeight 14) while the
+  text span inherited the token's `line-height: 1`; the `?shot` screenshot showed `example.orq`
+  and a clipped `p`. Its own `line-height: 1.25` reads 0 with the chip still 22px and 5px down.
+
+  Review round 1 (2026-09-13), the ellipsis alone was not enough: a box keeping its automatic
+  minimum held the huge chip whole, past the screen at 400 (droite and escape 267.5, long 17.6),
+  and the answers row's max-content widened the dialog at 900 (modale 821.4). The box's
+  `min-width: 0` and `.attendee-status` joining the --field-w idioms are what brought both back.
+
+  `modale` is the one number to watch: the dialog is content-sized, and before `.recipients-box`
+  joined modal.css's --field-w idioms the chips' max-content widened it — 659.9px of form with two
+  chips, 800 with the long one, against the 624.1 every other state of the editor draws (675 in
+  probes/recurrence-editor.html is the same dialog). A second `modale` value is the regression.
+
+  Drive it in Chrome/Edge; `document.title` becomes 'probe-done' and the numbers are in `#out`.
+  `?shot` draws only the huge-chip editor and the composer at both widths, for a screenshot
+  (`--screenshot --window-size=1400,1600`): a frame is its own viewport, --window-size is not.
+-->
+<html lang="fr" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Probe — event attendees</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <link rel="stylesheet" href="/src/styles/calendar.css" />
+  <style>
+    .frames { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+    .frames iframe { border: 1px solid #888; height: 760px; }
+    #out { white-space: pre; font-family: ui-monospace, monospace; font-size: 11px; background: #fff; color: #000; padding: 8px; }
+  </style>
+</head>
+<body>
+  <div id="out"></div>
+  <div class="frames"></div>
+
+  <script>
+    const L = {
+      fr: {
+        title: 'Modifier l’événement', close: 'Fermer', titleLabel: 'Titre', location: 'Lieu',
+        guests: 'Invités', remove: 'Retirer', accepted: 'a accepté', pending: 'sans réponse',
+        availability: 'Disponibilité', busy: 'Occupé', tentative: 'Provisoire', free: 'Libre', save: 'Enregistrer',
+      },
+      en: {
+        title: 'Edit event', close: 'Close', titleLabel: 'Title', location: 'Location',
+        guests: 'Attendees', remove: 'Remove', accepted: 'accepted', pending: 'no answer yet',
+        availability: 'Availability', busy: 'Busy', tentative: 'Tentative', free: 'Free', save: 'Save',
+      },
+    }
+    const LONG = 'dominique.vandersteen-peeters@facilities.example.org'
+    const HUGE = 'reservations.salle-du-conseil.batiment-principal.site-de-louvain-la-neuve@facilities.example.org'
+
+    // RecipientsField's and AttendeeStatusList's own markup, as EventEditor renders it (dumped
+    // from the component under jsdom, attributes included).
+    function chip(shown, address) {
+      const title = shown === address ? '' : ` title="${address}"`
+      return `<span class="recipient-token"><span class="recipient-token-text"${title}>${shown}</span><button type="button" aria-label="${this.remove} ${shown}">✕</button></span>`
+    }
+    const extra = long => long === 2 ? HUGE : LONG
+    function form(s, long) {
+      const chips = [chip.call(s, 'Marc Dupont', 'marc.dupont@example.org'),
+        chip.call(s, 'chloe.vandersteen@example.org', 'chloe.vandersteen@example.org')]
+      if (long) chips.push(chip.call(s, extra(long), extra(long)))
+      return `<form id="calendar-event-form" class="calendar-editor-form">
+        <div class="field-h"><label for="event-title">${s.titleLabel}</label><input id="event-title" type="text" value="Revue trimestrielle"></div>
+        <div class="field-h"><label for="event-location">${s.location}</label><input id="event-location" type="text" value="Salle Mercure, 14 rue de la Longue-Haie"></div>
+        <div class="field-h recipients-field"><label for="event-attendees">${s.guests}</label><div class="recipients-box">${chips.join('')}<input id="event-attendees" type="text" role="combobox" aria-expanded="false" aria-autocomplete="list" value=""></div></div>
+        <div class="field-h"><span class="field-h-label"></span><ul class="attendee-status">
+          <li><span class="attendee-dot is-accepted" aria-hidden="true"></span><span class="attendee-name">Marc Dupont</span><span class="attendee-answer">${s.accepted}</span></li>
+          <li><span class="attendee-dot is-pending" aria-hidden="true"></span><span class="attendee-name">${long ? extra(long) : 'chloe.vandersteen@example.org'}</span><span class="attendee-answer">${s.pending}</span></li>
+        </ul></div>
+        <div class="field-h"><span class="field-h-label">${s.availability}</span><div class="seg" role="radiogroup" aria-label="${s.availability}"><label><input type="radio" name="event-availability" checked="">${s.busy}</label><label><input type="radio" name="event-availability">${s.tentative}</label><label><input type="radio" name="event-availability">${s.free}</label></div></div>
+      </form>`
+    }
+
+    // The last chip of a box: cut or whole, and whether its ✕ still ends inside the box.
+    function coupe(box) {
+      const token = [...box.querySelectorAll('.recipient-token')].pop()
+      const text = token.querySelector('.recipient-token-text')
+      const x = token.querySelector('button').getBoundingClientRect()
+      return `${text.scrollWidth > text.clientWidth ? 'cut' : 'whole'}  x ${x.right <= box.getBoundingClientRect().right ? 'in' : 'OUT'}`
+    }
+
+    // Clipped descenders, a chip's height and where it sits in its box.
+    function glyphes(box) {
+      const texts = [...box.querySelectorAll('.recipient-token-text')]
+      const worst = Math.max(...texts.map(text => text.scrollHeight - text.clientHeight))
+      const token = box.querySelector('.recipient-token').getBoundingClientRect()
+      const top = Math.round((token.top - box.getBoundingClientRect().top) * 10) / 10
+      return `glyphes ${worst}  jeton ${Math.round(token.height * 10) / 10}  haut ${top}`
+    }
+
+    // ComposeView's To row, as it renders it.
+    function drawCompose(s) {
+      document.body.innerHTML = `<div class="compose-view" data-testid="compose-view"><div class="compose-fields">
+        <div class="compose-to-row">
+          <div class="field-h recipients-field"><label for="compose-to">À</label><div class="recipients-box">${chip.call(s, HUGE, HUGE)}<input id="compose-to" type="text" role="combobox" aria-expanded="false" aria-autocomplete="list" value=""></div></div>
+          <span class="compose-cc-links"><button type="button" class="compose-link-btn">Cc</button><button type="button" class="compose-link-btn">Cci</button><button type="button" class="compose-link-btn">Priorité</button></span>
+        </div></div></div>`
+      const fields = document.querySelector('.compose-fields').getBoundingClientRect()
+      let escape = 0
+      for (const node of document.querySelectorAll('.compose-to-row, .compose-to-row *')) {
+        const b = node.getBoundingClientRect()
+        if (b.width === 0 || b.height === 0) continue
+        escape = Math.max(escape, b.right - fields.right, fields.left - b.left)
+      }
+      const box = document.querySelector('.recipients-box')
+      return `escape ${Math.round(Math.max(0, escape) * 10) / 10}  ${coupe(box)}  box ${Math.round(box.getBoundingClientRect().width)}  ${glyphes(box)}`
+    }
+
+    function drawFrame(lang, long) {
+      const s = L[lang]
+      document.documentElement.lang = lang
+      // CalendarLayout's two shells: the dialog from 640px up, the whole screen below.
+      document.body.innerHTML = innerWidth < 640
+        ? `<div class="calendar-editor-screen" data-testid="calendar-editor"><div class="calendar-editor-head"><span class="modal-title">${s.title}</span><button type="submit" form="calendar-event-form" class="btn btn-primary">${s.save}</button><button type="button" class="modal-close" aria-label="${s.close}">✕</button></div>${form(s, long)}</div>`
+        : `<div class="modal-overlay" data-testid="calendar-editor"><div class="modal calendar-editor"><div class="modal-header"><span class="modal-title">${s.title}</span><button type="button" class="modal-close" aria-label="${s.close}">✕</button></div>${form(s, long)}</div></div>`
+
+      const r = el => el.getBoundingClientRect()
+      const n = v => Math.round(v * 10) / 10
+      const location = document.getElementById('event-location')
+      const box = document.querySelector('.recipients-box')
+      const guestsLabel = document.querySelector('label[for="event-attendees"]')
+      const locationLabel = document.querySelector('label[for="event-location"]')
+      const status = document.querySelector('.attendee-status')
+      const formBox = document.querySelector('.calendar-editor-form')
+      const cs = getComputedStyle(formBox)
+      const inner = { left: r(formBox).left + parseFloat(cs.paddingLeft), right: r(formBox).right - parseFloat(cs.paddingRight) }
+      let escape = 0
+      for (const row of [document.querySelector('.recipients-field'), status.parentElement])
+        for (const node of [row, ...row.querySelectorAll('*')]) {
+          const b = r(node)
+          if (b.width === 0 || b.height === 0) continue
+          escape = Math.max(escape, b.right - inner.right, inner.left - b.left)
+        }
+      const beside = r(guestsLabel).bottom > r(box).top
+      return [
+        `ecart box ${n(r(box).left - r(location).left)}`,
+        `droite ${n(r(box).right - r(location).right)}`,
+        `ecart label ${n(r(guestsLabel).left - r(locationLabel).left)}`,
+        `etat ${n(r(status).left - r(box).left)}`,
+        `escape ${n(Math.max(0, escape))}`,
+        `label/box ${beside ? 'beside' : 'above'}`,
+        `box ${n(r(box).width)}x${n(r(box).height)}`,
+        `form ${n(inner.right - inner.left)}`,
+        `modale ${document.querySelector('.modal') ? n(r(document.querySelector('.modal')).width) : '-'}`,
+        glyphes(box),
+        long ? `coupe ${coupe(box)}` : '',
+      ].join('  ')
+    }
+
+    const params = new URLSearchParams(location.search)
+    if (params.has('compose')) {
+      window.probe = drawCompose(L.fr)
+    } else if (params.has('lang')) {
+      window.probe = drawFrame(params.get('lang'), Number(params.get('long')))
+    } else {
+      // `?shot` keeps the four frames a screenshot is read from: the huge chip, editor and composer.
+      const shot = params.has('shot')
+      const cases = []
+      for (const width of [900, 400]) {
+        for (const lang of ['fr', 'en']) for (const long of [0, 1, 2])
+          if (!shot || (lang === 'fr' && long === 2)) cases.push({ width, lang, long })
+        cases.push({ width, compose: true })
+      }
+      if (shot) document.getElementById('out').hidden = true
+      const frames = document.querySelector('.frames')
+      const done = cases.map(({ width, lang, long, compose }) => new Promise(resolve => {
+        const frame = document.createElement('iframe')
+        frame.width = width
+        frame.src = compose ? `${location.pathname}?compose=1` : `${location.pathname}?lang=${lang}&long=${long}`
+        const label = compose ? 'compose  ' : `${lang} ${['    ', 'long', 'huge'][long]}`
+        frame.onload = () => {
+          // One frame after load: the stylesheets are applied and laid out by then.
+          const read = () => frame.contentWindow.probe
+            ? resolve(`${width} ${label}  ${frame.contentWindow.probe}`)
+            : setTimeout(read, 50)
+          read()
+        }
+        frames.append(frame)
+      }))
+      Promise.all(done).then(lines => {
+        document.getElementById('out').textContent = lines.join('\n')
+        document.title = 'probe-done'
+      })
+    }
+  </script>
+</body>
+</html>

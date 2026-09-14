@@ -38,6 +38,7 @@ internal static class IcsSplitter
         var rebase = next.RecurrenceRule is not null && at.HasTime == next.DtStart!.HasTime
                      && at.Date == next.DtStart.Date && Core(next.RecurrenceRule) == oldCore;
         var dropped = MoveExceptions(following, next, cut, rebase, newUid);
+        IcsComposer.InviteSeries(following, w, next);
         IcsComposer.Stamp(next, nowUtc, bump: false);
         IcsComposer.EnsureTimeZones(following, IcsDocument.Components(following));
 

@@ -51,6 +51,8 @@ CREATE TABLE `calendar_events` (
   `ics_raw`          MEDIUMTEXT   NOT NULL COMMENT 'La ressource CalDAV entière, souveraine ; les colonnes en sont un index',
   `ics_hash`         CHAR(64)     NOT NULL DEFAULT '' COMMENT 'SHA-256 hex de ics_raw ; base de l''ETag',
   `sync_sequence`    BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `scheduling_owner` VARCHAR(16) NULL COMMENT '"webmail" quand le webmail a envoyé la première invitation (spec 5e, décision 9)',
+  `scheduling_hash`  CHAR(64)    NULL COMMENT 'SHA-256 de l''empreinte au dernier envoi',
   `updated_at`       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `ux_calendar_events_uid` (`calendar_id`, `uid`),
@@ -104,7 +106,7 @@ CREATE TABLE `calendar_revisions` (
   `dav_name`    VARCHAR(255) NULL COLLATE utf8mb4_bin,
   `ics_hash`    CHAR(64)     NOT NULL,
   `ics_raw`     MEDIUMTEXT   NOT NULL COMMENT 'Les octets remplacés ou refusés — même type que calendar_events.ics_raw',
-  `cause`       ENUM('put','webmail','import','delete','rejected') NOT NULL,
+  `cause`       ENUM('put','webmail','import','delete','rejected','scheduling') NOT NULL,
   `replaced_at` DATETIME     NOT NULL COMMENT 'UTC ; posée par le code, jamais par le schéma',
   PRIMARY KEY (`id`),
   KEY `ix_calendar_revisions_user_time` (`user_id`, `replaced_at`),
@@ -124,6 +126,21 @@ Le lecteur d'invitations cherche un `UID` reçu par mail dans tous les agendas d
 
 ```sql
 ALTER TABLE `calendar_events` ADD KEY `ix_calendar_events_user_uid` (`user_id`, `uid`);
+```
+
+## Tranche 5e2 — deux colonnes
+
+Le planificateur d'invitations retient qui a invité (`webmail` ou personne) et l'empreinte du
+dernier envoi (spec 5e, décision 9). Une cause de révision de plus : le serveur avance lui-même
+une `SEQUENCE` que le planificateur doit notifier, geste qui n'est ni un `PUT` ni une main d'utilisateur.
+
+```sql
+ALTER TABLE `calendar_events`
+  ADD COLUMN `scheduling_owner` VARCHAR(16) NULL AFTER `sync_sequence`,
+  ADD COLUMN `scheduling_hash`  CHAR(64)    NULL AFTER `scheduling_owner`;
+
+ALTER TABLE `calendar_revisions`
+  MODIFY `cause` ENUM('put','webmail','import','delete','rejected','scheduling') NOT NULL;
 ```
 
 ## Trois écarts par rapport au DDL du plan

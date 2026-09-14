@@ -258,6 +258,7 @@
       "badgeRequest": "Invitation",
       "badgeUpdate": "Update",
       "badgeCancel": "Cancelled",
+      "badgeReply": "Reply",
       "when": "When",
       "where": "Where",
       "organizer": "Organiser",
@@ -297,7 +298,27 @@
       "addedReplyFailed": "Added to your calendar. The reply could not be sent.",
       "failed": "The answer could not be recorded.",
       "reload": "Reload the message",
-      "declinedStays": "Declined. The message stays here."
+      "declinedStays": "Declined. The message stays here.",
+      "addedNoOrganizer": "Added to your calendar. The invitation gives no address a reply can be sent to.",
+      "declinedNoOrganizer": "Declined. The invitation gives no address a reply can be sent to.",
+      "addedUidUnwritable": "Added to your calendar. This invitation does not allow a reply to be sent.",
+      "declinedUidUnwritable": "Declined. This invitation does not allow a reply to be sent.",
+      "reply": {
+        "answer": {
+          "ACCEPTED": "{{name}} accepted",
+          "TENTATIVE": "{{name}} answered maybe",
+          "DECLINED": "{{name}} declined"
+        },
+        "stale": "reply to an earlier version",
+        "superseded": "a later reply is already in the calendar",
+        "unknownUid": "This event no longer exists",
+        "notOwner": "This event was not invited from the webmail",
+        "unknownAttendee": "{{name}} is not on the guest list",
+        "occurrenceOnly": "Reply for a single date of the series, not carried into the calendar",
+        "unsupportedAnswer": "The reply from {{name}} cannot be carried into the calendar",
+        "notApplied": "Reply not recorded in the calendar.",
+        "retry": "Retry"
+      }
     }
   },
   "viewer": {

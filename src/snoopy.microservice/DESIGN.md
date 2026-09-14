@@ -149,6 +149,8 @@ Key `appsettings.json` entries:
 - `Sieve` — ManageSieve connection used by `ManageSieveClient` for the rules feature: `Host`, `Port` (`4190`), `ScriptName` (`weesky-rules`), `TimeoutSeconds`, `AllowInvalidCertificate` (dev only).
 - `Cors:AllowedOrigins` — array of allowed frontend origins.
 
+The calendar service account — the SMTP account that sends the invitation mails a CalDAV device's write owes the guests — is **not** configuration. An administrator enters it in Administration > Application (`api/SchedulingAccount`); it lives in the single-row `scheduling_service_account` table (`docs/superpowers/webmail-scheduling-service-account-table.md`), its password protected by Data Protection under a purpose of its own. A `Scheduling` section or `Scheduling__Smtp__*` variables left over from an earlier deployment are ignored. Without an account, or with a password the key ring can no longer decrypt, those mails are refused and logged, never sent. The single retry waits a fixed minute. **This assumes a single instance of the service.** The account is cached in the process (`ServiceAccountProvider`) and only the instance that saved or deleted it reloads it; a second instance would keep sending with the old account, or refusing without one, until it restarts. The one-connection-test-at-a-time gate is a static semaphore of the process too, so two instances would each run a test of their own.
+
 ## Known caveats / tech debt
 
 - `StringComparison.InvariantCultureIgnoreCase` comparisons in EF Core `Where` clauses: depend on `EnableStringComparisonTranslations` being enabled on the Pomelo side — any provider regression would silently break case-insensitive lookups.

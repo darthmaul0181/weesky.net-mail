@@ -295,10 +295,60 @@ Three consequences for anyone touching this module:
 - **`ifHash` is the DAV ETag.** The hash the editor freezes at seed time for its own optimistic
   concurrency (`updateBodyOf`, above) is the very value a CalDAV client reads and sends back as
   `If-Match`: both worlds share one notion of "the version I read", never two.
-- **No participant is composed by this screen, still.** `editor.attendeesReadOnly` stays true past
-  5c: the protocol can now read and write `ATTENDEE`/`ORGANIZER` (RFC 4791 schedules nothing
-  beyond that), but no screen of this module writes one — scheduling remains an open residual, not
-  a guarantee this module would silently break.
+- **A write through either door can send mail (5e2).** The server, not CalDAV, schedules: the
+  `DAV:` header still announces no `calendar-auto-schedule`, so a phone never offers guests of its
+  own on these calendars, and what it edits is sent for it. The paragraph below says when.
+
+**Invitations (5e).** Receiving (5e1) lives in the mail reader; inviting (5e2) starts in this
+module's editor and ends in the same reader.
+
+- **The Guests field.** `AttendeesField` sits under Location whenever `EventDetail.canInvite` is
+  true — no organizer, or one of the primary account's addresses (`IUserAddresses.ForPrimaryAsync`;
+  a connected account's identity, a Gmail, organizes like anybody else) — and a received event keeps its read-only
+  names instead. The editor writes `attendees: [{ email, name? }]`; the server sets `ORGANIZER` to
+  the primary account's default sending identity (`OrganizerIdentity`) and keeps each known
+  guest's `PARTSTAT`. Guests on an event somebody else organizes are refused `400 not_organizer`;
+  an address that is not one is refused on screen first (`editor.invalidAttendee`). The answers
+  under the field follow the chips, each with the dot `attendeeStatus` reads from the stored
+  master; a guest list edited from one occurrence is the whole series'.
+- **Two doors, one hook.** `CalendarEventsController` and `CalDavController` (`PUT`, `DELETE`) call
+  `InvitationScheduler.AfterWriteAsync` after a successful write, with the file before and after.
+  Nothing else does: not an import, not an answer (`Respond`), not `ApplyReply`, not deleting a
+  whole calendar. The hook catches everything, so it never fails the write it follows; it is awaited
+  before the response, and anything SMTP cannot take at once leaves through the queue.
+- **Two columns decide.** `scheduling_owner` is `'webmail'` once the webmail owns the event — it
+  sent the first invitation, or took over one silently (below); `scheduling_hash` is
+  `SchedulingShape` — every component's dates, rule, status, title, location and lower-cased guest
+  addresses — as of the last send, or, for a silent takeover, the reference fingerprint recorded
+  without a send. `SchedulingDecider` turns the pair and the new file into REQUESTs and CANCELs; a
+  changed shape whose SEQUENCE the client did not advance gets it advanced by a second, conditional
+  write (`RevisionCause.Scheduling`), on the component that moved. **A webmail write also takes
+  ownership silently** of an event that already had guests but no owner (Thunderbird invited it, or
+  it predates 5e2): the stored file stands in for the last version sent, so nothing mails unless
+  what a guest is told about — the fingerprint — differs from it: a description or a calendar move
+  takes ownership with no REQUEST at all.
+- **Two sessions, one queue.** A webmail write sends through the user's own SMTP session; a device
+  write, or a session that cannot be opened, goes through `ServiceMailQueue`, the service account
+  an administrator enters in Administration > Application (`api/SchedulingAccount`), with one retry a
+  minute later. `POST`/`PUT` answer `scheduling: { owner,
+  sent }`, where `sent` counts the people told, not the messages (one carries every recipient of its
+  kind), and the editor's toast shows it (`editor.savedSent`). `From` is the file's `ORGANIZER` when it is
+  one of the primary account's addresses, the resolved identity otherwise.
+- **A guest's REPLY.** The message detail reads it into `invitation.reply` and writes nothing;
+  `InvitationCard` then calls `POST /api/Calendar/Invitations/ApplyReply` once per mounting when
+  `status` is `Applicable` and not `applied`. Only yes, maybe and no are applicable. A reply to an
+  earlier SEQUENCE is `Stale`; one older than the recorded answer of the same SEQUENCE is
+  `Superseded`, ordered by its DTSTAMP, which the stored `ATTENDEE` keeps as `X-WEESKY-REPLY-STAMP`
+  (stripped from outgoing mail). The write carries If-Match: a change in between answers `200
+  applied:false, applyError:"calendar_conflict"` and the card offers Retry; `400
+  reply_not_applicable` and `reply_not_a_reply` offer Reload, which redraws the card from the
+  message as it now reads.
+- **Error codes this module can see.** `not_organizer` on a write; from the card, the
+  `invitation_*`, `reply_*` and `calendar_conflict` / `calendar_busy` / `calendar_refused` codes
+  `apiErrorMessage` translates. `Respond` answers `replyError: "invitation_no_organizer"` when the
+  file gives no address a reply can be sent to (none, or one no mail can reach), and
+  `"invitation_uid_unwritable"` when its UID holds a character no reply may carry: either way the
+  answer is recorded and no Resend is offered.
 
 **And the editor's Start and End rows were stacked when they were meant to be on one line.**
 `index.css`'s phone block turns *every* `.field-h` into a `flex-direction: column`, which is right

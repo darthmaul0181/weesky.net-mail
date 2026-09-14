@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models;
@@ -8,7 +9,8 @@ using weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 namespace weesky.Snoopy.Microservice.Controllers;
 
 /// <summary>
-/// Answering an invitation received by mail (spec 5e, décision 4). A mail controller rather than a
+/// Answering an invitation received by mail (spec 5e, décision 4), and applying a guest's answer to
+/// one the webmail sent (décision 12). A mail controller rather than a
 /// calendar one: the file is re-read from the mailbox the request names, so the account is
 /// resolved the way every api/Mail action resolves it.
 /// </summary>
@@ -16,7 +18,8 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/Calendar/Invitations")]
 [Authorize]
 public sealed class CalendarInvitationsController(
-    IInvitationResponder responder, IAccountConnectionResolver connections) : MailControllerBase(connections)
+    IInvitationResponder responder, IInvitationReplyApplier applier, IAccountConnectionResolver connections)
+    : MailControllerBase(connections)
 {
     /// <summary>Records the answer in the calendar and mails it to the organizer.</summary>
     /// <param name="request">the message, the part, the answer, and where a creation goes</param>
@@ -41,9 +44,34 @@ public sealed class CalendarInvitationsController(
         var resolution = await TryResolveAsync(cancellationToken);
         if (resolution.Failed(out var error, out var connection)) return error;
 
-        var result = await responder.RespondAsync(AuthenticatedUser, connection, request, cancellationToken);
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : StatusCode(result.Error.Status, ResultEnveloppe.CreateErrorEnveloppe(result.Error.Message));
+        return Answer(await responder.RespondAsync(AuthenticatedUser, connection, request, cancellationToken));
     }
+
+    /// <summary>Writes a guest's REPLY into the event the webmail invited them to. Never sends a mail.</summary>
+    /// <param name="request">the message and the part carrying the REPLY</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The invitation block as it now stands; <c>applied: false</c> with its code when the calendar did not take the write</response>
+    /// <response code="400">The part is not a REPLY, or the answer is not applicable (unknown event, not invited from the webmail, unknown guest, one date, older version)</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="404">No such message, or no such part on it</response>
+    /// <response code="422">The part is larger than an event may be</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpPost("ApplyReply")]
+    [ProducesResponseType(typeof(ApplyReplyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<ApplyReplyResponse>> ApplyReply(ApplyReplyRequest request, CancellationToken cancellationToken)
+    {
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
+
+        return Answer(await applier.ApplyAsync(AuthenticatedUser, connection, request, cancellationToken));
+    }
+
+    private ActionResult<T> Answer<T>(Result<T, ResponderFailure> result) => result.IsSuccess
+        ? Ok(result.Value)
+        : StatusCode(result.Error.Status, ResultEnveloppe.CreateErrorEnveloppe(result.Error.Message));
 }

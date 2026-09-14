@@ -1,3 +1,4 @@
+using Ical.Net.CalendarComponents;
 using weesky.Snoopy.Microservice.Models.Mail;
 using IcsCalendar = Ical.Net.Calendar;
 
@@ -6,13 +7,14 @@ namespace weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 internal sealed record InvitationAttendee(string Email, string? Name, string? PartStat);
 
 /// <summary>A received calendar part, read once. <see cref="DtStartLine"/> is the file's own
-/// DTSTART line, unfolded, which the REPLY copies verbatim so the organizer's agenda pairs it.</summary>
+/// DTSTART line, unfolded, which the REPLY copies verbatim so the organizer's agenda pairs it.
+/// <see cref="DtStamp"/> is its DTSTAMP in UTC basic form, null when absent or spelled otherwise.</summary>
 internal sealed record ParsedInvitation(
     InvitationMethod Method, string Uid, int Sequence, bool OccurrenceOnly,
     string? Summary, string? Location, bool Repeats, bool IsAllDay,
     DateTime? Start, DateTime? End, DateOnly? StartDate, DateOnly? EndDateExclusive,
     InvitationPerson? Organizer, IReadOnlyList<InvitationAttendee> Attendees,
-    string? DtStartLine);
+    string? DtStartLine, string? DtStamp);
 
 /// <summary><see cref="Ignored"/>: no handled METHOD, the part stays an attachment.
 /// <see cref="Reason"/>: the guards or the parser refused it — « Invitation illisible ».</summary>
@@ -39,6 +41,7 @@ internal static class InvitationParser
         {
             "REQUEST" => InvitationMethod.Request,
             "CANCEL" => InvitationMethod.Cancel,
+            "REPLY" => InvitationMethod.Reply,
             _ => (InvitationMethod?)null,
         };
         if (method is null) return InvitationReading.NotAnInvitation;
@@ -71,22 +74,40 @@ internal static class InvitationParser
                 .Select(a => (Address: IcsProjector.Address(a.Value), Attendee: a))
                 .Where(x => x.Address is not null)
                 .Select(x => new InvitationAttendee(x.Address!, Text(x.Attendee.CommonName), Upper(x.Attendee.ParticipationStatus)))],
-            PartStatRewriter.LineOf(ics, "DTSTART")), false, null);
+            PartStatRewriter.LineOf(ics, "DTSTART"),
+            DtStampOf(ics)), false, null);
     }
 
+    /// <summary>Read on the text: a missing DTSTAMP must stay missing, not become the parse's own clock.</summary>
+    private static string? DtStampOf(string ics) =>
+        PartStatRewriter.LineOf(ics, "DTSTAMP") is { } line && line[(PartStatRewriter.ValueStart(line) + 1)..].Trim() is var value
+        && PartStatRewriter.IsReplyStamp(value) ? value : null;
+
     /// <summary>The master's SEQUENCE of a stored file; 0 when the file carries none or cannot be read.</summary>
-    internal static int SequenceOf(string ics) =>
-        IcsDocument.TryLoad(ics) is { } parsed && IcsDocument.MasterOf(parsed) is { } master ? master.Sequence : 0;
+    internal static int SequenceOf(string ics) => IcsDocument.TryLoad(ics) is { } parsed ? SequenceOf(parsed) : 0;
+
+    internal static int SequenceOf(IcsCalendar parsed) => IcsDocument.MasterOf(parsed)?.Sequence ?? 0;
 
     /// <summary>The PARTSTAT the file's master carries for an address, case-insensitively; null when the address is not invited.</summary>
     internal static string? PartStatOf(string ics, string address)
     {
         if (IcsDocument.TryLoad(ics) is not { } parsed) return null;
         var component = IcsDocument.MasterOf(parsed) ?? IcsDocument.Components(parsed).FirstOrDefault();
-        return component?.Attendees?
-            .FirstOrDefault(a => a is not null && string.Equals(IcsProjector.Address(a.Value), address, StringComparison.OrdinalIgnoreCase))
-            is { } attendee ? Upper(attendee.ParticipationStatus) ?? "NEEDS-ACTION" : null;
+        return component is null ? null : GuestLinesIn(component, address).FirstOrDefault()?.PartStat;
     }
+
+    /// <summary>Every ATTENDEE line naming the address, case-insensitively, in every component, the
+    /// master's first — the lines <see cref="PartStatRewriter.Rewrite"/> writes.</summary>
+    internal static IReadOnlyList<GuestLine> GuestLinesOf(IcsCalendar parsed, string address) =>
+        [.. IcsDocument.Components(parsed).OrderBy(c => c.RecurrenceIdentifier is null ? 0 : 1)
+            .SelectMany(c => GuestLinesIn(c, address))];
+
+    private static IEnumerable<GuestLine> GuestLinesIn(CalendarEvent component, string address) =>
+        (component.Attendees ?? [])
+            .Where(a => a is not null && string.Equals(IcsProjector.Address(a.Value), address, StringComparison.OrdinalIgnoreCase))
+            .Select(a => new GuestLine(Upper(a.ParticipationStatus) ?? "NEEDS-ACTION",
+                a.Parameters.Where(p => p.Name.Equals(PartStatRewriter.ReplyStampParameter, StringComparison.OrdinalIgnoreCase))
+                    .Select(p => p.Value).FirstOrDefault(v => v is not null && PartStatRewriter.IsReplyStamp(v))));
 
     private static string? Text(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static string? Upper(string? value) => Text(value)?.ToUpperInvariant();

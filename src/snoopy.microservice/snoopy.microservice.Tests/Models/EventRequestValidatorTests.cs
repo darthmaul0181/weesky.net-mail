@@ -1,4 +1,5 @@
 using weesky.Snoopy.Microservice.Models.Calendar;
+using weesky.Snoopy.Microservice.Services.Calendar;
 using Xunit;
 
 namespace weesky.Snoopy.Microservice.Tests.Models;
@@ -165,6 +166,107 @@ public sealed class EventRequestValidatorTests
         Assert.True(result.IsSuccess);
         Assert.True(result.Value.KeepRepeat);
         Assert.Null(result.Value.Repeat);
+    }
+
+    [Fact]
+    public void Attendees_AreLowercased_Deduplicated_AndNamed_OrRefused()
+    {
+        var request = Dated();
+        request.Attendees = [
+            new() { Email = " Marc.Dupont@Example.org ", Name = "Marc\r\nDupont" },
+            new() { Email = "marc.dupont@example.org" },
+            new() { Email = "julie@example.net", Name = "  " }];
+
+        var write = EventRequestValidator.Validate(request).Value;
+
+        Assert.Equal([new AttendeeWrite("marc.dupont@example.org", "Marc Dupont"), new AttendeeWrite("julie@example.net", null)], write.Attendees);
+        Assert.Null(write.Organizer);
+
+        request.Attendees = [new() { Email = "not an address" }];
+        Assert.Equal(EventRequestValidator.InvalidAttendee, EventRequestValidator.Validate(request).Error);
+        request.Attendees = [.. Enumerable.Range(0, 101).Select(i => new AttendeeRequest { Email = $"g{i}@example.org" })];
+        Assert.Equal(EventRequestValidator.TooManyAttendees, EventRequestValidator.Validate(request).Error);
+        request.Attendees = null;
+        Assert.Null(EventRequestValidator.Validate(request).Value.Attendees);
+        request.Attendees = [];
+        Assert.Empty(EventRequestValidator.Validate(request).Value.Attendees!);
+    }
+
+    // A DQUOTE cannot sit inside a parameter value (RFC 5545 § 3.2), nor can a control character;
+    // a bare local part is no address a guest can be mailed at.
+    [Theory]
+    [InlineData("Marc \"le Grand\"\tDupont", "Marc le Grand Dupont")]
+    [InlineData("\"\"", null)]
+    public void Attendees_NameLosesQuotesAndControls(string raw, string? expected)
+    {
+        var request = Dated();
+        request.Attendees = [new() { Email = "marc@example.org", Name = raw }];
+
+        Assert.Equal(expected, EventRequestValidator.Validate(request).Value.Attendees!.Single().Name);
+    }
+
+    [Theory]
+    [InlineData("marc")]
+    [InlineData("")]
+    [InlineData("Marc <marc@example.org>")]
+    // MimeKit takes both, but the first is no mailto: URI and the second reads back
+    // percent-encoded, so a guest's answer would never be matched to them again.
+    [InlineData("\"marc dupont\"@example.org")]
+    [InlineData("josé@example.org")]
+    public void Attendees_RefuseWhatIsNotABareAddress(string email)
+    {
+        var request = Dated();
+        request.Attendees = [new() { Email = email }];
+
+        Assert.Equal(EventRequestValidator.InvalidAttendee, EventRequestValidator.Validate(request).Error);
+    }
+
+    // A guest the stored file already lists is that file's to keep, whatever its address; only a
+    // new address has to be a plain mailto one.
+    [Fact]
+    public void Attendees_AnAddressTheFileAlreadyHolds_PassesAsItIs_ANewOneIsStillChecked()
+    {
+        // As the projector reads `sip:room@example.org`, `mailto:josé@example.org` and
+        // `mailto:salle%2520mercure@…`: already decoded once, so compared as they are, never again.
+        string[] stored = ["sip:room@example.org", "josé@example.org", "salle%20mercure@example.org"];
+        var request = Dated();
+        request.Attendees = [new() { Email = "SIP:room@example.org" }, new() { Email = " josé@example.org" }, new() { Email = "salle%20mercure@example.org" }, new() { Email = "paul@example.org" }];
+
+        Assert.Equal(["sip:room@example.org", "josé@example.org", "salle%20mercure@example.org", "paul@example.org"],
+            EventRequestValidator.Validate(request, stored).Value.Attendees!.Select(a => a.Email));
+
+        request.Attendees = [.. request.Attendees, new() { Email = "rené@example.org" }];
+        Assert.Equal(EventRequestValidator.InvalidAttendee, EventRequestValidator.Validate(request, stored).Error);
+        request.Attendees = [new() { Email = "sip:room@example.org" }];
+        Assert.Equal(EventRequestValidator.InvalidAttendee, EventRequestValidator.Validate(request).Error);
+    }
+
+    [Fact]
+    public void Attendees_RefuseAnAddressWiderThanItsColumn()
+    {
+        var request = Dated();
+        request.Attendees = [new() { Email = new string('a', 64) + "@" + string.Join('.', Enumerable.Repeat(new string('b', 60), 5)) + ".org" }];
+
+        Assert.Equal(EventRequestValidator.InvalidAttendee, EventRequestValidator.Validate(request).Error);
+    }
+
+    [Fact]
+    public void Attendees_LongNameIsCut()
+    {
+        var request = Dated();
+        request.Attendees = [new() { Email = "marc@example.org", Name = new string('a', 150) }];
+
+        Assert.Equal(IcsComposer.MaxCommonNameLength, EventRequestValidator.Validate(request).Value.Attendees!.Single().Name!.Length);
+    }
+
+    // The cut never leaves half of a surrogate pair, which no encoder can write.
+    [Fact]
+    public void Attendees_LongNameIsCutBeforeAnEmojiItWouldSplit()
+    {
+        var request = Dated();
+        request.Attendees = [new() { Email = "marc@example.org", Name = new string('a', 99) + "😀 Dupont" }];
+
+        Assert.Equal(new string('a', 99), EventRequestValidator.Validate(request).Value.Attendees!.Single().Name);
     }
 
     private static Func<EventRequest> Case(Action<EventRequest> tweak, bool allDay = false) => () =>

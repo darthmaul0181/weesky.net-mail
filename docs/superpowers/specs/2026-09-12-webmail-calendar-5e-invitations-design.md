@@ -14,11 +14,18 @@ de [5a](2026-09-04-webmail-calendar-5-overview-design.md#découpage),
 | 5b | Les écrans de l'agenda dans le webmail | livrée |
 | 5c | Serveur CalDAV : découverte, agendas multiples, cinq rapports, filtres, tombes, historique | livrée |
 | 5d | Conformité : `ccs-caldavtester`, correctifs, clients réels | livrée, close |
-| **5e** | **Les invitations, en deux phases : recevoir (5e1), puis inviter (5e2)** | 5e1 livrée ; 5e2 à planifier |
+| **5e** | **Les invitations, en deux phases : recevoir (5e1), puis inviter (5e2)** | 5e1 livrée ; 5e2 livrée, recette à faire |
 
 5d est close. 5e2 ajoute au serveur une réaction aux écritures CalDAV, la première fois qu'il
 fait autre chose que stocker un `PUT` ; elle a son propre scénario client, dans cette tranche
 (voir Tests).
+
+**Ce que la livraison de 5e2 a changé au comportement décrit ici**, arbitré en revue : les
+réponses d'une même `SEQUENCE` sont ordonnées par leur `DTSTAMP`, gardé sur la ligne `ATTENDEE`
+dans un paramètre `X-WEESKY-REPLY-STAMP` que les mails sortants retirent ; seules « accepté »,
+« provisoire » et « refusé » sont applicables ; la `SEQUENCE` avancée par le serveur est celle de
+la surcharge qui a bougé ; une liste d'invités modifiée depuis une occurrence vaut pour toute la
+série.
 
 ## Ce que fait la tranche
 
@@ -390,17 +397,23 @@ ferait donc partir les invitations depuis le webmail et échouer celles du compt
 qui est le pire des deux mondes. Le composeur écarte cette identité et retombe sur l'adresse
 principale de l'utilisateur, toujours sur un domaine hébergé.
 
+**Livrée (5e2)** avec l'[écart 4 du plan](../plans/2026-09-13-webmail-calendar-5e2-inviting.md#écarts-avec-la-lettre-de-la-spec-arbitrés-par-ce-plan) : aucune table `domains` n'est consultée ;
+l'identité par défaut du compte principal, telle que `IdentityResolver` la calcule, est par
+construction une adresse que le serveur héberge.
+
 ### 9. La règle d'empreinte : une seule, quel que soit l'appareil
 
 Deux colonnes sur `calendar_events` :
 
-- `scheduling_owner` : `'webmail'` quand le webmail a envoyé la première invitation, `NULL`
-  sinon. Un événement avec invités écrit par Thunderbird reste `NULL` : Thunderbird envoie
-  lui-même ses mails quand le serveur ne relaie pas, et on ne double pas les siens. Le webmail
-  prend la main (pose `'webmail'`) la première fois qu'il enregistre lui-même un tel événement
-  avec l'utilisateur pour organisateur.
+- `scheduling_owner` : `'webmail'` quand le webmail possède l'événement : il en a envoyé
+  la première invitation, ou en a pris la main silencieusement (un événement que Thunderbird avait
+  invité, ou stocké avant 5e2) ; `NULL` sinon. Thunderbird envoie lui-même ses mails quand le
+  serveur ne relaie pas, et on ne double pas les siens : une prise de main silencieuse n'envoie
+  donc rien, elle ne fait que retenir le fichier stocké comme référence (ci-dessous).
 - `scheduling_hash` : l'empreinte des champs qui comptent pour un invité, telle qu'elle était
-  **au dernier envoi** : la forme que le composeur compare déjà pour incrémenter `SEQUENCE`
+  **au dernier envoi** — ou, pour une prise de main silencieuse, celle du fichier déjà stocké,
+  retenue comme référence sans qu'aucun mail ne parte : la forme que le composeur compare déjà
+  pour incrémenter `SEQUENCE`
   (`IcsComposer.Shape` : début, fin, statut, règle, dates ajoutées et exclues), plus le titre,
   le lieu, et la liste triée des adresses des invités, **en minuscules et sans `mailto:`** : un
   `REPLY` d'Outlook réécrit volontiers l'adresse dans une autre casse, et sans cette
@@ -434,12 +447,18 @@ recalcule l'empreinte et :
 
 | situation | mails | sujet | après |
 |---|---|---|---|
-| première écriture avec invités depuis le webmail | `REQUEST` à tous | « Invitation » ; « Mise à jour » si le fichier en base portait déjà des invités (un événement que Thunderbird avait invité, que le webmail reprend) | `owner` posé, empreinte écrite |
+| première écriture avec invités depuis le webmail, personne n'était invité avant | `REQUEST` à tous | « Invitation » | `owner` posé, empreinte écrite |
+| idem, mais le fichier en base portait déjà des invités (un événement que Thunderbird avait invité, ou stocké avant 5e2) | prise de possession silencieuse : comparé au fichier stocké, selon les lignes de ce tableau | rien si rien n'a changé pour un invité ; sinon « Mise à jour »/« Invitation »/« Annulation » comme ci-dessous | `owner` posé, empreinte écrite |
 | empreinte inchangée | aucun | — | — |
 | empreinte changée, mêmes invités | `REQUEST` à tous | « Mise à jour » | empreinte écrite |
 | invités ajoutés | `REQUEST` aux ajoutés ; `REQUEST` aux autres seulement si autre chose a changé | « Invitation » aux ajoutés, « Mise à jour » aux autres | empreinte écrite |
 | invités retirés | `CANCEL` aux retirés (seuls) ; `REQUEST` aux restants seulement si autre chose a changé | « Annulation » / « Mise à jour » | empreinte écrite |
 | plus aucun invité, ou suppression | `CANCEL` à tous | « Annulation » | `owner` remis à `NULL` |
+
+**La prise de possession ne prévient les invités que si quelque chose change pour eux.** Une
+note ajoutée, un rappel posé ou l'événement déplacé vers un autre agenda ne changent rien à ce
+qu'un invité doit savoir ; le webmail prend alors la main sans envoyer de mail, exactement comme
+si le fichier déjà stocké était sa propre dernière version envoyée.
 
 La `SEQUENCE` du fichier est celle que l'écriture a produite : le composeur du webmail
 l'incrémente selon sa règle, un client CalDAV l'incrémente lui-même (iOS, Thunderbird, DAVx⁵ le
@@ -476,6 +495,10 @@ version.
 - **Répondre par le webmail à une invitation reçue** (5e1) écrit un fichier dont l'organisateur
   n'est pas l'utilisateur : `owner` reste `NULL`, le crochet ne fait rien.
 
+**Livrée (5e2)** avec les [écarts 1 à 3 du plan](../plans/2026-09-13-webmail-calendar-5e2-inviting.md#écarts-avec-la-lettre-de-la-spec-arbitrés-par-ce-plan) : les méthodes d'écriture du store
+rapportent leurs changements (`EventWriteResult`), le contrôleur d'événements résout la session du
+compte principal, et la seconde écriture de `SEQUENCE` vaut pour les deux portes.
+
 ### 10. Deux sessions SMTP pour un même mail
 
 Le mail est composé une seule fois (`InvitationMailer`), et remis par l'une des deux sessions :
@@ -488,11 +511,12 @@ Le mail est composé une seule fois (`InvitationMailer`), et remis par l'une des
   toujours l'identité du compte principal, décision 8). C'est aussi ce qui fait de ce contrôleur
   le bon endroit pour appeler le planificateur : il est le seul des deux à disposer des
   identifiants de l'utilisateur ;
-- **écriture depuis un appareil CalDAV** : le **compte de service** `noreply-agenda@weesky.net`,
-  configuré dans le microservice (`Scheduling:Smtp:{Host, Port, Login, Password}` dans la
-  configuration locale, jamais dans le dépôt ; le mot de passe ayant transité par la conversation
-  de conception est à changer avant la mise en service). `From` et l'adresse d'enveloppe sont
-  celles de l'utilisateur ; le compte de service n'apparaît dans aucun en-tête visible. Postfix
+- **écriture depuis un appareil CalDAV** : le **compte de service** `noreply-agenda@weesky.net`,
+  configuré dans Administration > Application et nulle part ailleurs (hôte, port, sécurité,
+  identifiant, mot de passe : table `scheduling_service_account`, mot de passe protégé par Data
+  Protection, jamais dans la configuration ni dans le dépôt ; le mot de passe ayant transité par
+  la conversation de conception est à changer avant la mise en service). `From` et l'adresse d'enveloppe sont
+  celles de l'utilisateur ; le compte de service n'apparaît dans aucun en-tête visible. Postfix
   l'y autorise par la troisième branche ajoutée à `smtpd_sender_login_maps` (pour tout domaine
   de la table `domains`, et eux seuls). Pas de copie dans les Envoyés : elle exigerait la même
   confiance côté IMAP, qu'on ne demande pas ; le mail est tracé dans le journal du microservice
@@ -543,6 +567,13 @@ seule date de la série, ce que Google sait envoyer) est affiché en lecture seu
 qui le dit — pour ce dernier, « Réponse pour une seule date de la série, non reportée dans
 l'agenda » : la reporter demanderait d'écrire une surcharge, c'est-à-dire la fusion que 1 bis
 écarte. Dans ces cas `applicable` est faux et l'encart n'appelle rien.
+
+**La réponse est appliquée sans vérifier que l'expéditeur du mail est bien l'invité nommé par
+l'`ATTENDEE`** : Google Agenda et Outlook font de même, leurs protections portant sur la réception
+des invitations, pas sur les réponses. Un invité qui connaît l'`UID` du rendez-vous et l'adresse
+d'un autre invité peut donc faire écrire une fausse réponse à son nom dans l'événement stocké, qui
+se synchronise sur les appareils de l'utilisateur sans qu'aucun mail ne parte ; une réponse
+authentique reçue ensuite la remplace, sauf si elle porte une date antérieure à la réponse forgée.
 
 **Le critère est bien `scheduling_owner`, et non « l'utilisateur est l'organisateur ».** Les deux
 ne se recouvrent pas : un rendez-vous que Thunderbird a invité porte l'utilisateur comme

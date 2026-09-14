@@ -104,8 +104,24 @@ export interface MailSpamScore {
   raw: string
 }
 
-/** What the organiser's block asks for: a date to answer, or the word that it is off. */
-export type InvitationMethod = 'Request' | 'Cancel'
+/** What the block is: the organiser asking for a date, the word that it is off, or a guest's answer. */
+export type InvitationMethod = 'Request' | 'Cancel' | 'Reply'
+
+/** Whether a guest's answer may enter the calendar. Only `Applicable` is ever written; `Stale`
+    answers an earlier version, `Superseded` is older than the answer already recorded, and
+    `UnsupportedAnswer` says something other than yes, maybe or no. */
+export type ReplyStatus =
+  | 'Applicable' | 'UnknownUid' | 'NotOwner' | 'UnknownAttendee' | 'OccurrenceOnly'
+  | 'Stale' | 'Superseded' | 'UnsupportedAnswer'
+
+/** The guest who answered, what they said, and whether the calendar already holds it. */
+export interface InvitationReply {
+  email: string
+  name?: string
+  partStat: string
+  status: ReplyStatus
+  applied: boolean
+}
 
 /** How the event the block names stands in the user's own calendar. `Outdated` is a copy the
     organiser has since revised, `Newer` one the calendar already holds a later version of. */
@@ -151,6 +167,8 @@ export interface MailInvitation {
   calendarId?: string
   /** The block carries a single date of a series: nothing here can be answered as a whole. */
   occurrenceOnly: boolean
+  /** Set on a `Reply` block alone. */
+  reply?: InvitationReply
   /** The MIME part the block was read from — what an answer names back. */
   part: string
   /** The block could not be read, `reason` says why: the file stays an ordinary attachment. */
@@ -163,8 +181,23 @@ export interface MailInvitation {
 export interface InvitationResponse {
   invitation: MailInvitation
   replySent: boolean
+  /** `invitation_no_organizer` (no address to reply to) or `invitation_uid_unwritable` (a UID no reply can carry); the send failure otherwise. */
   replyError?: string
   trashed: boolean
+}
+
+export interface ApplyReplyArgs {
+  folder: string
+  uid: number
+  part: string
+}
+
+/** A guest's answer carried into the calendar: `applied` is false, with its code, when the
+    calendar did not take the write — the event changed in between, or it was busy. */
+export interface ApplyReplyResponse {
+  invitation: MailInvitation
+  applied: boolean
+  applyError?: string
 }
 
 /** `language` and `timeZone` word and place the reply mail the backend sends on the user's

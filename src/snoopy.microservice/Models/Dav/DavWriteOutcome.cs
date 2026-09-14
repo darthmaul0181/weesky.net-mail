@@ -1,3 +1,4 @@
+using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Services.Calendar;
 
 namespace weesky.Snoopy.Microservice.Models.Dav;
@@ -11,7 +12,9 @@ namespace weesky.Snoopy.Microservice.Models.Dav;
 /// <see cref="Precondition"/> is the one the calendar gate judged an <see cref="DavWriteStatus.InvalidCard"/>
 /// on, so its XML translation names it without reading the file again; null on the address book,
 /// whose refusals name one element each.
+/// <see cref="Replaced"/> is the row as it stood before this write — including the byte-identical
+/// short-circuit, which reports it without opening a transaction — null on a creation.
 /// </summary>
 public sealed record DavWriteOutcome(
     DavWriteStatus Status, string? Etag, string? ConflictHref, ulong Sequence,
-    IcsPrecondition? Precondition = null);
+    IcsPrecondition? Precondition = null, ReplacedVersion? Replaced = null);

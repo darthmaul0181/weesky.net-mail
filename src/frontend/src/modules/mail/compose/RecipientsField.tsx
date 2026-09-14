@@ -25,6 +25,8 @@ interface Props {
   /** A group that would insert nothing. The field never adds in silence, so it says so through
       whatever announcement channel the caller owns. */
   onEmptyGroup?: (name: string) => void
+  /** Which tokens are drawn as a mistake. */
+  isValid?: (token: string) => boolean
 }
 
 /**
@@ -49,6 +51,7 @@ export function namesByAddressOf(contacts: Contact[]): Map<string, string> {
 
 export default function RecipientsField({
   id, label, tokens, onChange, autoFocus, contacts = [], groups = [], onEmptyGroup,
+  isValid = isValidAddress,
 }: Props) {
   const { t } = useTranslation('compose')
   const [draft, setDraft] = useState('')
@@ -147,11 +150,15 @@ export default function RecipientsField({
           const shown = name ?? token
           return (
             <span key={`${token}-${index}`}
-              className={`recipient-token${isValidAddress(token) ? '' : ' is-invalid'}`}
-              // Only when the chip is not already showing it: a bubble repeating the text under
-              // the cursor is noise, the rule AddressLabel follows in the reader.
-              title={name ? token : undefined}>
-              {shown}
+              className={`recipient-token${isValid(token) ? '' : ' is-invalid'}`}>
+              {/* The address only when the chip is not already showing it whole: a bubble
+                  repeating the text under the cursor is noise, the rule AddressLabel follows. */}
+              <span className="recipient-token-text" title={name ? token : undefined}
+                onMouseEnter={name ? undefined : event => {
+                  const text = event.currentTarget
+                  if (text.scrollWidth > text.clientWidth) text.title = token
+                  else text.removeAttribute('title')
+                }}>{shown}</span>
               <button type="button" aria-label={t('recipients.remove', { name: shown })}
                 onClick={() => onChange(tokens.filter((_, i) => i !== index))}>✕</button>
             </span>

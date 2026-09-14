@@ -46,13 +46,30 @@ const CODES = {
   calendar_conflict: 'errors:calendarConflict',
   calendar_busy: 'errors:calendarBusy',
   calendar_refused: 'errors:calendarRefused',
+  reply_not_applicable: 'errors:replyNotApplicable',
+  reply_not_a_reply: 'errors:replyNotApplicable',
+  smtp_unreachable: 'errors:smtpUnreachable',
+  smtp_auth_failed: 'errors:smtpAuthFailed',
+  smtp_auth_unsupported: 'errors:smtpAuthUnsupported',
+  smtp_tls_failed: 'errors:smtpTlsFailed',
+  smtp_timeout: 'errors:smtpTimeout',
+  password_unreadable: 'errors:passwordUnreadable',
+  stored_account_invalid: 'errors:storedAccountInvalid',
+  scheduling_account_changed_concurrently: 'errors:schedulingAccountChangedConcurrently',
+  connection_test_in_progress: 'errors:connectionTestInProgress',
+  security_none_disallowed: 'errors:securityNoneDisallowed',
+  password_required_for_new_endpoint: 'errors:passwordRequiredForNewEndpoint',
 } as const
 
-export function apiErrorMessage(error: unknown, fallback: string): string {
-  const code = error instanceof Error ? (error as { code?: string }).code : undefined
-  // hasOwnProperty, not `CODES[code]` directly: `code` comes off the wire, and 'constructor'
-  // resolves to an inherited function — truthy, and not a translation key.
+// hasOwnProperty, not `CODES[code]` directly: `code` comes off the wire, and 'constructor'
+// resolves to an inherited function — truthy, and not a translation key.
+export function messageForCode(code: string | undefined | null, fallback: string): string {
   const key = code && Object.prototype.hasOwnProperty.call(CODES, code)
     ? CODES[code as keyof typeof CODES] : undefined
   return key ? i18next.t(key) : fallback
+}
+
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  const code = error instanceof Error ? (error as { code?: string }).code : undefined
+  return messageForCode(code, fallback)
 }

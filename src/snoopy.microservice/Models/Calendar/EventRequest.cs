@@ -45,4 +45,11 @@ public class EventRequest
     public Visibility Visibility { get; set; } = Visibility.Default;
 
     public string? Url { get; set; }
+
+    /// <summary>The guests, the whole list; null leaves the file's ATTENDEE lines as they are,
+    /// an empty list removes them all (spec 5e, décision 8).</summary>
+    public List<AttendeeRequest>? Attendees { get; set; }
+
+    /// <summary>The language of the invitation mails this write may send: "fr" or "en".</summary>
+    public string Language { get; set; } = "en";
 }

@@ -145,9 +145,24 @@ internal static class IcsProjector
     {
         null => null,
         { IsAbsoluteUri: true } when value.Scheme.Equals("mailto", StringComparison.OrdinalIgnoreCase) =>
-            Trimmed(value.AbsoluteUri["mailto:".Length..]),
+            Trimmed(Decoded(value.AbsoluteUri["mailto:".Length..])),
         _ => Trimmed(value.OriginalString),
     };
+
+    /// <summary>What <see cref="Address"/> read before it decoded: the spelling calendar_attendees rows
+    /// projected before 5e2 still hold, and that a client may therefore send back.</summary>
+    internal static string? EncodedAddress(Uri? value) =>
+        value is { IsAbsoluteUri: true } && value.Scheme.Equals("mailto", StringComparison.OrdinalIgnoreCase)
+            ? Trimmed(value.AbsoluteUri["mailto:".Length..])
+            : Address(value);
+
+    /// <summary>A percent-encoded address as a person writes it (<c>josé@…</c>), whichever way the
+    /// file spelled it — unless decoding would put a control character in it.</summary>
+    internal static string Decoded(string escaped)
+    {
+        var decoded = Uri.UnescapeDataString(escaped);
+        return decoded.Any(char.IsControl) ? escaped : decoded;
+    }
 
     private static DateTime Min(DateTime left, DateTime right) => left <= right ? left : right;
 

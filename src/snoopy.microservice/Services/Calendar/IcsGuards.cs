@@ -20,7 +20,7 @@ internal static class IcsGuards
     private const string SupportedVersion = "2.0";
     private const string TzIdParameter = "TZID=";
     private const int MaxUidLength = 255;
-    private const int MaxEmailLength = 320;
+    internal const int MaxEmailLength = 320;
 
     /// <summary>One past the ceiling: the value every saturating count stops at, so no product of
     /// attacker-sized lists can ever wrap past it.</summary>
@@ -144,13 +144,19 @@ internal static class IcsGuards
             else if (line.StartsWith("END:VTIMEZONE", StringComparison.OrdinalIgnoreCase)) inZone = false;
             if (inZone) continue;
 
-            var colon = Unquoted(line, ':');
-            if (colon <= 0) continue;
-            foreach (var parameter in Parameters(line[..colon]))
-            {
-                if (parameter.StartsWith(TzIdParameter, StringComparison.OrdinalIgnoreCase))
-                    yield return parameter[TzIdParameter.Length..].Trim('"');
-            }
+            foreach (var tzid in TzIdsOf(line)) yield return tzid;
+        }
+    }
+
+    /// <summary>The TZID parameters one logical line carries, unquoted.</summary>
+    internal static IEnumerable<string> TzIdsOf(string line)
+    {
+        var colon = Unquoted(line, ':');
+        if (colon <= 0) yield break;
+        foreach (var parameter in Parameters(line[..colon]))
+        {
+            if (parameter.StartsWith(TzIdParameter, StringComparison.OrdinalIgnoreCase))
+                yield return parameter[TzIdParameter.Length..].Trim('"');
         }
     }
 

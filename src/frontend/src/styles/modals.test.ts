@@ -57,6 +57,14 @@ describe('dialogs on a narrow screen', () => {
     expect(modalRule).toMatch(/--modal-w:\s*0\s*[;}]/)
   })
 
+  // Stacked under its label, a 34ch text box ended 71px short of the select below it at 390.
+  it('gives every field row\'s control the whole dialog width below 640px', () => {
+    const phoneBlock = braceBlock(modalCss, modalCss.indexOf('@media (max-width: 639px)'))
+    const rowRuleAt = phoneBlock.search(/\.modal \.field-h\s*\{/)
+    expect(rowRuleAt).toBeGreaterThan(-1)
+    expect(braceBlock(phoneBlock, rowRuleAt)).toMatch(/--field-w:\s*100%\s*[;}]/)
+  })
+
   it('keeps the content-sized contract above 640px', () => {
     expect(modalCss).toMatch(/min-width:\s*var\(--modal-w,\s*24rem\)/)
   })

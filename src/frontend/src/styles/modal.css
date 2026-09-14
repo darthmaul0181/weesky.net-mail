@@ -86,7 +86,8 @@
    The measure is a width, never a flex-basis: measured in Chrome, a basis does not feed the flex
    container's intrinsic contribution at all, so --field-w had literally no effect on the box. */
 .modal .field-h > :is(input[type="text"], input[type="password"], input[type="email"],
-                      input[type="number"], .quota-field, .identity-combo) {
+                      input[type="number"], .quota-field, .identity-combo, .recipients-box,
+                      .attendee-status) {
   flex-basis: auto;
   width: var(--field-w, 34ch);
   min-width: 0;
@@ -138,6 +139,9 @@
     max-width: 100%;
     padding: 18px;
   }
+
+  /* Stacked under its label, a 34ch box stopped short of the stretched <select> beside it. */
+  .modal .field-h { --field-w: 100%; }
 
   /* .modal-close is reused by every dialog and carries no Cancel sibling on most of them, so on
      a phone — where the outside-click strip just shrank from 24px plus centring slack to 12px —

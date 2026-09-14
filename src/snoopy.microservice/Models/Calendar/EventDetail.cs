@@ -7,9 +7,10 @@ namespace weesky.Snoopy.Microservice.Models.Calendar;
 /// this version and not one somebody replaced meanwhile. <c>RepeatIsExact</c> and
 /// <c>ForeignAlarms</c> are what the editor cannot show and must therefore warn about: a rule its
 /// own controls would narrow, and the alarms its bell does not carry. <c>MyPartStat</c> is the
-/// user's own answer to an invitation, stamped by the controller (spec 5e).
+/// user's own answer to an invitation, and <c>CanInvite</c> whether the user organizes it, both
+/// stamped by the controller (spec 5e).
 /// </summary>
 public sealed record EventDetail(
     Guid Id, Guid CalendarId, string Uid, string IcsHash, EventWrite Fields, string? RecurrenceText,
     IReadOnlyList<AttendeeProjection> Attendees, string? Status, bool RepeatIsExact,
-    IReadOnlyList<string> ForeignAlarms, string? MyPartStat = null);
+    IReadOnlyList<string> ForeignAlarms, string? MyPartStat = null, bool CanInvite = true);

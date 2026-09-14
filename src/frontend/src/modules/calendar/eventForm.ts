@@ -1,5 +1,5 @@
 import type {
-  Availability, EditScope, EventDetail, EventUpdateBody, EventWrite, Occurrence, RecurrenceWrite,
+  AttendeeWrite, Availability, EditScope, EventDetail, EventUpdateBody, EventWrite, Occurrence, RecurrenceWrite,
   Visibility,
 } from './calendarTypes'
 import { durationMinutesOf, wallClockOf, type WallClock } from './multiDay'
@@ -40,6 +40,9 @@ export interface EventFormState {
   /** The stored rule is more than the picker can show, so a save must keep it as it stands. */
   keepRepeat: boolean
   foreignAlarms: string[]
+  attendees: AttendeeWrite[]
+  /** False on an event somebody else organizes: the field gives way to the read-only list. */
+  canInvite: boolean
 }
 
 const FREQUENCIES = { daily: 'DAILY', weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY' }
@@ -69,6 +72,7 @@ export function newEventForm(
     // A day off does not block a free/busy, and that is how Apple's clients write one.
     availability: allDay ? 'Free' : 'Busy',
     visibility: 'Default', url: '', keepRepeat: false, foreignAlarms: [],
+    attendees: [], canInvite: true,
   }
 }
 
@@ -132,6 +136,10 @@ export function formOf(
     location: f.location ?? '', description: f.description ?? '',
     availability: availabilityOf(detail), visibility: f.visibility, url: f.url ?? '',
     keepRepeat: !detail.repeatIsExact || beyondTheBlock(f.repeat), foreignAlarms: detail.foreignAlarms,
+    attendees: detail.canInvite
+      ? detail.attendees.filter(a => !a.isOrganizer && !a.recurrenceId).map(a => ({ email: a.email, name: a.name }))
+      : [],
+    canInvite: detail.canInvite,
   }
 }
 
@@ -206,6 +214,7 @@ export function writeOf(form: EventFormState): EventWrite {
   if (form.location) write.location = form.location
   if (form.description) write.description = form.description
   if (form.url) write.url = form.url
+  if (form.canInvite) write.attendees = form.attendees
 
   if (form.isAllDay) {
     write.startDate = form.startDate

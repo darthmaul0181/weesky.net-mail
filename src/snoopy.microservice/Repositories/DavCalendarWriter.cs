@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
+using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Services.Calendar;
 using weesky.Snoopy.Microservice.Services.Dav;
@@ -79,6 +80,9 @@ internal sealed class DavCalendarWriter(
                 if (ifMatch is not null && !Holds(ifMatch, row))
                     return Refused(DavWriteStatus.PreconditionFailed);
 
+                // Taken before the row is removed.
+                var replaced = row.AsReplaced();
+
                 // EventId NULL: a delete revision outlives the row it describes.
                 await sync.ArchiveAsync(userId, calendarId, null, row.Uid, row.DavName, row.IcsRaw,
                     RevisionCause.Delete, cancellationToken);
@@ -90,7 +94,7 @@ internal sealed class DavCalendarWriter(
                 await context.SaveChangesAsync(cancellationToken);
 
                 await sync.PlaceTombstoneAsync(calendarId, davName, rank, cancellationToken);
-                return new DavWriteOutcome(DavWriteStatus.Deleted, null, null, rank);
+                return new DavWriteOutcome(DavWriteStatus.Deleted, null, null, rank, Replaced: replaced);
             }, outcome => outcome.Status is DavWriteStatus.Deleted, cancellationToken);
         }
         catch (Exception e) when (DavWriteAnswer.IsTransient(e))
@@ -205,9 +209,11 @@ internal sealed class DavCalendarWriter(
         if (createOnly && row is not null) return Refused(DavWriteStatus.AlreadyExists);
 
         // Byte-identical with what is already stored: nothing changes, so no transaction, no rank,
-        // no client woken — the shape every idempotent DAVx5 retry takes.
+        // no client woken — the shape every idempotent DAVx5 retry takes. The row is still
+        // reported: the scheduler needs its scheduling columns even when nothing else moved.
         if (row is not null && string.Equals(row.IcsRaw, ics, StringComparison.Ordinal))
-            return new DavWriteOutcome(DavWriteStatus.Replaced, EntityTag(row), null, row.SyncSequence);
+            return new DavWriteOutcome(
+                DavWriteStatus.Replaced, EntityTag(row), null, row.SyncSequence, Replaced: row.AsReplaced());
 
         var uid = UidOf(parsed);
 
@@ -255,6 +261,7 @@ internal sealed class DavCalendarWriter(
                 return Refused(DavWriteStatus.CollectionFull);
 
             var replacing = row is not null;
+            ReplacedVersion? replaced = null;
             if (row is null)
             {
                 row = new CalendarEvent
@@ -269,6 +276,8 @@ internal sealed class DavCalendarWriter(
                 // and never without it.
                 await sync.ArchiveAsync(userId, calendarId, row.Id, row.Uid, row.DavName,
                     row.IcsRaw, cause, cancellationToken);
+                // Taken before ApplyIcsAsync overwrites ics_raw.
+                replaced = row.AsReplaced();
             }
 
             await store.ApplyIcsAsync(row, calendar, ics, parsed, rank, cancellationToken);
@@ -279,7 +288,8 @@ internal sealed class DavCalendarWriter(
             await sync.LiftTombstoneAsync(calendarId, davName, cancellationToken);
 
             return new DavWriteOutcome(
-                replacing ? DavWriteStatus.Replaced : DavWriteStatus.Created, EntityTag(row), null, rank);
+                replacing ? DavWriteStatus.Replaced : DavWriteStatus.Created, EntityTag(row), null, rank,
+                Replaced: replaced);
         }, outcome => outcome.Status is DavWriteStatus.Created or DavWriteStatus.Replaced,
             cancellationToken);
     }

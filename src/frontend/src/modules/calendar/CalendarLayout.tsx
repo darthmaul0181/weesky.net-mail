@@ -500,8 +500,11 @@ export default function CalendarLayout() {
   // of this module's own mutations, a focus refetch — can bring the window back without the
   // instance being edited, which flipped this false, unmounted the keyed editor and threw away
   // what was being typed. A form already sown never waits for anything again.
+  // A detail being read again after it went stale is not sown from: a save's own invalidation is
+  // one, and the hash it holds is the version that save replaced (the invitation hook writes again).
+  const detailCurrent = detail != null && !(eventQuery.isStale && eventQuery.isFetching)
   const editorReady = seed?.key === editorKey
-    || ((routeId ? detail != null : calendarsQuery.data !== undefined) && occurrenceFound)
+    || ((routeId ? detailCurrent : calendarsQuery.data !== undefined) && occurrenceFound)
   if (editorKey && editorReady && seed?.key !== editorKey) {
     setSeed({
       key: editorKey,
@@ -599,8 +602,8 @@ export default function CalendarLayout() {
     // offers a way out of a conflict that is no longer there.
     setConflict(false)
     try {
+      let chosen = scope
       if (detail) {
-        let chosen = scope
         // Décision 8: the occurrence's own RECURRENCE-ID, never the repeat the picker holds. A
         // repeat just added has no other occurrence, so there is nothing to ask about.
         if (chosen === null && isRecurring(occurrence)) {
@@ -615,16 +618,17 @@ export default function CalendarLayout() {
           setSaveError(t('errors.occurrenceMissing'))
           return
         }
-        await updateEvent.mutateAsync({
+      }
+      const result = detail
+        ? await updateEvent.mutateAsync({
           id: detail.id,
           body: updateBodyOf(form, { ...detail, icsHash: seed?.hash ?? detail.icsHash },
             occurrence, chosen ?? 'All'),
         })
-      } else {
-        await createEvent.mutateAsync(writeOf(form))
-      }
+        : await createEvent.mutateAsync(writeOf(form))
+      const sent = result?.scheduling?.sent ?? 0
       rememberCalendar(form.calendarId)
-      addToast(t('editor.saved'), 'success')
+      addToast(sent > 0 ? t('editor.savedSent', { count: sent }) : t('editor.saved'), 'success')
       backToGrid()
     } catch (error) {
       // The form stays exactly as it was typed: bouncing back to a grid that kept nothing is how

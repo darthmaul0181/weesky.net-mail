@@ -5,7 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import ApplicationTab from './ApplicationTab'
 
-const mocks = vi.hoisted(() => ({ getAppSettings: vi.fn(), setAppSetting: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  getAppSettings: vi.fn(),
+  setAppSetting: vi.fn(),
+  adminGetSchedulingAccount: vi.fn(),
+  adminSaveSchedulingAccount: vi.fn(),
+  adminDeleteSchedulingAccount: vi.fn(),
+  adminTestSchedulingAccount: vi.fn(),
+}))
 vi.mock('../../../api.js', () => ({ api: mocks }))
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -24,7 +31,13 @@ function renderTab(settings: Record<string, string> = {
 }
 
 describe('ApplicationTab', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // The scheduling-account section mounts alongside this tab; its own behaviour is covered in
+    // SchedulingAccountSection.test.tsx — here it just needs a resolved answer so it never rejects
+    // and leaks an unhandled error into these unrelated assertions.
+    mocks.adminGetSchedulingAccount.mockResolvedValue({ configured: false, passwordStored: false, passwordReadable: false, allowCleartext: false })
+  })
 
   it('shows the stored values, not values of its own', async () => {
     renderTab({ 'app.installable': 'true', 'app.name': 'Weesky Mail', 'app.shortName': 'Weesky' })

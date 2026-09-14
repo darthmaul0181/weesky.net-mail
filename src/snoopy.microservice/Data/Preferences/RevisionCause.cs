@@ -22,5 +22,9 @@ public enum RevisionCause
     /// A PUT body refused on a precondition, archived before the 412 leaves. DAVx5 applies
     /// "the server wins" without consulting anyone, so the refused version is otherwise lost.
     /// </summary>
-    Rejected
+    Rejected,
+
+    /// <summary>The server advanced a component's SEQUENCE after a device wrote a change the
+    /// invitees have to receive (spec 5e, décision 9) — neither a PUT nor the user's gesture.</summary>
+    Scheduling
 }

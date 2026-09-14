@@ -41,8 +41,8 @@ public sealed class InvitationReaderTests
     private void Stored(string ics, Guid calendar, string davName = "abc.ics", params (string Ics, Guid Calendar)[] more)
     {
         var uid = UidOf(ics);
-        List<StoredEventRef> rows = [new(Guid.NewGuid(), calendar, davName, ics)];
-        rows.AddRange(more.Select(m => new StoredEventRef(Guid.NewGuid(), m.Calendar, "other.ics", m.Ics)));
+        List<StoredEventRef> rows = [new(Guid.NewGuid(), calendar, davName, ics, null, IcsDocument.HashOf(ics))];
+        rows.AddRange(more.Select(m => new StoredEventRef(Guid.NewGuid(), m.Calendar, "other.ics", m.Ics, null, IcsDocument.HashOf(m.Ics))));
         _events.Setup(e => e.FindByUidAsync(WebmailUid, uid, It.IsAny<CancellationToken>())).ReturnsAsync(rows);
     }
 
@@ -167,10 +167,208 @@ public sealed class InvitationReaderTests
         _events.Verify(e => e.FindByUidAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
-    public async Task Reply_IsNull_TheFileStaysAnAttachment()
+    private static StoredEventRef Invited(string? owner = "webmail", string? ics = null)
     {
-        Assert.Null(await Create().ReadAsync(_user, Conn, Part("google-reply"), CancellationToken.None));
+        var file = ics ?? Fixture("webmail-invited");
+        return new(Guid.NewGuid(), Guid.NewGuid(), "web.ics", file, owner, IcsDocument.HashOf(file));
+    }
+
+    private static MailCalendarPart ReplyPart(string fixture) =>
+        new("2", Fixture(fixture).Replace("aaaa1111-bbbb-2222-cccc-3333dddd4444", "web-1111-2222"), false);
+
+    [Fact]
+    public async Task Reply_ToAnEventTheWebmailInvited_IsApplicable_AndSaysWhatTheFileHolds()
+    {
+        var reader = Create();
+        var stored = Invited();
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>())).ReturnsAsync([stored]);
+
+        var block = (await reader.ReadAsync(_user, Conn, ReplyPart("google-reply"), CancellationToken.None))!;
+
+        Assert.Equal(InvitationMethod.Reply, block.Method);
+        Assert.Equal(new InvitationReply("marc.dupont@example.org", "Marc Dupont", "DECLINED", ReplyStatus.Applicable, Applied: false), block.Reply);
+        Assert.Equal(InvitationPresence.Current, block.InCalendar);
+        Assert.Equal(stored.CalendarId, block.CalendarId);
+        Assert.Equal("NEEDS-ACTION", block.SavedPartStat);
+        Assert.Null(block.AddressedTo);
+        Assert.Null(block.FilePartStat);
+        _addresses.Verify(a => a.ForAccountAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Reply_AlreadyInTheFile_IsApplied()
+    {
+        var reader = Create();
+        var stored = Invited(ics: Fixture("webmail-invited").Replace("PARTSTAT=NEEDS-ACTION", "PARTSTAT=DECLINED"));
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>())).ReturnsAsync([stored]);
+
+        var block = (await reader.ReadAsync(_user, Conn, ReplyPart("google-reply"), CancellationToken.None))!;
+
+        Assert.True(block.Reply!.Applied);
+        Assert.Equal(ReplyStatus.Applicable, block.Reply.Status);
+    }
+
+    [Fact]
+    public async Task Reply_ToASeries_IsAppliedOnlyOnceEveryComponentHoldsTheAnswer()
+    {
+        var reader = Create();
+        var series = Fixture("webmail-invited-override");
+        var masterOnly = new System.Text.RegularExpressions.Regex("PARTSTAT=NEEDS-ACTION").Replace(series, "PARTSTAT=DECLINED", 1);
+        var reply = new MailCalendarPart("2", ReplyPart("google-reply").Ics.Replace("SEQUENCE:0", "SEQUENCE:1"), false);
+
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>())).ReturnsAsync([Invited(ics: masterOnly)]);
+        var half = (await reader.ReadAsync(_user, Conn, reply, CancellationToken.None))!;
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Invited(ics: series.Replace("PARTSTAT=NEEDS-ACTION", "PARTSTAT=DECLINED"))]);
+        var whole = (await reader.ReadAsync(_user, Conn, reply, CancellationToken.None))!;
+
+        Assert.Equal("DECLINED", half.SavedPartStat);
+        Assert.Equal((ReplyStatus.Applicable, false), (half.Reply!.Status, half.Reply.Applied));
+        Assert.Equal((ReplyStatus.Applicable, true), (whole.Reply!.Status, whole.Reply.Applied));
+    }
+
+    [Theory]
+    [InlineData(null, ReplyStatus.UnknownUid, InvitationPresence.Absent)]
+    [InlineData("", ReplyStatus.NotOwner, InvitationPresence.Current)]
+    public async Task Reply_ToAnUnknownUid_OrAnEventNotInvitedHere_IsNotApplicable(string? owner, ReplyStatus status, InvitationPresence presence)
+    {
+        var reader = Create();
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(owner is null ? [] : [Invited(owner: null)]);
+
+        var block = (await reader.ReadAsync(_user, Conn, ReplyPart("google-reply"), CancellationToken.None))!;
+
+        Assert.Equal(status, block.Reply!.Status);
+        Assert.Equal(presence, block.InCalendar);
+    }
+
+    [Fact]
+    public async Task Reply_FromSomeoneNotInvited_OrForOneDate_OrStale_IsNotApplicable()
+    {
+        var reader = Create();
+        var stored = Invited(ics: Fixture("webmail-invited").Replace("SEQUENCE:0", "SEQUENCE:2"));
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>())).ReturnsAsync([stored]);
+        Assert.Equal(ReplyStatus.Stale, (await reader.ReadAsync(_user, Conn, ReplyPart("google-reply"), CancellationToken.None))!.Reply!.Status);
+
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>())).ReturnsAsync([Invited()]);
+        var stranger = new MailCalendarPart("2", ReplyPart("google-reply").Ics.Replace("marc.dupont@example.org", "paul@example.org"), false);
+        Assert.Equal(ReplyStatus.UnknownAttendee, (await reader.ReadAsync(_user, Conn, stranger, CancellationToken.None))!.Reply!.Status);
+
+        var oneDate = (await reader.ReadAsync(_user, Conn, ReplyPart("google-reply-occurrence"), CancellationToken.None))!;
+        Assert.Equal(ReplyStatus.OccurrenceOnly, oneDate.Reply!.Status);
+        Assert.True(oneDate.OccurrenceOnly);
+        _events.Verify(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Reply_MatchesTheGuest_WhateverTheCase()
+    {
+        var reader = Create();
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>())).ReturnsAsync([Invited()]);
+        var block = (await reader.ReadAsync(_user, Conn, ReplyPart("outlook-reply-upper"), CancellationToken.None))!;
+        Assert.Equal(ReplyStatus.Applicable, block.Reply!.Status);
+        Assert.Equal("TENTATIVE", block.Reply.PartStat);
+    }
+
+    private void Holding(params StoredEventRef[] rows) =>
+        _events.Setup(e => e.FindByUidAsync(_user.WebmailUid, "web-1111-2222", It.IsAny<CancellationToken>())).ReturnsAsync(rows);
+
+    private static MailCalendarPart Answer(string partStat = "DECLINED", string? dtStamp = "20260913T100000Z")
+    {
+        var ics = ReplyPart("google-reply").Ics.Replace("PARTSTAT=DECLINED", "PARTSTAT=" + partStat);
+        return new("2", dtStamp is null ? ics.Replace("DTSTAMP:20260913T100000Z\r\n", "") : ics.Replace("DTSTAMP:20260913T100000Z", "DTSTAMP:" + dtStamp), false);
+    }
+
+    private static string AnsweredFile(string partStat, string stamp) =>
+        PartStatRewriter.Rewrite(Fixture("webmail-invited"), "marc.dupont@example.org", partStat, stamp)!;
+
+    [Fact]
+    public async Task Reply_PicksTheGuestTheFileNames_EvenWhenOnlyAnOverrideNamesThem()
+    {
+        var reader = Create();
+        var marcOnTheMaster = new System.Text.RegularExpressions.Regex("ATTENDEE;CN=Marc Dupont.*\r\n");
+        Holding(Invited(ics: marcOnTheMaster.Replace(Fixture("webmail-invited-override"), "", 1)));
+        var delegation = ReplyPart("google-reply").Ics.Replace("SEQUENCE:0", "SEQUENCE:1")
+            .Replace("ATTENDEE;CUTYPE", "ATTENDEE;PARTSTAT=ACCEPTED:mailto:paul@example.org\r\nATTENDEE;CUTYPE");
+
+        var block = (await reader.ReadAsync(_user, Conn, new MailCalendarPart("2", delegation, false), CancellationToken.None))!;
+
+        Assert.Equal(("marc.dupont@example.org", "DECLINED", ReplyStatus.Applicable, false),
+            (block.Reply!.Email, block.Reply.PartStat, block.Reply.Status, block.Reply.Applied));
+        Assert.Equal("NEEDS-ACTION", block.SavedPartStat);
+    }
+
+    [Theory]
+    [InlineData("NEEDS-ACTION")]
+    [InlineData("DELEGATED")]
+    [InlineData("X-WEESKY-MAYBE")]
+    public async Task Reply_SayingAnythingButYesMaybeOrNo_IsUnsupported(string partStat)
+    {
+        var reader = Create();
+        Holding(Invited());
+
+        var block = (await reader.ReadAsync(_user, Conn, Answer(partStat), CancellationToken.None))!;
+
+        Assert.Equal((partStat, ReplyStatus.UnsupportedAnswer, false), (block.Reply!.PartStat, block.Reply.Status, block.Reply.Applied));
+    }
+
+    [Fact]
+    public async Task Reply_WhenTheUidIsInTwoCalendars_TheEventTheWebmailInvitedAnswers()
+    {
+        var reader = Create();
+        var invited = Invited();
+        Holding(Invited(owner: null), invited);
+
+        var block = (await reader.ReadAsync(_user, Conn, Answer(), CancellationToken.None))!;
+
+        Assert.Equal((ReplyStatus.Applicable, invited.CalendarId), (block.Reply!.Status, block.CalendarId));
+    }
+
+    [Fact]
+    public async Task Reply_OlderThanTheAnswerTheFileHolds_AtTheSameSequence_IsSuperseded()
+    {
+        var reader = Create();
+        Holding(Invited(ics: AnsweredFile("DECLINED", "20260914T090000Z")));
+
+        var older = (await reader.ReadAsync(_user, Conn, Answer("ACCEPTED", "20260913T100000Z"), CancellationToken.None))!;
+        var same = (await reader.ReadAsync(_user, Conn, Answer("ACCEPTED", "20260914T090000Z"), CancellationToken.None))!;
+        var unstamped = (await reader.ReadAsync(_user, Conn, Answer("ACCEPTED", dtStamp: null), CancellationToken.None))!;
+        Holding(Invited(ics: AnsweredFile("DECLINED", "20260914T090000Z").Replace("SEQUENCE:0", "SEQUENCE:1")));
+        var atSequenceOne = (await reader.ReadAsync(_user, Conn,
+            new MailCalendarPart("2", Answer("ACCEPTED").Ics.Replace("SEQUENCE:0", "SEQUENCE:1"), false), CancellationToken.None))!;
+
+        Assert.Equal(ReplyStatus.Superseded, older.Reply!.Status);
+        Assert.Equal("DECLINED", older.SavedPartStat);
+        Assert.Equal(ReplyStatus.Applicable, same.Reply!.Status);
+        Assert.Equal(ReplyStatus.Applicable, unstamped.Reply!.Status);
+        Assert.Equal(ReplyStatus.Superseded, atSequenceOne.Reply!.Status);
+    }
+
+    [Fact]
+    public async Task Reply_OfTheSameAnswer_IsApplied_UnlessTheFileStampedItEarlier()
+    {
+        var reader = Create();
+        Holding(Invited(ics: AnsweredFile("DECLINED", "20260912T100000Z")));
+        var earlier = (await reader.ReadAsync(_user, Conn, Answer(), CancellationToken.None))!;
+        Holding(Invited(ics: AnsweredFile("DECLINED", "20260913T100000Z")));
+        var same = (await reader.ReadAsync(_user, Conn, Answer(), CancellationToken.None))!;
+        var unstamped = (await reader.ReadAsync(_user, Conn, Answer(dtStamp: null), CancellationToken.None))!;
+
+        Assert.Equal((ReplyStatus.Applicable, false), (earlier.Reply!.Status, earlier.Reply.Applied));
+        Assert.Equal((ReplyStatus.Applicable, true), (same.Reply!.Status, same.Reply.Applied));
+        Assert.Equal((ReplyStatus.Applicable, true), (unstamped.Reply!.Status, unstamped.Reply.Applied));
+    }
+
+    [Fact]
+    public async Task Reply_WithoutAttendee_IsUnreadable()
+    {
+        var ics = Fixture("google-reply").Replace(
+            "ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=DECLINED;CN=Marc Dupont:mailto:marc.dupont@example.org\r\n", "");
+
+        var block = (await Create().ReadAsync(_user, Conn, new MailCalendarPart("2", ics, false), CancellationToken.None))!;
+
+        Assert.Equal((true, InvitationReader.ReplyWithoutAttendee, "2"), (block.Unreadable, block.Reason, block.Part));
+        _events.Verify(e => e.FindByUidAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

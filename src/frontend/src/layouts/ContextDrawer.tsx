@@ -2,10 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import MenuIcon from '../icons/MenuIcon'
+import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap'
 import { useViewport } from '../hooks/useViewport'
-
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]),'
-  + ' select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 interface Props {
   open: boolean
@@ -39,33 +37,11 @@ export default function ContextDrawer({ open, onClose, children }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (open) onCloseRef.current() }, [pathname, search])
 
-  // Moves focus into the panel the moment it opens, and gives it back on close — without this,
-  // aria-modal="true" tells assistive tech a dialog appeared while focus stays on the trigger
-  // behind it, and the Tab handler below never engages because focus never entered the panel.
-  useEffect(() => {
-    if (!open) return
-    const previouslyFocused = document.activeElement as HTMLElement | null
-    const items = panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE)
-    const target = items?.[0] ?? panel.current
-    target?.focus()
-    return () => previouslyFocused?.focus()
-  }, [open])
+  useDialogFocusTrap(panel, { active: open })
 
   useEffect(() => {
     if (!open) return
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') { onClose(); return }
-      if (event.key !== 'Tab') return
-      const items = panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE)
-      if (!items?.length) return
-      const first = items[0]
-      const last = items[items.length - 1]
-      // Focus starts outside the panel until the effect above moves it in; without this branch
-      // neither arm below matches and Tab walks straight into the content behind the scrim.
-      if (!panel.current?.contains(document.activeElement)) { event.preventDefault(); first.focus() }
-      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
-    }
+    function onKey(event: KeyboardEvent) { if (event.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])

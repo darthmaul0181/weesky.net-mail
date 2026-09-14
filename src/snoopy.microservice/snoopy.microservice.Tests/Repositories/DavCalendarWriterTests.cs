@@ -568,6 +568,30 @@ public sealed class DavCalendarWriterTests : IAsyncLifetime
         Assert.Equal(DavPaths.Event(userId, CalendarStore.DefaultDavName, "b.ics"), outcome.ConflictHref);
     }
 
+    [Fact]
+    public async Task Replaced_ReportsTheRowBeforeTheWrite_IncludingTheByteIdenticalShortCircuit()
+    {
+        var ada = Event("u1", "Ada");
+        var created = await writer.PutAsync(userId, calendarId, "a.ics", ada, None);
+        Assert.Null(created.Replaced);
+
+        var grace = Event("u1", "Grace");
+        var replaced = await writer.PutAsync(userId, calendarId, "a.ics", grace, None);
+        Assert.Equal(ada, replaced.Replaced!.Ics);
+
+        var store = new CalendarEventStore(context, sync, NullLogger<CalendarEventStore>.Instance);
+        await store.SetSchedulingAsync(userId, calendarId, "a.ics", "webmail", "h", None);
+
+        // The byte-identical short-circuit reports the row too — it never opens a transaction.
+        var sameBytes = await writer.PutAsync(userId, calendarId, "a.ics", grace, None);
+        Assert.Equal(grace, sameBytes.Replaced!.Ics);
+        Assert.Equal(("webmail", "h"), (sameBytes.Replaced.SchedulingOwner, sameBytes.Replaced.SchedulingHash));
+
+        var deleted = await writer.DeleteAsync(userId, calendarId, "a.ics", None);
+        Assert.Equal(grace, deleted.Replaced!.Ics);
+        Assert.Equal(("webmail", "h"), (deleted.Replaced.SchedulingOwner, deleted.Replaced.SchedulingHash));
+    }
+
     private static DavCalendarWriter NewWriter(PreferencesDbContext context, ICalendarSyncStore sync) =>
         new(new CalendarEventStore(context, sync, NullLogger<CalendarEventStore>.Instance), sync,
             context, NullLogger<DavCalendarWriter>.Instance);

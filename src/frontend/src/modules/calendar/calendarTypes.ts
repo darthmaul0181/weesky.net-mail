@@ -67,6 +67,33 @@ export interface EventWrite {
   /** The editor never showed this event's rule, so it must not decide it: the stored RRULE stays
       as it is and `repeat` is ignored. Set it whenever `EventDetail.repeatIsExact` is false. */
   keepRepeat?: boolean
+  /** Omitted leaves the stored guests as they are; `[]` removes them and the organizer; a list is
+      the exact list, a known guest keeping their answer. */
+  attendees?: AttendeeWrite[]
+  /** The language the invitation mails this write sends are written in. */
+  language?: string
+}
+
+export interface AttendeeWrite {
+  email: string
+  name?: string
+}
+
+/** What the invitation hook did with a write: how many mails left. */
+export interface SchedulingReport {
+  owner?: string
+  sent: number
+}
+
+/** `POST /api/Calendar/Events`. */
+export interface CreatedId {
+  id: string
+  scheduling?: SchedulingReport
+}
+
+/** `PUT /api/Calendar/Events/{id}`. */
+export interface EventUpdated {
+  scheduling: SchedulingReport
 }
 
 /** One ORGANIZER or ATTENDEE line, carrying the RECURRENCE-ID of the component it was written on
@@ -101,6 +128,8 @@ export interface EventDetail {
   /** The user's own answer to an invitation (their ATTENDEE's PARTSTAT); absent when the event
       does not invite them. */
   myPartStat?: string
+  /** No ORGANIZER, or every one of them is the user's: the guest list is theirs to write. */
+  canInvite: boolean
 }
 
 /** Body of `PUT /api/Calendar/Events/{id}`. `scope` says how far the edit reaches, `instanceId`

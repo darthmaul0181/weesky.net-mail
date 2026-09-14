@@ -64,6 +64,28 @@ public sealed class UserAddressesTests
         Assert.Equal(["alice@weesky.be", "alice@weesky.net", "alice.pro@weesky.be", "me@gmail.com"], addresses);
     }
 
+    // Organizer side: the identity of a connected account (Gmail) is somebody the user may invite, never the organizer.
+    [Fact]
+    public async Task ForPrimary_IsTheHomeListAndThePrimaryAccountsIdentities_WithoutAConnectedAccounts()
+    {
+        var addresses = await Create().ForPrimaryAsync(_user, CancellationToken.None);
+
+        Assert.Equal(["alice@weesky.be", "alice@weesky.net", "alice.pro@weesky.be"], addresses);
+    }
+
+    // The event's detail reads both lists, the save and its hook the organizer's twice: the platform is asked once per request.
+    [Fact]
+    public async Task TheHomeList_IsReadOnce_ForEveryReadingOfTheSameRequest()
+    {
+        var sut = Create();
+
+        await sut.ForPrincipalAsync(_user, CancellationToken.None);
+        await sut.ForPrimaryAsync(_user, CancellationToken.None);
+        await sut.ForAccountAsync(_user, TestConnections.Primary("alice@weesky.be", "pw"), CancellationToken.None);
+
+        _accounts.Verify(a => a.GetAccountInfoAsync(_user, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task Primary_WhenThePlatformCannotAnswer_IsTheAddressAlone_AndWarns()
     {

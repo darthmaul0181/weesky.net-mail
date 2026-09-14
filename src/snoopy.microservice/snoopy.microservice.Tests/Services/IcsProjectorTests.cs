@@ -8,6 +8,16 @@ namespace weesky.Snoopy.Microservice.Tests.Services;
 
 public sealed class IcsProjectorTests
 {
+    // A mailto: address reads as a person writes it, whichever way the file spelled it; a decoding
+    // that would put a line break in it keeps the escaped text instead.
+    [Theory]
+    [InlineData("mailto:josé@example.org", "josé@example.org")]
+    [InlineData("mailto:jos%C3%A9@example.org", "josé@example.org")]
+    [InlineData("sip:room@example.org", "sip:room@example.org")]
+    [InlineData("mailto:evil%0D%0ABcc@example.org", "evil%0D%0ABcc@example.org")]
+    public void Address_DecodesAMailtoAddress_NeverIntoAControlCharacter(string value, string expected) =>
+        Assert.Equal(expected, IcsProjector.Address(new Uri(value)));
+
     [Fact]
     public void Dated_ProjectsUtcAndZone()
     {

@@ -1,4 +1,3 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,12 +19,6 @@ namespace weesky.Snoopy.Providers.Weesky.Controllers;
 [Authorize(Policy = AdminRequirement.PolicyName)]
 public sealed class AdminController : ApiBaseController
 {
-    private static readonly HashSet<string> EncryptedSecurities = ["StartTls", "SslOnConnect"];
-
-    /// <summary>Bounds the protected blob under oauth_client_secret's VARBINARY(1024): 512 bytes
-    /// of plaintext stay well inside it once Data Protection adds its framing.</summary>
-    private const int MaxClientSecretBytes = 512;
-
     private readonly IAdminRepository _adminRepository;
     private readonly IDovecotQuotaClient _dovecotQuotaClient;
     private readonly IExternalDomainStore _externalDomains;
@@ -388,9 +381,7 @@ public sealed class AdminController : ApiBaseController
     };
 
     /// <summary>
-    /// Securities are checked by exact, case-sensitive string match against the three literals —
-    /// not <c>Enum.TryParse</c>, which also accepts a numeric string and would let a value the
-    /// admin never typed reach the resolver that reads this row back. The cleartext opt-in is the
+    /// Hosts and securities follow <see cref="MailEndpointRules"/>. The cleartext opt-in is the
     /// same one the resolver applies, so a row that saves here is a row that resolves there.
     /// </summary>
     private static Result Validate(ExternalDomainRequest request, bool allowCleartext, bool requireSecret)
@@ -398,22 +389,22 @@ public sealed class AdminController : ApiBaseController
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 100)
             return Result.Failure("Name must be between 1 and 100 characters");
 
-        if (ValidateHost(request.ImapHost) is { } imapHostError) return Result.Failure(imapHostError);
-        if (ValidateHost(request.SmtpHost) is { } smtpHostError) return Result.Failure(smtpHostError);
+        if (MailEndpointRules.ValidateHost(request.ImapHost) is { } imapHostError) return Result.Failure(imapHostError);
+        if (MailEndpointRules.ValidateHost(request.SmtpHost) is { } smtpHostError) return Result.Failure(smtpHostError);
 
         if (request.ImapPort is < 1 or > 65535) return Result.Failure("Imap port must be between 1 and 65535");
         if (request.SmtpPort is < 1 or > 65535) return Result.Failure("Smtp port must be between 1 and 65535");
 
-        if (ValidateSecurity(request.ImapSecurity, allowCleartext) is { } imapSecurityError)
+        if (MailEndpointRules.ValidateSecurity(request.ImapSecurity, allowCleartext) is { } imapSecurityError)
             return Result.Failure($"Imap {imapSecurityError}");
-        if (ValidateSecurity(request.SmtpSecurity, allowCleartext) is { } smtpSecurityError)
+        if (MailEndpointRules.ValidateSecurity(request.SmtpSecurity, allowCleartext) is { } smtpSecurityError)
             return Result.Failure($"Smtp {smtpSecurityError}");
 
         if (request.SieveHost is null != request.SievePort is null)
             return Result.Failure("Sieve host and port must both be present or both be absent");
         if (request.SieveHost is not null)
         {
-            if (ValidateHost(request.SieveHost) is { } sieveHostError) return Result.Failure(sieveHostError);
+            if (MailEndpointRules.ValidateHost(request.SieveHost) is { } sieveHostError) return Result.Failure(sieveHostError);
             if (request.SievePort is < 1 or > 65535) return Result.Failure("Sieve port must be between 1 and 65535");
         }
 
@@ -443,25 +434,8 @@ public sealed class AdminController : ApiBaseController
 
         if (requireSecret && string.IsNullOrEmpty(request.OAuthClientSecret))
             return Result.Failure("A client secret is required for an OAuth2 domain");
-        if (request.OAuthClientSecret is { } secret
-            && Encoding.UTF8.GetByteCount(secret) > MaxClientSecretBytes)
-            return Result.Failure($"The client secret may not exceed {MaxClientSecretBytes} bytes");
+        if (DataProtectionSecretProtector.ValidateLength(request.OAuthClientSecret, "client secret") is { } tooLong)
+            return Result.Failure(tooLong);
         return Result.Success();
     }
-
-    private static string? ValidateHost(string host)
-    {
-        if (string.IsNullOrEmpty(host) || host.Length > 255) return "Host must be between 1 and 255 characters";
-        return Uri.CheckHostName(host) == UriHostNameType.Unknown ? "Host is not a valid hostname or IP address" : null;
-    }
-
-    /// <summary>Refusing None here rather than at read time is what stops an admin from saving a
-    /// row that would answer 404 on every use, with nothing on screen saying why.</summary>
-    private static string? ValidateSecurity(string security, bool allowCleartext) => security switch
-    {
-        _ when EncryptedSecurities.Contains(security) => null,
-        "None" when allowCleartext => null,
-        "None" => "security cannot be None: set Mail:AllowCleartext to accept an unencrypted endpoint",
-        _ => "security must be exactly one of None, StartTls, SslOnConnect"
-    };
 }

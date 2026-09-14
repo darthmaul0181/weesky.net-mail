@@ -1602,7 +1602,8 @@ textarea.compose-editor {
 
 /* ── Compose: recipients ─────────────────────────────────────────────────── */
 .recipients-box {
-  flex: 1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  /* min-width: 0 so a chip wider than the row is cut to the box rather than widening it. */
+  flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface); padding: 4px 6px; min-height: 32px;
 }
@@ -1644,6 +1645,12 @@ textarea.compose-editor {
 }
 /* Still 12px: the tray is a footer band listing files, not a form value like a recipient. */
 .compose-attachment { gap: 6px; border-radius: var(--radius-sm); padding: 4px 8px; font-size: 12px; }
+/* A chip is never wider than its box: the text gives way to an ellipsis, the ✕ stays whole. */
+.recipient-token { max-width: 100%; }
+/* A line of its own, taller than the token's line-height: 1, which its overflow: hidden would cut
+   the descenders (g, j, p, q, y, @) from — measured scrollHeight 16 over clientHeight 14. */
+.recipient-token-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.recipient-token button { flex: none; }
 .recipient-token.is-invalid { color: var(--danger); border-color: var(--danger); }
 .recipient-token button, .compose-attachment button { background: none; border: none; cursor: pointer; color: inherit; padding: 0; }
 
@@ -1713,7 +1720,7 @@ textarea.compose-editor {
 .compose-fields .field-h > label:first-child { width: 66px; }
 .compose-fields .field-h > input[type="text"] { padding: 6px 10px; }
 .compose-to-row { display: flex; align-items: flex-start; gap: 8px; }
-.compose-to-row .recipients-field { flex: 1; }
+.compose-to-row .recipients-field { flex: 1; min-width: 0; }
 .compose-cc-links { display: flex; gap: 8px; padding-top: 6px; }
 .compose-link-btn { background: none; border: none; color: var(--action-primary); cursor: pointer; padding: 0; font-size: 13px; }
 
@@ -1941,8 +1948,7 @@ textarea.compose-editor {
      Cc/Cci/Priorité strip, which is a row of its own and not this row's control. */
   .compose-fields .field-h { flex-direction: row; align-items: center; gap: 10px; }
   .compose-fields .field-h > label:first-child { width: 52px; flex: none; }
-  .compose-fields .field-h > input[type="text"],
-  .compose-fields .field-h.recipients-field .recipients-box { min-width: 0; }
+  .compose-fields .field-h > input[type="text"] { min-width: 0; }
   .field-h.recipients-field .recipients-box input { min-width: 60px; }
   .compose-from { flex-direction: row; align-items: center; gap: 10px; }
   .compose-from .compose-from-label { width: 52px; flex: none; }

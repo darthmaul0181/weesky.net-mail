@@ -24,6 +24,8 @@ internal static class IcsComposer
     private const string Private = "PRIVATE";
     private const string Confidential = "CONFIDENTIAL";
     private const string DefaultReminder = "Reminder";
+    private const string Mailto = "mailto:";
+    internal const int MaxCommonNameLength = 100;
 
     private static readonly string[] Stamps = ["DTSTAMP", "LAST-MODIFIED", "SEQUENCE", "CREATED"];
     private static readonly string[] SeriesOnly = ["RRULE", "RDATE", "EXDATE", "EXRULE"];
@@ -50,6 +52,7 @@ internal static class IcsComposer
         var master = Master(calendar);
         var before = Shape(master);
         Apply(master, w, withRule: true);
+        InviteSeries(calendar, w, master);
         Stamp(master, nowUtc, bump: Shape(master) != before);
         EnsureTimeZones(calendar, IcsDocument.Components(calendar));
         return IcsDocument.Serialize(calendar);
@@ -69,13 +72,18 @@ internal static class IcsComposer
             : Timing(previous.DtStart, IcsDocument.EndOf(previous), previous.Status);
         RemoveOverride(calendar, at);
 
-        var over = master.Copy<CalendarEvent>()!;
+        var over = Faithful(master, m => m.Copy<CalendarEvent>()!);
         foreach (var name in SeriesOnly) over.Properties.Remove(name);
         over.RecurrenceIdentifier = new RecurrenceIdentifier(at, null);
-        if (previous is not null) over.Sequence = previous.Sequence;
+        if (previous is not null)
+        {
+            over.Sequence = previous.Sequence;
+            TakeGuestLines(over, previous, w);
+        }
         Apply(over, w, withRule: false);
         Stamp(over, nowUtc, bump: Timing(over.DtStart, IcsDocument.EndOf(over), over.Status) != before);
         calendar.Events.Add(over);
+        InviteSeries(calendar, w, over);
         EnsureTimeZones(calendar, IcsDocument.Components(calendar));
         return IcsDocument.Serialize(calendar);
     }
@@ -93,7 +101,7 @@ internal static class IcsComposer
     internal static CalendarEvent Instance(IcsCalendar parsed, EventOccurrence occurrence,
         CalendarEvent source, string calendarTimeZone)
     {
-        var instance = source.Copy<CalendarEvent>()!;
+        var instance = Faithful(source, m => m.Copy<CalendarEvent>()!);
         foreach (var name in SeriesOnly) instance.Properties.Remove(name);
         instance.Properties.Remove("DURATION");
         if (occurrence.InstanceId.Length > 0)
@@ -157,7 +165,23 @@ internal static class IcsComposer
 
     internal static bool SameContent(IcsCalendar before, IcsCalendar after) => Canonical(before) == Canonical(after);
 
-    internal static IcsCalendar Clone(IcsCalendar calendar) => calendar.Copy<IcsCalendar>()!;
+    internal static IcsCalendar Clone(IcsCalendar calendar) => Faithful(calendar, c => c.Copy<IcsCalendar>()!);
+
+    /// <summary>Ical.Net 5.2.3's attendee copy assigns <c>Rsvp</c> on a parameter list the copy
+    /// shares with its source, so RSVP=FALSE appears on both for every line that had none. The bare
+    /// lines are noted before copying and the invented parameter taken back from both. The list is
+    /// enumerated: its <c>ContainsKey</c> still answers true once the parameter is removed.</summary>
+    private static T Faithful<T>(T source, Func<T, T> copy) where T : CalendarComponent
+    {
+        var bare = AttendeesIn(source).Select(a => !a.Parameters.Any(p => p.Name.Equals("RSVP", StringComparison.OrdinalIgnoreCase))).ToList();
+        var result = copy(source);
+        foreach (var (isBare, was, now) in bare.Zip(AttendeesIn(source), AttendeesIn(result)))
+            if (isBare) { was.Parameters.Remove("RSVP"); now.Parameters.Remove("RSVP"); }
+        return result;
+    }
+
+    private static IEnumerable<Attendee> AttendeesIn(CalendarComponent root) =>
+        Descendants(root).Prepend(root).SelectMany(c => c.Properties.AllOf("ATTENDEE").Select(p => p.Value).OfType<Attendee>());
 
     /// <summary>Décision 5: a resource without a master is edited through its first component.</summary>
     internal static CalendarEvent Master(IcsCalendar calendar) =>
@@ -226,7 +250,99 @@ internal static class IcsComposer
         PlaceReminders(evt, w);
         PlaceAvailability(evt, w);
         PlaceUrl(evt, w.Url);
+        PlaceAttendees(evt, w);
     }
+
+    /// <summary>A series is invited whole (spec § 9): an override keeps its own dates, but the
+    /// people invited to it are the people invited to the event.</summary>
+    internal static void InviteSeries(IcsCalendar calendar, EventWrite w, CalendarEvent edited)
+    {
+        if (w.Attendees is null) return;
+        foreach (var component in IcsDocument.Components(calendar).Where(c => !ReferenceEquals(c, edited)))
+            PlaceAttendees(component, w);
+    }
+
+    /// <summary>An address a mailto: value carries with nothing to escape and nothing to decode: the next
+    /// save must find the guest again to keep their answer, and every client must read the same text.</summary>
+    internal static bool IsMailtoAddress(string email) =>
+        Uri.TryCreate(Mailto + email, UriKind.Absolute, out var uri) && uri.AbsoluteUri == Mailto + email
+        && IcsProjector.Address(uri) == email;
+
+    /// <summary>An override already at that date is the reference for its own guests: what they
+    /// answered to that occurrence alone, under its own ORGANIZER — never the master's lines.</summary>
+    private static void TakeGuestLines(CalendarEvent over, CalendarEvent previous, EventWrite w)
+    {
+        over.Properties.Remove("ATTENDEE");
+        foreach (var line in previous.Attendees)
+        {
+            if (line?.Value is not { } address) continue;
+            var taken = new Attendee(address);
+            CopyParameters(line.Parameters, taken.Parameters);
+            over.Attendees.Add(taken);
+        }
+        // Once a property is removed, the library's stale index makes the next assignment of that
+        // name a silent no-op: never removed when PlaceAttendees is about to write the organizer.
+        if (previous.Organizer is not { Value: { } host } organizer)
+        {
+            if (OrganizerWritten(w) is null) over.Properties.Remove("ORGANIZER");
+            return;
+        }
+        var kept = new Organizer(host.OriginalString);
+        CopyParameters(organizer.Parameters, kept.Parameters);
+        over.Organizer = kept;
+    }
+
+    /// <summary>Parameter by parameter onto a line of its own: the library's copy of a whole line
+    /// shares its parameter list with the original, and invents RSVP=FALSE (see Faithful).</summary>
+    private static void CopyParameters(IParameterCollection from, IParameterCollection to)
+    {
+        foreach (var parameter in from) to.Add(parameter.Copy<CalendarParameter>()!);
+    }
+
+    /// <summary>A CN parameter value: one line, no control character, no DQUOTE (RFC 5545 § 3.2
+    /// forbids it quoted or not), at most <see cref="MaxCommonNameLength"/> characters without
+    /// splitting a surrogate pair; null when nothing is left.</summary>
+    internal static string? CommonName(string? raw)
+    {
+        var name = string.Concat((raw ?? string.Empty).ReplaceLineEndings(" ")
+            .Where(c => c != '"').Select(c => char.IsControl(c) ? ' ' : c)).Trim();
+        if (name.Length > MaxCommonNameLength)
+            name = name[..(char.IsHighSurrogate(name[MaxCommonNameLength - 1]) ? MaxCommonNameLength - 1 : MaxCommonNameLength)].TrimEnd();
+        return name.Length == 0 ? null : name;
+    }
+
+    /// <summary>Décision 8: the list exactly as sent under the ORGANIZER the caller resolved. A
+    /// guest already there keeps their line — answer, role, every parameter — and only takes the
+    /// name the request gives; a new one is asked (REQ-PARTICIPANT, NEEDS-ACTION, RSVP). Null
+    /// leaves every line, an empty list removes the guests and the organizer with them.</summary>
+    private static void PlaceAttendees(CalendarEvent evt, EventWrite w)
+    {
+        if (w.Attendees is null) return;
+        IEnumerable<Attendee?>? stored = evt.Attendees;
+        var lines = (stored ?? []).OfType<Attendee>().ToList();
+        // A guest is found under the address as read today and under the escaped spelling older rows
+        // hold, each decoded at most once; the decoded one wins a clash.
+        var previous = new Dictionary<string, Attendee>(StringComparer.Ordinal);
+        foreach (var spelling in new Func<Uri?, string?>[] { IcsProjector.Address, IcsProjector.EncodedAddress })
+            foreach (var line in lines)
+                if (spelling(line.Value)?.ToLowerInvariant() is { } key) previous.TryAdd(key, line);
+        evt.Properties.Remove("ATTENDEE");
+        foreach (var guest in w.Attendees)
+        {
+            var known = previous.TryGetValue(guest.Email, out var kept);
+            // An address no plain mailto: value carries (accented, escaped) keeps the value the file wrote.
+            var line = known && !IsMailtoAddress(guest.Email) ? new Attendee(kept!.Value!) : new Attendee(Mailto + guest.Email);
+            if (known) CopyParameters(kept!.Parameters, line.Parameters);
+            else (line.Role, line.ParticipationStatus, line.Rsvp) = ("REQ-PARTICIPANT", "NEEDS-ACTION", true);
+            if (CommonName(guest.Name) is { } name) line.CommonName = name;
+            evt.Attendees.Add(line);
+        }
+        if (w.Attendees.Count == 0) evt.Properties.Remove("ORGANIZER");
+        else if (OrganizerWritten(w) is { } o) evt.Organizer = new Organizer(Mailto + o.Email) { CommonName = CommonName(o.Name) };
+    }
+
+    /// <summary>The ORGANIZER a write puts on the component it rewrites: only with guests, and only when resolved.</summary>
+    private static OrganizerWrite? OrganizerWritten(EventWrite w) => w is { Attendees.Count: > 0, Organizer: { } o } ? o : null;
 
     internal static void Stamp(CalendarEvent evt, DateTime nowUtc, bool bump)
     {

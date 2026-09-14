@@ -550,6 +550,10 @@ a.dropdown-item { text-decoration: none; }
   color: var(--text-muted);
 }
 
+/* A note standing in for a validation refusal rather than plain guidance — the scheduling
+   account dialog's "a password is required" hint is the one caller today. */
+.settings-note.is-warn { color: var(--danger); }
+
 /* The palette blocks are attribute selectors, deliberately not anchored to <html>: stamping
    data-palette and data-theme on the thumbnail re-declares all 33 tokens inside it, so a
    preview costs no colour of its own. Anchoring those selectors blanks every thumbnail. */

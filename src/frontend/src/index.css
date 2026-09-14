@@ -594,9 +594,10 @@ body {
 }
 .connected-account-warn { font-size: 12px; color: var(--danger); }
 
-/* The tile's repair action is a word rather than a glyph for an OAuth row; the icon buttons beside
-   it set the row's height, so it takes their measure and not a form submit's. */
-.connected-account-list .admin-list-item-actions .btn { padding: 5px 10px; font-size: 13px; }
+/* A tile's word action (an OAuth row's repair, the service account's Tester) sits beside icon
+   buttons that set the row's height, so it takes their measure and not a form submit's. */
+.connected-account-list .admin-list-item-actions .btn,
+.svc-account-card .admin-list-item-actions .btn { padding: 5px 10px; font-size: 13px; }
 
 /* The connect form is revealed in place, so it is boxed like a tile — otherwise three field
    rows appear to belong to the list under them. */
@@ -1199,6 +1200,65 @@ body {
   opacity: 0.3;
   cursor: default;
 }
+
+/* ── Scheduling service account (Application tab) ───────────────────────── */
+
+.svc-account-section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.svc-account-section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0 0 4px; }
+.svc-account-section-intro { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 560px; }
+
+/* Configured, not-configured and password-unreadable share the tile skin (mock-up "B"'s .card):
+   centered like every other .admin-list-item. Green by default — the account works — muted when
+   there is none, red when its password cannot be read. */
+.svc-account-card > svg { flex: none; color: var(--success); }
+.svc-account-card.is-empty,
+.svc-account-card.is-warn { border-style: dashed; }
+.svc-account-card.is-empty { background: transparent; }
+.svc-account-card.is-empty > svg { color: var(--text-muted); }
+.svc-account-card.is-warn { border-color: var(--danger); }
+.svc-account-card.is-warn > svg { color: var(--danger); }
+.svc-account-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* An address or host has no space to wrap at: unbroken, it pushed the page sideways on a phone. */
+.svc-account-login { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.svc-account-meta { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
+.svc-account-warn-text { font-size: 13px; color: var(--danger); margin: 2px 0 0; }
+.svc-account-empty-text { flex: 1; min-width: 200px; margin: 2px 0; color: var(--text-muted); font-size: 13px; }
+
+/* The last-test pill, mock-up "B": a tinted fill, not the identities page's plain-outline .row-tag. */
+.svc-account-pill { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex: none; }
+.svc-account-pill.is-ok { color: var(--success); background: color-mix(in oklab, var(--success) 12%, transparent); }
+.svc-account-pill.is-fail { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
+
+/* The card's own width, not the window's: a tablet's settings column squeezed the login to 8 lines.
+   The slot holds the card alone, so no dialog's fixed overlay sits inside this container. */
+.svc-account-slot { container-type: inline-size; }
+@container (max-width: 559px) {
+  /* The info column fills the line after the 16px icon and 12px gap, so the pill wraps under it at
+     its own width, on the text's left edge, 4px below the meta line, and the actions under that. */
+  .svc-account-card:not(.is-warn) { flex-wrap: wrap; }
+  .svc-account-card:not(.is-warn) .svc-account-info { flex-basis: calc(100% - 28px); }
+  .svc-account-pill { margin: -8px 0 0 28px; }
+  .svc-account-card:not(.is-warn) .admin-list-item-actions { width: 100%; justify-content: flex-end; }
+}
+
+/* The note, the warning and the test result start on the input column: 110px label + 16px gap.
+   .modal outranks the margin shorthands of .settings-note (shell.css, loaded later) and the result. */
+.modal .svc-account-field-indent { margin-left: 126px; }
+
+/* The dialog's inline test result, mock-up "B": an icon plus a sentence, never a boxed alert —
+   `.alert-error` still applies to a save refusal, which blocks the whole form. */
+.svc-account-test-result { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; max-width: 56ch; font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
+.svc-account-test-result svg { flex: none; }
+.svc-account-test-result.is-ok { color: var(--success); }
+.svc-account-test-result.is-fail { color: var(--danger); }
+
+/* Pushes Tester to the leading edge of .folder-pick-submit's flex-end row (mock-up "B"'s footer)
+   instead of a second copy of that row's own layout and phone stacking (mail.css). */
+.svc-account-test-btn { margin-right: auto; }
 
 /* ── Ownership tiles ─────────────────────────────────────── */
 
@@ -3133,4 +3193,12 @@ body {
      --toggle-bleed retunes this with it. */
   .rule-card-header { flex-wrap: wrap; row-gap: calc(var(--toggle-bleed) + 2px); }
   .rule-card-btns { margin-left: auto; }
+
+  /* .folder-pick-submit's own phone stack (mail.css) already applies to the dialog footer; the
+     leading margin that pushes Tester left has nothing to spend in a column and is dropped. */
+  .svc-account-test-btn { margin-right: 0; }
+
+  /* Labels stack above inputs here, so there is no input column left to align on. */
+  .modal .svc-account-field-indent { margin-left: 0; }
+
 }

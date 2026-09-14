@@ -13,7 +13,7 @@
     "domains": "A domain is a mail domain hosted directly on this server (e.g. example.com). Every user account belongs to exactly one domain. Adding a domain enables creating mailboxes of the form user@example.com.",
     "virtualdomains": "A virtual alias domain is a domain with no mailboxes of its own. Emails sent to any address under this domain are redirected to real mailboxes via alias rules. Each virtual alias domain can have one or more owners — accounts authorised to create and manage aliases under it.",
     "externaldomains": "Define the external mail providers users may connect accounts from.",
-    "application": "Offers the webmail for installation as a desktop app: browsers then show an install icon in the address bar, and the app opens in its own window. The name and short name are what users see under the icon. Switching this off stops offering it — it does not uninstall the app for anyone who already installed it."
+    "application": "Offers the webmail for installation as a desktop app: browsers then show an install icon in the address bar, and the app opens in its own window. The name and short name are what users see under the icon. Switching this off stops offering it — it does not uninstall the app for anyone who already installed it. Below: without a sending account, an appointment changed from a phone or Thunderbird does not notify the guests."
   },
   "accounts": {
     "title": "Accounts ({{total}})",
@@ -114,5 +114,37 @@
     "sievePort": "Sieve port",
     "sieveMismatch": "Sieve host and port must both be present or both be absent",
     "sieveNote": "Leave empty if the provider does not support Sieve filters — the Rules tab will be hidden for accounts on this domain."
+  },
+  "scheduling": {
+    "title": "Calendar invitation sending account",
+    "intro": "When an appointment with guests is changed from a phone or Thunderbird, the server sends the invitations with this account, in the organizer's name. Without it, those changes notify nobody.",
+    "loadFailed": "Could not load the sending account.",
+    "testedOn": "Connection tested on {{date}}",
+    "testFailed": "Last test failed",
+    "test": "Test",
+    "testSuccess": "The connection test succeeded.",
+    "testUnknownError": "The connection test failed.",
+    "configure": "Configure",
+    "emptyTitle": "No account configured: changes made from a phone do not send invitations.",
+    "unreadableTitle": "The stored password can no longer be read. Enter it again to resume sending invitations.",
+    "deleted": "The sending account was deleted.",
+    "deleteFailed": "Could not delete the sending account.",
+    "saved": "The sending account was saved.",
+    "saveFailed": "Could not save the sending account.",
+    "saveTimedOut": "Saving is not responding. It may have gone through anyway: close this window to see the account, or try again.",
+    "dialogTitle": "Calendar invitation sending account",
+    "host": "SMTP host",
+    "port": "SMTP port",
+    "security": "SMTP security",
+    "login": "Login",
+    "password": "Password",
+    "passwordUnchanged": "Unchanged",
+    "passwordStoredNote": "A password is stored. It is never shown; leave the field empty to keep it.",
+    "passwordRequiredHint": "A password is required to save or test this account.",
+    "testConnection": "Test the connection",
+    "testResultOk": "The connection succeeded.",
+    "portWord": "port",
+    "refusedByServer": "Settings refused by the server: {{message}}",
+    "accountGone": "The account no longer exists."
   }
 }

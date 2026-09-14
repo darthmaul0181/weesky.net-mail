@@ -152,7 +152,7 @@ public sealed class CalDavDeleteTests : IAsyncLifetime
 
     private Guid GivenCalendar(string davName) => GivenCalendarOn(server, davName);
 
-    private static Guid GivenCalendarOn(DavTestServer on, string davName)
+    internal static Guid GivenCalendarOn(DavTestServer on, string davName)
     {
         using var db = on.CreateContext();
         var row = new CalendarRow

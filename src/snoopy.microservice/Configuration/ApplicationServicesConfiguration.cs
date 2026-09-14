@@ -8,6 +8,7 @@ using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Services.Calendar.Invitations;
+using weesky.Snoopy.Microservice.Services.Calendar.Scheduling;
 using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Configuration;
@@ -88,6 +89,7 @@ internal static class ApplicationServicesConfiguration
         services.AddSingleton<IOutgoingMailSanitizer, OutgoingMailSanitizer>();
         services.AddSingleton<IQuotePreparer, QuotePreparer>();
         services.AddSingleton<IClientSecretProtector, ClientSecretProtector>();
+        services.AddSingleton<IServiceAccountSecretProtector, ServiceAccountSecretProtector>();
         // Singleton: a scoped store would forget every handshake at the end of the request that
         // started it.
         services.AddSingleton<IOAuthHandshakeStore, OAuthHandshakeStore>();
@@ -102,6 +104,15 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IRoleFolderLocator, RoleFolderLocator>();
         services.AddScoped<IMailSender, MailSender>();
         services.AddScoped<IDraftSaver, DraftSaver>();
+        services.AddScoped<IOrganizerIdentity, OrganizerIdentity>();
+        services.AddScoped<IInvitationScheduler, InvitationScheduler>();
+
+        // Singleton, so the account is read once rather than per mail; the admin screen invalidates it.
+        services.AddSingleton<IServiceAccountProvider, ServiceAccountProvider>();
+        // One instance under two faces: the scheduler enqueues, the host runs the sending loop.
+        services.AddSingleton<ServiceMailQueue>();
+        services.AddSingleton<IServiceMailQueue>(sp => sp.GetRequiredService<ServiceMailQueue>());
+        services.AddHostedService(sp => sp.GetRequiredService<ServiceMailQueue>());
 
         // Singleton is load-bearing: staged metadata and per-account reserved bytes live in this
         // instance's in-memory dictionaries, so a shorter lifetime would forget uploads mid-compose.
@@ -142,6 +153,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IFolderRoleStore, FolderRoleStore>();
         services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
         services.AddScoped<IAppSettingStore, AppSettingStore>();
+        services.AddScoped<ISchedulingAccountStore, SchedulingAccountStore>();
         services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
         services.AddScoped<IWebmailUserStore, WebmailUserStore>();
         services.AddScoped<ITrustedSenderStore, TrustedSenderStore>();
@@ -166,11 +178,13 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IDavCalendarReader, DavCalendarReader>();
         services.AddScoped<IDavCalendarWriter, DavCalendarWriter>();
         services.AddScoped<IUserAddresses, UserAddresses>();
-        // The responder takes the concrete reader — it calls ResolveAsync, which the card's
-        // interface does not carry — so both resolutions must be the one scoped instance.
+        // The responder and the reply applier take the concrete reader — they call its Resolve methods,
+        // which the card's interface does not carry — so both resolutions must be the one scoped instance.
         services.AddScoped<InvitationReader>();
         services.AddScoped<IInvitationReader>(provider => provider.GetRequiredService<InvitationReader>());
+        services.AddScoped<InvitationPartLoader>();
         services.AddScoped<IInvitationResponder, InvitationResponder>();
+        services.AddScoped<IInvitationReplyApplier, InvitationReplyApplier>();
 
         return services;
     }

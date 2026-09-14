@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Trans, useTranslation } from 'react-i18next'
 import CalendarIcon from '../../../icons/CalendarIcon'
@@ -7,9 +7,15 @@ import { ApiError } from '../../../api.js'
 import CalendarSelect from '../../calendar/CalendarSelect'
 import { hourCycleOf } from '../../calendar/calendarLocale'
 import { useCalendars } from '../../calendar/queries'
-import type { InvitationAnswer, InvitationResponse, MailInvitation } from '../api/mailTypes'
-import { mailKeys, useAccountId, useRespondInvitation } from '../queries'
-import { cardStateOf, noActionKey, whenOf } from './invitationText'
+import type { InvitationAnswer, InvitationResponse, MailInvitation, MailMessageDetail } from '../api/mailTypes'
+import { mailKeys, useAccountId, useApplyInvitationReply, useRespondInvitation } from '../queries'
+import { cardStateOf, noActionKey, replyPending, replySentenceOf, whenOf } from './invitationText'
+
+/** The `replyError`s that are not failures: the file itself leaves no reply to send, so no retry would. */
+const NO_ORGANIZER = 'invitation_no_organizer'
+const UID_UNWRITABLE = 'invitation_uid_unwritable'
+/** Refusals that mean the block on screen is out of date: only the message as it now reads can say why. */
+const OUTDATED_REPLY = ['reply_not_applicable', 'reply_not_a_reply']
 
 interface Props {
   invitation: MailInvitation
@@ -32,11 +38,14 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
   const [invitation, setInvitation] = useState(initial)
   const [outcome, setOutcome] = useState<InvitationResponse | null>(null)
   const [lastAnswer, setLastAnswer] = useState<InvitationAnswer | null>(null)
-  const [error, setError] = useState<{ message: string; gone: boolean } | null>(null)
+  const [error, setError] = useState<{ message: string; gone: boolean; retry?: boolean } | null>(null)
   const [calendarId, setCalendarId] = useState<string | undefined>(undefined)
+  const [reloading, setReloading] = useState(false)
   const accountId = useAccountId()
   const queryClient = useQueryClient()
   const respond = useRespondInvitation()
+  const { mutateAsync: applyMutation, isPending: applying } = useApplyInvitationReply()
+  const attempted = useRef(false)
   const { data: calendars } = useCalendars(tz)
 
   const state = cardStateOf(invitation)
@@ -61,13 +70,60 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
     }
   }
 
+  // A refusal only a later state could lift (4xx) offers no retry: asking again earns the same one.
+  // One that says the block is out of date offers Reload instead, as a message gone does.
+  const applyReply = useCallback(async () => {
+    setError(null)
+    try {
+      const result = await applyMutation({ folder: folderPath, uid, part: invitation.part })
+      setInvitation(result.invitation)
+      if (!result.applied) setError({ message: t('reader.invitation.reply.notApplied'), gone: false, retry: true })
+    } catch (caught) {
+      const status = caught instanceof ApiError ? caught.status : 0
+      const outdated = caught instanceof ApiError && OUTDATED_REPLY.includes(caught.code ?? '')
+      setError({
+        message: apiErrorMessage(caught, t('reader.invitation.reply.notApplied')),
+        gone: status === 404 || outdated, retry: status === 0 || status >= 500,
+      })
+    }
+  }, [applyMutation, folderPath, uid, invitation.part, t])
+
+  // Once per mounting (décision 12): the reader's periodic refresh, StrictMode's second mount and
+  // the block the answer hands back all come through here again, and the ref turns them away.
+  const pending = replyPending(invitation)
+  useEffect(() => {
+    if (!pending || attempted.current) return
+    attempted.current = true
+    void applyReply()
+  }, [pending, applyReply])
+
+  // The card holds its own copy of the block, so a refetch alone would redraw nothing: it takes the
+  // block the message now carries, and a reply that still applies is carried in on the user's asking.
+  // A refetch that did not answer leaves the cache on the old block, which confirms nothing.
+  async function reload() {
+    const key = mailKeys.message(accountId, folderPath, uid)
+    setReloading(true)
+    try {
+      await queryClient.invalidateQueries({ queryKey: key })
+    } finally {
+      setReloading(false)
+    }
+    const state = queryClient.getQueryState<MailMessageDetail>(key)
+    const fresh = state?.data?.invitation
+    if (state?.status !== 'success' || state.isInvalidated || !fresh) return
+    setError(null)
+    setInvitation(fresh)
+    if (replyPending(fresh)) void applyReply()
+  }
+
   // Decided once: the word on the badge and the class under it are two readings of one thing, and
   // two conditionals is how they come to disagree.
-  const badgeKind = invitation.method === 'Cancel' ? 'cancel'
+  const badgeKind = invitation.method === 'Cancel' ? 'cancel' : invitation.method === 'Reply' ? 'reply'
     : invitation.inCalendar === 'Outdated' ? 'update' : 'request'
   const badge = badgeKind === 'cancel' ? t('reader.invitation.badgeCancel')
-    : badgeKind === 'update' ? t('reader.invitation.badgeUpdate')
-      : t('reader.invitation.badgeRequest')
+    : badgeKind === 'reply' ? t('reader.invitation.badgeReply')
+      : badgeKind === 'update' ? t('reader.invitation.badgeUpdate')
+        : t('reader.invitation.badgeRequest')
 
   if (state === 'unreadable') {
     return (
@@ -126,6 +182,13 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
           : null
   const filedAnswer = wordsFor(invitation.filePartStat)?.filed ?? null
 
+  const people = invitation.reply ? [invitation.reply] : invitation.attendees
+  // An answer that should have mailed the organizer and did not: a failure worth a Resend, or a
+  // file no reply can be built from, which no retry will change.
+  const unsent = outcome && !outcome.replySent && outcome.replyError !== undefined && lastAnswer
+    ? { answer: lastAnswer, declined: lastAnswer === 'Declined', cause: outcome.replyError } : null
+  const unanswerable = unsent?.cause === NO_ORGANIZER || unsent?.cause === UID_UNWRITABLE
+
   let context: string | null = null
   if (state === 'forwarded') context = t('reader.invitation.forwarded')
   else if (state === 'updated') context = t('reader.invitation.updated')
@@ -177,6 +240,21 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
     case 'forwarded':
       foot = <div className="invitation-card-actions">{calendarPicker}{addOnlyButton}</div>
       break
+    case 'reply': {
+      // Nothing to decide: the answer, checked once the calendar holds it, or why it stays out.
+      const reply = invitation.reply
+      foot = (
+        <div className="invitation-card-actions is-answered">
+          {reply && (
+            <span className={reply.status === 'Applicable' ? 'invitation-card-answer' : 'invitation-card-answer is-muted'}>
+              {reply.applied && <span className="invitation-card-check" aria-hidden="true">✓</span>}
+              {replySentenceOf(reply, t)}
+            </span>
+          )}
+        </div>
+      )
+      break
+    }
     case 'cancelled':
       foot = (
         <div className="invitation-card-actions is-answered">
@@ -226,16 +304,24 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
           <><dt>{t('reader.invitation.organizer')}</dt>
             <dd>{invitation.organizer.name || invitation.organizer.email}</dd></>
         )}
-        {invitation.attendees.length > 0 && (
+        {/* A reply names the guest who answered; a delegation's delegate is not theirs to show. */}
+        {people.length > 0 && (
           <><dt>{t('reader.invitation.attendees')}</dt>
-            <dd>{invitation.attendees.map(a => a.name || a.email).join(', ')}</dd></>
+            <dd>{people.map(a => a.name || a.email).join(', ')}</dd></>
         )}
       </dl>
       {foot}
-      {outcome && !outcome.replySent && outcome.replyError !== undefined && lastAnswer && (
+      {unsent && unanswerable && (
+        <p className="invitation-card-context">
+          {unsent.cause === NO_ORGANIZER
+            ? t(unsent.declined ? 'reader.invitation.declinedNoOrganizer' : 'reader.invitation.addedNoOrganizer')
+            : t(unsent.declined ? 'reader.invitation.declinedUidUnwritable' : 'reader.invitation.addedUidUnwritable')}
+        </p>
+      )}
+      {unsent && !unanswerable && (
         <p className="invitation-card-error">
-          {t(lastAnswer === 'Declined' ? 'reader.invitation.replyFailed' : 'reader.invitation.addedReplyFailed')}
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => answer(lastAnswer)}>
+          {t(unsent.declined ? 'reader.invitation.replyFailed' : 'reader.invitation.addedReplyFailed')}
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => answer(unsent.answer)}>
             {t('reader.invitation.resend')}
           </button>
         </p>
@@ -254,9 +340,15 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => queryClient.invalidateQueries({ queryKey: mailKeys.message(accountId, folderPath, uid) })}
+              disabled={reloading || applying}
+              onClick={() => void reload()}
             >
               {t('reader.invitation.reload')}
+            </button>
+          )}
+          {error.retry && (
+            <button type="button" className="btn btn-ghost" disabled={applying} onClick={() => void applyReply()}>
+              {t('reader.invitation.reply.retry')}
             </button>
           )}
         </p>

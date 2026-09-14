@@ -5,6 +5,7 @@ import {
   APP_SETTING_KEYS, installableOf, useAppSettings, useSetAppSetting,
 } from '../../../hooks/useAppSettings'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import SchedulingAccountSection from './SchedulingAccountSection'
 
 interface Props {
   addToast: (message: string, kind?: string) => void
@@ -139,6 +140,8 @@ export default function ApplicationTab({ addToast }: Props) {
       >
         {setSetting.isPending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
       </button>
+
+      <SchedulingAccountSection addToast={addToast} />
     </>
   )
 }

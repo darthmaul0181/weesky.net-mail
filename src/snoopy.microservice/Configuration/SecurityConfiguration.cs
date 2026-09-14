@@ -29,8 +29,8 @@ internal static class SecurityConfiguration
                 DavAuthenticationDefaults.AuthenticationScheme, _ => { });
 
         // No handler is registered here: the platform brings one, and a deployment whose platform
-        // has no admin directory leaves the policy unsatisfiable — the right answer for the two
-        // core routes carrying it: PUT /api/AppSettings and POST /api/Contacts/Backfill (4a).
+        // has no admin directory leaves the policy unsatisfiable — the right answer for the core
+        // routes carrying it: PUT /api/AppSettings, POST /api/Contacts/Backfill, api/SchedulingAccount.
         services.AddAuthorization(options =>
         {
             options.AddPolicy(AdminRequirement.PolicyName, policy =>

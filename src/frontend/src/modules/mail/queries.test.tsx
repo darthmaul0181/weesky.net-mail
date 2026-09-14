@@ -3,8 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { settle } from '../../test-utils'
-import { POLL_INTERVAL, mailKeys, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useReplaceIdentities, useSearchMessages, useSendMessage, useSetFlags } from './queries'
-import type { MailFolderNode } from './api/mailTypes'
+import { POLL_INTERVAL, mailKeys, useApplyInvitationReply, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useReplaceIdentities, useSearchMessages, useSendMessage, useSetFlags } from './queries'
+import type { MailFolderNode, MailInvitation, MailMessageDetail } from './api/mailTypes'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   setMessageFlags: vi.fn(),
   putIdentities: vi.fn(),
+  applyInvitationReply: vi.fn(),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -29,6 +30,7 @@ vi.mock('../../api.js', () => ({
     sendMessage: mocks.sendMessage,
     setMessageFlags: mocks.setMessageFlags,
     putIdentities: mocks.putIdentities,
+    applyInvitationReply: mocks.applyInvitationReply,
   },
 }))
 
@@ -622,5 +624,30 @@ describe('useReplaceIdentities', () => {
 
     expect(mocks.putIdentities).toHaveBeenCalledWith(rows, { accountId: 'linked-1' })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('linked-1') })
+  })
+})
+
+describe('useApplyInvitationReply', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // The calendar is what changed. The message is patched in place rather than refetched, so a
+  // reopen draws the applied block at once instead of asking the server a second time.
+  it('names the account, refreshes the calendar, and patches the cached message without refetching it', async () => {
+    const block = { part: '2', uid: 'u', method: 'Reply' } as MailInvitation
+    const applied = { ...block, reply: { email: 'marc@example.org', partStat: 'ACCEPTED', status: 'Applicable', applied: true } } as MailInvitation
+    mocks.applyInvitationReply.mockResolvedValue({ invitation: applied, applied: true })
+    const { client, wrapper } = createWrapper()
+    const messageKey = mailKeys.message('primary', 'INBOX', 7)
+    client.setQueryData(messageKey, { uid: 7, invitation: block } as MailMessageDetail)
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const args = { folder: 'INBOX', uid: 7, part: '2' }
+
+    const { result } = renderHook(() => useApplyInvitationReply(), { wrapper })
+    await result.current.mutateAsync(args)
+
+    expect(mocks.applyInvitationReply).toHaveBeenCalledWith(args, { accountId: 'primary' })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['calendar', 'primary'] })
+    expect(invalidate).toHaveBeenCalledTimes(1)
+    expect(client.getQueryData<MailMessageDetail>(messageKey)?.invitation).toEqual(applied)
   })
 })

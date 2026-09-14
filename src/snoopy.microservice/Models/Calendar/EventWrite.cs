@@ -6,7 +6,8 @@ namespace weesky.Snoopy.Microservice.Models.Calendar;
 /// an all-day one carries the dates, <c>EndDateInclusive</c> being the last day shown — the
 /// composer writes the exclusive DTEND RFC 5545 wants (décision 5).
 /// <c>KeepRepeat</c> is the editor saying it never showed the rule: the file's own RRULE stays
-/// where it is, and <c>Repeat</c> is not read at all.
+/// where it is, and <c>Repeat</c> is not read at all. <c>Attendees</c> null leaves the file's
+/// ATTENDEE and ORGANIZER lines alone; an empty list removes them (spec 5e, décision 8).
 /// </summary>
 public sealed record EventWrite(
     Guid CalendarId,
@@ -24,4 +25,6 @@ public sealed record EventWrite(
     Availability Availability,
     Visibility Visibility,
     string? Url,
-    bool KeepRepeat = false);
+    bool KeepRepeat = false,
+    IReadOnlyList<AttendeeWrite>? Attendees = null,
+    OrganizerWrite? Organizer = null);

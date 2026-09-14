@@ -12,6 +12,7 @@ import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSource, MailMessageSummary,
   MailSearchPage, FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote,
   QuotePurpose, SavedDraft, OpenedDraft, MailPriority, InvitationResponse, RespondInvitationArgs,
+  ApplyReplyArgs, ApplyReplyResponse,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -193,6 +194,26 @@ export function useRespondInvitation() {
       patchTreeCounts(queryClient, accountId,
         [[args.folder, { total: -source.removed, unread: -source.removedUnread }]])
       queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+    },
+  })
+}
+
+/**
+ * A guest's answer carried into the calendar, asked for once by the card (décision 12). The
+ * calendar is what changed. The cached message takes the returned block in place of a refetch,
+ * so reopening it draws the answer as recorded instead of asking the server again.
+ */
+export function useApplyInvitationReply() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation<ApplyReplyResponse, ApiError, ApplyReplyArgs>({
+    mutationKey: mailKeys.writes(accountId),
+    mutationFn: args => api.applyInvitationReply(args, { accountId }) as Promise<ApplyReplyResponse>,
+    onSuccess: (result, args) => {
+      queryClient.setQueryData<MailMessageDetail>(mailKeys.message(accountId, args.folder, args.uid),
+        detail => detail && { ...detail, invitation: result.invitation })
+      queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
     },
   })
 }

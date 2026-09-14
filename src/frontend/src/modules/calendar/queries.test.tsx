@@ -1,11 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { Occurrence, OccurrenceListResponse } from './calendarTypes'
+import i18next from 'i18next'
 import {
-  calendarKeys, isConflict, useCalendars, useCreateEvent, useMoveOccurrence, useSearch,
-  useSetCalendarVisible, useWindow,
+  calendarKeys, isConflict, useCalendars, useCreateEvent, useDeleteEvent, useEvent,
+  useMoveOccurrence, useSearch, useSetCalendarVisible, useUpdateEvent, useWindow,
 } from './queries'
 import type { Window } from './windowOf'
 
@@ -58,6 +59,10 @@ function windowKey() {
 function cached(): OccurrenceListResponse | undefined {
   return client.getQueryData(windowKey())
 }
+
+// A case that switches the language and fails before switching back must not leave the next
+// file's cases reading French.
+afterEach(async () => { await i18next.changeLanguage('en') })
 
 describe('calendarKeys', () => {
   // One invalidation of `all` has to reach every calendar query, so each key extends it.
@@ -145,6 +150,71 @@ describe('the mutations', () => {
   })
 })
 
+describe('the language of the invitation mails', () => {
+  const EVENT = {
+    calendarId: 'c1', isAllDay: false, reminderMinutesBefore: [],
+    availability: 'Busy' as const, visibility: 'Default' as const,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  })
+
+  it('sends the screen language with a creation, an update and a deletion', async () => {
+    mocks.createEvent.mockResolvedValue({ id: 'e2', scheduling: { sent: 1 } })
+    mocks.updateEvent.mockResolvedValue({ scheduling: { sent: 0 } })
+    mocks.deleteEvent.mockResolvedValue(null)
+    await i18next.changeLanguage('fr')
+
+    const create = renderHook(() => useCreateEvent(), { wrapper }).result
+    await create.current.mutateAsync(EVENT)
+    expect(mocks.createEvent).toHaveBeenCalledWith({ ...EVENT, language: 'fr' })
+
+    const update = renderHook(() => useUpdateEvent(), { wrapper }).result
+    await update.current.mutateAsync({ id: 'e1', body: { ...EVENT, scope: 'All', ifHash: 'h1' } })
+    expect(mocks.updateEvent).toHaveBeenCalledWith('e1',
+      { ...EVENT, scope: 'All', ifHash: 'h1', language: 'fr' })
+
+    const remove = renderHook(() => useDeleteEvent(), { wrapper }).result
+    await remove.current.mutateAsync({ id: 'e1', scope: 'This', instanceId: '20260914T080000' })
+    expect(mocks.deleteEvent).toHaveBeenCalledWith('e1', 'This', '20260914T080000', 'fr')
+  })
+
+  it('writes in English on any screen that is not French', async () => {
+    mocks.deleteEvent.mockResolvedValue(null)
+    await i18next.changeLanguage('en-GB')
+
+    const remove = renderHook(() => useDeleteEvent(), { wrapper }).result
+    await remove.current.mutateAsync({ id: 'e1', scope: 'All' })
+    expect(mocks.deleteEvent).toHaveBeenCalledWith('e1', 'All', undefined, 'en')
+  })
+})
+
+// The hook may write the file a second time after a save (SEQUENCE), so the hash an editor holds
+// is stale the moment the write lands: the next save must read the event again, never reuse it.
+describe('the version a next save proves it read', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  })
+
+  it('reads the event again once an update lands', async () => {
+    mocks.getEvent.mockResolvedValueOnce({ id: 'e1', icsHash: 'h1' })
+    mocks.getEvent.mockResolvedValue({ id: 'e1', icsHash: 'h2' })
+    mocks.updateEvent.mockResolvedValue({ scheduling: { sent: 1 } })
+
+    const hooks = renderHook(() => ({ event: useEvent('e1'), update: useUpdateEvent() }), { wrapper })
+    await waitFor(() => expect(hooks.result.current.event.data?.icsHash).toBe('h1'))
+
+    await hooks.result.current.update.mutateAsync({ id: 'e1', body: {
+      calendarId: 'c1', isAllDay: false, reminderMinutesBefore: [], availability: 'Busy',
+      visibility: 'Default', scope: 'All', ifHash: 'h1',
+    } })
+    await waitFor(() => expect(hooks.result.current.event.data?.icsHash).toBe('h2'))
+  })
+})
+
 describe('useMoveOccurrence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -186,6 +256,17 @@ describe('useMoveOccurrence', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(cached()?.occurrences[0].startUtc).toBe('2026-09-14T06:00:00Z')
+  })
+
+  // A drag moves an event its guests were invited to: the update mails speak the screen's language.
+  it('sends the screen language with the move', async () => {
+    mocks.updateEvent.mockResolvedValue({ scheduling: { sent: 2 } })
+    await i18next.changeLanguage('fr')
+
+    const { result } = renderHook(() => useMoveOccurrence(WINDOW, TZ), { wrapper })
+    await result.current.mutateAsync({ id: 'e1', body, moved })
+
+    expect(mocks.updateEvent).toHaveBeenCalledWith('e1', { ...body, language: 'fr' })
   })
 
   it('resyncs the screen whichever way the move went', async () => {

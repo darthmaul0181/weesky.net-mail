@@ -258,6 +258,7 @@
       "badgeRequest": "Invitation",
       "badgeUpdate": "Mise à jour",
       "badgeCancel": "Annulé",
+      "badgeReply": "Réponse",
       "when": "Quand",
       "where": "Où",
       "organizer": "Organisateur",
@@ -297,7 +298,27 @@
       "addedReplyFailed": "Ajouté à l’agenda. La réponse n’a pas pu être envoyée.",
       "failed": "La réponse n’a pas pu être enregistrée.",
       "reload": "Recharger le message",
-      "declinedStays": "Refusé. Le message reste ici."
+      "declinedStays": "Refusé. Le message reste ici.",
+      "addedNoOrganizer": "Ajouté à l’agenda. L’invitation ne donne aucune adresse où envoyer la réponse.",
+      "declinedNoOrganizer": "Refusé. L’invitation ne donne aucune adresse où envoyer la réponse.",
+      "addedUidUnwritable": "Ajouté à l’agenda. Cette invitation ne permet pas d’envoyer une réponse.",
+      "declinedUidUnwritable": "Refusé. Cette invitation ne permet pas d’envoyer une réponse.",
+      "reply": {
+        "answer": {
+          "ACCEPTED": "{{name}} a accepté",
+          "TENTATIVE": "{{name}} a répondu peut-être",
+          "DECLINED": "{{name}} a refusé"
+        },
+        "stale": "réponse à une version précédente",
+        "superseded": "une réponse plus récente est déjà dans l’agenda",
+        "unknownUid": "Ce rendez-vous n’existe plus",
+        "notOwner": "Ce rendez-vous n’a pas été invité depuis le webmail",
+        "unknownAttendee": "{{name}} n’est pas dans la liste des invités",
+        "occurrenceOnly": "Réponse pour une seule date de la série, non reportée dans l’agenda",
+        "unsupportedAnswer": "La réponse de {{name}} ne peut pas être reportée dans l’agenda",
+        "notApplied": "Réponse non enregistrée dans l’agenda.",
+        "retry": "Réessayer"
+      }
     }
   },
   "viewer": {

@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -87,6 +90,20 @@ public sealed class CalendarEntitiesTests
         Assert.Equal(typeof(WebmailUser), foreignKey.PrincipalEntityType.ClrType);
     }
 
+    // The InMemory provider carries no relational conventions, so [Column] never reaches
+    // GetColumnName() on this model — the attributes themselves are what the DDL has to match.
+    [Fact]
+    public void Event_HasTheSchedulingColumns_WithTheirMaxLength()
+    {
+        var owner = typeof(CalendarEvent).GetProperty(nameof(CalendarEvent.SchedulingOwner))!;
+        var hash = typeof(CalendarEvent).GetProperty(nameof(CalendarEvent.SchedulingHash))!;
+
+        Assert.Equal("scheduling_owner", owner.GetCustomAttribute<ColumnAttribute>()!.Name);
+        Assert.Equal(16, owner.GetCustomAttribute<MaxLengthAttribute>()!.Length);
+        Assert.Equal("scheduling_hash", hash.GetCustomAttribute<ColumnAttribute>()!.Name);
+        Assert.Equal(64, hash.GetCustomAttribute<MaxLengthAttribute>()!.Length);
+    }
+
     [Fact]
     public void Revision_CauseIsStoredAsTheLowercaseEnumName()
     {
@@ -99,5 +116,22 @@ public sealed class CalendarEntitiesTests
 
         Assert.Equal("rejected", converter.ConvertToProvider(RevisionCause.Rejected));
         Assert.Equal(RevisionCause.Webmail, converter.ConvertFromProvider("webmail"));
+    }
+
+    // "scheduling" (10 chars) is the longest RevisionCause name; the column has to fit it, and the
+    // DDL's ENUM has to list it too (docs/superpowers/webmail-calendar-tables.md, checked by hand).
+    [Fact]
+    public void Revision_CauseColumnFitsScheduling_AndRoundTripsIt()
+    {
+        using var db = new PreferencesTestDbContext(nameof(Revision_CauseColumnFitsScheduling_AndRoundTripsIt));
+
+        var property = db.Model.FindEntityType(typeof(CalendarRevision))!.FindProperty(nameof(CalendarRevision.Cause));
+        Assert.NotNull(property);
+        Assert.Equal(16, property!.GetMaxLength());
+
+        var converter = property.GetValueConverter();
+        Assert.NotNull(converter);
+        Assert.Equal("scheduling", converter!.ConvertToProvider(RevisionCause.Scheduling));
+        Assert.Equal(RevisionCause.Scheduling, converter.ConvertFromProvider("scheduling"));
     }
 }

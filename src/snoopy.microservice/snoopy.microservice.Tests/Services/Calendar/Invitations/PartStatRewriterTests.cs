@@ -37,6 +37,21 @@ public sealed class PartStatRewriterTests
         Assert.True(target.Count > 1, "the rewritten line is long enough to have been folded");
     }
 
+    // The address comes decoded from the projector; a file may spell it either way.
+    [Theory]
+    [InlineData("mailto:jos%C3%A9@example.org")]
+    [InlineData("mailto:josé@example.org")]
+    public void MatchesAnAccentedGuest_WhicheverWayTheFileSpelledIt(string value)
+    {
+        var ics = Google.Replace("mailto:marc.dupont@example.org", value);
+
+        Assert.Equal("ACCEPTED", InvitationParser.PartStatOf(ics, "josé@example.org"));
+        var lines = Unfolded(PartStatRewriter.Rewrite(ics, "José@example.org", "DECLINED")!)
+            .Where(l => l.StartsWith("ATTENDEE", StringComparison.Ordinal) && l.EndsWith(value, StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(lines);
+        Assert.All(lines, line => Assert.Contains("PARTSTAT=DECLINED", line));
+    }
+
     [Fact]
     public void AddsPartStat_WhenTheLineHadNone()
     {
@@ -67,6 +82,30 @@ public sealed class PartStatRewriterTests
         var once = PartStatRewriter.Rewrite(Google, "alice@weesky.be", "ACCEPTED")!;
         Assert.Equal(once, PartStatRewriter.Rewrite(once, "alice@weesky.be", "ACCEPTED"));
     }
+
+    [Fact]
+    public void AReplyStamp_FollowsThePartStat_IsReplacedByTheNextOne_AndIsLeftAloneWithoutOne()
+    {
+        const string Head = "ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;CN=Alice;X-NUM-GUESTS=0;";
+        static string AlicesLine(string ics) => Unfolded(ics).Single(l => l.EndsWith("mailto:Alice@Weesky.be", StringComparison.Ordinal));
+
+        var once = PartStatRewriter.Rewrite(Google, "alice@weesky.be", "DECLINED", "20260913T100000Z")!;
+        var later = PartStatRewriter.Rewrite(once, "alice@weesky.be", "ACCEPTED", "20260914T080000Z")!;
+        var unstamped = PartStatRewriter.Rewrite(once, "alice@weesky.be", "TENTATIVE")!;
+
+        Assert.Equal(Head + "PARTSTAT=DECLINED;X-WEESKY-REPLY-STAMP=20260913T100000Z:mailto:Alice@Weesky.be", AlicesLine(once));
+        Assert.Equal(once, PartStatRewriter.Rewrite(once, "alice@weesky.be", "DECLINED", "20260913T100000Z"));
+        Assert.Equal(Head + "PARTSTAT=ACCEPTED;X-WEESKY-REPLY-STAMP=20260914T080000Z:mailto:Alice@Weesky.be", AlicesLine(later));
+        Assert.Equal(Head + "X-WEESKY-REPLY-STAMP=20260913T100000Z;PARTSTAT=TENTATIVE:mailto:Alice@Weesky.be", AlicesLine(unstamped));
+    }
+
+    [Theory]
+    [InlineData("20260913T100000")]
+    [InlineData("2026-09-13T10:00:00Z")]
+    [InlineData("20260913T100000Z:mailto:x@example.org")]
+    [InlineData("20260913T100000Z\r\nATTENDEE:mailto:x@example.org")]
+    public void AStampThatIsNotAUtcBasicDateTime_IsRefused(string stamp) =>
+        Assert.Null(PartStatRewriter.Rewrite(Google, "alice@weesky.be", "DECLINED", stamp));
 
     [Fact]
     public void NullWhenTheAddressIsNotInvited()
