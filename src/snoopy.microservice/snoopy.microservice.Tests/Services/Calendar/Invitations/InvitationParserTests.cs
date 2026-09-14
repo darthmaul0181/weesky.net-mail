@@ -81,13 +81,30 @@ public sealed class InvitationParserTests
     }
 
     [Fact]
-    public void Reply_IsIgnored_NotUnreadable()
+    public void DtStamp_IsReadInUtcBasicForm_AndNullOtherwise()
+    {
+        var reply = Fixture("google-reply");
+
+        Assert.Equal("20260913T100000Z", InvitationParser.Read(reply).Invitation!.DtStamp);
+        Assert.Null(InvitationParser.Read(reply.Replace("DTSTAMP:20260913T100000Z\r\n", "")).Invitation!.DtStamp);
+        Assert.Null(InvitationParser.Read(reply.Replace("DTSTAMP:20260913T100000Z", "DTSTAMP:20260913T100000")).Invitation!.DtStamp);
+    }
+
+    [Fact]
+    public void Reply_IsRead_WithItsOneAttendee()
     {
         var reading = InvitationParser.Read(Fixture("google-reply"));
+        Assert.False(reading.Ignored);
+        var reply = reading.Invitation!;
+        Assert.Equal(InvitationMethod.Reply, reply.Method);
+        Assert.Equal("aaaa1111-bbbb-2222-cccc-3333dddd4444", reply.Uid);
+        var who = Assert.Single(reply.Attendees);
+        Assert.Equal(("marc.dupont@example.org", "DECLINED"), (who.Email, who.PartStat));
+        Assert.False(reply.OccurrenceOnly);
 
-        Assert.Null(reading.Invitation);
-        Assert.True(reading.Ignored);
-        Assert.Null(reading.Reason);
+        // Domain-lowered only: IcsProjector.Address goes through System.Uri, which keeps the local part.
+        Assert.Equal("MARC.DUPONT@example.org", Assert.Single(InvitationParser.Read(Fixture("outlook-reply-upper")).Invitation!.Attendees).Email);
+        Assert.True(InvitationParser.Read(Fixture("google-reply-occurrence")).Invitation!.OccurrenceOnly);
     }
 
     [Fact]

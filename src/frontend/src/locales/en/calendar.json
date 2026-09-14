@@ -50,6 +50,12 @@
     "declined": "You declined",
     "pending": "You have not answered yet"
   },
+  "guestAnswer": {
+    "accepted": "accepted",
+    "tentative": "answered maybe",
+    "declined": "declined",
+    "pending": "no answer yet"
+  },
   "preview": {
     "allDay": "All day",
     "edit": "Edit",
@@ -83,13 +89,13 @@
     "visibility": "Visibility",
     "url": "Web address",
     "attendees": "Attendees",
-    "attendeesReadOnly": "Read only until invitations are supported",
     "foreignAlarms": "Reminders this screen cannot change",
     "keptRepeat": "This event repeats in a way this screen cannot show. The rule is kept as it is.",
     "save": "Save",
     "delete": "Delete",
     "close": "Close",
     "endBeforeStart": "The end comes before the start",
+    "invalidAttendee": "An attendee address is not valid",
     "startDate": "Start date",
     "startTime": "Start time",
     "endDate": "End date",
@@ -98,6 +104,7 @@
     "replaceRepeat": "Replace",
     "organizer": "Organiser",
     "saved": "Event saved",
+    "savedSent": "Saved · invitations sent: {{count}}",
     "deleted": "Event deleted",
     "discardTitle": "Discard changes?",
     "discardBody": "The changes made to this event will be lost.",

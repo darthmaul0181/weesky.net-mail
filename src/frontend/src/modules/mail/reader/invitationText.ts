@@ -1,14 +1,17 @@
 import type { TFunction } from 'i18next'
-import type { MailInvitation } from '../api/mailTypes'
+import type { InvitationReply, MailInvitation } from '../api/mailTypes'
 import { dateLocaleOf, formatLongDay, formatLongDayRange, formatTime } from '../../calendar/calendarLocale'
 import { addDays, plainDateOf, type PlainDate } from '../../calendar/plainDate'
 
 /** What the card is for, in the reader's own terms: a date to answer, one already answered, one
-    that is not the user's to answer, a revision, a cancellation, a dead end, or a broken file. */
-export type CardState = 'invite' | 'answered' | 'forwarded' | 'updated' | 'cancelled' | 'noAction' | 'unreadable'
+    that is not the user's to answer, a revision, a cancellation, a dead end, a guest's answer, or
+    a broken file. */
+export type CardState =
+  | 'invite' | 'answered' | 'forwarded' | 'updated' | 'cancelled' | 'noAction' | 'reply' | 'unreadable'
 
 export function cardStateOf(i: MailInvitation): CardState {
   if (i.unreadable) return 'unreadable'
+  if (i.method === 'Reply') return 'reply'
   if (i.occurrenceOnly || i.inCalendar === 'Newer') return 'noAction'
   if (i.method === 'Cancel') return i.inCalendar === 'Cancelled' ? 'cancelled' : 'noAction'
   switch (i.inCalendar) {
@@ -24,6 +27,31 @@ export function noActionKey(i: MailInvitation): 'occurrenceOnly' | 'newer' | 'ca
   if (i.occurrenceOnly) return 'occurrenceOnly'
   if (i.inCalendar === 'Newer') return 'newer'
   return 'cancelAbsent'
+}
+
+/** A guest's answer the calendar may take and does not hold yet: the one case the card writes. */
+export const replyPending = (i: MailInvitation): boolean =>
+  cardStateOf(i) === 'reply' && i.reply?.status === 'Applicable' && !i.reply.applied
+
+/** What a guest's reply says, and why it stays out of the calendar when it does. The answer leads
+    whenever the reply names one of the three; a word outside them is said as such, even on an
+    older version, rather than leaving a bare tail. */
+export function replySentenceOf(reply: InvitationReply, t: TFunction<'mail'>): string {
+  const name = reply.name || reply.email
+  const answer = reply.partStat === 'ACCEPTED' ? t('reader.invitation.reply.answer.ACCEPTED', { name, ns: 'mail' })
+    : reply.partStat === 'TENTATIVE' ? t('reader.invitation.reply.answer.TENTATIVE', { name, ns: 'mail' })
+      : reply.partStat === 'DECLINED' ? t('reader.invitation.reply.answer.DECLINED', { name, ns: 'mail' })
+        : null
+  switch (reply.status) {
+    case 'UnknownUid': return t('reader.invitation.reply.unknownUid', { ns: 'mail' })
+    case 'NotOwner': return t('reader.invitation.reply.notOwner', { ns: 'mail' })
+    case 'UnknownAttendee': return t('reader.invitation.reply.unknownAttendee', { name, ns: 'mail' })
+    case 'OccurrenceOnly': return t('reader.invitation.reply.occurrenceOnly', { ns: 'mail' })
+  }
+  if (answer === null || reply.status === 'UnsupportedAnswer') return t('reader.invitation.reply.unsupportedAnswer', { name, ns: 'mail' })
+  if (reply.status === 'Stale') return `${answer} · ${t('reader.invitation.reply.stale', { ns: 'mail' })}`
+  if (reply.status === 'Superseded') return `${answer} · ${t('reader.invitation.reply.superseded', { ns: 'mail' })}`
+  return answer
 }
 
 /** The date in words, in the browser's zone — the one the grid places every hour against, so the

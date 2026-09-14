@@ -35,7 +35,8 @@ public sealed class RespondInvitationRequest
 
 /// <summary>The invitation block as it stands after the answer, and what was and was not done
 /// beyond the calendar: a reply that could not leave and a mail that stayed put are reported,
-/// never rolled back (décision 4).</summary>
+/// never rolled back (décision 4). <c>ReplyError</c> is <c>invitation_no_organizer</c> when the file names
+/// nobody a reply can be addressed to — no retry will send it — and the sender's failure otherwise.</summary>
 public sealed record InvitationResponse(MailInvitation Invitation, bool ReplySent, string? ReplyError, bool Trashed);
 
 /// <summary>A refusal before anything was written, and the HTTP status the controller answers with.</summary>

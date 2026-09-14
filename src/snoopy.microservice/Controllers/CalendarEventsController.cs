@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Snoopy.Microservice.Models.Calendar;
+using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Services.Calendar;
+using weesky.Snoopy.Microservice.Services.Calendar.Scheduling;
 
 namespace weesky.Snoopy.Microservice.Controllers;
 
@@ -13,8 +15,13 @@ namespace weesky.Snoopy.Microservice.Controllers;
 [Route("api/Calendar/Events")]
 [ApiController]
 [Authorize]
-public sealed class CalendarEventsController(ICalendarEventStore store, IUserAddresses addresses) : ApiBaseController
+public sealed class CalendarEventsController(
+    ICalendarEventStore store, IUserAddresses addresses, IOrganizerIdentity organizer,
+    IInvitationScheduler scheduler, IAccountConnectionResolver connections) : ApiBaseController
 {
+    /// <summary>Guests on an event somebody else organizes: only the organizer invites (décision 8).</summary>
+    internal const string NotOrganizer = "not_organizer";
+
     private static readonly TimeSpan MaxWindow = TimeSpan.FromDays(365.2425 * OccurrenceExpander.MaxYears);
 
     internal static readonly string InstanceIdRequired = "instanceId is required for this scope";
@@ -22,6 +29,8 @@ public sealed class CalendarEventsController(ICalendarEventStore store, IUserAdd
     /// <summary>Creation is the one door where <c>keepRepeat</c> cannot mean anything: there is no
     /// stored RRULE to leave alone, so accepting it would drop the rule the user chose in silence.</summary>
     internal static readonly string KeepRepeatNeedsAnEvent = "keepRepeat needs an existing event";
+
+    private Task<MailAccountConnection?>? session;
 
     /// <summary>Every occurrence across every calendar of the user inside <c>[from, to[</c>.</summary>
     /// <param name="from">the window's lower bound, an instant (<c>…Z</c> or with an offset)</param>
@@ -82,26 +91,50 @@ public sealed class CalendarEventsController(ICalendarEventStore store, IUserAdd
     {
         var detail = await store.GetAsync(AuthenticatedUser.WebmailUid, id, cancellationToken);
         if (detail == null) return NotFoundEnveloppe(CalendarEventStore.NotFound);
-        var mine = await OwnAnswersAsync([id], cancellationToken);
-        return Ok(EventResponse.From(mine.TryGetValue(id, out var answer) ? detail with { MyPartStat = answer } : detail));
+        var mine = await OwnAnswersAsync([id], await OwnAddressesAsync(cancellationToken), cancellationToken);
+        return Ok(EventResponse.From(detail with
+        {
+            MyPartStat = mine.TryGetValue(id, out var answer) ? answer : detail.MyPartStat,
+            CanInvite = MayInvite(detail, await OrganizerAddressesAsync(cancellationToken)),
+        }));
     }
+
+    private Task<IReadOnlyList<string>> OwnAddressesAsync(CancellationToken cancellationToken) =>
+        addresses.ForPrincipalAsync(AuthenticatedUser, cancellationToken);
+
+    /// <summary>The addresses the user organizes under: the primary account's alone, a connected account is somebody else.</summary>
+    private Task<IReadOnlyList<string>> OrganizerAddressesAsync(CancellationToken cancellationToken) =>
+        addresses.ForPrimaryAsync(AuthenticatedUser, cancellationToken);
 
     /// <summary>The user's own answers, stamped here and not in the store: only the controller
     /// holds the principal the address list is read for (spec 5e).</summary>
-    private async Task<IReadOnlyDictionary<Guid, string>> OwnAnswersAsync(
-        IEnumerable<Guid> eventIds, CancellationToken cancellationToken) =>
-        await store.OwnPartStatsAsync(AuthenticatedUser.WebmailUid, [.. eventIds.Distinct()],
-            await addresses.ForPrincipalAsync(AuthenticatedUser, cancellationToken), cancellationToken);
+    private Task<IReadOnlyDictionary<Guid, string>> OwnAnswersAsync(
+        IEnumerable<Guid> eventIds, IReadOnlyList<string> own, CancellationToken cancellationToken) =>
+        store.OwnPartStatsAsync(AuthenticatedUser.WebmailUid, [.. eventIds.Distinct()], own, cancellationToken);
+
+    /// <summary>Décision 8: every ORGANIZER on any component, master included, is one of the primary
+    /// account's addresses — or there is none. One foreign organizer is enough to refuse: a save with guests
+    /// writes the user's ORGANIZER on every component, over that one too.
+    /// <paramref name="own"/> comes lower-cased from <see cref="IUserAddresses.ForPrimaryAsync"/>.</summary>
+    private static bool MayInvite(EventDetail detail, IReadOnlyList<string> own) =>
+        detail.Attendees.Where(a => a.IsOrganizer)
+            .All(host => own.Contains(host.Email.Trim().ToLowerInvariant(), StringComparer.Ordinal));
+
+    /// <summary>The ORGANIZER goes with the guests: resolved only when there are some.</summary>
+    private async Task<EventWrite> WithOrganizerAsync(EventWrite write, CancellationToken cancellationToken) =>
+        write.Attendees is { Count: > 0 }
+            ? write with { Organizer = await organizer.ResolveAsync(AuthenticatedUser, cancellationToken) }
+            : write;
 
     private async Task<OccurrenceListResponse> AnsweredAsync(
         IReadOnlyList<EventOccurrence> occurrences, CancellationToken cancellationToken)
     {
-        var mine = await OwnAnswersAsync(occurrences.Select(o => o.EventId), cancellationToken);
+        var mine = await OwnAnswersAsync(occurrences.Select(o => o.EventId), await OwnAddressesAsync(cancellationToken), cancellationToken);
         return new OccurrenceListResponse([.. occurrences
             .Select(o => mine.TryGetValue(o.EventId, out var answer) ? o with { MyPartStat = answer } : o)]);
     }
 
-    /// <summary>Creates an event and answers its id.</summary>
+    /// <summary>Creates an event and answers its id, with what the invitation hook sent.</summary>
     /// <param name="request">the event to create</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="201">Created</response>
@@ -120,10 +153,12 @@ public sealed class CalendarEventsController(ICalendarEventStore store, IUserAdd
         var validated = EventRequestValidator.Validate(request);
         if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 
-        var created = await store.CreateAsync(AuthenticatedUser.WebmailUid, validated.Value, cancellationToken);
+        var write = await WithOrganizerAsync(validated.Value, cancellationToken);
+        var created = await store.CreateAsync(AuthenticatedUser.WebmailUid, write, cancellationToken);
         if (created.IsFailure) return MapFailure(created.Error);
 
-        return StatusCode(StatusCodes.Status201Created, new CreatedId(created.Value));
+        var report = await ScheduleAsync(created.Value, request.Language, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, new CreatedId(created.Value.EventId, report));
     }
 
     /// <summary>
@@ -133,13 +168,13 @@ public sealed class CalendarEventsController(ICalendarEventStore store, IUserAdd
     /// <param name="id">the event's identifier</param>
     /// <param name="request">the scope, the instance it targets, and the replacement fields</param>
     /// <param name="cancellationToken">cancellation token</param>
-    /// <response code="204">Saved</response>
-    /// <response code="400">A validation refusal, a missing <c>ifHash</c>, or a narrow scope without an instance id</response>
+    /// <response code="200">Saved; <c>scheduling</c> says what was sent</response>
+    /// <response code="400">A validation refusal, a missing <c>ifHash</c>, a narrow scope without an instance id, or <c>attendees</c> on an event somebody else organizes (<c>not_organizer</c>)</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">No such event for this user</response>
     /// <response code="409">The event changed since <c>ifHash</c> was read; reload and retry</response>
     [HttpPut("{id:guid}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(EventUpdated), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -150,14 +185,26 @@ public sealed class CalendarEventsController(ICalendarEventStore store, IUserAdd
         if (RequiresInstanceId(request.Scope) && string.IsNullOrEmpty(request.InstanceId))
             return BadRequestEnveloppe(InstanceIdRequired);
 
-        var validated = EventRequestValidator.Validate(request);
+        EventDetail? current = null;
+        if (request.Attendees is not null)
+        {
+            current = await store.GetAsync(AuthenticatedUser.WebmailUid, id, cancellationToken);
+            if (current is null) return MapFailure(CalendarEventStore.NotFound);
+            if (!MayInvite(current, await OrganizerAddressesAsync(cancellationToken))) return BadRequestEnveloppe(NotOrganizer);
+        }
+
+        var kept = current?.Attendees.Where(a => a.RecurrenceId is null && !a.IsOrganizer).Select(a => a.Email);
+        var validated = EventRequestValidator.Validate(request, kept);
         if (validated.IsFailure) return BadRequestEnveloppe(validated.Error);
 
+        var write = await WithOrganizerAsync(validated.Value, cancellationToken);
         var updated = await store.UpdateAsync(
-            AuthenticatedUser.WebmailUid, id, request.Scope, request.InstanceId, validated.Value,
+            AuthenticatedUser.WebmailUid, id, request.Scope, request.InstanceId, write,
             request.IfHash, cancellationToken);
 
-        return updated.IsSuccess ? NoContent() : MapFailure(updated.Error);
+        return updated.IsSuccess
+            ? Ok(new EventUpdated(await ScheduleAsync(updated.Value, request.Language, cancellationToken)))
+            : MapFailure(updated.Error);
     }
 
     /// <summary>Deletes the whole series, one instance, or one instance and every later one.</summary>
@@ -165,6 +212,7 @@ public sealed class CalendarEventsController(ICalendarEventStore store, IUserAdd
     /// <param name="scope">how much of the series to remove</param>
     /// <param name="instanceId">the targeted instance, required for <see cref="EditScope.This"/> and
     /// <see cref="EditScope.ThisAndFollowing"/></param>
+    /// <param name="language">the language of the cancellations this removal may send: "fr" or "en" (the default)</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Deleted (or nothing changed: the narrow scope named nothing to remove)</response>
     /// <response code="400">A narrow scope without an instance id</response>
@@ -176,12 +224,41 @@ public sealed class CalendarEventsController(ICalendarEventStore store, IUserAdd
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Delete(
-        Guid id, EditScope scope, string? instanceId, CancellationToken cancellationToken)
+        Guid id, EditScope scope, string? instanceId, [FromQuery] string? language, CancellationToken cancellationToken)
     {
         if (RequiresInstanceId(scope) && string.IsNullOrEmpty(instanceId)) return BadRequestEnveloppe(InstanceIdRequired);
 
         var deleted = await store.DeleteAsync(AuthenticatedUser.WebmailUid, id, scope, instanceId, cancellationToken);
-        return deleted.IsSuccess ? NoContent() : MapFailure(deleted.Error);
+        if (deleted.IsFailure) return MapFailure(deleted.Error);
+
+        await ScheduleAsync(deleted.Value, language ?? "en", cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>The hook once per resource the write touched — a split touches two — summed into one report.</summary>
+    private async Task<SchedulingReport> ScheduleAsync(EventWriteResult written, string language, CancellationToken cancellationToken)
+    {
+        string? owner = null;
+        var sent = 0;
+        foreach (var change in written.Changes)
+        {
+            var report = await scheduler.AfterWriteAsync(AuthenticatedUser, change, WriteOrigin.Webmail, OpenSessionAsync, language, cancellationToken);
+            sent += report.Sent;
+            owner ??= report.Owner;
+        }
+        return new SchedulingReport(owner, sent);
+    }
+
+    /// <summary>The user's own SMTP session, resolved only when a mail is due and once per request: the
+    /// primary account's, since the organizer is always its identity (décisions 8 and 10). Null — the
+    /// queue takes over — when the cookie carries no credentials or the request names another account.</summary>
+    private Task<MailAccountConnection?> OpenSessionAsync(CancellationToken cancellationToken) =>
+        session ??= ResolveSessionAsync(cancellationToken);
+
+    private async Task<MailAccountConnection?> ResolveSessionAsync(CancellationToken cancellationToken)
+    {
+        var resolved = await connections.ResolveAsync(AuthenticatedUser, Request, cancellationToken);
+        return resolved.IsSuccess && resolved.Value.AccountId == MailAccountConnection.Primary ? resolved.Value : null;
     }
 
     private static bool RequiresInstanceId(EditScope scope) =>

@@ -6,6 +6,8 @@ import type { EventDetail } from './calendarTypes'
 import EventEditor, { type EventEditorProps } from './EventEditor'
 import type { EventFormState } from './eventForm'
 
+vi.mock('../contacts/queries', () => ({ useContacts: () => ({ data: [] }) }))
+
 const CALENDARS = [calendarOf('a', '#3b82c4', 'Personal'), calendarOf('b', '#c4783b', 'Work')]
 
 function form(overrides: Partial<EventFormState> = {}): EventFormState {
@@ -15,7 +17,7 @@ function form(overrides: Partial<EventFormState> = {}): EventFormState {
     timeZone: TZ, repeat: { kind: 'never' }, reminders: [15],
     location: 'Rue Haute 12', description: 'Bring the card',
     availability: 'Busy', visibility: 'Default', url: '',
-    keepRepeat: false, foreignAlarms: [], ...overrides,
+    keepRepeat: false, foreignAlarms: [], attendees: [], canInvite: true, ...overrides,
   }
 }
 
@@ -26,7 +28,7 @@ function detailOf(overrides: Partial<EventDetail> = {}): EventDetail {
       calendarId: 'a', isAllDay: false, reminderMinutesBefore: [15],
       availability: 'Busy', visibility: 'Default',
     },
-    attendees: [], repeatIsExact: true, foreignAlarms: [], ...overrides,
+    attendees: [], repeatIsExact: true, foreignAlarms: [], canInvite: true, ...overrides,
   }
 }
 
@@ -204,9 +206,11 @@ describe('EventEditor', () => {
     expect(screen.getByLabelText('Web address')).toBeInTheDocument()
   })
 
-  it('lists the attendees it cannot yet write to', () => {
+  it('lists the attendees of a received event, without their answers', () => {
     draw({
+      initial: form({ canInvite: false }),
       detail: detailOf({
+        canInvite: false,
         attendees: [
           { email: 'boss@weesky.be', name: 'Boss', isOrganizer: true },
           { email: 'me@weesky.be', partStat: 'ACCEPTED', isOrganizer: false },
@@ -215,17 +219,104 @@ describe('EventEditor', () => {
     })
     expect(screen.getByText('Boss')).toBeInTheDocument()
     expect(screen.getByText('me@weesky.be')).toBeInTheDocument()
-    expect(screen.getByText('Read only until invitations are supported')).toBeInTheDocument()
     expect(screen.queryByText('ACCEPTED')).toBeNull()
+    expect(screen.queryByText('accepted')).toBeNull()
   })
 
   it('says what the user answered, and nothing when they are not invited', () => {
     const attendees = [{ email: 'boss@weesky.be', name: 'Boss', isOrganizer: true }]
-    draw({ detail: detailOf({ attendees, myPartStat: 'ACCEPTED' }) })
+    const initial = form({ canInvite: false })
+    draw({ initial, detail: detailOf({ attendees, myPartStat: 'ACCEPTED', canInvite: false }) })
     expect(screen.getByText('You accepted')).toBeInTheDocument()
     cleanup()
-    draw({ detail: detailOf({ attendees }) })
+    draw({ initial, detail: detailOf({ attendees, canInvite: false }) })
     expect(screen.queryByText(/^You /)).toBeNull()
+  })
+
+  it('shows the guests field on a new event and on one the user organizes', () => {
+    draw()
+    expect(screen.getByLabelText('Attendees')).toBeInTheDocument()
+    cleanup()
+    draw({
+      initial: form({ attendees: [{ email: 'marc@example.org', name: 'Marc' }] }),
+      detail: detailOf({ canInvite: true, attendees: [{ email: 'marc@example.org', name: 'Marc', isOrganizer: false, partStat: 'ACCEPTED' }] }),
+    })
+    expect(screen.getByLabelText('Attendees')).toBeInTheDocument()
+    expect(screen.getByText(/Marc/)).toBeInTheDocument()
+    // The answers list under the field.
+    expect(screen.getByText('accepted')).toBeInTheDocument()
+  })
+
+  it('shows names only, no field, on a received event', () => {
+    draw({
+      initial: form({ canInvite: false }),
+      detail: detailOf({ canInvite: false, attendees: [{ email: 'lea@example.net', name: 'Léa', isOrganizer: true }, { email: 'me@weesky.be', isOrganizer: false, partStat: 'ACCEPTED' }], myPartStat: 'ACCEPTED' }),
+    })
+    expect(screen.queryByLabelText('Attendees')).toBeNull()
+    expect(screen.getByText('Léa')).toBeInTheDocument()
+    expect(screen.queryByText('Read only until invitations are supported')).toBeNull()
+  })
+
+  it('hands the guests to onSave', async () => {
+    const { onSave } = draw({ initial: form({ attendees: [{ email: 'marc@example.org' }], canInvite: true }) })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave.mock.calls[0][0].attendees).toEqual([{ email: 'marc@example.org' }])
+  })
+
+  // Render faithfully: the file lists Marc twice, the screen says so twice.
+  it('draws a guest listed twice twice, in the field and in the answers', () => {
+    const marc = { email: 'marc@example.org', name: 'Marc', isOrganizer: false, partStat: 'ACCEPTED' }
+    draw({
+      initial: form({ attendees: [{ email: 'marc@example.org' }, { email: 'marc@example.org' }] }),
+      detail: detailOf({ attendees: [marc, marc] }),
+    })
+    expect(screen.getAllByText('marc@example.org')).toHaveLength(2)
+    expect(screen.getAllByText('accepted')).toHaveLength(2)
+  })
+
+  // A SIP room, an accented address booked from another client: the server keeps a stored line as
+  // it is, so the chip draws its value — decoded, as the projection reads it — and never as a
+  // mistake to fix. Only a new address is checked, by the server's own rule.
+  const chipOf = (text: string) =>
+    screen.getAllByText(text).map(one => one.closest('.recipient-token')).find(Boolean)
+
+  it('keeps a stored guest it could not have typed, and refuses a new address that is not one', async () => {
+    const room = 'sip:room@example.org'
+    const jose = 'josé@example.org'
+    const { onSave } = draw({
+      initial: form({ attendees: [{ email: room, name: 'Salle Mercure' }, { email: jose }] }),
+      detail: detailOf({ attendees: [{ email: room, name: 'Salle Mercure', isOrganizer: false }, { email: jose, isOrganizer: false }] }),
+    })
+    expect(chipOf(room)).not.toHaveClass('is-invalid')
+    expect(chipOf(jose)).not.toHaveClass('is-invalid')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave.mock.calls[0][0].attendees).toEqual([{ email: room, name: 'Salle Mercure' }, { email: jose }])
+
+    await userEvent.type(screen.getByLabelText('Attendees'), 'marc{Enter}100%@example.org{Enter}')
+    expect(chipOf('marc')).toHaveClass('is-invalid')
+    expect(chipOf('100%@example.org')).toHaveClass('is-invalid')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByText('An attendee address is not valid')).toBeInTheDocument()
+    expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
+  // The answers follow the chips: a guest removed is no longer listed, one just added has not
+  // answered yet, and each keeps the stored answer it had.
+  it('lists the answers of the guests the field holds, not of the ones stored', async () => {
+    draw({
+      initial: form({ attendees: [{ email: 'marc@example.org', name: 'Marc' }, { email: 'lea@example.net', name: 'Léa' }] }),
+      detail: detailOf({ attendees: [
+        { email: 'marc@example.org', name: 'Marc', isOrganizer: false, partStat: 'ACCEPTED' },
+        { email: 'lea@example.net', name: 'Léa', isOrganizer: false, partStat: 'DECLINED' }] }),
+    })
+    const answers = () => [...document.querySelectorAll('.attendee-status li')].map(li => li.textContent)
+    expect(answers()).toEqual(['Marcaccepted', 'Léadeclined'])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove marc@example.org' }))
+    expect(answers()).toEqual(['Léadeclined'])
+
+    await userEvent.type(screen.getByLabelText('Attendees'), 'julie@example.net{Enter}')
+    expect(answers()).toEqual(['Léadeclined', 'julie@example.netno answer yet'])
   })
 
   it('hands the whole form to the save, with no scope of its own', async () => {

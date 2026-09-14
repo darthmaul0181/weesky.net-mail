@@ -11,6 +11,7 @@ using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services.CalDav;
 using weesky.Snoopy.Microservice.Services.Calendar;
+using weesky.Snoopy.Microservice.Services.Calendar.Scheduling;
 using weesky.Snoopy.Microservice.Services.Dav;
 
 namespace weesky.Snoopy.Microservice.Controllers;
@@ -23,6 +24,7 @@ public sealed class CalDavController(
     ICalendarSyncStore syncStore,
     PreferencesDbContext preferences,
     TimeProvider clock,
+    IInvitationScheduler scheduler,
     ILogger<CalDavController> logger) : DavControllerBase(preferences, logger)
 {
     /// <summary>Above the resource ceiling, so a body over it is read and refused as the announced
@@ -182,6 +184,9 @@ public sealed class CalDavController(
             // never reached the calendar and earns the same archive as any 412.
             if (outcome.Status is DavWriteStatus.AlreadyExists or DavWriteStatus.PreconditionFailed)
                 await ArchiveRefusedBodyAsync(user.WebmailUid, calendar.Id, davName, body, cancellationToken);
+            if (outcome.Status is DavWriteStatus.Created or DavWriteStatus.Replaced)
+                await scheduler.AfterWriteAsync(user, new EventChange(null, calendar.Id, davName, outcome.Replaced, body),
+                    WriteOrigin.Device, null, null, cancellationToken);
 
             trace.Condition = await AnswerPutOutcomeAsync(outcome, DemandsCreation(), cancellationToken);
         }, calendarName);
@@ -224,10 +229,12 @@ public sealed class CalDavController(
 
             // The header rides along, as on PUT: the check above is the fast path, the gate's
             // re-comparison under the state lock is the decision.
-            trace.Condition = await AnswerOutcomeAsync(
-                await writer.DeleteAsync(AuthenticatedUser.WebmailUid, calendar.Id, member.DavName,
-                    cancellationToken, HeaderOrNull(Request.Headers.IfMatch)),
-                cancellationToken);
+            var outcome = await writer.DeleteAsync(AuthenticatedUser.WebmailUid, calendar.Id, member.DavName,
+                cancellationToken, HeaderOrNull(Request.Headers.IfMatch));
+            if (outcome.Status == DavWriteStatus.Deleted)
+                await scheduler.AfterWriteAsync(AuthenticatedUser, new EventChange(null, calendar.Id, member.DavName, outcome.Replaced, null),
+                    WriteOrigin.Device, null, null, cancellationToken);
+            trace.Condition = await AnswerOutcomeAsync(outcome, cancellationToken);
         }, calendarName);
 
     /// <summary>

@@ -121,20 +121,20 @@ internal sealed class CalendarEventStore(
             IcsReader.RepeatIsExact(parsed), IcsReader.ForeignAlarms(parsed));
     }
 
-    public async Task<Result<Guid>> CreateAsync(
+    public async Task<Result<EventWriteResult>> CreateAsync(
         Guid userId, EventWrite write, CancellationToken cancellationToken)
     {
         var calendar = await FindCalendarAsync(userId, write.CalendarId, cancellationToken);
-        if (calendar is null) return Result.Failure<Guid>(CalendarStore.NotFound);
+        if (calendar is null) return Result.Failure<EventWriteResult>(CalendarStore.NotFound);
 
         var id = Guid.NewGuid();
         // An event born here has no foreign UID, so its own id serves — as ContactStore does. The
         // column stays distinct from the key because an imported resource brings one we must keep.
         var composed = Attempt(() => IcsComposer.ComposeNew(write, id.ToString(), DateTime.UtcNow));
-        if (composed.IsFailure) return Result.Failure<Guid>(composed.Error);
+        if (composed.IsFailure) return Result.Failure<EventWriteResult>(composed.Error);
 
         var parsed = Parse(composed.Value);
-        if (parsed.IsFailure) return Result.Failure<Guid>(parsed.Error);
+        if (parsed.IsFailure) return Result.Failure<EventWriteResult>(parsed.Error);
 
         return await InTransactionAsync(async () =>
         {
@@ -144,7 +144,7 @@ internal sealed class CalendarEventStore(
             // must not be decided from two different reads of the same table.
             if (await context.CalendarEvents.CountAsync(e => e.CalendarId == calendar.Id, cancellationToken)
                 >= MaxPerCalendar)
-                return Result.Failure<Guid>(CapReached);
+                return Result.Failure<EventWriteResult>(CapReached);
 
             var row = new CalendarEvent
             {
@@ -157,26 +157,27 @@ internal sealed class CalendarEventStore(
             // A name that comes back must stop being reported as deleted. Always a miss today — the
             // name is a fresh GUID — and it stays for the door a CalDAV PUT will open.
             await sync.LiftTombstoneAsync(calendar.Id, row.DavName, cancellationToken);
-            return Result.Success(id);
+            return Result.Success(new EventWriteResult(id,
+                [new EventChange(id, calendar.Id, row.DavName, null, composed.Value)]));
         }, cancellationToken);
     }
 
-    public async Task<Result> UpdateAsync(
+    public async Task<Result<EventWriteResult>> UpdateAsync(
         Guid userId, Guid eventId, EditScope scope, string? instanceId, EventWrite write,
         string? ifHash, CancellationToken cancellationToken)
     {
         var row = await FindAsync(userId, eventId, cancellationToken);
-        if (row is null) return Result.Failure(NotFound);
+        if (row is null) return Result.Failure<EventWriteResult>(NotFound);
 
         // Refused before anything else: a client that says what it read is refused when that is no
         // longer true, and the refusal opens no transaction, takes no rank and wakes no client.
-        if (ifHash is not null && ifHash != row.IcsHash) return Result.Failure(EventMoved);
+        if (ifHash is not null && ifHash != row.IcsHash) return Result.Failure<EventWriteResult>(EventMoved);
 
         var source = await FindCalendarAsync(userId, row.CalendarId, cancellationToken);
         var target = write.CalendarId == row.CalendarId
             ? source
             : await FindCalendarAsync(userId, write.CalendarId, cancellationToken);
-        if (source is null || target is null) return Result.Failure(NotFound);
+        if (source is null || target is null) return Result.Failure<EventWriteResult>(NotFound);
 
         var moving = target.Id != source.Id;
         var followingId = Guid.NewGuid();
@@ -185,36 +186,36 @@ internal sealed class CalendarEventStore(
         // changes nothing is refused without opening a transaction — and composed AGAIN inside it
         // when the row moved, since the rewrite must build on the bytes actually stored.
         var rewrite = Compose(row.IcsRaw, scope, instanceId, write, followingId);
-        if (rewrite.IsFailure) return Result.Failure(rewrite.Error);
-        if (moving && rewrite.Value.Scope != EditScope.All) return Result.Failure(MoveNeedsWholeEvent);
-        if (!moving && rewrite.Value.Unchanged) return Result.Success();
+        if (rewrite.IsFailure) return Result.Failure<EventWriteResult>(rewrite.Error);
+        if (moving && rewrite.Value.Scope != EditScope.All) return Result.Failure<EventWriteResult>(MoveNeedsWholeEvent);
+        if (!moving && rewrite.Value.Unchanged) return Result.Success(NoChange(eventId));
 
         var read = row.IcsHash;
 
-        return await InTransactionAsync<Result>(async () =>
+        return await InTransactionAsync<Result<EventWriteResult>>(async () =>
         {
             var (sourceRank, targetRank) = await RanksAsync(source.Id, target.Id, cancellationToken);
 
             // Re-read under the state lock. Without it two saves holding the same still-valid hash
             // both pass the check above and the second silently overwrites the first, both archiving
             // the same pre-image — the lost update ContactStore.UpdateAsync closes the same way.
-            if (!await ReloadAsync(row, cancellationToken)) return Result.Failure(NotFound);
+            if (!await ReloadAsync(row, cancellationToken)) return Result.Failure<EventWriteResult>(NotFound);
             // Moved collection since the read: the ranks just taken are not the ones this write
             // needs, and a pure move leaves the bytes alone — so the hash below would not catch it.
-            if (row.CalendarId != source.Id) return Result.Failure(EventMoved);
+            if (row.CalendarId != source.Id) return Result.Failure<EventWriteResult>(EventMoved);
             if (row.IcsHash != read)
             {
-                if (ifHash is not null) return Result.Failure(EventMoved);
+                if (ifHash is not null) return Result.Failure<EventWriteResult>(EventMoved);
 
                 rewrite = Compose(row.IcsRaw, scope, instanceId, write, followingId);
-                if (rewrite.IsFailure) return Result.Failure(rewrite.Error);
-                if (moving && rewrite.Value.Scope != EditScope.All) return Result.Failure(MoveNeedsWholeEvent);
-                if (!moving && rewrite.Value.Unchanged) return Result.Success();
+                if (rewrite.IsFailure) return Result.Failure<EventWriteResult>(rewrite.Error);
+                if (moving && rewrite.Value.Scope != EditScope.All) return Result.Failure<EventWriteResult>(MoveNeedsWholeEvent);
+                if (!moving && rewrite.Value.Unchanged) return Result.Success(NoChange(eventId));
             }
 
             if (moving && await context.CalendarEvents.AnyAsync(
                     e => e.CalendarId == target.Id && e.Uid == row.Uid, cancellationToken))
-                return Result.Failure(UidTaken);
+                return Result.Failure<EventWriteResult>(UidTaken);
 
             // What this write ADDS to the target: the resource itself when it changes collection,
             // and the following half when the series is cut in two. Counted under the lock, or a
@@ -222,7 +223,7 @@ internal sealed class CalendarEventStore(
             var arriving = (moving ? 1 : 0) + (rewrite.Value.Following is null ? 0 : 1);
             if (arriving > 0 && await context.CalendarEvents.CountAsync(
                     e => e.CalendarId == target.Id, cancellationToken) + arriving > MaxPerCalendar)
-                return Result.Failure(CapReached);
+                return Result.Failure<EventWriteResult>(CapReached);
 
             await sync.ArchiveAsync(
                 userId, source.Id, row.Id, row.Uid, row.DavName, row.IcsRaw,
@@ -237,8 +238,13 @@ internal sealed class CalendarEventStore(
                 row.DavName = await FreeNameAsync(target.Id, row.Id, row.DavName, cancellationToken);
             }
 
+            // Taken before ApplyIcsAsync overwrites ics_raw — CalendarId/DavName already the
+            // target's when this write also moved the resource.
+            var before = row.AsReplaced();
             await ApplyIcsAsync(
                 row, target, rewrite.Value.Ics, rewrite.Value.Parsed, targetRank, cancellationToken);
+
+            var changes = new List<EventChange> { new(row.Id, row.CalendarId, row.DavName, before, rewrite.Value.Ics) };
 
             if (rewrite.Value is { Following: { } text, FollowingParsed: { } half })
             {
@@ -250,49 +256,52 @@ internal sealed class CalendarEventStore(
                 context.CalendarEvents.Add(born);
                 // The same rank as the original: one gesture, one version of the collection.
                 await ApplyIcsAsync(born, target, text, half, targetRank, cancellationToken);
+                changes.Add(new EventChange(born.Id, born.CalendarId, born.DavName, null, text));
             }
 
             await context.SaveChangesAsync(cancellationToken);
             if (moving) await sync.LiftTombstoneAsync(target.Id, row.DavName, cancellationToken);
-            return Result.Success();
+            return Result.Success(new EventWriteResult(eventId, changes));
         }, cancellationToken);
     }
 
-    public async Task<Result> DeleteAsync(
+    public async Task<Result<EventWriteResult>> DeleteAsync(
         Guid userId, Guid eventId, EditScope scope, string? instanceId,
         CancellationToken cancellationToken)
     {
         var row = await FindAsync(userId, eventId, cancellationToken);
-        if (row is null) return Result.Failure(NotFound);
+        if (row is null) return Result.Failure<EventWriteResult>(NotFound);
 
         var calendar = await FindCalendarAsync(userId, row.CalendarId, cancellationToken);
-        if (calendar is null) return Result.Failure(NotFound);
+        if (calendar is null) return Result.Failure<EventWriteResult>(NotFound);
 
         // Resolved outside the lock so an invalid instance id or a deletion that removes nothing is
         // refused without opening a transaction; resolved again inside it when the row moved.
         var removal = Removing(row.IcsRaw, scope, instanceId, calendar.Id);
-        if (removal.IsFailure) return Result.Failure(removal.Error);
-        if (removal.Value.Unchanged) return Result.Success();
+        if (removal.IsFailure) return Result.Failure<EventWriteResult>(removal.Error);
+        if (removal.Value.Unchanged) return Result.Success(NoChange(eventId));
 
         var read = row.IcsHash;
 
-        return await InTransactionAsync<Result>(async () =>
+        return await InTransactionAsync<Result<EventWriteResult>>(async () =>
         {
             var rank = await sync.NextSequenceAsync(row.CalendarId, cancellationToken);
 
             // Read under the lock, so what is archived is what is actually being removed.
-            if (!await ReloadAsync(row, cancellationToken)) return Result.Failure(NotFound);
-            if (row.CalendarId != calendar.Id) return Result.Failure(EventMoved);
+            if (!await ReloadAsync(row, cancellationToken)) return Result.Failure<EventWriteResult>(NotFound);
+            if (row.CalendarId != calendar.Id) return Result.Failure<EventWriteResult>(EventMoved);
             if (row.IcsHash != read)
             {
                 removal = Removing(row.IcsRaw, scope, instanceId, calendar.Id);
-                if (removal.IsFailure) return Result.Failure(removal.Error);
-                if (removal.Value.Unchanged) return Result.Success();
+                if (removal.IsFailure) return Result.Failure<EventWriteResult>(removal.Error);
+                if (removal.Value.Unchanged) return Result.Success(NoChange(eventId));
             }
 
             if (removal.Value.Whole)
             {
-                // EventId NULL: a delete revision outlives the row it describes.
+                // Taken before the row is removed; EventId NULL on the archive below: a delete
+                // revision outlives the row it describes.
+                var before = row.AsReplaced();
                 await sync.ArchiveAsync(
                     userId, row.CalendarId, null, row.Uid, row.DavName, row.IcsRaw,
                     RevisionCause.Delete, cancellationToken);
@@ -302,18 +311,62 @@ internal sealed class CalendarEventStore(
                 await context.SaveChangesAsync(cancellationToken);
 
                 await sync.PlaceTombstoneAsync(row.CalendarId, row.DavName, rank, cancellationToken);
-                return Result.Success();
+                return Result.Success(new EventWriteResult(eventId,
+                    [new EventChange(row.Id, row.CalendarId, row.DavName, before, null)]));
             }
 
             await sync.ArchiveAsync(
                 userId, row.CalendarId, row.Id, row.Uid, row.DavName, row.IcsRaw,
                 RevisionCause.Webmail, cancellationToken);
 
+            var beforeRewrite = row.AsReplaced();
             await ApplyIcsAsync(
                 row, calendar, removal.Value.Ics, removal.Value.Parsed!, rank, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
-            return Result.Success();
+            return Result.Success(new EventWriteResult(eventId,
+                [new EventChange(row.Id, row.CalendarId, row.DavName, beforeRewrite, removal.Value.Ics)]));
         }, cancellationToken);
+    }
+
+    public async Task SetSchedulingAsync(
+        Guid userId, Guid calendarId, string davName, string? owner, string? hash,
+        CancellationToken cancellationToken)
+    {
+        // Projected to the id alone: this write must never pull ics_raw — a whole VCALENDAR — off
+        // the wire for two short columns, and Task 5's hook calls it after every scheduled send.
+        var id = await context.CalendarEvents.AsNoTracking()
+            .Where(e => e.CalendarId == calendarId && e.UserId == userId && e.DavName == davName)
+            .Select(e => (Guid?)e.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (id is null) return;
+
+        // A write earlier in the same request may already track this very row (the PUT this
+        // scheduling follows, in the same context) — attaching a second instance under the same key
+        // throws, so that tracked entry is reused instead of a stub.
+        var tracked = context.ChangeTracker.Entries<CalendarEvent>()
+            .FirstOrDefault(e => e.Entity.Id == id)?.Entity;
+        var stub = tracked is null;
+        var row = tracked ?? new CalendarEvent { Id = id.Value };
+        if (stub) context.CalendarEvents.Attach(row);
+
+        row.SchedulingOwner = owner;
+        row.SchedulingHash = hash;
+        // Only these two columns — never sync_sequence, ics_hash or updated_at (its own
+        // ON UPDATE CURRENT_TIMESTAMP is intended, not this write's to trigger by touching the row).
+        context.Entry(row).Property(e => e.SchedulingOwner).IsModified = true;
+        context.Entry(row).Property(e => e.SchedulingHash).IsModified = true;
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        finally
+        {
+            // A blank stub left tracked would shadow the real row for every later query on this
+            // context — Task 5's scheduler reads and writes rows right after this call. Never done
+            // for a reused tracked entry: that one belongs to whatever wrote it first.
+            if (stub) context.Entry(row).State = EntityState.Detached;
+        }
     }
 
     public async Task<IReadOnlyList<EventOccurrence>> SearchAsync(
@@ -384,7 +437,7 @@ internal sealed class CalendarEventStore(
             .Join(context.Calendars, e => e.CalendarId, c => c.Id, (e, c) => new { Event = e, Calendar = c })
             .OrderBy(x => x.Calendar.DavName == CalendarStore.DefaultDavName ? 0 : 1)
             .ThenBy(x => x.Calendar.Order).ThenBy(x => x.Calendar.DisplayName)
-            .Select(x => new StoredEventRef(x.Event.Id, x.Event.CalendarId, x.Event.DavName, x.Event.IcsRaw))
+            .Select(x => new StoredEventRef(x.Event.Id, x.Event.CalendarId, x.Event.DavName, x.Event.IcsRaw, x.Event.SchedulingOwner, x.Event.IcsHash))
             .ToListAsync(cancellationToken);
 
     public Task<CalendarImportOutcome> ImportAsync(
@@ -480,6 +533,10 @@ internal sealed class CalendarEventStore(
         try { return Result.Success(gesture()); }
         catch (ArgumentException failed) { return Result.Failure<T>(failed.Message); }
     }
+
+    /// <summary>A save or a narrow deletion that removes nothing: no row touched, so no change to
+    /// report — but the caller still learns which event it addressed.</summary>
+    private static EventWriteResult NoChange(Guid eventId) => new(eventId, []);
 
     /// <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>
     private async Task<bool> ReloadAsync(CalendarEvent row, CancellationToken cancellationToken)

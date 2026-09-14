@@ -1,11 +1,13 @@
 import {
   keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient,
 } from '@tanstack/react-query'
+import i18next from 'i18next'
 import { api, ApiError } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import type {
   Calendar, CalendarImportOutcome, CalendarImportReport, CalendarListResponse, CalendarWrite,
-  EditScope, EventDetail, EventUpdateBody, EventWrite, Occurrence, OccurrenceListResponse,
+  CreatedId, EditScope, EventDetail, EventUpdateBody, EventUpdated, EventWrite, Occurrence,
+  OccurrenceListResponse,
 } from './calendarTypes'
 import type { Window } from './windowOf'
 
@@ -105,19 +107,28 @@ function invalidateAll(queryClient: QueryClient, accountId: string) {
   queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
 }
 
+/** The language the server writes the invitation mails in: the screen's, never a guess. */
+export function mailLanguage(): 'fr' | 'en' {
+  return i18next.language?.startsWith('fr') ? 'fr' : 'en'
+}
+
+const updateEvent = (id: string, body: EventUpdateBody) =>
+  api.updateEvent(id, { ...body, language: mailLanguage() }) as Promise<EventUpdated>
+
 export function useCreateEvent() {
-  return useCalendarMutation((event: EventWrite) => api.createEvent(event) as Promise<EventDetail>)
+  return useCalendarMutation((event: EventWrite) =>
+    api.createEvent({ ...event, language: mailLanguage() }) as Promise<CreatedId>)
 }
 
 export function useUpdateEvent() {
   return useCalendarMutation(
-    ({ id, body }: { id: string; body: EventUpdateBody }) => api.updateEvent(id, body))
+    ({ id, body }: { id: string; body: EventUpdateBody }) => updateEvent(id, body))
 }
 
 export function useDeleteEvent() {
   return useCalendarMutation(
     ({ id, scope, instanceId }: { id: string; scope: EditScope; instanceId?: string }) =>
-      api.deleteEvent(id, scope, instanceId))
+      api.deleteEvent(id, scope, instanceId, mailLanguage()))
 }
 
 export function useCreateCalendar() {
@@ -169,7 +180,7 @@ export function useMoveOccurrence(window: Window, tz: string) {
   const key = calendarKeys.window(accountId, window.from, window.to, tz)
 
   return useMutation({
-    mutationFn: ({ id, body }: MoveVariables) => api.updateEvent(id, body),
+    mutationFn: ({ id, body }: MoveVariables) => updateEvent(id, body),
     onMutate: async ({ moved }: MoveVariables) => {
       // Without this, a refetch already in flight lands after the patch and undoes it.
       await queryClient.cancelQueries({ queryKey: key })

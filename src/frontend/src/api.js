@@ -266,10 +266,12 @@ export const api = {
   updateEvent: (id, event) =>
     request('PUT', `/api/Calendar/Events/${id}`, event),
 
-  // scope/instanceId travel in the query string, the same rule the PUT of a narrow edit follows.
-  deleteEvent: (id, scope, instanceId) => {
+  // scope/instanceId travel in the query string, the same rule the PUT of a narrow edit follows;
+  // language is the one the cancellations are written in.
+  deleteEvent: (id, scope, instanceId, language) => {
     const params = new URLSearchParams({ scope })
     if (instanceId) params.set('instanceId', instanceId)
+    if (language) params.set('language', language)
     return request('DELETE', `/api/Calendar/Events/${id}?${params}`)
   },
 
@@ -415,6 +417,8 @@ export const api = {
   // it names the message the block was read from, so it lives beside the message calls.
   respondInvitation: (body, options) =>
     request('POST', '/api/Calendar/Invitations/Respond', body, options),
+  applyInvitationReply: (body, options) =>
+    request('POST', '/api/Calendar/Invitations/ApplyReply', body, options),
 
   getMessageSource: (folder, uid, options) =>
     request('GET', `/api/Mail/Messages/Source?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
@@ -497,6 +501,20 @@ export const api = {
 
   adminDeleteExternalDomain: (id) =>
     request('DELETE', `/api/Admin/domains/external/${id}`),
+
+  adminGetSchedulingAccount: () =>
+    request('GET', '/api/SchedulingAccount'),
+
+  adminSaveSchedulingAccount: (account, options) =>
+    request('PUT', '/api/SchedulingAccount', account, options),
+
+  adminDeleteSchedulingAccount: () =>
+    request('DELETE', '/api/SchedulingAccount'),
+
+  // `account` is optional: no body tests and records the stored one, a body tests those values
+  // without persisting anything — the same request shape either way.
+  adminTestSchedulingAccount: (account) =>
+    request('POST', '/api/SchedulingAccount/Test', account),
 
   // ── Preferences ───────────────────────────────────────────────────────────
   // The response covers every known key: defaults live on the backend, so there is no second

@@ -4,7 +4,7 @@ import { firePointer, installPointerEvents } from '../../test-utils'
 import WeekView from './WeekView'
 import { occurrenceOf, renderInCalendar, TZ } from './calendarTestHarness'
 import type { Occurrence } from './calendarTypes'
-import { todayIn } from './plainDate'
+import { addDays, todayIn } from './plainDate'
 
 const noop = () => {}
 const WEEK = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18',
@@ -102,7 +102,8 @@ describe('WeekView', () => {
   })
 
   it('draws no current-time line on a week that is not this one', () => {
-    week([])
+    const today = todayIn(TZ)
+    week([], Array.from({ length: 7 }, (_, i) => addDays(today, 14 + i)), today)
     expect(document.querySelector('.now-line')).toBeNull()
   })
 

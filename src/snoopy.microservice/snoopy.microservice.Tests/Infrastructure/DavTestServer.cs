@@ -19,6 +19,7 @@ using weesky.Snoopy.Microservice.Models;
 using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Calendar.Scheduling;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
 
 namespace weesky.Snoopy.Microservice.Tests.Infrastructure;
@@ -192,6 +193,8 @@ internal sealed class DavTestServer : IAsyncDisposable
         services.AddScoped<ICalendarStore>(provider => provider.GetRequiredService<CalendarStore>());
         services.AddScoped<CalendarEventStore>();
         services.AddScoped<IDavCalendarWriter, DavCalendarWriter>();
+        // The invitation hook without mail or store: a test that watches the doors replaces it through `overrides`.
+        services.AddSingleton<IInvitationScheduler>(new RecordingInvitationScheduler());
         // The principal reads its addresses through these two, behind the shared UserAddresses
         // service. Answered by default with the account's own domain and no curated identity, so
         // no CardDAV test changes shape; a test that cares replaces them through `overrides`.

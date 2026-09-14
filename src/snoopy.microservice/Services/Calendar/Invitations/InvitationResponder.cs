@@ -6,6 +6,7 @@ using weesky.Snoopy.Microservice.Models.Dav;
 using weesky.Snoopy.Microservice.Models.Mail;
 using weesky.Snoopy.Microservice.Platform;
 using weesky.Snoopy.Microservice.Repositories;
+using weesky.Snoopy.Microservice.Services.Calendar.Scheduling;
 
 namespace weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 
@@ -25,6 +26,7 @@ public interface IInvitationResponder
 /// </summary>
 internal sealed class InvitationResponder(
     IMailMessageRepository messages,
+    InvitationPartLoader parts,
     InvitationReader reader,
     ICalendarStore calendars,
     IDavCalendarWriter writer,
@@ -35,7 +37,8 @@ internal sealed class InvitationResponder(
 {
     // Stable codes, not prose: they travel as the envelope's message and are what the client
     // branches on to say the refusal in the reader's own language.
-    internal const string NoOrganizer = "The invitation names no organizer to answer";
+    internal const string NoOrganizer = "invitation_no_organizer";
+    internal const string UidUnwritable = "invitation_uid_unwritable";
     internal const string NotAddressed = "invitation_not_addressed";
     internal const string NotInCalendar = "invitation_not_in_calendar";
     internal const string OccurrenceOnly = "invitation_occurrence_only";
@@ -43,7 +46,6 @@ internal sealed class InvitationResponder(
     internal const string Incompatible = "invitation_incompatible_answer";
     internal const string NoCalendar = "invitation_no_calendar";
     internal const string Unreadable = "invitation_unreadable";
-    internal const string TooLarge = "invitation_too_large";
     internal const string UnknownAnswer = "invitation_unknown_answer";
     internal const string CalendarConflict = "calendar_conflict";
     internal const string CalendarBusy = "calendar_busy";
@@ -54,7 +56,7 @@ internal sealed class InvitationResponder(
     public async Task<Result<InvitationResponse, ResponderFailure>> RespondAsync(
         User user, MailAccountConnection connection, RespondInvitationRequest request, CancellationToken cancellationToken)
     {
-        var ics = await ReadPartAsync(user, connection, request, cancellationToken);
+        var ics = await parts.LoadAsync(user, connection, request.Folder, request.Uid, request.Part, cancellationToken);
         if (ics.IsFailure) return Result.Failure<InvitationResponse, ResponderFailure>(ics.Error);
 
         var reading = InvitationParser.Read(ics.Value);
@@ -64,12 +66,13 @@ internal sealed class InvitationResponder(
             return Refused(422, Unreadable);
         }
         if (parsed.OccurrenceOnly) return Refused(400, OccurrenceOnly);
-        var fits = parsed.Method switch
+        var compatible = parsed.Method switch
         {
             InvitationMethod.Request => request.Answer is not InvitationAnswer.Remove,
-            _ => request.Answer is InvitationAnswer.Remove,
+            InvitationMethod.Cancel => request.Answer is InvitationAnswer.Remove,
+            _ => false,
         };
-        if (!fits) return Refused(400, Incompatible);
+        if (!compatible) return Refused(400, Incompatible);
 
         var context = await reader.ResolveAsync(user, connection, parsed, cancellationToken);
         if (context.Presence is InvitationPresence.Newer) return Refused(409, Stale);
@@ -88,24 +91,6 @@ internal sealed class InvitationResponder(
 
         var after = await reader.ResolveAsync(user, connection, parsed, cancellationToken);
         return new InvitationResponse(InvitationReader.Block(parsed, after, request.Part), replySent, replyError, trashed);
-    }
-
-    private async Task<Result<string, ResponderFailure>> ReadPartAsync(
-        User user, MailAccountConnection connection, RespondInvitationRequest request, CancellationToken cancellationToken)
-    {
-        var part = await messages.GetAttachmentAsync(user, connection, request.Folder, request.Uid, request.Part, cancellationToken);
-        if (part.IsFailure)
-            return Result.Failure<string, ResponderFailure>(new ResponderFailure(
-                part.Error is ImapSession.FolderNotFound or ImapSession.MessageNotFound or ImapSession.AttachmentNotFound ? 404 : 502,
-                part.Error));
-        using var content = part.Value.Content;
-        using var buffer = new MemoryStream();
-        await content.CopyToAsync(buffer, cancellationToken);
-        if (buffer.Length > IcsGuards.MaxIcsBytes)
-            return Result.Failure<string, ResponderFailure>(new ResponderFailure(422, TooLarge));
-        // The card's decode, not a second one: a BOM'd or iso-8859-1 part must read here exactly as
-        // it read when the invitation was shown, or the buttons answer a different file.
-        return MailMessageMapper.DecodeText(buffer.GetBuffer(), (int)buffer.Length, part.Value.Charset);
     }
 
     private async Task<Result<bool, ResponderFailure>> WriteAsync(
@@ -167,17 +152,29 @@ internal sealed class InvitationResponder(
     private static Result<bool, ResponderFailure> Map(DavWriteOutcome outcome) => outcome.Status switch
     {
         DavWriteStatus.Created or DavWriteStatus.Replaced or DavWriteStatus.Deleted or DavWriteStatus.NotFound => Done,
-        DavWriteStatus.UidConflict or DavWriteStatus.AlreadyExists or DavWriteStatus.PreconditionFailed =>
-            Failed(409, CalendarConflict),
-        DavWriteStatus.Busy => Failed(502, CalendarBusy),
-        _ => Failed(422, CalendarRefused),
+        var refused => CodeOf(refused) switch
+        {
+            CalendarConflict => Failed(409, CalendarConflict),
+            CalendarBusy => Failed(502, CalendarBusy),
+            var code => Failed(422, code),
+        },
+    };
+
+    /// <summary>The stable code of a write the writer did not carry out.</summary>
+    internal static string CodeOf(DavWriteStatus status) => status switch
+    {
+        DavWriteStatus.UidConflict or DavWriteStatus.AlreadyExists or DavWriteStatus.PreconditionFailed => CalendarConflict,
+        DavWriteStatus.Busy => CalendarBusy,
+        _ => CalendarRefused,
     };
 
     private async Task<(bool Sent, string? Error)> SendReplyAsync(
         User user, MailAccountConnection connection, RespondInvitationRequest request, ParsedInvitation parsed,
         string addressedTo, CancellationToken cancellationToken)
     {
-        if (parsed.Organizer is null) return (false, NoOrganizer);
+        // An ORGANIZER no mail can be addressed to (`mailto:a%20b@…`) is no organizer to answer.
+        if (parsed.Organizer is null || InvitationMailer.Mailbox(parsed.Organizer.Email) is null) return (false, NoOrganizer);
+        if (!ItipCalendar.CarriesUid(parsed.Uid)) return (false, UidUnwritable);
         var partStat = request.Answer switch
         {
             InvitationAnswer.Accepted => "ACCEPTED", InvitationAnswer.Tentative => "TENTATIVE", _ => "DECLINED",

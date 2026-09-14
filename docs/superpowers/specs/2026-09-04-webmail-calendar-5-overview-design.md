@@ -52,11 +52,11 @@ réel a été l'inverse, et le carnet a occupé deux sous-projets, d'où l'agend
 | 4e | Les groupes de contacts | [4e](2026-08-31-webmail-contacts-4e-groups-design.md) | livrée |
 | 4f | La photo en écriture | [4f](2026-09-03-webmail-contacts-4f-photo-design.md) | livrée |
 | **5** | **L'agenda et sa synchronisation CalDAV** — ce document | | |
-| 5a | Modèle de données, moteur iCalendar, occurrences, API | à écrire | à venir |
-| 5b | Les écrans | à écrire | à venir |
-| 5c | Le serveur CalDAV | à écrire | à venir |
-| 5d | La conformité clients, iOS compris | à écrire | à venir |
-| 5e | Les invitations, en deux phases : recevoir (5e1), inviter (5e2) | [5e](2026-09-12-webmail-calendar-5e-invitations-design.md) | à venir |
+| 5a | Modèle de données, moteur iCalendar, occurrences, API | [5a](#découpage) | livrée |
+| 5b | Les écrans | [5b](2026-09-05-webmail-calendar-5b-screens-design.md) | livrée |
+| 5c | Le serveur CalDAV | [5c](2026-09-06-webmail-calendar-5c-caldav-design.md) | livrée |
+| 5d | La conformité clients, iOS compris | [5d](2026-09-07-webmail-calendar-5d-conformance-design.md) | livrée |
+| 5e | Les invitations, en deux phases : recevoir (5e1), inviter (5e2) | [5e](2026-09-12-webmail-calendar-5e-invitations-design.md) | livrée, recette à faire |
 
 Les specs sans numéro sont des améliorations transversales, livrées au fil de l'eau entre deux
 tranches : palettes, notifications, rafraîchissement périodique, en-tête et actions du lecteur,

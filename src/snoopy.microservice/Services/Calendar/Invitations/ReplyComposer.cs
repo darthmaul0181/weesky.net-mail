@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using MimeKit;
 
 namespace weesky.Snoopy.Microservice.Services.Calendar.Invitations;
@@ -15,8 +13,6 @@ internal sealed record ReplyInput(
 /// </summary>
 internal static class ReplyComposer
 {
-    private const string ProductId = "-//weesky//webmail//EN";
-
     internal static MimeMessage Compose(ReplyInput input)
     {
         var message = new MimeMessage();
@@ -35,32 +31,9 @@ internal static class ReplyComposer
         return message;
     }
 
-    internal static string Calendar(ReplyInput input)
-    {
-        var e = input.Invitation;
-        var ics = new StringBuilder()
-            .Append("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:").Append(ProductId).Append("\r\nMETHOD:REPLY\r\n")
-            .Append("BEGIN:VEVENT\r\nUID:").Append(e.Uid).Append("\r\n")
-            .Append("SEQUENCE:").Append(e.Sequence).Append("\r\n")
-            .Append("DTSTAMP:").Append(input.NowUtc.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture)).Append("\r\n")
-            .Append("ORGANIZER").Append(Cn(input.OrganizerName)).Append(":mailto:").Append(input.OrganizerEmail).Append("\r\n")
-            .Append("ATTENDEE;PARTSTAT=").Append(input.PartStat).Append(Cn(input.FromName)).Append(":mailto:").Append(input.FromAddress).Append("\r\n");
-        if (e.DtStartLine is { } dtstart) ics.Append(dtstart).Append("\r\n");
-        if (!string.IsNullOrWhiteSpace(e.Summary)) ics.Append("SUMMARY:").Append(EscapeText(e.Summary)).Append("\r\n");
-        return ics.Append("END:VEVENT\r\nEND:VCALENDAR\r\n").ToString();
-    }
-
-    /// <summary>RFC 5545 § 3.2: a parameter value holding ':' ';' or ',' is quoted; a '"' cannot appear in one.
-    /// The line breaks go with it: the name is the user's own profile, and one would splice a line
-    /// of its choosing into the REPLY.</summary>
-    private static string Cn(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-        var clean = name.Replace("\"", string.Empty).Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
-        return ";CN=" + (clean.IndexOfAny([':', ';', ',']) >= 0 ? $"\"{clean}\"" : clean);
-    }
-
-    /// <summary>RFC 5545 § 3.3.11.</summary>
-    private static string EscapeText(string value) =>
-        value.Replace("\\", "\\\\").Replace(";", "\\;").Replace(",", "\\,").Replace("\r\n", "\\n").Replace("\n", "\\n");
+    internal static string Calendar(ReplyInput input) => ItipCalendar.Reduced(
+        method: "REPLY", uid: input.Invitation.Uid, sequence: input.Invitation.Sequence, nowUtc: input.NowUtc,
+        organizerEmail: input.OrganizerEmail, organizerName: input.OrganizerName,
+        attendees: [(input.FromAddress, input.FromName, input.PartStat)],
+        dtStartLine: input.Invitation.DtStartLine, summary: input.Invitation.Summary);
 }

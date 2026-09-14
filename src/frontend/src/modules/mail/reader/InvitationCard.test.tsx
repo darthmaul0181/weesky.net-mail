@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { StrictMode } from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Calendar } from '../../calendar/calendarTypes'
-import type { MailInvitation } from '../api/mailTypes'
+import type { MailInvitation, ReplyStatus } from '../api/mailTypes'
+import { useMessage } from '../queries'
 import InvitationCard from './InvitationCard'
 
 const mocks = vi.hoisted(() => ({
   respondInvitation: vi.fn(),
+  applyInvitationReply: vi.fn(),
   getCalendars: vi.fn(),
+  getMailMessage: vi.fn(),
   // The class queries.ts imports from the mocked module, so `instanceof ApiError` holds against
   // what these tests throw. A locally-declared twin fails that check silently.
   ApiError: class ApiError extends Error {
@@ -23,7 +27,12 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../api.js', () => ({
-  api: { respondInvitation: mocks.respondInvitation, getCalendars: mocks.getCalendars },
+  api: {
+    respondInvitation: mocks.respondInvitation,
+    applyInvitationReply: mocks.applyInvitationReply,
+    getCalendars: mocks.getCalendars,
+    getMailMessage: mocks.getMailMessage,
+  },
   ApiError: mocks.ApiError,
 }))
 
@@ -71,6 +80,16 @@ function renderCard(invitation: MailInvitation = base) {
 
 const answered = (partStat: string, presence: MailInvitation['inCalendar'] = 'Current') =>
   ({ ...base, inCalendar: presence, savedPartStat: partStat, calendarId: 'c1' })
+
+// A guest's REPLY: no address of the user's is invited, and the file names the guest alone.
+const request: MailInvitation = { ...base }
+delete request.addressedTo
+delete request.filePartStat
+const reply = (status: ReplyStatus, applied = false, partStat = 'ACCEPTED'): MailInvitation => ({
+  ...request, method: 'Reply', attendees: [{ email: 'marc@example.org', name: 'Marc' }],
+  inCalendar: status === 'UnknownUid' ? 'Absent' : 'Current', calendarId: 'c1',
+  reply: { email: 'marc@example.org', name: 'Marc', partStat, status, applied },
+})
 
 describe('InvitationCard', () => {
   beforeEach(() => {
@@ -316,6 +335,216 @@ describe('InvitationCard', () => {
     expect(screen.getByText('The organiser recorded you as having accepted.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument()
     await waitFor(() => expect(mocks.getCalendars).toHaveBeenCalled())
+  })
+
+  it('a reply applies itself once, then says what the guest answered', async () => {
+    let resolve!: (value: unknown) => void
+    mocks.applyInvitationReply.mockReturnValue(new Promise(r => { resolve = r }))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    // StrictMode mounts twice in development: the one call has to survive that too.
+    const card = (invitation: MailInvitation) => (
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <InvitationCard invitation={invitation} folderPath="INBOX" uid={7} onTrashed={onTrashed} />
+        </QueryClientProvider>
+      </StrictMode>
+    )
+    const view = render(card(reply('Applicable')))
+
+    // Until the calendar has taken it, the answer is said without the check that claims it.
+    expect(screen.getByText('Marc accepted')).toBeInTheDocument()
+    expect(document.querySelector('.invitation-card-check')).toBeNull()
+    resolve({ invitation: reply('Applicable', true), applied: true })
+    await waitFor(() => expect(document.querySelector('.invitation-card-check')).not.toBeNull())
+    expect(mocks.applyInvitationReply).toHaveBeenCalledWith({ folder: 'INBOX', uid: 7, part: '2' }, expect.anything())
+
+    // The reader's periodic refresh hands the card the same block, then a changed one.
+    view.rerender(card(reply('Applicable')))
+    view.rerender(card({ ...reply('Applicable', false, 'DECLINED'), sequence: 1 }))
+    await new Promise(r => setTimeout(r, 0))
+    expect(mocks.applyInvitationReply).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Marc accepted')).toBeInTheDocument()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByLabelText('Reply')).toBeInTheDocument()
+  })
+
+  it('an already applied reply calls nothing', async () => {
+    renderCard(reply('Applicable', true, 'DECLINED'))
+    expect(await screen.findByText('Marc declined')).toBeInTheDocument()
+    expect(document.querySelector('.invitation-card-check')).not.toBeNull()
+    expect(mocks.applyInvitationReply).not.toHaveBeenCalled()
+  })
+
+  it('the attendees row names the guest who answered, not the delegate the reply also carries', () => {
+    renderCard({ ...reply('Applicable', true), attendees: [{ email: 'marc@example.org', name: 'Marc' }, { email: 'zoe@example.org', name: 'Zoé' }] })
+    expect(screen.getByText('Marc')).toBeInTheDocument()
+    expect(screen.queryByText(/Zoé/)).toBeNull()
+  })
+
+  it.each([
+    ['Stale', 'TENTATIVE', 'Marc answered maybe · reply to an earlier version'],
+    ['Superseded', 'TENTATIVE', 'Marc answered maybe · a later reply is already in the calendar'],
+    ['UnknownUid', 'TENTATIVE', 'This event no longer exists'],
+    ['NotOwner', 'TENTATIVE', 'This event was not invited from the webmail'],
+    ['UnknownAttendee', 'TENTATIVE', 'Marc is not on the guest list'],
+    ['OccurrenceOnly', 'TENTATIVE', 'Reply for a single date of the series, not carried into the calendar'],
+    ['UnsupportedAnswer', 'DELEGATED', 'The reply from Marc cannot be carried into the calendar'],
+  ] as const)('%s is read only', async (status, partStat, sentence) => {
+    renderCard(reply(status, false, partStat))
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(mocks.applyInvitationReply).not.toHaveBeenCalled()
+  })
+
+  it('a reply the calendar refused offers to retry', async () => {
+    mocks.applyInvitationReply
+      .mockResolvedValueOnce({ invitation: reply('Applicable'), applied: false, applyError: 'calendar_conflict' })
+      .mockResolvedValueOnce({ invitation: reply('Applicable', true), applied: true })
+    renderCard(reply('Applicable'))
+
+    expect(await screen.findByText('Reply not recorded in the calendar.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(document.querySelector('.invitation-card-check')).not.toBeNull())
+    expect(screen.getByText('Marc accepted')).toBeInTheDocument()
+    expect(screen.queryByText('Reply not recorded in the calendar.')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+    expect(mocks.applyInvitationReply).toHaveBeenCalledTimes(2)
+  })
+
+  it('a reply that could not reach the server offers to retry', async () => {
+    mocks.applyInvitationReply.mockRejectedValueOnce(new mocks.ApiError('boom', 502, null))
+    renderCard(reply('Applicable'))
+
+    expect(await screen.findByText('Reply not recorded in the calendar.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  // The card beside the reader's own query on its message, as MessageReader mounts them: Reload
+  // refetches that query, and only a refetch that answered may redraw the card.
+  async function renderWithMessage(invitation: MailInvitation) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    function MessageQuery() { useMessage('INBOX', 7); return null }
+    render(
+      <QueryClientProvider client={client}>
+        <MessageQuery />
+        <InvitationCard invitation={invitation} folderPath="INBOX" uid={7} onTrashed={onTrashed} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(client.getQueryState(['mail', 'primary', 'message', 'INBOX', 7])?.status).toBe('success'))
+    return client
+  }
+
+  // A 400 says the reply no longer applies: asking again would earn the same refusal, and the
+  // block on screen is what is out of date. Reload redraws the card from the message as it now reads.
+  it.each(['reply_not_applicable', 'reply_not_a_reply'])('%s offers Reload, which redraws the card from the message', async code => {
+    mocks.applyInvitationReply.mockRejectedValueOnce(new mocks.ApiError(code, 400, code))
+    mocks.getMailMessage
+      .mockResolvedValueOnce({ uid: 7, invitation: reply('Applicable') })
+      .mockResolvedValueOnce({ uid: 7, invitation: reply('Superseded') })
+    await renderWithMessage(reply('Applicable'))
+
+    expect(await screen.findByText('This reply no longer applies to the event in your calendar.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Reload the message' }))
+
+    expect(await screen.findByText('Marc accepted · a later reply is already in the calendar')).toBeInTheDocument()
+    expect(screen.queryByText('This reply no longer applies to the event in your calendar.')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(mocks.applyInvitationReply).toHaveBeenCalledTimes(1)
+  })
+
+  it('a reload whose block still applies carries it into the calendar', async () => {
+    mocks.applyInvitationReply
+      .mockRejectedValueOnce(new mocks.ApiError('reply_not_applicable', 400, 'reply_not_applicable'))
+      .mockResolvedValueOnce({ invitation: reply('Applicable', true), applied: true })
+    mocks.getMailMessage.mockResolvedValue({ uid: 7, invitation: reply('Applicable') })
+    await renderWithMessage(reply('Applicable'))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reload the message' }))
+
+    await waitFor(() => expect(document.querySelector('.invitation-card-check')).not.toBeNull())
+    expect(mocks.applyInvitationReply).toHaveBeenCalledTimes(2)
+  })
+
+  // The cache still holds the block the refetch failed to confirm: nothing is redrawn from it, and
+  // above all no write is asked for on its word.
+  it('a reload whose refetch fails keeps the card as it was and asks for nothing', async () => {
+    mocks.applyInvitationReply.mockRejectedValueOnce(
+      new mocks.ApiError('reply_not_applicable', 400, 'reply_not_applicable'))
+    mocks.getMailMessage
+      .mockResolvedValueOnce({ uid: 7, invitation: reply('Applicable') })
+      .mockRejectedValueOnce(new mocks.ApiError('boom', 502, null))
+    await renderWithMessage(reply('Applicable'))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reload the message' }))
+
+    await waitFor(() => expect(mocks.getMailMessage).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reload the message' })).toBeEnabled())
+    expect(screen.getByText('This reply no longer applies to the event in your calendar.')).toBeInTheDocument()
+    expect(mocks.applyInvitationReply).toHaveBeenCalledTimes(1)
+  })
+
+  it('Reload is disabled while it runs, so a double click reloads once', async () => {
+    mocks.applyInvitationReply.mockRejectedValueOnce(
+      new mocks.ApiError('reply_not_applicable', 400, 'reply_not_applicable'))
+    mocks.getMailMessage
+      .mockResolvedValueOnce({ uid: 7, invitation: reply('Applicable') })
+      .mockReturnValueOnce(new Promise(() => {}))
+    await renderWithMessage(reply('Applicable'))
+
+    const reload = await screen.findByRole('button', { name: 'Reload the message' })
+    fireEvent.click(reload)
+    fireEvent.click(reload)
+
+    expect(reload).toBeDisabled()
+    expect(mocks.getMailMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('a guest with no name is named by the address, in the sentence and on the Attendees row', async () => {
+    const nameless: MailInvitation = {
+      ...reply('Applicable', true), attendees: [{ email: 'marc@example.org' }],
+      reply: { email: 'marc@example.org', partStat: 'ACCEPTED', status: 'Applicable', applied: true },
+    }
+    renderCard(nameless)
+
+    expect(await screen.findByText('marc@example.org accepted')).toBeInTheDocument()
+    expect(screen.getByText('marc@example.org')).toBeInTheDocument()
+  })
+
+  // The calendar took the answer; there is no address to mail it to, and no retry would change that.
+  it.each([
+    ['Accept', 'Added to your calendar. The invitation gives no address a reply can be sent to.'],
+    ['Decline', 'Declined. The invitation gives no address a reply can be sent to.'],
+  ])('%s on an invitation with no address to reply to offers no Resend', async (button, sentence) => {
+    mocks.respondInvitation.mockResolvedValue({
+      invitation: button === 'Accept' ? answered('ACCEPTED') : { ...base, inCalendar: 'Absent' },
+      replySent: false, replyError: 'invitation_no_organizer', trashed: false,
+    })
+    renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: button }))
+
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resend' })).toBeNull()
+    expect(screen.queryByText(/could not be sent/)).toBeNull()
+  })
+
+  // The UID holds a character no reply may carry: recorded, and no retry would change that either.
+  it.each([
+    ['Accept', 'Added to your calendar. This invitation does not allow a reply to be sent.'],
+    ['Decline', 'Declined. This invitation does not allow a reply to be sent.'],
+  ])('%s on an invitation whose UID no reply can carry offers no Resend', async (button, sentence) => {
+    mocks.respondInvitation.mockResolvedValue({
+      invitation: button === 'Accept' ? answered('ACCEPTED') : { ...base, inCalendar: 'Absent' },
+      replySent: false, replyError: 'invitation_uid_unwritable', trashed: false,
+    })
+    renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: button }))
+
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resend' })).toBeNull()
+    expect(screen.queryByText(/could not be sent/)).toBeNull()
   })
 
   it('an invitation filed without an answer names its calendar alone', async () => {

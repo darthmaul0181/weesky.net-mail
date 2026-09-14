@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EventDetail, EventWrite, Occurrence } from './calendarTypes'
 import {
-  alignEnd, allowedScopes, defaultRule, formOf, isRecurring, movedBody, movedOccurrence, newEventForm, updateBodyOf, validate, writeOf,
+  type EventFormState, alignEnd, allowedScopes, defaultRule, formOf, isRecurring, movedBody, movedOccurrence, newEventForm, updateBodyOf, validate, writeOf,
 } from './eventForm'
 
 const TZ = 'Europe/Brussels'
@@ -18,10 +18,13 @@ function fields(overrides: Partial<EventWrite> = {}): EventWrite {
 function detailOf(overrides: Partial<EventDetail> = {}): EventDetail {
   return {
     id: 'e1', calendarId: 'c1', uid: 'u1', icsHash: 'hash-1', fields: fields(),
-    attendees: [], repeatIsExact: true, foreignAlarms: [],
+    attendees: [], repeatIsExact: true, foreignAlarms: [], canInvite: true,
     ...overrides,
   }
 }
+
+const form = (overrides: Partial<EventFormState> = {}): EventFormState =>
+  ({ ...formOf(detailOf(), null, TZ), ...overrides })
 
 function occurrenceOf(overrides: Partial<Occurrence> = {}): Occurrence {
   return {
@@ -48,6 +51,27 @@ describe('formOf', () => {
     expect(formOf(detailOf({ fields: fields({ availability: 'Free' }), myPartStat: 'accepted' }), null, TZ).availability).toBe('Free')
     expect(formOf(detailOf({ fields: fields({ availability: 'Tentative' }) }), null, TZ).availability).toBe('Tentative')
   })
+
+  it('seeds the guests of an event the user organizes, and none of a received one', () => {
+    const guests = [
+      { email: 'alice@weesky.be', name: 'Alice', isOrganizer: true },
+      { email: 'marc@example.org', name: 'Marc', isOrganizer: false, partStat: 'ACCEPTED' },
+      { email: 'julie@example.net', isOrganizer: false, recurrenceId: '20261019T100000' },
+    ]
+    const own = formOf(detailOf({ attendees: guests, canInvite: true }), null, TZ)
+    expect(own.attendees).toEqual([{ email: 'marc@example.org', name: 'Marc' }])
+    expect(own.canInvite).toBe(true)
+
+    const received = formOf(detailOf({ attendees: guests, canInvite: false }), null, TZ)
+    expect(received.attendees).toEqual([])
+    expect(received.canInvite).toBe(false)
+  })
+
+  // Render faithfully: a guest the file lists twice is two guests on the way back too.
+  it('keeps a guest listed twice as two guests', () => {
+    const twice = { email: 'marc@example.org', isOrganizer: false }
+    expect(formOf(detailOf({ attendees: [twice, twice] }), null, TZ).attendees).toHaveLength(2)
+  })
 })
 
 describe('newEventForm', () => {
@@ -59,6 +83,7 @@ describe('newEventForm', () => {
       calendarId: 'c1', title: '', isAllDay: false, timeZone: TZ,
       startDate: '2026-09-14', startTime: '09:00', endDate: '2026-09-14', endTime: '10:30',
       availability: 'Busy', visibility: 'Default', keepRepeat: false,
+      attendees: [], canInvite: true,
     })
     expect(form.repeat).toEqual({ kind: 'never' })
   })
@@ -184,6 +209,13 @@ describe('formOf', () => {
 })
 
 describe('writeOf', () => {
+  it('writes the guests only when the user may invite', () => {
+    const own = form({ attendees: [{ email: 'marc@example.org', name: 'Marc' }], canInvite: true })
+    expect(writeOf(own).attendees).toEqual([{ email: 'marc@example.org', name: 'Marc' }])
+    expect(writeOf(form({ attendees: [], canInvite: true })).attendees).toEqual([])
+    expect(writeOf(form({ attendees: [{ email: 'x@y.z' }], canInvite: false })).attendees).toBeUndefined()
+  })
+
   it('writes a dated event with its wall clock and its zone', () => {
     const write = writeOf(formOf(detailOf(), null, TZ))
 

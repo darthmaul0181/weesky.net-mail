@@ -1,9 +1,14 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import ChevronDownIcon from '../../icons/ChevronDownIcon'
 import ChevronRightIcon from '../../icons/ChevronRightIcon'
+import { canonicalAddress } from '../../lib/canonicalAddress'
+import { answersOf } from './attendeeStatus'
+import AttendeesField from './AttendeesField'
+import AttendeeStatusList from './AttendeeStatusList'
 import { useCalendar } from './calendarContext'
+import { isInvitableAddress } from './guestAddress'
 import CalendarSelect from './CalendarSelect'
 import type {
   Availability, Calendar, EditScope, EventDetail, Occurrence, RecurrenceWrite, Visibility,
@@ -79,7 +84,7 @@ export default function EventEditor({
   const [invalid, setInvalid] = useState<string | null>(null)
   const [more, setMore] = useState(
     initial.description !== '' || initial.visibility !== 'Default' || initial.url !== ''
-    || (detail?.attendees.length ?? 0) > 0)
+    || (!initial.canInvite && (detail?.attendees.length ?? 0) > 0))
 
   // Every write goes through `alignEnd`: while a series runs the end date is not the user's to
   // set, and a state that ever held a stale one would save it.
@@ -91,12 +96,17 @@ export default function EventEditor({
   const title = detail ? t('editor.editTitle') : t('editor.newTitle')
   // The rule the switch was turned off on, so turning it back on finds it rather than a default.
   const remembered = useRef<RecurrenceWrite | null>(null)
+  const answers = detail ? answersOf(form.attendees, detail.attendees) : []
+  // A guest the event came with is kept as the file stores it; only a new address is checked.
+  const kept = useMemo(() => new Set(initial.attendees.map(a => canonicalAddress(a.email))), [initial])
+  const guestOk = (email: string) => isInvitableAddress(email) || kept.has(canonicalAddress(email))
 
   // The key rather than `t(key)`: a key reaching t() as a variable is invisible to the typed
   // guard and to src/locales/keys.test.ts alike.
   function messageOf(key: string): string {
     switch (key) {
       case 'editor.endBeforeStart': return t('editor.endBeforeStart')
+      case 'editor.invalidAttendee': return t('editor.invalidAttendee')
       default: return t('errors.save')
     }
   }
@@ -125,6 +135,7 @@ export default function EventEditor({
   function submit(event: FormEvent) {
     event.preventDefault()
     const key = validate(form)
+      ?? (form.canInvite && !form.attendees.every(a => guestOk(a.email)) ? 'editor.invalidAttendee' : null)
     setInvalid(key)
     if (!key) onSave(form, null)
   }
@@ -259,6 +270,18 @@ export default function EventEditor({
             onChange={event => set({ location: event.target.value })} />
         </div>
 
+        {/* The field is a `.field-h` row of its own, so it lines up with Location unaided. */}
+        {form.canInvite && (
+          <AttendeesField value={form.attendees} isValid={guestOk}
+            onChange={attendees => set({ attendees })} />
+        )}
+        {form.canInvite && answers.length > 0 && (
+          <div className="field-h">
+            <span className="field-h-label" />
+            <AttendeeStatusList guests={answers} />
+          </div>
+        )}
+
         <div className="field-h">
           <span className="field-h-label">{t('editor.availability')}</span>
           <div className="seg" role="radiogroup" aria-label={t('editor.availability')}>
@@ -307,12 +330,12 @@ export default function EventEditor({
                 onChange={event => set({ url: event.target.value })} />
             </div>
 
-            {detail && detail.attendees.length > 0 && (
+            {detail && !form.canInvite && detail.attendees.length > 0 && (
               <div className="field-h">
                 <span className="field-h-label">{t('editor.attendees')}</span>
                 <div className="editor-attendees">
-                  {detail.attendees.map(one => (
-                    <span className="editor-attendee" key={`${one.recurrenceId ?? ''}${one.email}`}>
+                  {detail.attendees.map((one, index) => (
+                    <span className="editor-attendee" key={`${index}-${one.email}`}>
                       {one.isOrganizer && (
                         <span className="editor-organizer" title={t('editor.organizer')} />
                       )}
@@ -322,7 +345,6 @@ export default function EventEditor({
                   {myAnswerOf(detail.myPartStat, t) && (
                     <span className="editor-my-answer">{myAnswerOf(detail.myPartStat, t)}</span>
                   )}
-                  <span className="editor-hint">{t('editor.attendeesReadOnly')}</span>
                 </div>
               </div>
             )}

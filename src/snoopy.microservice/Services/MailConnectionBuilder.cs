@@ -50,7 +50,7 @@ internal static class MailConnectionBuilder
     }
 
     /// <summary>Only the three values the admin screens write, and None only under the opt-in.</summary>
-    private static bool TryParseSecurity(string value, bool allowCleartext, out SecureSocketOptions security)
+    internal static bool TryParseSecurity(string value, bool allowCleartext, out SecureSocketOptions security)
         => Enum.TryParse(value, out security)
            && security switch
            {

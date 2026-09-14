@@ -1,43 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import GlobeIcon from '../../../icons/GlobeIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import { isValidHost, isValidPort, SECURITY_OPTIONS, securityLabel } from '../../../lib/mailEndpointValidation'
 import {
   useCreateExternalDomain, useUpdateExternalDomain,
   type ExternalDomain, type ExternalDomainPayload,
 } from './useExternalDomains'
-
-// STARTTLS and SSL/TLS are protocol names; only "None" is prose.
-const SECURITY_OPTIONS = [
-  { value: 'None', labelKey: 'external.securityNone' },
-  { value: 'StartTls', label: 'STARTTLS' },
-  { value: 'SslOnConnect', label: 'SSL/TLS' },
-] as const satisfies Array<{ value: string; label?: string; labelKey?: string }>
-
-type SecurityOption = (typeof SECURITY_OPTIONS)[number]
-
-function securityLabel(option: SecurityOption, t: TFunction<'admin'>): string {
-  return 'labelKey' in option ? t(option.labelKey) : option.label
-}
-
-// Mirrors Uri.CheckHostName loosely: a dotted DNS name or an IPv4/IPv6 literal. It only needs to
-// catch the common typos before they round-trip — the backend's own check is the real gate.
-const HOSTNAME_RE = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/
-const IPV4_RE = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/
-const IPV6_RE = /^[0-9a-fA-F:]+:[0-9a-fA-F:]*$/
-
-function isValidHost(host: string): boolean {
-  if (!host || host.length > 255) return false
-  return HOSTNAME_RE.test(host) || IPV4_RE.test(host) || IPV6_RE.test(host)
-}
-
-function isValidPort(value: string): boolean {
-  if (!/^\d+$/.test(value.trim())) return false
-  const port = Number(value)
-  return port >= 1 && port <= 65535
-}
 
 // Mirrors OAuthProviderConfig.IsHttps: an endpoint reached in the clear would put the client
 // secret on the wire, so there is no opt-in the way there is for IMAP.

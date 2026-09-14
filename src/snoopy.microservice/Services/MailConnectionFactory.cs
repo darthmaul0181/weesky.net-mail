@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Security;
+using System.Net.Sockets;
 using CSharpFunctionalExtensions;
 using MailKit;
 using MailKit.Security;
@@ -67,7 +68,7 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
         {
             Logger.LogError("{Protocol} is not configured ({ConfigurationKey} missing)",
                 endpoint.Protocol, endpoint.ConfigurationKey);
-            return Result.Failure<TClient>("Mail service is not configured");
+            return Result.Failure<TClient>(MailConnectionErrors.NotConfigured);
         }
 
         // The configuration-level notice, independent of whether the server ever answers. What
@@ -78,6 +79,7 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
                 endpoint.Protocol, endpoint.Host, endpoint.Port);
 
         TClient? client = null;
+        var authenticating = false;
 
         try
         {
@@ -105,7 +107,7 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
                             "Refusing to authenticate over an unencrypted {Protocol} connection to {Host}:{Port}; " +
                             "set Mail:AllowCleartext if the link is genuinely trusted",
                             endpoint.Protocol, endpoint.Host, endpoint.Port);
-                        return Result.Failure<TClient>("Unable to connect to the mail service");
+                        return Result.Failure<TClient>(MailConnectionErrors.SecureChannelFailed);
                     }
 
                     Logger.LogWarning(
@@ -114,6 +116,7 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
                         endpoint.Protocol, endpoint.Host, endpoint.Port);
                 }
 
+                authenticating = true;
                 await (connection.Credential switch
                 {
                     OAuthCredential oauth => client.AuthenticateAsync(
@@ -140,19 +143,30 @@ internal abstract class MailConnectionFactory<TClient, TSession>(
         {
             // Never echo the server's message: it can disclose account state.
             Logger.LogWarning("{Protocol} authentication failed for {Username}", endpoint.Protocol, connection.Username);
-            return Result.Failure<TClient>("Mail authentication failed");
+            return Result.Failure<TClient>(MailConnectionErrors.AuthenticationFailed);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Unable to connect to {Protocol} at {Host}:{Port}",
                 endpoint.Protocol, endpoint.Host, endpoint.Port);
-            return Result.Failure<TClient>("Unable to connect to the mail service");
+            return Result.Failure<TClient>(Classify(ex, authenticating));
         }
         finally
         {
             client?.Dispose();
         }
     }
+
+    /// <summary>The caller's own cancellation was rethrown above, so a cancellation here is the connect budget.
+    /// MailKit's NotSupportedException means an extension the server lacks: STARTTLS before, AUTH after.</summary>
+    private static string Classify(Exception ex, bool authenticating) => ex switch
+    {
+        NotSupportedException when authenticating => MailConnectionErrors.AuthenticationUnsupported,
+        NotSupportedException or SslHandshakeException => MailConnectionErrors.SecureChannelFailed,
+        OperationCanceledException or TimeoutException or SocketException { SocketErrorCode: SocketError.TimedOut }
+            => MailConnectionErrors.TimedOut,
+        _ => MailConnectionErrors.Unreachable
+    };
 
     private bool ValidateCertificate(string protocol, SslPolicyErrors errors)
     {

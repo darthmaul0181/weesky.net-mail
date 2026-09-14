@@ -50,6 +50,12 @@
     "declined": "Vous avez refusé",
     "pending": "Vous n’avez pas encore répondu"
   },
+  "guestAnswer": {
+    "accepted": "a accepté",
+    "tentative": "a répondu peut-être",
+    "declined": "a refusé",
+    "pending": "sans réponse"
+  },
   "preview": {
     "allDay": "Journée entière",
     "edit": "Modifier",
@@ -82,14 +88,14 @@
     "availability": "Disponibilité",
     "visibility": "Visibilité",
     "url": "Adresse web",
-    "attendees": "Participants",
-    "attendeesReadOnly": "En lecture seule tant que les invitations ne sont pas gérées",
+    "attendees": "Invités",
     "foreignAlarms": "Rappels que cet écran ne peut pas modifier",
     "keptRepeat": "Cet événement se répète d’une manière que cet écran ne sait pas montrer. La règle est conservée telle quelle.",
     "save": "Enregistrer",
     "delete": "Supprimer",
     "close": "Fermer",
     "endBeforeStart": "La fin précède le début",
+    "invalidAttendee": "Une adresse d’invité n’est pas valide",
     "startDate": "Date de début",
     "startTime": "Heure de début",
     "endDate": "Date de fin",
@@ -98,6 +104,7 @@
     "replaceRepeat": "Remplacer",
     "organizer": "Organisateur",
     "saved": "Événement enregistré",
+    "savedSent": "Enregistré · invitations envoyées : {{count}}",
     "deleted": "Événement supprimé",
     "discardTitle": "Abandonner les modifications ?",
     "discardBody": "Les modifications apportées à cet événement seront perdues.",

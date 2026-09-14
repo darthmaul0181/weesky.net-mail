@@ -308,6 +308,26 @@ describe('RecipientsField — a token wears its contact name', () => {
     expect(screen.getByText('stranger@x.be')).not.toHaveAttribute('title')
   })
 
+  // A chip wider than the box is cut with an ellipsis; the full address is then one hover away,
+  // and only then — a bubble repeating a text that is whole under the cursor is noise.
+  it('names a truncated chip in full on hover, and only a truncated one', () => {
+    const long = 'dominique.vandersteen-peeters@facilities.example.org'
+    show([long, 'ghost@x.be'], [])
+    const measure = (text: HTMLElement, scroll: number, client: number) => {
+      Object.defineProperty(text, 'scrollWidth', { value: scroll })
+      Object.defineProperty(text, 'clientWidth', { value: client })
+    }
+    const cut = screen.getByText(long)
+    const whole = screen.getByText('ghost@x.be')
+    measure(cut, 390, 300)
+    measure(whole, 80, 80)
+
+    fireEvent.mouseEnter(cut)
+    fireEvent.mouseEnter(whole)
+    expect(cut).toHaveAttribute('title', long)
+    expect(whole).not.toHaveAttribute('title')
+  })
+
   it('names the remove button after what the chip shows', () => {
     show(['bruno@x.be'], [bruno])
 

@@ -35,7 +35,7 @@ public interface ICalendarEventStore
     /// indistinguishable from one that does not exist.</summary>
     Task<EventDetail?> GetAsync(Guid userId, Guid eventId, CancellationToken cancellationToken);
 
-    Task<Result<Guid>> CreateAsync(Guid userId, EventWrite write, CancellationToken cancellationToken);
+    Task<Result<EventWriteResult>> CreateAsync(Guid userId, EventWrite write, CancellationToken cancellationToken);
 
     /// <summary>
     /// <paramref name="ifHash"/>, when given, must still be the resource's <c>ics_hash</c> or the
@@ -43,12 +43,20 @@ public interface ICalendarEventStore
     /// <paramref name="instanceId"/> names the occurrence for the two narrow scopes, spelled in the
     /// master's own DTSTART form.
     /// </summary>
-    Task<Result> UpdateAsync(
+    Task<Result<EventWriteResult>> UpdateAsync(
         Guid userId, Guid eventId, EditScope scope, string? instanceId, EventWrite write,
         string? ifHash, CancellationToken cancellationToken);
 
-    Task<Result> DeleteAsync(
+    Task<Result<EventWriteResult>> DeleteAsync(
         Guid userId, Guid eventId, EditScope scope, string? instanceId,
+        CancellationToken cancellationToken);
+
+    /// <summary>The two columns the scheduler owns — silent when the row named by
+    /// <paramref name="calendarId"/>/<paramref name="davName"/> no longer exists. Never touches
+    /// <c>sync_sequence</c>, <c>updated_at</c> nor <c>ics_hash</c>: these columns are not part of the
+    /// resource.</summary>
+    Task SetSchedulingAsync(
+        Guid userId, Guid calendarId, string davName, string? owner, string? hash,
         CancellationToken cancellationToken);
 
     /// <summary>Fonctionnalité 5: one result per event, at the occurrence that comes next — or the

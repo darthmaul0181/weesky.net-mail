@@ -4,6 +4,7 @@ using Ical.Net.DataTypes;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Services.Calendar;
 using weesky.Snoopy.Microservice.Tests.Fixtures;
+using weesky.Snoopy.Microservice.Tests.Services.Calendar.Invitations;
 using Xunit;
 using IcsCalendar = Ical.Net.Calendar;
 
@@ -389,6 +390,316 @@ public sealed class IcsComposerTests
         Assert.Single(calendar.TimeZones);
     }
 
+    private static readonly OrganizerWrite Alice = new("alice@weesky.be", "Alice");
+
+    [Fact]
+    public void ComposeNew_WritesOrganizerAndEveryGuest_NeedsActionWithRsvp()
+    {
+        var ics = IcsComposer.ComposeNew(Write(start: Local(2026, 9, 7, 9), end: Local(2026, 9, 7, 10), tz: Ics.Zone,
+            attendees: [new("marc.dupont@example.org", "Marc Dupont"), new("julie@example.net", null)], organizer: Alice), "u1", Now);
+
+        var master = IcsDocument.MasterOf(IcsDocument.TryLoad(ics)!)!;
+        Assert.Equal("mailto:alice@weesky.be", master.Organizer!.Value!.ToString());
+        Assert.Equal("Alice", master.Organizer!.CommonName);
+        Assert.Collection(master.Attendees,
+            a => { Assert.Equal("mailto:marc.dupont@example.org", a.Value!.ToString()); Assert.Equal("Marc Dupont", a.CommonName); Assert.Equal("NEEDS-ACTION", a.ParticipationStatus); Assert.True(a.Rsvp); Assert.Equal("REQ-PARTICIPANT", a.Role); },
+            a => { Assert.Equal("mailto:julie@example.net", a.Value!.ToString()); Assert.Null(a.CommonName); });
+    }
+
+    // A name is free text the editor took from the contacts: the separators of the content line
+    // itself must come back as they went in.
+    [Fact]
+    public void ComposeNew_AGuestNameWithLineSeparators_ReadsBackIdentical()
+    {
+        const string name = "Dupont: Marc; Jr, PhD";
+        var ics = IcsComposer.ComposeNew(Write(start: Local(2026, 9, 7, 9), end: Local(2026, 9, 7, 10), tz: Ics.Zone,
+            attendees: [new("marc.dupont@example.org", name)], organizer: Alice with { Name = name }), "u1", Now);
+
+        var master = IcsDocument.MasterOf(IcsDocument.TryLoad(ics)!)!;
+        Assert.Equal(name, Assert.Single(master.Attendees).CommonName);
+        Assert.Equal("mailto:marc.dupont@example.org", master.Attendees[0].Value!.ToString());
+        Assert.Equal(name, master.Organizer!.CommonName);
+    }
+
+    [Fact]
+    public void RewriteAll_KeepsAKnownGuestsAnswer_DropsTheRemoved_AndReachesOverrides()
+    {
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited-override"))!;
+        var ics = IcsComposer.RewriteAll(existing, Write(start: Local(2026, 10, 5, 10), end: Local(2026, 10, 5, 11), tz: Ics.Zone,
+            repeat: Weekly(), attendees: [new("julie@example.net", "Julie"), new("paul@example.org", null)], organizer: Alice), Now);
+
+        AssertTheSeriesInvites(ics, 2);
+    }
+
+    // Spec § 9: a series is invited whole — editing one occurrence cannot leave the other
+    // occurrences with another guest list.
+    [Fact]
+    public void RewriteOne_WithAttendees_PutsTheListOnEveryComponent()
+    {
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited-override"))!;
+        var ics = IcsComposer.RewriteOne(existing, "20261012T100000", Write(start: Local(2026, 10, 12, 14), end: Local(2026, 10, 12, 15), tz: Ics.Zone,
+            attendees: [new("julie@example.net", "Julie"), new("paul@example.org", null)], organizer: Alice), Now);
+
+        AssertTheSeriesInvites(ics, 3);
+    }
+
+    [Fact]
+    public void RewriteAll_WithNullAttendees_LeavesTheLines_AndWithEmptyRemovesThemAndTheOrganizer()
+    {
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited"))!;
+        var untouched = IcsComposer.RewriteAll(existing, Write(start: Local(2026, 10, 5, 10), end: Local(2026, 10, 5, 11), tz: Ics.Zone, repeat: Weekly()), Now);
+        Assert.Equal(2, IcsDocument.MasterOf(IcsDocument.TryLoad(untouched)!)!.Attendees.Count);
+
+        var emptied = IcsComposer.RewriteAll(existing, Write(start: Local(2026, 10, 5, 10), end: Local(2026, 10, 5, 11), tz: Ics.Zone, repeat: Weekly(), attendees: []), Now);
+        var master = IcsDocument.MasterOf(IcsDocument.TryLoad(emptied)!)!;
+        Assert.Empty(master.Attendees);
+        Assert.Null(master.Organizer);
+    }
+
+    // The new series is invited whole too: an override moved past the cut carries the new list.
+    [Fact]
+    public void Split_WithAttendees_InvitesEveryComponentOfTheFollowingSeries()
+    {
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited-override"))!;
+        var invited = WriteMatching(existing) with { Attendees = [new("julie@example.net", "Julie"), new("paul@example.org", null)], Organizer = Alice };
+
+        AssertTheSeriesInvites(IcsComposer.Split(existing, "20261012T100000", invited, "u2", Now).Following, 2);
+
+        var emptied = IcsDocument.TryLoad(IcsComposer.Split(existing, "20261012T100000", invited with { Attendees = [], Organizer = null }, "u2", Now).Following)!;
+        Assert.Equal(2, IcsDocument.Components(emptied).Count());
+        Assert.All(IcsDocument.Components(emptied), c => { Assert.Empty(c.Attendees); Assert.Null(c.Organizer); });
+    }
+
+    [Fact]
+    public void RewriteAll_WithEmptyAttendees_RemovesGuestsAndOrganizerFromOverridesToo()
+    {
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited-override"))!;
+
+        var emptied = IcsDocument.TryLoad(IcsComposer.RewriteAll(existing, WriteMatching(existing) with { Attendees = [] }, Now))!;
+
+        Assert.Equal(2, IcsDocument.Components(emptied).Count());
+        Assert.All(IcsDocument.Components(emptied), c => { Assert.Empty(c.Attendees); Assert.Null(c.Organizer); });
+    }
+
+    // A label or profile name is free text: a line break must never open a property of its own.
+    [Fact]
+    public void ComposeNew_ANameWithALineBreak_StaysInsideItsParameter()
+    {
+        var ics = IcsComposer.ComposeNew(Write(start: Local(2026, 9, 7, 9), end: Local(2026, 9, 7, 10), tz: Ics.Zone,
+            attendees: [new("marc@example.org", "Marc\nX-EVIL:2")], organizer: Alice with { Name = "Alice\r\nX-EVIL:1" }), "u1", Now);
+
+        var master = IcsDocument.MasterOf(IcsDocument.TryLoad(ics)!)!;
+        Assert.DoesNotContain("\nX-EVIL", ics);
+        Assert.Equal("Alice X-EVIL:1", master.Organizer!.CommonName);
+        Assert.Equal("Marc X-EVIL:2", Assert.Single(master.Attendees).CommonName);
+    }
+
+    // Décision 8 sets ROLE, PARTSTAT and RSVP for a new guest only: a known guest's line is theirs.
+    [Fact]
+    public void RewriteAll_AKnownGuestKeepsEveryParameterOfTheirLine()
+    {
+        const string before = "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:Julie@Example.net";
+        var fixture = InvitationParserTests.Fixture("webmail-invited");
+        Assert.Contains(before, fixture);
+        var existing = IcsDocument.TryLoad(fixture.Replace(before, "ATTENDEE;ROLE=CHAIR;CUTYPE=ROOM;X-FOO=1;PARTSTAT=ACCEPTED:mailto:Julie@Example.net"))!;
+        var write = Write(start: Local(2026, 10, 5, 10), end: Local(2026, 10, 5, 11), tz: Ics.Zone, repeat: Weekly(), organizer: Alice);
+
+        var unnamed = AttendeeLine(IcsComposer.RewriteAll(existing, write with { Attendees = [new("julie@example.net", null)] }, Now), "julie@example.net");
+        Assert.All(["ROLE=CHAIR", "CUTYPE=ROOM", "X-FOO=1", "PARTSTAT=ACCEPTED"], p => Assert.Contains(p, unnamed));
+        Assert.DoesNotContain("RSVP", unnamed);
+        Assert.DoesNotContain("CN=", unnamed);
+
+        var named = AttendeeLine(IcsComposer.RewriteAll(existing, write with { Attendees = [new("julie@example.net", "Julie")] }, Now), "julie@example.net");
+        Assert.All(["CN=Julie", "ROLE=CHAIR", "CUTYPE=ROOM", "X-FOO=1", "PARTSTAT=ACCEPTED"], p => Assert.Contains(p, named));
+        Assert.DoesNotContain("RSVP", named);
+    }
+
+    // A guest only the stored file could have written, sent back as the projector read it: the line
+    // is the file's own, parameters and value, so the next save still finds them.
+    [Fact]
+    public void RewriteAll_AStoredGuestTheValidatorWouldRefuse_KeepsTheLineTheFileWrote()
+    {
+        const string julie = "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:Julie@Example.net";
+        // Percent-encoded by the client that wrote it: no plain mailto: of "salle mercure@…" exists.
+        const string room = "ATTENDEE;CUTYPE=ROOM;PARTSTAT=ACCEPTED:mailto:salle%20mercure@example.org";
+        const string jose = "ATTENDEE;PARTSTAT=TENTATIVE:mailto:josé@example.org";
+        var fixture = InvitationParserTests.Fixture("webmail-invited");
+        var eol = fixture.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var existing = IcsDocument.TryLoad(fixture.Replace(julie, room + eol + jose))!;
+        // What the editor sends back: every guest as the projector read it.
+        var sentBack = IcsDocument.MasterOf(existing)!.Attendees.OfType<Attendee>()
+            .Select(a => new AttendeeWrite(IcsProjector.Address(a.Value)!.ToLowerInvariant(), null)).ToList();
+
+        var ics = IcsComposer.RewriteAll(existing, Write(start: Local(2026, 10, 5, 10), end: Local(2026, 10, 5, 11), tz: Ics.Zone,
+            repeat: Weekly(), attendees: sentBack, organizer: Alice), Now);
+
+        var lines = ics.Replace("\r\n ", string.Empty).Split("\r\n");
+        Assert.Contains(room, lines);
+        Assert.Contains(jose, lines);
+    }
+
+    // The validator and the composer read a stored guest the same way, byte for byte: an address the
+    // projector decoded once (`salle%2520mercure` → `salle%20mercure`) is kept, never decoded again
+    // into a `mailto:salle mercure@…` no URI can hold.
+    [Fact]
+    public void AStoredGuestTheValidatorLetsThrough_IsTheOneTheComposerKeeps()
+    {
+        const string julie = "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:Julie@Example.net";
+        const string room = "ATTENDEE;CUTYPE=ROOM;PARTSTAT=ACCEPTED:mailto:salle%2520mercure@example.org";
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited").Replace(julie, room))!;
+        var projected = IcsDocument.MasterOf(existing)!.Attendees.OfType<Attendee>().Select(a => IcsProjector.Address(a.Value)!).ToList();
+        var request = new EventRequest
+        {
+            CalendarId = Guid.NewGuid(), IsAllDay = false, TimeZone = Ics.Zone,
+            Start = Local(2026, 10, 5, 10), End = Local(2026, 10, 5, 11),
+            Attendees = [.. projected.Select(e => new AttendeeRequest { Email = e })],
+        };
+        var validated = EventRequestValidator.Validate(request, projected);
+        Assert.True(validated.IsSuccess, validated.IsFailure ? validated.Error : null);
+
+        var ics = IcsComposer.RewriteAll(existing, validated.Value with { Repeat = Weekly(), Organizer = Alice }, Now);
+
+        Assert.Contains(room, ics.Replace("\r\n ", string.Empty).Split("\r\n"));
+    }
+
+    // A calendar_attendees row projected before addresses were decoded still holds the escaped
+    // spelling, and the editor sends it back: the guest is the same line under either spelling, kept
+    // verbatim with its answer — never dropped and asked again.
+    [Theory]
+    [InlineData("mailto:jos%C3%A9@example.org", "jos%C3%A9@example.org")]
+    [InlineData("mailto:jos%C3%A9@example.org", "josé@example.org")]
+    [InlineData("mailto:salle%2520mercure@example.org", "salle%2520mercure@example.org")]
+    public void AStoredGuestSentBackUnderEitherSpelling_KeepsItsLineAndItsAnswer(string value, string sentBack)
+    {
+        const string julie = "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED:mailto:Julie@Example.net";
+        var guest = "ATTENDEE;PARTSTAT=ACCEPTED:" + value;
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited").Replace(julie, guest))!;
+        var request = new EventRequest
+        {
+            CalendarId = Guid.NewGuid(), IsAllDay = false, TimeZone = Ics.Zone,
+            Start = Local(2026, 10, 5, 10), End = Local(2026, 10, 5, 11),
+            Attendees = [new AttendeeRequest { Email = "marc.dupont@example.org" }, new AttendeeRequest { Email = sentBack }],
+        };
+        var validated = EventRequestValidator.Validate(request, ["marc.dupont@example.org", sentBack]);
+        Assert.True(validated.IsSuccess, validated.IsFailure ? validated.Error : null);
+
+        var ics = IcsComposer.RewriteAll(existing, validated.Value with { Repeat = Weekly(), Organizer = Alice }, Now);
+
+        var attendees = ics.Replace("\r\n ", string.Empty).Split("\r\n").Where(l => l.StartsWith("ATTENDEE", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, attendees.Count);
+        Assert.Contains(guest, attendees);
+    }
+
+    // Ical.Net's attendee copy invents RSVP=FALSE; no gesture that copies the model may carry it out.
+    [Fact]
+    public void Rewrites_NeverInventAnRsvp()
+    {
+        var existing = IcsDocument.TryLoad(InvitationParserTests.Fixture("webmail-invited"))!;
+        var write = Write(start: Local(2026, 10, 5, 10), end: Local(2026, 10, 5, 11), tz: Ics.Zone, repeat: Weekly());
+
+        Assert.DoesNotContain("RSVP=FALSE", IcsComposer.RewriteAll(existing, write, Now));
+        Assert.DoesNotContain("RSVP=FALSE", IcsComposer.RewriteOne(existing, "20261012T100000", write with { Repeat = null, Start = Local(2026, 10, 12, 14), End = Local(2026, 10, 12, 15) }, Now));
+        Assert.DoesNotContain("RSVP=FALSE", IcsComposer.Split(existing, "20261012T100000", write, "u2", Now).Following);
+    }
+
+    // A guest may answer one occurrence differently from the series: each component keeps its own.
+    [Fact]
+    public void Rewrites_KeepEachComponentsOwnAnswer()
+    {
+        var existing = JulieDeclinesTheOverride();
+        var write = Write(start: Local(2026, 10, 5, 10), end: Local(2026, 10, 5, 11), tz: Ics.Zone,
+            attendees: [new("julie@example.net", null), new("paul@example.org", null)], organizer: Alice);
+
+        var all = IcsComposer.RewriteAll(existing, write with { Repeat = Weekly() }, Now);
+        Assert.Equal([(null, "ACCEPTED"), ("20261019T100000", "DECLINED")], JuliesAnswers(all));
+
+        var one = IcsComposer.RewriteOne(existing, "20261012T100000", write with { Start = Local(2026, 10, 12, 14), End = Local(2026, 10, 12, 15) }, Now);
+        Assert.Equal([(null, "ACCEPTED"), ("20261012T100000", "ACCEPTED"), ("20261019T100000", "DECLINED")], JuliesAnswers(one));
+    }
+
+    // The override at that date is the reference for who answered what to it, never the master.
+    [Fact]
+    public void RewriteOne_OnAnExistingOverride_KeepsTheAnswersGivenToThatOccurrence()
+    {
+        var existing = JulieDeclinesTheOverride();
+        var before = IcsDocument.Serialize(existing);
+        var write = Write(start: Local(2026, 10, 19, 16), end: Local(2026, 10, 19, 17), tz: Ics.Zone);
+
+        var untouched = IcsComposer.RewriteOne(existing, "20261019T100000", write, Now);
+        Assert.Equal([(null, "ACCEPTED"), ("20261019T100000", "DECLINED")], JuliesAnswers(untouched));
+        var moved = IcsDocument.Components(IcsDocument.TryLoad(untouched)!).Single(c => c.RecurrenceIdentifier is not null);
+        Assert.Equal("Alice (this date)", moved.Organizer!.CommonName);
+        Assert.Equal(2, moved.Attendees.Count);
+
+        var invited = IcsComposer.RewriteOne(existing, "20261019T100000",
+            write with { Attendees = [new("julie@example.net", null), new("paul@example.org", null)], Organizer = Alice }, Now);
+        Assert.Equal([(null, "ACCEPTED"), ("20261019T100000", "DECLINED")], JuliesAnswers(invited));
+        Assert.DoesNotContain("RSVP=FALSE", invited);
+        Assert.All(IcsDocument.Components(IcsDocument.TryLoad(invited)!), c =>
+        {
+            Assert.Equal("mailto:alice@weesky.be", c.Organizer!.Value!.ToString());
+            Assert.Equal("Alice", c.Organizer.CommonName);
+        });
+        Assert.Equal(before, IcsDocument.Serialize(existing));
+    }
+
+    // The override names no ORGANIZER of its own: the guest list still writes one on it, and the
+    // empty list still takes the master's away.
+    [Fact]
+    public void RewriteOne_OnAnOverrideWithoutOrganizer_WritesOrRemovesItLikeEverywhereElse()
+    {
+        const string line = "ORGANIZER;CN=Alice:mailto:alice@weesky.be\r\n";
+        var fixture = InvitationParserTests.Fixture("webmail-invited-override");
+        var at = fixture.LastIndexOf(line, StringComparison.Ordinal);
+        Assert.True(at > fixture.IndexOf(line, StringComparison.Ordinal));
+        var existing = IcsDocument.TryLoad(fixture[..at] + fixture[(at + line.Length)..])!;
+        Assert.Null(IcsDocument.Components(existing).Single(c => c.RecurrenceIdentifier is not null).Organizer);
+        var write = Write(start: Local(2026, 10, 19, 16), end: Local(2026, 10, 19, 17), tz: Ics.Zone,
+            attendees: [new("julie@example.net", null), new("paul@example.org", null)], organizer: Alice);
+
+        var invited = IcsDocument.TryLoad(IcsComposer.RewriteOne(existing, "20261019T100000", write, Now))!;
+        Assert.Equal(2, IcsDocument.Components(invited).Count());
+        Assert.All(IcsDocument.Components(invited), c => Assert.Equal("mailto:alice@weesky.be", c.Organizer?.Value?.ToString()));
+
+        var emptied = IcsDocument.TryLoad(IcsComposer.RewriteOne(existing, "20261019T100000", write with { Attendees = [], Organizer = null }, Now))!;
+        Assert.All(IcsDocument.Components(emptied), c => { Assert.Null(c.Organizer); Assert.Empty(c.Attendees); });
+    }
+
+    /// <summary>The override fixture where Julie declined 19 October alone, under an ORGANIZER line
+    /// of its own so that its origin shows.</summary>
+    private static IcsCalendar JulieDeclinesTheOverride()
+    {
+        var fixture = InvitationParserTests.Fixture("webmail-invited-override");
+        const string accepted = "PARTSTAT=ACCEPTED:mailto:Julie@Example.net";
+        const string organizer = "ORGANIZER;CN=Alice:";
+        var at = fixture.LastIndexOf(accepted, StringComparison.Ordinal);
+        fixture = fixture[..at] + "PARTSTAT=DECLINED:mailto:Julie@Example.net" + fixture[(at + accepted.Length)..];
+        at = fixture.LastIndexOf(organizer, StringComparison.Ordinal);
+        return IcsDocument.TryLoad(fixture[..at] + "ORGANIZER;CN=Alice (this date):" + fixture[(at + organizer.Length)..])!;
+    }
+
+    private static IEnumerable<(string?, string?)> JuliesAnswers(string ics) =>
+        IcsDocument.Components(IcsDocument.TryLoad(ics)!)
+            .Select(c => (IcsDocument.InstanceIdOf(c) is { Length: > 0 } id ? id : null,
+                c.Attendees.Single(a => a.Value!.ToString().EndsWith("julie@example.net", StringComparison.OrdinalIgnoreCase)).ParticipationStatus))
+            .OrderBy(p => p.Item1, StringComparer.Ordinal);
+
+    private static string AttendeeLine(string ics, string address) =>
+        ics.Replace("\r\n ", string.Empty).Split("\r\n").Single(l => l.StartsWith("ATTENDEE", StringComparison.Ordinal) && l.EndsWith(":mailto:" + address, StringComparison.Ordinal));
+
+    private static void AssertTheSeriesInvites(string ics, int components)
+    {
+        var parsed = IcsDocument.Components(IcsDocument.TryLoad(ics)!).ToList();
+        Assert.Equal(components, parsed.Count);
+        foreach (var component in parsed)
+        {
+            Assert.Equal("mailto:alice@weesky.be", component.Organizer!.Value!.ToString());
+            Assert.Equal(["julie@example.net", "paul@example.org"], component.Attendees.Select(a => a.Value!.ToString()["mailto:".Length..]).Order());
+            Assert.Equal("ACCEPTED", component.Attendees.Single(a => a.Value!.ToString().EndsWith("julie@example.net", StringComparison.Ordinal)).ParticipationStatus);
+            Assert.Equal("NEEDS-ACTION", component.Attendees.Single(a => a.Value!.ToString().EndsWith("paul@example.org", StringComparison.Ordinal)).ParticipationStatus);
+        }
+    }
+
     private static CalendarEvent Override(string ics) =>
         IcsDocument.TryLoad(ics)!.Events.Single(e => e.RecurrenceIdentifier is not null);
 
@@ -412,9 +723,11 @@ public sealed class IcsComposerTests
     private static EventWrite Write(
         DateTime? start = null, DateTime? end = null, string? tz = null, RecurrenceWrite? repeat = null,
         (DateOnly Start, DateOnly EndInclusive)? allDay = null, IReadOnlyList<int>? reminders = null,
-        Availability availability = Availability.Busy, Visibility visibility = Visibility.Default, string? url = null) =>
+        Availability availability = Availability.Busy, Visibility visibility = Visibility.Default, string? url = null,
+        IReadOnlyList<AttendeeWrite>? attendees = null, OrganizerWrite? organizer = null) =>
         new(Guid.Empty, "Standup", null, null, allDay is not null, start, end, tz,
-            allDay?.Start, allDay?.EndInclusive, repeat, reminders ?? [], availability, visibility, url);
+            allDay?.Start, allDay?.EndInclusive, repeat, reminders ?? [], availability, visibility, url,
+            Attendees: attendees, Organizer: organizer);
 
     private static EventWrite WriteAllDay(DateOnly day) => Write(allDay: (day, day));
 

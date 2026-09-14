@@ -557,6 +557,18 @@
 .editor-attendee { display: flex; align-items: center; gap: 8px; }
 .editor-organizer { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
 .editor-my-answer { font-weight: 600; }
+/* The guest list with its answers — preview and editor. The dot is the answer, the word says it
+   for a screen reader and a colour-blind eye alike. */
+.attendee-status { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.attendee-status li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.attendee-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attendee-answer { color: var(--text-muted); flex: none; }
+.attendee-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--text-muted); background: transparent; }
+.attendee-dot.is-accepted { background: var(--success); border-color: var(--success); }
+.attendee-dot.is-tentative { background: var(--action-primary); border-color: var(--action-primary); }
+.attendee-dot.is-declined { background: var(--danger); border-color: var(--danger); }
+.event-preview .attendee-status { margin-left: 20px; }
+.field-h > .attendee-status { flex: 1; min-width: 0; }
 .editor-error {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px;
   color: var(--danger); font-size: 13px;

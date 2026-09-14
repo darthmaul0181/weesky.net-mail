@@ -1,10 +1,12 @@
 using System.Globalization;
 using NodaTime;
+using weesky.Snoopy.Microservice.Models.Calendar;
 
 namespace weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 
-/// <summary>The words of a REPLY, in the two languages the webmail speaks. French carries its
-/// non-breaking spaces (U+00A0) before ':' and inside « ». Anything but "fr" is English.</summary>
+/// <summary>The words of a REPLY and of the organizer's mails, in the two languages the webmail
+/// speaks. French carries its non-breaking spaces (U+00A0) before ':' and inside « ». Anything but
+/// "fr" is English.</summary>
 internal static class InvitationText
 {
     private const string Nbsp = "\u00A0";
@@ -31,7 +33,7 @@ internal static class InvitationText
 
     internal static string Subject(string partStat, string? summary, string language)
     {
-        var title = string.IsNullOrWhiteSpace(summary) ? (IsFrench(language) ? "(sans titre)" : "(no title)") : summary;
+        var title = Title(summary, language);
         var word = (IsFrench(language), partStat) switch
         {
             (true, "ACCEPTED") => "Accept\u00e9" + Nbsp + ":",
@@ -46,7 +48,7 @@ internal static class InvitationText
 
     internal static string Body(string who, string partStat, string? summary, string when, string language)
     {
-        var title = string.IsNullOrWhiteSpace(summary) ? (IsFrench(language) ? "(sans titre)" : "(no title)") : summary;
+        var title = Title(summary, language);
         if (IsFrench(language))
         {
             var verb = partStat switch
@@ -61,6 +63,43 @@ internal static class InvitationText
         };
         return $"{who} {english} the invitation \u201C{title}\u201D on {when}.";
     }
+
+    internal static string OrganizerSubject(MailKind kind, string? summary, string language)
+    {
+        var fr = IsFrench(language);
+        var head = (kind, fr) switch
+        {
+            (MailKind.Invitation, _) => "Invitation",
+            (MailKind.Update, true) => "Mise \u00e0 jour",
+            (MailKind.Update, false) => "Updated",
+            (_, true) => "Annulation",
+            (_, false) => "Cancelled",
+        };
+        return head + (fr ? Nbsp + ": " : ": ") + Title(summary, language);
+    }
+
+    /// <summary>The organizer's plain text (décision 11): title, when, where, by whom, then how to answer.</summary>
+    internal static string OrganizerBody(MailKind kind, string? summary, string when, string? location, string organizer, string language)
+    {
+        var fr = IsFrench(language);
+        List<string> lines = [Title(summary, language), (fr ? "Quand" + Nbsp + ": " : "When: ") + when];
+        if (!string.IsNullOrWhiteSpace(location)) lines.Add((fr ? "O\u00f9" + Nbsp + ": " : "Where: ") + OneLine(location));
+        lines.Add((fr ? "Organis\u00e9 par " : "Organised by ") + organizer);
+        lines.Add(string.Empty);
+        lines.Add((kind, fr) switch
+        {
+            (MailKind.Cancellation, true) => "Ce rendez-vous est annul\u00e9.",
+            (MailKind.Cancellation, false) => "This event is cancelled.",
+            (_, true) => "R\u00e9pondez depuis votre agenda, ou par retour de mail.",
+            (_, false) => "Reply from your calendar, or by return mail.",
+        });
+        return string.Join("\r\n", lines);
+    }
+
+    private static string Title(string? summary, string language) =>
+        string.IsNullOrWhiteSpace(summary) ? (IsFrench(language) ? "(sans titre)" : "(no title)") : OneLine(summary);
+
+    private static string OneLine(string value) => value.ReplaceLineEndings(" ").Trim();
 
     private static bool IsFrench(string language) => language.StartsWith("fr", StringComparison.OrdinalIgnoreCase);
     private static CultureInfo Culture(string language) => CultureInfo.GetCultureInfo(IsFrench(language) ? "fr-FR" : "en-GB");

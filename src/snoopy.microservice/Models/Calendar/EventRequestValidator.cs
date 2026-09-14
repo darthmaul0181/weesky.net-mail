@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using weesky.Snoopy.Microservice.Services;
 using weesky.Snoopy.Microservice.Services.Calendar;
 
 namespace weesky.Snoopy.Microservice.Models.Calendar;
@@ -18,6 +19,10 @@ internal static class EventRequestValidator
     /// would silently drop a rule the user chose.</summary>
     internal const string KeepRepeatIsExclusive = "keepRepeat and repeat are exclusive";
 
+    internal const int MaxAttendees = 100;
+    internal const string TooManyAttendees = "At most 100 attendees";
+    internal const string InvalidAttendee = "An attendee needs a valid address";
+
     /// <summary>RFC 5545 § 3.3.10's own ranges: a day of the month, the position a BYSETPOS picks
     /// out of a year, and the ordinal a BYDAY code may carry. Bounded here so an out-of-range value
     /// is a refusal in the editor's words rather than a rule the engine silently never fires.</summary>
@@ -29,7 +34,11 @@ internal static class EventRequestValidator
 
     private static readonly string[] Weekdays = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
-    internal static Result<EventWrite> Validate(EventRequest request)
+    /// <param name="request">the body</param>
+    /// <param name="storedAddresses">the addresses the stored event already lists, as the projector
+    /// reads them: such a guest is the file's own line, kept by the composer, so only a new address
+    /// has to be a plain mailto one</param>
+    internal static Result<EventWrite> Validate(EventRequest request, IEnumerable<string>? storedAddresses = null)
     {
         if (request == null) return Result.Failure<EventWrite>("Request body is required");
         if (request.KeepRepeat && request.Repeat is not null) return Result.Failure<EventWrite>(KeepRepeatIsExclusive);
@@ -74,11 +83,32 @@ internal static class EventRequestValidator
                 return Result.Failure<EventWrite>($"Reminder must be between 0 and {MaxReminderMinutes} minutes");
         }
 
+        IReadOnlyList<AttendeeWrite>? attendees = null;
+        if (request.Attendees is { } guests)
+        {
+            if (guests.Count > MaxAttendees) return Result.Failure<EventWrite>(TooManyAttendees);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var stored = (storedAddresses ?? []).Select(AttendeeKey).ToHashSet(StringComparer.Ordinal);
+            var list = new List<AttendeeWrite>();
+            foreach (var guest in guests)
+            {
+                var email = AttendeeKey(guest?.Email);
+                if (!stored.Contains(email) && (email.Length > IcsGuards.MaxEmailLength || !ContactValidator.IsValidAddress(email) || !IcsComposer.IsMailtoAddress(email)))
+                    return Result.Failure<EventWrite>(InvalidAttendee);
+                if (seen.Add(email)) list.Add(new AttendeeWrite(email, IcsComposer.CommonName(guest!.Name)));
+            }
+            attendees = list;
+        }
+
         return Result.Success(new EventWrite(
             request.CalendarId, Blank(request.Summary), Blank(request.Location), Blank(request.Description),
             request.IsAllDay, start, end, timeZone, startDate, endDate, repeat, reminders,
-            request.Availability, request.Visibility, Blank(request.Url), request.KeepRepeat));
+            request.Availability, request.Visibility, Blank(request.Url), request.KeepRepeat, attendees));
     }
+
+    /// <summary>Never decoded: a stored address comes already decoded by the projector, exactly as the
+    /// composer reads it, and a second decoding would let through a guest the composer cannot find.</summary>
+    private static string AttendeeKey(string? email) => (email ?? string.Empty).Trim().ToLowerInvariant();
 
     private static Result<RecurrenceWrite> ValidateRecurrence(RecurrenceRequest request)
     {

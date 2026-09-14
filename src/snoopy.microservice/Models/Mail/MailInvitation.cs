@@ -1,6 +1,6 @@
 namespace weesky.Snoopy.Microservice.Models.Mail;
 
-public enum InvitationMethod { Request, Cancel }
+public enum InvitationMethod { Request, Cancel, Reply }
 
 /// <summary>What the calendar holds for the received UID (spec 5e, décision 3).</summary>
 public enum InvitationPresence { Absent, Current, Outdated, Newer, Cancelled }
@@ -9,7 +9,7 @@ public sealed record InvitationPerson(string Email, string? Name);
 
 /// <summary>
 /// The <c>invitation</c> block of a message detail, and the answer of the respond endpoint. Filled
-/// when the message carries a calendar part whose METHOD is REQUEST or CANCEL; <see cref="Unreadable"/>
+/// when the message carries a calendar part whose METHOD is REQUEST, CANCEL or REPLY; <see cref="Unreadable"/>
 /// when that part fails the guards every stored file passes, in which case only <see cref="Part"/>
 /// and <see cref="Reason"/> are set.
 /// </summary>
@@ -40,6 +40,8 @@ public sealed class MailInvitation
     public Guid? CalendarId { get; init; }
     /// <summary>The file targets one date of a series (RECURRENCE-ID without a master): shown, never applied (décision 1 bis).</summary>
     public bool OccurrenceOnly { get; init; }
+    /// <summary>Set on a REPLY: the guest and their answer (décision 12); null on a REQUEST or a CANCEL.</summary>
+    public InvitationReply? Reply { get; init; }
     /// <summary>The MIME part specifier the respond endpoint re-reads the file by (décision 4).</summary>
     public string Part { get; init; } = string.Empty;
     public bool Unreadable { get; init; }

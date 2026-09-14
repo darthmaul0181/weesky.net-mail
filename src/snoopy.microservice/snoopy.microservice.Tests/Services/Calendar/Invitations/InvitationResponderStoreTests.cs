@@ -46,7 +46,7 @@ public sealed class InvitationResponderStoreTests : IAsyncLifetime
             .ReturnsAsync(Result.Success(new SendMessageResult(true)));
         _profiles.Setup(p => p.GetDisplayNameAsync(user, None)).ReturnsAsync("Alice");
         Part(InvitationParserTests.Fixture("google-request"));
-        responder = new InvitationResponder(_messages.Object, new InvitationReader(_addresses.Object, events),
+        responder = new InvitationResponder(_messages.Object, new InvitationPartLoader(_messages.Object), new InvitationReader(_addresses.Object, events),
             new CalendarStore(context, sync), writer, _sender.Object, _locator.Object, _profiles.Object,
             NullLogger<InvitationResponder>.Instance);
     }

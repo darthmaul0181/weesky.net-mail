@@ -1,5 +1,6 @@
 using System.Globalization;
 using MimeKit;
+using weesky.Snoopy.Microservice.Services.Calendar;
 using weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 using Xunit;
 
@@ -99,5 +100,18 @@ public sealed class ReplyComposerTests
 
         Assert.Single(ics.Split("\r\n"), line => line.StartsWith("ATTENDEE"));
         Assert.DoesNotContain("mailto:mallory@example.org\r\n", ics);
+    }
+
+    [Fact]
+    public void Calendar_CleansNamesThroughTheOneSharedHygiene()
+    {
+        var ics = ReplyComposer.Calendar(Input() with { FromName = "Alice\tMartin", OrganizerName = "\"\"" });
+
+        Assert.Contains("ATTENDEE;PARTSTAT=ACCEPTED;CN=Alice Martin:mailto:alice@weesky.be\r\n", ics);
+        Assert.Contains("ORGANIZER:mailto:marc.dupont@example.org\r\n", ics);
+
+        var tooLong = new string('a', IcsComposer.MaxCommonNameLength) + ", Alice";
+        Assert.Contains(PartStatRewriter.Unfold(ReplyComposer.Calendar(Input() with { FromName = tooLong })),
+            line => line.Text.StartsWith($"ATTENDEE;PARTSTAT=ACCEPTED;CN={IcsComposer.CommonName(tooLong)}:mailto:", StringComparison.Ordinal));
     }
 }

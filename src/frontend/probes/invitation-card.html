@@ -1,6 +1,7 @@
 <!doctype html>
 <!--
-  Probe: the invitation card in the reader, in its seven states (spec 5e, décision 3), FR and EN.
+  Probe: the invitation card in the reader, in its seven states (spec 5e, décision 3), the three a
+  guest's reply takes and the answer with no address to reply to (décision 12), FR and EN.
 
   What no test in this repo can see. The card is a labelled grid inside a column that is
   `overflow: hidden`, so a value too wide for it is cut off rather than scrollable, and jsdom
@@ -27,6 +28,24 @@
               `Organiser` fit the 88px; one card reporting two values is the regression.
     actions   32-33 at 900 — one line, the combo and the three answers side by side — and WRAP
               at 400 on states 1, 2 and 5, which is expected there and is not a fault.
+
+  5e2 added states 8-11: a reply applied (check), one read-only (the longest sentence, Superseded),
+  one not recorded with Retry, and an answer whose file gives no address to reply to. Three more
+  readings:
+
+    lignes    line boxes of the answer's own text — 1 everywhere at 900.
+    erreur    the error sentence and its button on one line (`erreur 1`) or not (`erreur WRAP`).
+    glyphes   worst `scrollHeight - clientHeight` over the title, badge, answer, error, context,
+              hint and buttons: a positive number is a descender cut at its own box. Its positive
+              control, `controle`, is a `gjpqy` span cut on purpose (line-height 1, overflow
+              hidden) outside every card: it must read above 0, or the metric sees no ink.
+
+  Measured 2026-09-13, re-measured 2026-09-14 after the no-address wording (same numbers),
+  headless Edge, window 1400, viewport 1366x1306, over all 44 cards:
+    escape 0 in all 88 readings; libelles 188 at 400 and 612 at 900, one value per card.
+    lignes 1 at 900 in every state; at 400, 2 on the read-only reply (the sentence wraps, expected).
+    erreur 1 at 900 (FR and EN) and at 400 EN; WRAP at 400 FR only, Réessayer under its sentence.
+    glyphes 0 in all 88 readings, against controle 2. actions unchanged: no WRAP at 900.
 
   The loop skips any node with no box: the calendar `<select>`'s `<option>` elements are laid
   out by the widget and answer a zero-sized rect at the origin, which once read as an overhang
@@ -61,6 +80,8 @@
 <body>
   <div class="col-400"><div class="col-label">reader column 400px</div><div class="mail-reader"></div></div>
   <div class="col-900"><div class="col-label">reader column 900px</div><div class="mail-reader"></div></div>
+  <!-- The glyphes positive control: text deliberately cut at its own box, never part of a card. -->
+  <span id="clipped-control" style="display: inline-block; font-size: 15px; line-height: 1; overflow: hidden">gjpqy</span>
   <div id="out"></div>
 
   <script>
@@ -85,6 +106,11 @@
         noAction: 'Votre agenda porte une version plus récente de ce rendez-vous.',
         unreadable: 'Invitation illisible',
         unreadableHint: 'Le fichier d’agenda n’a pas pu être lu. Il reste disponible en pièce jointe.',
+        reply: 'Réponse', guest: 'Chloé Vandersteen',
+        replyApplied: 'Chloé Vandersteen a répondu peut-être',
+        replyReadOnly: 'Chloé Vandersteen a répondu peut-être · une réponse plus récente est déjà dans l’agenda',
+        notApplied: 'Réponse non enregistrée dans l’agenda.', retry: 'Réessayer',
+        noOrganizer: 'Ajouté à l’agenda. L’invitation ne donne aucune adresse où envoyer la réponse.',
       },
       en: {
         badge: 'Invitation', update: 'Update', cancel: 'Cancelled',
@@ -102,18 +128,24 @@
         noAction: 'Your calendar holds a newer version of this event.',
         unreadable: 'Unreadable invitation',
         unreadableHint: 'The calendar file could not be read. It stays available as an attachment.',
+        reply: 'Reply', guest: 'Chloé Vandersteen',
+        replyApplied: 'Chloé Vandersteen answered maybe',
+        replyReadOnly: 'Chloé Vandersteen answered maybe · a later reply is already in the calendar',
+        notApplied: 'Reply not recorded in the calendar.', retry: 'Retry',
+        noOrganizer: 'Added to your calendar. The invitation gives no address a reply can be sent to.',
       },
     }
 
     const btn = (label, pressed, kind = 'ghost') =>
       `<button type="button" class="btn ${kind === 'primary' ? 'btn-primary btn-auto' : kind === 'danger' ? 'btn-danger' : 'btn-ghost'}"${pressed ? ' aria-pressed="true"' : ''}>${label}</button>`
 
-    function rows(s) {
+    // A reply's card names the guest who answered, alone, on the Attendees row.
+    function rows(s, guests = s.guests) {
       return `<dl class="invitation-card-rows">
         <dt>${s.when}</dt><dd>${s.date}</dd>
         <dt>${s.where}</dt><dd>${s.place}</dd>
         <dt>${s.organizer}</dt><dd>${s.who}</dd>
-        <dt>${s.attendees}</dt><dd>${s.guests}</dd></dl>`
+        <dt>${s.attendees}</dt><dd>${guests}</dd></dl>`
     }
 
     // One entry per state of the mock-up: the badge it wears, the sentence above the rows, and
@@ -122,6 +154,8 @@
       const three = btn(s.accept, false, 'primary') + btn(s.tentative) + btn(s.decline)
       const picker = `<div class="dropdown-root is-left"><button type="button" class="calendar-select" aria-label="${s.calendar}" aria-expanded="false"><span class="calendar-swatch" aria-hidden="true" style="--cal: #2e7d5b"></span><span class="calendar-select-name">Personnel</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>`
       const check = '<span class="invitation-card-check" aria-hidden="true">✓</span>'
+      const said = (text, muted = false) =>
+        `<div class="invitation-card-actions is-answered"><span class="invitation-card-answer${muted ? ' is-muted' : ''}">${text}</span></div>`
       return [
         ['1 invite', s.badge, 'request', null, `<div class="invitation-card-actions">${picker}${three}</div>`],
         ['2 answered', s.badge, 'request', null,
@@ -137,6 +171,15 @@
              <span class="invitation-card-others">${btn(s.remove, false, 'danger')}</span></div>`],
         ['6 noAction', s.badge, 'request', null, `<p class="invitation-card-hint">${s.noAction}</p>`],
         ['7 unreadable', null, null, null, null],
+        ['8 replyApplied', s.reply, 'reply', null, said(check + s.replyApplied)],
+        ['9 replyReadOnly', s.reply, 'reply', null, said(s.replyReadOnly, true)],
+        ['10 replyRetry', s.reply, 'reply', null,
+          said(s.replyApplied) + `<p class="invitation-card-error">${s.notApplied}${btn(s.retry)}</p>`],
+        ['11 noOrganizer', s.badge, 'request', null,
+          `<div class="invitation-card-actions is-answered">
+             <span class="invitation-card-answer">${check}${s.answered}</span>
+             <span class="invitation-card-others">${btn(s.tentative)}${btn(s.decline)}</span></div>
+           <p class="invitation-card-context">${s.noOrganizer}</p>`],
       ]
     }
 
@@ -153,7 +196,7 @@
              <span class="invitation-card-title">${s.title}</span>
              <span class="invitation-card-badge is-${kind}">${badge}</span></div>
            ${context ? `<p class="invitation-card-context">${context}</p>` : ''}
-           ${rows(s)}${foot}`
+           ${rows(s, kind === 'reply' ? s.guest : s.guests)}${foot}`
       return el
     }
 
@@ -191,12 +234,31 @@
           const tall = actions.getBoundingClientRect().height > button.getBoundingClientRect().height + 4
           line += `  actions ${ceil(actions.getBoundingClientRect().height)}` + (tall ? ' WRAP' : '')
         }
+        // Line boxes of the answer's own text: one at 900 in every language, or the row wrapped.
+        const answer = el.querySelector('.invitation-card-answer')
+        if (answer) {
+          const range = document.createRange()
+          range.selectNodeContents(answer.lastChild)
+          line += `  lignes ${new Set([...range.getClientRects()].map(r => Math.round(r.top))).size}`
+        }
+        // The Retry beside its sentence: one line, as the Resend row is.
+        const error = el.querySelector('.invitation-card-error')
+        const errorButton = error?.querySelector('.btn')
+        if (error && errorButton)
+          line += error.getBoundingClientRect().height > errorButton.getBoundingClientRect().height + 4 ? '  erreur WRAP' : '  erreur 1'
+        // Descenders: no styled text is cut at its own box.
+        const clipped = [...el.querySelectorAll('.invitation-card-title, .invitation-card-badge, .invitation-card-answer, .invitation-card-error, .invitation-card-context, .invitation-card-hint, .btn')]
+          .reduce((worst, node) => Math.max(worst, node.scrollHeight - node.clientHeight), 0)
+        line += `  glyphes ${clipped}`
         report[`${width} ${el.dataset.case}`] = line
       }
     }
 
+    const control = document.getElementById('clipped-control')
+    report['controle'] = `glyphes ${control.scrollHeight - control.clientHeight} (gjpqy, line-height 1, overflow hidden)`
+
     document.getElementById('out').textContent =
-      Object.entries(report).map(([k, v]) => k.padEnd(22) + v).join('\n')
+      Object.entries(report).map(([k, v]) => k.padEnd(25) + v).join('\n')
     document.title = 'probe-done'
   </script>
 </body>

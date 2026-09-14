@@ -13,7 +13,7 @@
     "domains": "Un domaine est un domaine de messagerie hébergé directement sur ce serveur (p. ex. example.com). Chaque compte utilisateur appartient à un seul domaine. Ajouter un domaine permet de créer des boîtes de la forme utilisateur@example.com.",
     "virtualdomains": "Un domaine d’alias virtuel est un domaine sans boîte propre. Les messages envoyés à une adresse de ce domaine sont redirigés vers de vraies boîtes par des règles d’alias. Chaque domaine d’alias virtuel peut avoir un ou plusieurs propriétaires — des comptes autorisés à y créer et gérer des alias.",
     "externaldomains": "Définit les fournisseurs de messagerie externes depuis lesquels les utilisateurs peuvent connecter un compte.",
-    "application": "Propose le webmail à l’installation en tant qu’application de bureau : les navigateurs affichent alors une icône d’installation dans la barre d’adresse, et l’application s’ouvre dans sa propre fenêtre. Le nom et le nom court sont ce que les utilisateurs voient sous l’icône. Désactiver ce réglage cesse de le proposer — cela ne désinstalle l’application chez personne."
+    "application": "Propose le webmail à l’installation en tant qu’application de bureau : les navigateurs affichent alors une icône d’installation dans la barre d’adresse, et l’application s’ouvre dans sa propre fenêtre. Le nom et le nom court sont ce que les utilisateurs voient sous l’icône. Désactiver ce réglage cesse de le proposer — cela ne désinstalle l’application chez personne. Plus bas : sans compte d’envoi, un rendez-vous modifié depuis un téléphone ou Thunderbird ne prévient pas les invités."
   },
   "accounts": {
     "title": "Comptes ({{total}})",
@@ -114,5 +114,37 @@
     "sievePort": "Port Sieve",
     "sieveMismatch": "L’hôte et le port Sieve doivent être tous deux renseignés ou tous deux vides",
     "sieveNote": "Laissez vide si le fournisseur ne prend pas en charge les filtres Sieve — l’onglet Règles sera masqué pour les comptes de ce domaine."
+  },
+  "scheduling": {
+    "title": "Compte d’envoi des invitations d’agenda",
+    "intro": "Quand un rendez-vous avec invités est modifié depuis un téléphone ou Thunderbird, le serveur envoie les invitations avec ce compte, au nom de l’organisateur. Sans lui, ces modifications ne préviennent personne.",
+    "loadFailed": "Impossible de charger le compte d’envoi.",
+    "testedOn": "Connexion testée le {{date}}",
+    "testFailed": "Dernier test échoué",
+    "test": "Tester",
+    "testSuccess": "Le test de connexion a réussi.",
+    "testUnknownError": "Le test de connexion a échoué.",
+    "configure": "Configurer",
+    "emptyTitle": "Aucun compte configuré : les modifications faites depuis un téléphone n’envoient pas d’invitations.",
+    "unreadableTitle": "Le mot de passe enregistré ne peut plus être lu. Ressaisissez-le pour reprendre l’envoi des invitations.",
+    "deleted": "Le compte d’envoi a été supprimé.",
+    "deleteFailed": "Impossible de supprimer le compte d’envoi.",
+    "saved": "Le compte d’envoi a été enregistré.",
+    "saveFailed": "Impossible d’enregistrer le compte d’envoi.",
+    "saveTimedOut": "L’enregistrement ne répond pas. Il a pu aboutir malgré tout : fermez cette fenêtre pour voir le compte, ou réessayez.",
+    "dialogTitle": "Compte d’envoi des invitations",
+    "host": "Hôte SMTP",
+    "port": "Port SMTP",
+    "security": "Sécurité SMTP",
+    "login": "Identifiant",
+    "password": "Mot de passe",
+    "passwordUnchanged": "Inchangé",
+    "passwordStoredNote": "Un mot de passe est enregistré. Il n’est jamais affiché ; laissez le champ vide pour le conserver.",
+    "passwordRequiredHint": "Un mot de passe est requis pour enregistrer ou tester ce compte.",
+    "testConnection": "Tester la connexion",
+    "testResultOk": "La connexion a réussi.",
+    "portWord": "port",
+    "refusedByServer": "Réglages refusés par le serveur : {{message}}",
+    "accountGone": "Le compte n’existe plus."
   }
 }

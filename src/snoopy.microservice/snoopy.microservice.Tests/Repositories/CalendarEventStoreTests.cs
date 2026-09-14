@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using weesky.Snoopy.Microservice.Data.Preferences;
 using weesky.Snoopy.Microservice.Models.Calendar;
 using weesky.Snoopy.Microservice.Repositories;
@@ -39,7 +40,7 @@ public sealed class CalendarEventStoreTests
     {
         var (db, user, cal) = await Seed(nameof(Create_ProjectsColumns_HashesAndRanks_UidIsId));
 
-        var id = (await Events(db).CreateAsync(user, Write(cal, start: Local(2026, 9, 7, 9)), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal, start: Local(2026, 9, 7, 9)), None)).Value.EventId;
 
         var row = await new PreferencesTestDbContext(db).CalendarEvents.SingleAsync(None);
         Assert.Equal(id.ToString(), row.Uid);
@@ -58,7 +59,7 @@ public sealed class CalendarEventStoreTests
     {
         var (db, user, cal) = await Seed(
             nameof(Update_All_ArchivesWebmailRevision_AdvancesRank_SkipsWhenNothingChanged));
-        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value.EventId;
         var before = (await Events(db).GetAsync(user, id, None))!;
 
         Assert.True((await Events(db).UpdateAsync(
@@ -83,7 +84,7 @@ public sealed class CalendarEventStoreTests
     public async Task Update_WithStaleHash_IsRefusedAsMoved()
     {
         var (db, user, cal) = await Seed(nameof(Update_WithStaleHash_IsRefusedAsMoved));
-        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value.EventId;
         var before = (await Events(db).GetAsync(user, id, None))!;
 
         var refused = await Events(db).UpdateAsync(
@@ -105,7 +106,7 @@ public sealed class CalendarEventStoreTests
     public async Task Update_WhenAnotherWriterLandedFirst_IsRefusedAsMoved()
     {
         var (db, user, cal) = await Seed(nameof(Update_WhenAnotherWriterLandedFirst_IsRefusedAsMoved));
-        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value.EventId;
 
         // One store keeps the row tracked from a first save of its own — a live editor's session.
         var mine = Events(db);
@@ -137,7 +138,7 @@ public sealed class CalendarEventStoreTests
     public async Task ANarrowScopeOnAnEventThatDoesNotRepeat_IsTheWholeEvent()
     {
         var (db, user, cal) = await Seed(nameof(ANarrowScopeOnAnEventThatDoesNotRepeat_IsTheWholeEvent));
-        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value.EventId;
         var read = (await Events(db).GetAsync(user, id, None))!;
 
         Assert.True((await Events(db).UpdateAsync(
@@ -162,7 +163,7 @@ public sealed class CalendarEventStoreTests
     {
         var (db, user, cal) = await Seed(nameof(ThisAndFollowing_CutAtTheSeriesOwnStart_IsTheWholeSeries));
         var id = (await Events(db).CreateAsync(
-            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
         var read = (await Events(db).GetAsync(user, id, None))!;
 
         Assert.True((await Events(db).UpdateAsync(
@@ -186,7 +187,7 @@ public sealed class CalendarEventStoreTests
         var full = (await CalendarStoreTestFactory.Calendars(db).CreateAsync(
             user, new CalendarWrite("Full", null, null, null), "Europe/Brussels", None)).Value;
         var id = (await Events(db).CreateAsync(
-            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
         var read = (await Events(db).GetAsync(user, id, None))!;
 
         var seed = new PreferencesTestDbContext(db);
@@ -216,7 +217,7 @@ public sealed class CalendarEventStoreTests
     {
         var (db, user, cal) = await Seed(nameof(Update_ThisOnly_ThenDelete_ThisOnly));
         var id = (await Events(db).CreateAsync(
-            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
         var before = (await Events(db).GetAsync(user, id, None))!;
 
         Assert.True((await Events(db).UpdateAsync(
@@ -242,7 +243,7 @@ public sealed class CalendarEventStoreTests
         var (db, user, cal) = await Seed(
             nameof(Update_ThisAndFollowing_CreatesASecondRow_InOneTransaction));
         var id = (await Events(db).CreateAsync(
-            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
         var before = (await Events(db).GetAsync(user, id, None))!;
 
         Assert.True((await Events(db).UpdateAsync(
@@ -264,7 +265,7 @@ public sealed class CalendarEventStoreTests
         var (db, user, cal) = await Seed(nameof(Update_ToAnotherCalendar_TombstonesOld_RanksNew));
         var work = (await CalendarStoreTestFactory.Calendars(db).CreateAsync(
             user, new CalendarWrite("Work", null, null, null), "Europe/Brussels", None)).Value;
-        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value.EventId;
         var before = (await Events(db).GetAsync(user, id, None))!;
 
         Assert.True((await Events(db).UpdateAsync(
@@ -300,7 +301,7 @@ public sealed class CalendarEventStoreTests
         var work = (await CalendarStoreTestFactory.Calendars(db).CreateAsync(
             user, new CalendarWrite("Work", null, null, null), "Europe/Brussels", None)).Value;
         var id = (await Events(db).CreateAsync(
-            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
         var read = (await Events(db).GetAsync(user, id, None))!;
 
         var refused = await Events(db).UpdateAsync(
@@ -354,7 +355,7 @@ public sealed class CalendarEventStoreTests
     {
         var (db, user, cal) = await Seed(nameof(ARecurrenceIdInZForm_AddressesTheSameInstanceOfAZonedSeries));
         var id = (await Events(db).CreateAsync(
-            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
         var read = (await Events(db).GetAsync(user, id, None))!;
 
         Assert.True((await Events(db).UpdateAsync(
@@ -423,7 +424,7 @@ public sealed class CalendarEventStoreTests
     public async Task Delete_All_ArchivesDelete_AndTombstones()
     {
         var (db, user, cal) = await Seed(nameof(Delete_All_ArchivesDelete_AndTombstones));
-        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value.EventId;
 
         Assert.True((await Events(db).DeleteAsync(user, id, EditScope.All, null, None)).IsSuccess);
 
@@ -466,7 +467,7 @@ public sealed class CalendarEventStoreTests
     {
         var (db, user, cal) = await Seed(nameof(Delete_ThisAndFollowing_KeepsOnlyWhatCameBefore));
         var id = (await Events(db).CreateAsync(
-            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, repeat: CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
 
         Assert.True((await Events(db).DeleteAsync(
             user, id, EditScope.ThisAndFollowing, "20260921T090000", None)).IsSuccess);
@@ -487,10 +488,10 @@ public sealed class CalendarEventStoreTests
     {
         var (db, user, cal) = await Seed(nameof(Window_UsesColumnsToPreselect_ThenExpands));
         var inside = (await Events(db).CreateAsync(
-            user, Write(cal, Local(2026, 9, 9, 9), "Inside"), None)).Value;
+            user, Write(cal, Local(2026, 9, 9, 9), "Inside"), None)).Value.EventId;
         await Events(db).CreateAsync(user, Write(cal, Local(2026, 10, 20, 9), "Outside"), None);
         var endless = (await Events(db).CreateAsync(
-            user, Write(cal, Local(2026, 8, 3, 9), "Endless", CalendarStoreTestFactory.Weekly()), None)).Value;
+            user, Write(cal, Local(2026, 8, 3, 9), "Endless", CalendarStoreTestFactory.Weekly()), None)).Value.EventId;
 
         var found = (await Events(db).WindowAsync(
             user, Utc(2026, 9, 7), Utc(2026, 9, 14), "Europe/Brussels", None)).Value;
@@ -583,7 +584,7 @@ public sealed class CalendarEventStoreTests
     public async Task Get_AnswersNothingForAnotherUsersEvent()
     {
         var (db, user, cal) = await Seed(nameof(Get_AnswersNothingForAnotherUsersEvent));
-        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+        var id = (await Events(db).CreateAsync(user, Write(cal), None)).Value.EventId;
 
         Assert.Null(await Events(db).GetAsync(Guid.NewGuid(), id, None));
         Assert.Equal(CalendarEventStore.NotFound,
@@ -640,6 +641,150 @@ public sealed class CalendarEventStoreTests
         Assert.Empty(await store.FindByUidAsync(Guid.NewGuid(), inOther.Uid, None));
     }
 
+    [Fact]
+    public async Task FindByUid_CarriesWhoSendsTheInvitations()
+    {
+        var (db, user, cal) = await Seed(Guid.NewGuid().ToString());
+        var store = Events(db);
+        await store.CreateAsync(user, Write(cal), None);
+        var context = new PreferencesTestDbContext(db);
+        var row = await context.CalendarEvents.SingleAsync(None);
+        Assert.Null(Assert.Single(await store.FindByUidAsync(user, row.Uid, None)).SchedulingOwner);
+
+        row.SchedulingOwner = "webmail";
+        await context.SaveChangesAsync(None);
+
+        Assert.Equal("webmail", Assert.Single(await store.FindByUidAsync(user, row.Uid, None)).SchedulingOwner);
+    }
+
+    [Fact]
+    public async Task FindByUid_CarriesTheHashTheETagIsBuiltFrom()
+    {
+        var (db, user, cal) = await Seed(Guid.NewGuid().ToString());
+        var store = Events(db);
+        await store.CreateAsync(user, Write(cal), None);
+        var row = await new PreferencesTestDbContext(db).CalendarEvents.SingleAsync(None);
+
+        var found = Assert.Single(await store.FindByUidAsync(user, row.Uid, None));
+
+        Assert.NotEmpty(row.IcsHash);
+        Assert.Equal(row.IcsHash, found.IcsHash);
+    }
+
+    [Fact]
+    public async Task Create_Update_Delete_ReportWhatTheyChanged()
+    {
+        var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var store = CalendarStoreTestFactory.Events(db);
+
+        var created = (await store.CreateAsync(user, CalendarStoreTestFactory.Write(calendar, summary: "Réunion"), CancellationToken.None)).Value;
+        var creation = Assert.Single(created.Changes);
+        Assert.Equal(created.EventId, creation.EventId);
+        Assert.Equal(calendar, creation.CalendarId);
+        Assert.Null(creation.Before);
+        Assert.Contains("SUMMARY:Réunion", creation.After);
+
+        var detail = (await store.GetAsync(user, created.EventId, CancellationToken.None))!;
+        var updated = (await store.UpdateAsync(user, created.EventId, EditScope.All, null,
+            CalendarStoreTestFactory.Write(calendar, summary: "Réunion 2"), detail.IcsHash, CancellationToken.None)).Value;
+        var change = Assert.Single(updated.Changes);
+        Assert.Equal(creation.After, change.Before!.Ics);
+        Assert.Null(change.Before.SchedulingOwner);
+        Assert.Contains("SUMMARY:Réunion 2", change.After);
+        Assert.Equal(creation.DavName, change.DavName);
+
+        await store.SetSchedulingAsync(user, calendar, change.DavName, "webmail", "abc", CancellationToken.None);
+        var deleted = (await store.DeleteAsync(user, created.EventId, EditScope.All, null, CancellationToken.None)).Value;
+        var removal = Assert.Single(deleted.Changes);
+        Assert.Equal(("webmail", "abc"), (removal.Before!.SchedulingOwner, removal.Before.SchedulingHash));
+        Assert.Null(removal.After);
+    }
+
+    [Fact]
+    public async Task Update_ThisAndFollowing_ReportsTheCutSeries_AndTheNewOne()
+    {
+        var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var store = CalendarStoreTestFactory.Events(db);
+        var created = (await store.CreateAsync(user, CalendarStoreTestFactory.Write(calendar, repeat: CalendarStoreTestFactory.Weekly()), CancellationToken.None)).Value;
+        var detail = (await store.GetAsync(user, created.EventId, CancellationToken.None))!;
+        var third = (await store.WindowAsync(user, CalendarStoreTestFactory.Utc(2026, 9, 1), CalendarStoreTestFactory.Utc(2026, 10, 1), CalendarStoreTestFactory.Zone, CancellationToken.None)).Value[2];
+
+        var updated = (await store.UpdateAsync(user, created.EventId, EditScope.ThisAndFollowing, third.InstanceId,
+            CalendarStoreTestFactory.Write(calendar, summary: "Suite"), detail.IcsHash, CancellationToken.None)).Value;
+
+        Assert.Equal(2, updated.Changes.Count);
+        var cut = updated.Changes.Single(c => c.EventId == created.EventId);
+        Assert.NotNull(cut.Before);
+        Assert.Contains("UNTIL=", cut.After);
+        var following = updated.Changes.Single(c => c.EventId != created.EventId);
+        Assert.Null(following.Before);
+        Assert.Contains("SUMMARY:Suite", following.After);
+    }
+
+    [Fact]
+    public async Task Delete_ThisOccurrence_IsReportedAsAnUpdate()
+    {
+        var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
+        var store = CalendarStoreTestFactory.Events(db);
+        var created = (await store.CreateAsync(user, CalendarStoreTestFactory.Write(calendar, repeat: CalendarStoreTestFactory.Weekly()), CancellationToken.None)).Value;
+        var second = (await store.WindowAsync(user, CalendarStoreTestFactory.Utc(2026, 9, 1), CalendarStoreTestFactory.Utc(2026, 10, 1), CalendarStoreTestFactory.Zone, CancellationToken.None)).Value[1];
+
+        var deleted = (await store.DeleteAsync(user, created.EventId, EditScope.This, second.InstanceId, CancellationToken.None)).Value;
+
+        var change = Assert.Single(deleted.Changes);
+        Assert.NotNull(change.Before);
+        Assert.Contains("EXDATE", change.After);
+    }
+
+    [Fact]
+    public async Task SetSchedulingAsync_OnAMissingRow_IsSilent()
+    {
+        var (db, user, calendar) = await Seed(nameof(SetSchedulingAsync_OnAMissingRow_IsSilent));
+
+        await Events(db).SetSchedulingAsync(user, calendar, "never.ics", "webmail", "h", None);
+
+        Assert.Empty(new PreferencesTestDbContext(db).CalendarEvents);
+    }
+
+    [Fact]
+    public async Task SetSchedulingAsync_WritesOnlyItsOwnColumns()
+    {
+        var (db, user, cal) = await Seed(nameof(SetSchedulingAsync_WritesOnlyItsOwnColumns));
+        await Events(db).CreateAsync(user, Write(cal), None);
+        var before = await new PreferencesTestDbContext(db).CalendarEvents.SingleAsync(None);
+
+        await Events(db).SetSchedulingAsync(user, cal, before.DavName, "webmail", "abc", None);
+
+        var after = await new PreferencesTestDbContext(db).CalendarEvents.SingleAsync(None);
+        Assert.Equal("webmail", after.SchedulingOwner);
+        Assert.Equal("abc", after.SchedulingHash);
+        // Untouched: not part of the resource this write concerns itself with.
+        Assert.Equal(before.IcsRaw, after.IcsRaw);
+        Assert.Equal(before.IcsHash, after.IcsHash);
+        Assert.Equal(before.SyncSequence, after.SyncSequence);
+    }
+
+    /// <summary>A stub attached to reach a row by id must not outlive the write: left tracked, it
+    /// would shadow the real row for every later query on that same context — exactly what Task 5's
+    /// scheduler does right after calling this, reading or writing rows in the same scoped context.</summary>
+    [Fact]
+    public async Task SetSchedulingAsync_LeavesNoStubShadowingTheRowInItsOwnContext()
+    {
+        var (db, user, cal) = await Seed(nameof(SetSchedulingAsync_LeavesNoStubShadowingTheRowInItsOwnContext));
+        var seeded = (await Events(db).CreateAsync(user, Write(cal), None)).Value;
+
+        using var second = new PreferencesTestDbContext(db);
+        var store = new CalendarEventStore(second, new TestCalendarSyncStore(second), NullLogger<CalendarEventStore>.Instance);
+        await store.SetSchedulingAsync(user, cal, seeded.Changes[0].DavName, "webmail", "abc", None);
+
+        // A tracking read, deliberately: an EF query still returns an already-tracked instance's
+        // values over what the database holds, so a stub left attached would answer with them.
+        var read = await second.CalendarEvents.SingleAsync(e => e.Id == seeded.EventId, None);
+        Assert.Contains("SUMMARY:Standup", read.IcsRaw, StringComparison.Ordinal);
+        Assert.Equal("webmail", read.SchedulingOwner);
+        Assert.Equal("abc", read.SchedulingHash);
+    }
+
     private static int Occurrences(string text, string needle) =>
         text.Split(needle).Length - 1;
 
@@ -691,8 +836,8 @@ public sealed class CalendarEventStoreTests
         var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
         var store = CalendarStoreTestFactory.Events(db);
         var write = CalendarStoreTestFactory.Write(calendar, summary: "Dîner");
-        var mine = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
-        var other = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var mine = (await store.CreateAsync(user, write, CancellationToken.None)).Value.EventId;
+        var other = (await store.CreateAsync(user, write, CancellationToken.None)).Value.EventId;
         var context = new PreferencesTestDbContext(db);
         context.CalendarAttendees.AddRange(
             new CalendarAttendee { EventId = mine, Position = 0, Email = "marc@example.org", PartStat = "ACCEPTED", IsOrganizer = true },
@@ -719,8 +864,8 @@ public sealed class CalendarEventStoreTests
         var (db, user, calendar) = await CalendarStoreTestFactory.SeedAsync(Guid.NewGuid().ToString());
         var store = CalendarStoreTestFactory.Events(db);
         var write = CalendarStoreTestFactory.Write(calendar, summary: "Réunion");
-        var own = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
-        var fromMyOtherAccount = (await store.CreateAsync(user, write, CancellationToken.None)).Value;
+        var own = (await store.CreateAsync(user, write, CancellationToken.None)).Value.EventId;
+        var fromMyOtherAccount = (await store.CreateAsync(user, write, CancellationToken.None)).Value.EventId;
         var context = new PreferencesTestDbContext(db);
         context.CalendarAttendees.AddRange(
             new CalendarAttendee { EventId = own, Position = 0, Email = "Alice@Weesky.be", IsOrganizer = true },

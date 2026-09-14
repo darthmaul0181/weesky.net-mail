@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using weesky.Snoopy.Microservice.Models.Calendar;
 
 namespace weesky.Snoopy.Microservice.Data.Preferences;
 
@@ -85,6 +87,21 @@ public sealed class CalendarEvent
     [Column("sync_sequence")]
     public ulong SyncSequence { get; set; }
 
+    /// <summary>"webmail" once the webmail has sent the first invitation for this event, else null
+    /// — a device's or Thunderbird's own invitations are never doubled (spec 5e, décision 9).</summary>
+    [Column("scheduling_owner")]
+    [MaxLength(16)]
+    public string? SchedulingOwner { get; set; }
+
+    /// <summary>SHA-256 of the scheduling shape as it was at the last mail sent; null before any.</summary>
+    [Column("scheduling_hash")]
+    [MaxLength(64)]
+    public string? SchedulingHash { get; set; }
+
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>The scheduler's view of the row before it is overwritten — read this before
+    /// <c>ics_raw</c> changes, on both write doors.</summary>
+    internal ReplacedVersion AsReplaced() => new(IcsRaw, SchedulingOwner, SchedulingHash);
 }

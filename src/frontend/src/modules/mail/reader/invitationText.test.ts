@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { TFunction } from 'i18next'
-import { cardStateOf, noActionKey, whenOf } from './invitationText'
-import type { MailInvitation } from '../api/mailTypes'
+import { cardStateOf, noActionKey, replySentenceOf, whenOf } from './invitationText'
+import type { InvitationReply, MailInvitation } from '../api/mailTypes'
 
 const base: MailInvitation = {
   method: 'Request', uid: 'u', sequence: 0, isAllDay: false, repeats: false, attendees: [],
@@ -26,6 +26,32 @@ describe('cardStateOf', () => {
 
   it('a forwarded invitation already in the calendar is answered-less current', () => {
     expect(cardStateOf({ ...base, addressedTo: undefined, inCalendar: 'Current' })).toBe('answered')
+  })
+
+  // A guest's reply is its own card whatever the calendar holds; only a broken file outranks it.
+  it('a reply is a reply card, one date or older version included, unless unreadable', () => {
+    const reply = { ...base, method: 'Reply' as const, reply: { email: 'marc@example.org', partStat: 'ACCEPTED', status: 'Applicable' as const, applied: false } }
+    expect(cardStateOf(reply)).toBe('reply')
+    expect(cardStateOf({ ...reply, occurrenceOnly: true })).toBe('reply')
+    expect(cardStateOf({ ...reply, inCalendar: 'Newer' })).toBe('reply')
+    expect(cardStateOf({ ...reply, unreadable: true })).toBe('unreadable')
+  })
+})
+
+describe('replySentenceOf', () => {
+  const said = (status: InvitationReply['status'], partStat: string) =>
+    replySentenceOf({ email: 'marc@example.org', partStat, status, applied: false }, t)
+
+  it('puts the answer first when the reply names one of the three', () => {
+    expect(said('Applicable', 'DECLINED')).toBe('reader.invitation.reply.answer.DECLINED')
+    expect(said('Stale', 'ACCEPTED')).toBe('reader.invitation.reply.answer.ACCEPTED · reader.invitation.reply.stale')
+    expect(said('Superseded', 'TENTATIVE')).toBe('reader.invitation.reply.answer.TENTATIVE · reader.invitation.reply.superseded')
+  })
+
+  // An older reply can also say something the calendar does not take: it never prints a bare tail.
+  it('an answer outside the three is said as such, even on an older version', () => {
+    expect(said('Stale', 'DELEGATED')).toBe('reader.invitation.reply.unsupportedAnswer')
+    expect(said('UnsupportedAnswer', 'NEEDS-ACTION')).toBe('reader.invitation.reply.unsupportedAnswer')
   })
 })
 

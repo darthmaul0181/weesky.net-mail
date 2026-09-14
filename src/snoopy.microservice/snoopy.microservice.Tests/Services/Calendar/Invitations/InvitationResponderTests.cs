@@ -55,7 +55,7 @@ public sealed class InvitationResponderTests
             .ReturnsAsync(Result.Success());
         _profiles.Setup(p => p.GetDisplayNameAsync(_user, None)).ReturnsAsync("Alice Martin");
         Part("google-request");
-        return new InvitationResponder(_messages.Object, new InvitationReader(_addresses.Object, _events.Object),
+        return new InvitationResponder(_messages.Object, new InvitationPartLoader(_messages.Object), new InvitationReader(_addresses.Object, _events.Object),
             _calendars.Object, _writer.Object, _sender.Object, _locator.Object, _profiles.Object,
             NullLogger<InvitationResponder>.Instance);
     }
@@ -75,7 +75,7 @@ public sealed class InvitationResponderTests
     /// its UID is read off the component, the way the reader itself reads it.</summary>
     private void Stored(string ics, Guid calendar, string davName = "phone-name.ics") =>
         _events.Setup(e => e.FindByUidAsync(WebmailUid, IcsDocument.Components(IcsDocument.TryLoad(ics)!).First().Uid!, None))
-            .ReturnsAsync([new StoredEventRef(Guid.NewGuid(), calendar, davName, ics)]);
+            .ReturnsAsync([new StoredEventRef(Guid.NewGuid(), calendar, davName, ics, null, IcsDocument.HashOf(ics))]);
 
     private static RespondInvitationRequest Request(InvitationAnswer answer, Guid? calendarId = null) => new()
     {
@@ -358,7 +358,45 @@ public sealed class InvitationResponderTests
 
         Assert.True(result.IsSuccess);
         Assert.False(result.Value.ReplySent);
+        // The literal, not the constant: the card branches on this code, so it is a wire contract.
+        Assert.Equal("invitation_no_organizer", result.Value.ReplyError);
+    }
+
+    // An ORGANIZER that decodes to no deliverable address (a space, a '>', a ',') is answered like a
+    // missing one: the calendar takes the answer, no reply is built, and the response says why.
+    [Theory]
+    [InlineData("a%20b@example.org")]
+    [InlineData("a%3Eb@example.org")]
+    [InlineData("a%2Cb@example.org")]
+    public async Task AnUndeliverableOrganizer_IsReplySentFalse_WithAReason(string organizer)
+    {
+        var sut = Create();
+        PartText(Fixture("google-request").Replace("ORGANIZER;CN=Marc Dupont:mailto:marc.dupont@example.org", $"ORGANIZER;CN=Marc Dupont:mailto:{organizer}"));
+
+        var result = await sut.RespondAsync(_user, Conn, Request(InvitationAnswer.Accepted), None);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value.ReplySent);
         Assert.Equal(InvitationResponder.NoOrganizer, result.Value.ReplyError);
+        _writer.Verify(w => w.PutAsync(WebmailUid, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), None, false, null, RevisionCause.Webmail), Times.Once);
+        _sender.Verify(s => s.SendBuiltAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<MimeMessage>(), None), Times.Never);
+    }
+
+    // A UID no reply can carry on one line (an escaped newline): the calendar takes the answer, no reply
+    // is built, and the response says why rather than failing after the write.
+    [Fact]
+    public async Task AUidNoReplyCanCarry_IsReplySentFalse_WithAReason()
+    {
+        var sut = Create();
+        PartText(Fixture("google-request").Replace("UID:7c2e1c4a9f0b4d2e8a1c3b5d7e9f1a2b@google.com", "UID:7c2e@google.com\\nX-EVIL:1"));
+
+        var result = await sut.RespondAsync(_user, Conn, Request(InvitationAnswer.Accepted), None);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value.ReplySent);
+        Assert.Equal("invitation_uid_unwritable", result.Value.ReplyError);
+        _writer.Verify(w => w.PutAsync(WebmailUid, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), None, false, null, RevisionCause.Webmail), Times.Once);
+        _sender.Verify(s => s.SendBuiltAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<MimeMessage>(), None), Times.Never);
     }
 
     // ── refusals ────────────────────────────────────────────────────────
@@ -489,8 +527,24 @@ public sealed class InvitationResponderTests
         Assert.Equal(422, failure.Status);
         Assert.Equal(InvitationResponder.Unreadable, failure.Message);
 
-        Part("google-reply");
+        PartText(Fixture("google-request").Replace("METHOD:REQUEST", "METHOD:PUBLISH"));
         Assert.Equal(422, (await sut.RespondAsync(_user, Conn, Request(InvitationAnswer.Accepted), None)).Error.Status);
+    }
+
+    [Theory]
+    [InlineData(InvitationAnswer.Remove)]
+    [InlineData(InvitationAnswer.Accepted)]
+    public async Task AReply_TakesNoAnswer_Is400_AndNothingIsWritten(InvitationAnswer answer)
+    {
+        var sut = Create();
+        Stored(Fixture("webmail-invited"), Personal);
+        PartText(Fixture("google-reply").Replace("aaaa1111-bbbb-2222-cccc-3333dddd4444", "web-1111-2222"));
+
+        var failure = (await sut.RespondAsync(_user, Conn, Request(answer), None)).Error;
+
+        Assert.Equal((400, InvitationResponder.Incompatible), (failure.Status, failure.Message));
+        _writer.VerifyNoOtherCalls();
+        _sender.VerifyNoOtherCalls();
     }
 
     [Fact]

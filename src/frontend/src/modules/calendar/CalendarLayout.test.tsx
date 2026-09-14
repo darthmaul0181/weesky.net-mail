@@ -17,7 +17,7 @@ vi.mock('../../api.js', () => ({
     setCalendarVisible: vi.fn(), deleteCalendar: vi.fn(), exportCalendar: vi.fn(),
     importCalendar: vi.fn(), importCalendarAsNew: vi.fn(),
     getOccurrences: vi.fn(), searchEvents: vi.fn(), getEvent: vi.fn(),
-    createEvent: vi.fn(), updateEvent: vi.fn(), deleteEvent: vi.fn(),
+    createEvent: vi.fn(), updateEvent: vi.fn(), deleteEvent: vi.fn(), getContacts: vi.fn(),
   },
   // The very class the layout imports from the mocked module, so `instanceof ApiError` holds
   // against what these tests throw; a locally-declared twin fails that check.
@@ -37,7 +37,7 @@ const { api } = await import('../../api.js') as unknown as {
   api: Record<'getCalendars' | 'createCalendar' | 'updateCalendar' | 'setCalendarVisible'
     | 'deleteCalendar' | 'exportCalendar' | 'importCalendar' | 'importCalendarAsNew'
     | 'getOccurrences' | 'searchEvents' | 'getEvent' | 'createEvent' | 'updateEvent'
-    | 'deleteEvent', ReturnType<typeof vi.fn>>
+    | 'deleteEvent' | 'getContacts', ReturnType<typeof vi.fn>>
 }
 const { ApiError } = await import('../../api.js') as unknown as {
   ApiError: new (message: string, status: number) => Error
@@ -66,6 +66,7 @@ beforeEach(() => {
   // The preview now always fetches the detail (Task 7); a test with nothing to say about it
   // still needs an answer, or the query settles on the undefined react-query refuses to hold.
   api.getEvent.mockResolvedValue(detail())
+  api.getContacts.mockResolvedValue({ contacts: [] })
 })
 
 function occurrence(eventId: string, summary: string) {
@@ -97,7 +98,7 @@ function detail(fields: Record<string, unknown> = {}) {
       start: '2026-01-05T14:00:00', end: '2026-01-05T15:00:00', timeZone: BROWSER_TZ,
       reminderMinutesBefore: [], availability: 'Busy', visibility: 'Default', ...fields,
     },
-    attendees: [], repeatIsExact: true, foreignAlarms: [],
+    attendees: [], repeatIsExact: true, foreignAlarms: [], canInvite: true,
   }
 }
 
@@ -276,6 +277,50 @@ describe('CalendarLayout', () => {
       expect.objectContaining({ scope: 'All', ifHash: 'h1' })))
     await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
     expect(localStorage.getItem('calendar.lastUsed')).toBe('a')
+  })
+
+  it('says how many invitations went out with the save', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.updateEvent.mockResolvedValue({ scheduling: { sent: 2 } })
+    renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved · invitations sent: 2')).toBeInTheDocument()
+    expect(screen.queryByText('Event saved')).toBeNull()
+  })
+
+  it('says only that it saved when no invitation went out', async () => {
+    api.createEvent.mockResolvedValue({ id: 'e2', scheduling: { sent: 0 } })
+    renderAt('/calendar/new?view=week&date=2026-09-16&start=2026-09-16T09:00:00.000Z'
+      + '&end=2026-09-16T10:00:00.000Z&allDay=0')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Event saved')).toBeInTheDocument()
+  })
+
+  // The invitation hook may write the file a second time (SEQUENCE) before the save answers, so
+  // the hash the closed editor was sown with is stale: an editor reopened before the event has
+  // been read again must wait for that read rather than sow from the version the save replaced.
+  it('sows a reopened editor from the version its save wrote, never the one it replaced', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValueOnce(detail())
+    let land = () => {}
+    api.getEvent.mockImplementation(() => new Promise(resolve => {
+      land = () => resolve({ ...detail(), icsHash: 'h2' })
+    }))
+    api.updateEvent.mockResolvedValue({ scheduling: { sent: 1 } })
+    const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+    expect(api.updateEvent).toHaveBeenLastCalledWith('e1', expect.objectContaining({ ifHash: 'h1' }))
+
+    await router.navigate('/calendar/e1/edit?view=week&date=2026-09-16')
+    await settle()
+    land()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.updateEvent).toHaveBeenCalledTimes(2))
+    expect(api.updateEvent).toHaveBeenLastCalledWith('e1', expect.objectContaining({ ifHash: 'h2' }))
   })
 
   it('creates an event from the new route', async () => {
@@ -465,7 +510,7 @@ describe('CalendarLayout', () => {
     const box = (await screen.findByText('Delete “Dentist”?')).closest('.modal') as HTMLElement
     await userEvent.click(within(box).getByRole('button', { name: 'Delete' }))
     await waitFor(() =>
-      expect(api.deleteEvent).toHaveBeenCalledWith('e1', 'All', undefined))
+      expect(api.deleteEvent).toHaveBeenCalledWith('e1', 'All', undefined, 'en'))
   })
 
   it('asks the scope before deleting a recurring event', async () => {
@@ -480,7 +525,7 @@ describe('CalendarLayout', () => {
     expect(await screen.findByText('Delete a recurring event')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'This occurrence only' }))
     await waitFor(() => expect(api.deleteEvent)
-      .toHaveBeenCalledWith('e1', 'This', '2026-09-16T09:00:00'))
+      .toHaveBeenCalledWith('e1', 'This', '2026-09-16T09:00:00', 'en'))
   })
 
   // An obsolete bookmark is a target that no longer exists, never an invitation to create one.

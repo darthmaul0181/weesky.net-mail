@@ -1,0 +1,307 @@
+<!doctype html>
+<!--
+  Probe: the scheduling service account section on Administration > Application (mockup "B",
+  spec 5e2) — the four card states and the edit dialog with a failed test, verbatim DOM and real
+  class names, real stylesheets in main.tsx's order, real French strings.
+
+  Serving the real app was not an option: the frontend talks to https://api.mail.weesky.net and
+  the dev API carries no `localhost` origin, so a locally served build cannot get past the login
+  screen. This page restates the component markup with the real class names — no invented column
+  divs, no padding override — so a CSS edit changes what is measured and the real 639px phone
+  query actually fires when the BROWSER window is narrow, not a `<div>` pretending to be one.
+
+  Fix round 1 (the first version of this probe, superseded): it laid a "400px" column out inside a
+  1300px window, so `@media (max-width: 639px)` never applied at all — the very rule the round
+  exists to check — and it carried its own unconditional `.admin-tab-content { padding: 20px 24px }`,
+  which (same specificity, later in the cascade than index.css) silently overrode the *real* phone
+  block's `padding: 14px 0 0`. Both are gone: `.admin-tab-content` here has no rule of its own, and
+  the three widths below are real windows.
+
+  Served by the Vite dev server (`npm run dev -- --port 5178`) at
+  /probes/scheduling-account.html. **`--window-size` does not work here and must not be used**:
+  fix round 1's first attempt drove headless Edge with it and got the exact clamp this project's
+  own CLAUDE.md warns about (mobile-layout.html's note) — 390 and 320 both came back reporting an
+  identical, wrong `innerWidth`. What works: a small Node script (`cdp-probe.mjs`,
+  scratchpad-only, not committed) launching `msedge.exe --headless=new
+  --remote-debugging-port=9333`, connecting over the raw CDP WebSocket (Node 24 ships a global
+  `WebSocket`, so no dependency was needed) and calling `Emulation.setDeviceMetricsOverride`
+  before each `Page.navigate` — plus this file's own `<meta name="viewport">` (index.html already
+  has one; without it Chrome's mobile-emulation mode falls back to a 980px layout width whatever
+  the requested one is, a second bug fix round 1 found). `.modal-overlay` keeps its real
+  `position: fixed`; it visually covers the cards, which costs the readings below nothing, since
+  `getBoundingClientRect` does not care what is painted on top.
+
+  Reading the numbers:
+  - `overflow` (once, page-level) is `documentElement.scrollWidth - clientWidth` — a horizontal
+    scrollbar on the page itself. 0 always, or something on this page defeated `overflow: hidden`
+    entirely rather than merely running past an edge.
+  - `escape` is the worst overhang of any descendant past the viewport's own left/right edge.
+  - `lignes(login)` is the login line's own line-box count, `invitation-card.html`'s `lignes`
+    metric reused. The short mock-up login is 1 at every width now (fix round 2: the pill used to
+    squeeze it to 2 lines at 390/320); the deliberately long stress login (cards 2 and 4) wraps
+    more as the column narrows, graceful degradation rather than a fault — `escape` stays 0
+    beside every one of these readings.
+  - `texte` is the worst `scrollWidth - clientWidth` of a card's login and meta lines: text running
+    past its own box, which `escape` (boxes only) cannot see.
+  - `glyphes` is the worst `scrollHeight - clientHeight` over every styled text node in a card or
+    the dialog — a positive number is a descender cut at its own box. `controle` is the
+    deliberately clipped positive control (`gjpqy`, line-height 1, overflow hidden).
+  - `indent` is the absolute left edge of the stored-password note, the required-password warning
+    and the test result, printed beside the host input's own x. Fix round 2 compared the note
+    with the result only, and both sat on the label column (x=259 at 900) while reading ALIGNED.
+  - `inputs / select width` is each control's left-right edge in the dialog.
+  - `pill` is card 1's pill box, the login's x and the gap from the meta line's bottom to the pill.
+
+  The four cards: configured with the mock-up's own values and a green pill
+  (`noreply-agenda@weesky.net`, `mail.weesky.be`), configured with a deliberately long login/host
+  and a red pill, not-configured, and password-unreadable with the same long login/host. The
+  dialog carries the mock-up's login and a long failed-test sentence.
+
+  Measured 2026-09-14 (fix round 3), real device-metric emulation as described above, three
+  widths in one Edge process, Vite on 5178 (stopped afterwards, port verified free). Card 1
+  carries the short login, cards 2 and 4 the long one, card 3 none.
+    900:  overflow 0. escape 0 on all 4 cards and the dialog. lignes(login) 1 / 2 / - / 1.
+          glyphes 0, controle 2. indent: input x=317, note 317, warning 317, result 317.
+          Controls 317-709. Pill 563-730 beside the info column (-33 = same line).
+    390:  overflow 0. escape 0 everywhere. lignes(login) 1 / 2 / - / 2. glyphes 0, controle 2.
+          indent: input x=31, note/warning/result 31. Pill box 41-209 (its own width, was a
+          13-377 band), login x=41, 4px under the meta line. Inputs and select 31-359 (the
+          inputs were 31-288 until modal.css's phone block gave .field-h rows --field-w: 100%).
+    320:  overflow 0. escape 0 everywhere. lignes(login) 1 / 3 / - / 3. glyphes 0, controle 2.
+          indent: input x=31, note/warning/result 31. Pill box 41-209, login x=41, 4px under
+          the meta line. Inputs and select 31-289 (inputs were 31-288).
+
+  Final fix wave, 2026-09-14. The stress login and host lost their hyphens (51 and 57 characters,
+  no break opportunity): the hyphenated ones wrapped by themselves, so every reading above missed
+  an overflow the whole-feature review measured. Same method, Vite on 5178 (stopped afterwards).
+    Before (index.css at HEAD d94f5a1, new stress values):
+    390:  overflow 0. texte 0 / 10 / 0 / 10. dialog escape 7 (the result line's unbroken host).
+    320:  overflow 67, the page 387 px wide in a 320 px window. texte 0 / 80 / 0 / 80. dialog escape 10.
+    After (overflow-wrap: anywhere on the login, meta and test-result lines):
+    900:  overflow 0. escape 0 and texte 0 on all 4 cards and the dialog. lignes(login) 1 / 1 / - / 1.
+    390:  overflow 0. escape 0 and texte 0 everywhere. lignes(login) 1 / 2 / - / 2. glyphes 0.
+          Inputs and select 31-359, indent 31 unchanged.
+    320:  overflow 0. escape 0 and texte 0 everywhere. lignes(login) 1 / 2 / - / 2. glyphes 0.
+          Inputs and select 31-289, indent 31 unchanged.
+  Cross-checked on the real component in the admin page's own wrappers (.settings-content >
+  .admin-tab-content): at 390 the login needed 346 px in a 304 px column and .settings-content
+  scrolled 13 px sideways (83 px at 320); after, 0 at 390 and 320, and the Tester button still
+  computes 5px 10px / 13px from the merged selector list.
+
+  Tablet squeeze, 2026-09-14. The phone arrangement answered the window, so from 640 to 820 the
+  settings column left the info 90 px (700) and 30 px (640): login 3 and 8 lines. It now answers
+  `.svc-account-slot`'s own width (@container, 559px), measured on the real component in the admin
+  wrappers, short login: 900/820 one row, info 290/210; 700/640 pill under the text (x=233, the
+  login's), actions on their own line; 390/320 unchanged. Login 1 line and escape 0 at every width.
+  The dialogs stay outside the slot: their fixed overlay still measures the viewport (700 and 390).
+
+  document.title becomes 'probe-done' once every case has been measured.
+-->
+<html lang="fr" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Probe — scheduling account</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    body { margin: 0; background: var(--bg); }
+    .section-label { font: 600 12px system-ui; padding: 8px 12px 0; color: var(--text); }
+    #clipped-control { display: inline-block; font-size: 15px; line-height: 1; overflow: hidden; }
+    #out { white-space: pre; font-family: ui-monospace, monospace; font-size: 11px;
+           background: #fff; color: #000; padding: 8px; }
+  </style>
+</head>
+<body>
+  <div class="section-label">Application &gt; compte d’envoi des invitations</div>
+  <div class="admin-tab-content" id="tab-content"></div>
+
+  <div class="section-label">dialogue — modification, test échoué</div>
+  <div id="dialog-host"></div>
+
+  <span id="clipped-control">gjpqy</span>
+  <div id="out">measuring…</div>
+
+  <script type="module">
+    const SHIELD_CHECK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l7 2.5v5.5c0 4.2-2.8 7.2-7 9-4.2-1.8-7-4.8-7-9V5.5z" /><path d="M8.7 12l2.2 2.2 4.4-4.7" /></svg>`
+    const SHIELD_ALERT = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l7 2.5v5.5c0 4.2-2.8 7.2-7 9-4.2-1.8-7-4.8-7-9V5.5z" /><path d="M12 8.5v4" /><path d="M12 15h.01" /></svg>`
+    const PENCIL = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>`
+    const TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" /></svg>`
+
+    // No hyphen, so no break opportunity: a hyphenated stress value wrapped on its own and hid the overflow.
+    const LONG_LOGIN = 'agenda.invitations.services@mailhosting.example.com'
+    const LONG_HOST = 'smtprelay.invitations.weeskyenterprisehosting.example.com'
+
+    const CONFIGURED_OK = `<div class="admin-list-item svc-account-card">
+      ${SHIELD_CHECK}
+      <div class="svc-account-info">
+        <div class="svc-account-login">noreply-agenda@weesky.net</div>
+        <div class="svc-account-meta">mail.weesky.be · port 587 · STARTTLS</div>
+      </div>
+      <span class="svc-account-pill is-ok">Connexion testée le 14 sept.</span>
+      <div class="admin-list-item-actions">
+        <button type="button" class="btn btn-ghost btn-auto">Tester</button>
+        <button type="button" class="admin-icon-btn" title="Modifier">${PENCIL}</button>
+        <button type="button" class="admin-icon-btn is-danger" title="Supprimer">${TRASH}</button>
+      </div>
+    </div>`
+
+    const CONFIGURED_LONG_FAILED = `<div class="admin-list-item svc-account-card">
+      ${SHIELD_CHECK}
+      <div class="svc-account-info">
+        <div class="svc-account-login">${LONG_LOGIN}</div>
+        <div class="svc-account-meta">${LONG_HOST} · port 2525 · SSL/TLS</div>
+      </div>
+      <span class="svc-account-pill is-fail">Dernier test échoué</span>
+      <div class="admin-list-item-actions">
+        <button type="button" class="btn btn-ghost btn-auto">Tester</button>
+        <button type="button" class="admin-icon-btn" title="Modifier">${PENCIL}</button>
+        <button type="button" class="admin-icon-btn is-danger" title="Supprimer">${TRASH}</button>
+      </div>
+    </div>`
+
+    const NOT_CONFIGURED = `<div class="admin-list-item svc-account-card is-empty">
+      ${SHIELD_ALERT}
+      <p class="svc-account-empty-text">Aucun compte configuré : les modifications faites depuis un téléphone n’envoient pas d’invitations.</p>
+      <button type="button" class="btn btn-primary btn-auto">Configurer</button>
+    </div>`
+
+    const UNREADABLE = `<div class="admin-list-item svc-account-card is-warn">
+      ${SHIELD_ALERT}
+      <div class="svc-account-info">
+        <div class="svc-account-login">${LONG_LOGIN}</div>
+        <div class="svc-account-meta">${LONG_HOST}</div>
+        <p class="svc-account-warn-text">Le mot de passe enregistré ne peut plus être lu. Ressaisissez-le pour reprendre l’envoi des invitations.</p>
+      </div>
+      <div class="admin-list-item-actions">
+        <button type="button" class="admin-icon-btn" title="Modifier">${PENCIL}</button>
+        <button type="button" class="admin-icon-btn is-danger" title="Supprimer">${TRASH}</button>
+      </div>
+    </div>`
+
+    document.getElementById('tab-content').innerHTML = `
+      <div class="svc-account-section">
+        <h2 class="svc-account-section-title">Compte d’envoi des invitations d’agenda</h2>
+        <p class="svc-account-section-intro">Quand un rendez-vous avec invités est modifié depuis un téléphone ou Thunderbird, le serveur envoie les invitations avec ce compte, au nom de l’organisateur. Sans lui, ces modifications ne préviennent personne.</p>
+        ${CONFIGURED_OK}
+        <div style="height:12px"></div>
+        ${CONFIGURED_LONG_FAILED}
+        <div style="height:12px"></div>
+        ${NOT_CONFIGURED}
+        <div style="height:12px"></div>
+        ${UNREADABLE}
+      </div>`
+
+    // The mock-up's dialog artboard. The stored-password note and the required-password warning
+    // never show together in the app; both are here so one run measures the indent of each.
+    document.getElementById('dialog-host').innerHTML = `
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="d-title">
+          <div class="modal-header">
+            <span class="modal-title" id="d-title">${PENCIL} Compte d’envoi des invitations</span>
+            <button type="button" class="modal-close" aria-label="Fermer">✕</button>
+          </div>
+          <form>
+            <div class="field-h"><label for="d-host">Hôte SMTP</label><input id="d-host" type="text" value="mail.weesky.be" /></div>
+            <div class="field-h"><label for="d-port">Port SMTP</label><input id="d-port" type="number" value="587" /></div>
+            <div class="field-h"><label for="d-security">Sécurité SMTP</label>
+              <select id="d-security"><option>Aucune</option><option selected>STARTTLS</option><option>SSL/TLS</option></select>
+            </div>
+            <div class="field-h"><label for="d-login">Identifiant</label><input id="d-login" type="text" value="noreply-agenda@weesky.net" /></div>
+            <div class="field-h"><label for="d-password">Mot de passe</label><input id="d-password" type="password" placeholder="Inchangé" /></div>
+            <p class="settings-note svc-account-field-indent">Un mot de passe est enregistré. Il n’est jamais affiché ; laissez le champ vide pour le conserver.</p>
+            <p class="settings-note is-warn svc-account-field-indent">Un mot de passe est requis pour enregistrer ou tester ce compte.</p>
+            <div class="svc-account-test-result svc-account-field-indent is-fail" role="status">${SHIELD_ALERT}<span>Identifiants refusés par le serveur : ${LONG_HOST}</span></div>
+            <div class="folder-pick-submit">
+              <button type="button" class="btn btn-ghost btn-auto svc-account-test-btn">Tester la connexion</button>
+              <button type="button" class="btn btn-ghost btn-auto">Annuler</button>
+              <button type="submit" class="btn btn-primary btn-auto">Enregistrer</button>
+            </div>
+          </form>
+        </div>
+      </div>`
+    // The fixed overlay covers the cards, which getBoundingClientRect does not care about.
+
+    const ceil = n => Math.ceil(n)
+    const report = {}
+    report['viewport'] = `${window.innerWidth} x ${window.innerHeight}`
+    report['overflow'] = document.documentElement.scrollWidth - document.documentElement.clientWidth
+
+    function escapeOf(root) {
+      let escape = 0
+      for (const node of [root, ...root.querySelectorAll('*')]) {
+        const r = node.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) continue
+        escape = Math.max(escape, ceil(r.right - window.innerWidth), ceil(0 - r.left))
+      }
+      return Math.max(0, escape)
+    }
+
+    // Text running past its own box: `escape` reads boxes only, and an unbroken address overflows inside one.
+    function texteOf(root) {
+      return [...root.querySelectorAll('.svc-account-login, .svc-account-meta')]
+        .reduce((worst, node) => Math.max(worst, node.scrollWidth - node.clientWidth), 0)
+    }
+
+    function glyphesOf(root, selector) {
+      return [...root.querySelectorAll(selector)]
+        .reduce((worst, node) => Math.max(worst, node.scrollHeight - node.clientHeight), 0)
+    }
+
+    // Line boxes of the login's own text — 1 means one line, N>1 a wrap. Reused from
+    // invitation-card.html's `lignes` metric.
+    function linesOf(el) {
+      if (!el || !el.firstChild) return 0
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      return new Set([...range.getClientRects()].map(r => Math.round(r.top))).size
+    }
+
+    let i = 0
+    for (const card of document.querySelectorAll('.svc-account-card')) {
+      i += 1
+      const login = card.querySelector('.svc-account-login')
+      report[`card ${i} (${card.classList.contains('is-empty') ? 'not-configured' : card.classList.contains('is-warn') ? 'unreadable' : 'configured'})`] =
+        `escape ${escapeOf(card)}  texte ${texteOf(card)}  lignes(login) ${linesOf(login)}`
+        + `  glyphes ${glyphesOf(card, '.svc-account-login, .svc-account-meta, .svc-account-empty-text, .svc-account-warn-text, .svc-account-pill, .btn')}`
+    }
+
+    report['section title/intro'] = `glyphes ${glyphesOf(document.getElementById('tab-content'), '.svc-account-section-title, .svc-account-section-intro')}`
+
+    const dialogModal = document.querySelector('.modal')
+    report['dialog (incl. footer)'] = `escape ${escapeOf(dialogModal)}`
+      + `  glyphes ${glyphesOf(dialogModal, '.modal-title, label, .settings-note, .svc-account-test-result, .btn')}`
+
+    // Absolute edges, read against the input's own x: agreeing with each other proves nothing.
+    const box = el => el.getBoundingClientRect()
+    const x = el => Math.round(box(el).left)
+    const inputX = x(document.getElementById('d-host'))
+    const indented = [...dialogModal.querySelectorAll('.svc-account-field-indent')].map(x)
+    report['indent (note warn result)'] = `input x=${inputX}  ${indented.join(' ')}`
+      + `  ${indented.every(v => v === inputX) ? 'ON INPUT COLUMN' : 'OFF INPUT COLUMN'}`
+    report['inputs / select width'] = [...dialogModal.querySelectorAll('.field-h > :is(input, select)')]
+      .map(el => `${x(el)}-${Math.round(box(el).right)}`).join(' ')
+
+    const pill = document.querySelector('.svc-account-pill')
+    const card = pill.closest('.svc-account-card')
+    const login = card.querySelector('.svc-account-login')
+    report['pill (card 1)'] = `box ${x(pill)}-${Math.round(box(pill).right)}  login x=${x(login)}`
+      + `  top-meta.bottom ${Math.round(box(pill).top - box(card.querySelector('.svc-account-meta')).bottom)}`
+
+    const control = document.getElementById('clipped-control')
+    report['controle'] = `glyphes ${control.scrollHeight - control.clientHeight} (gjpqy, line-height 1, overflow hidden)`
+
+    document.getElementById('out').textContent =
+      Object.entries(report).map(([k, v]) => k.padEnd(34) + v).join('\n')
+    document.title = 'probe-done'
+  </script>
+</body>
+</html>

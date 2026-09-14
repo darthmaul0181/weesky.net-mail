@@ -19,9 +19,12 @@ public class PreferencesDbContext : DbContext
     {
         modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.AccountId, o.Role });
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
-        // No relation edge here, unlike the five per-account tables below: this setting belongs
-        // to no one, so there is nothing to order ahead of users.
+        // No relation edge on these two, unlike the five per-account tables below: both belong to
+        // no one, so there is nothing to order ahead of users.
         modelBuilder.Entity<AppSetting>().HasKey(s => s.SettingKey);
+        modelBuilder.Entity<SchedulingServiceAccount>().HasKey(a => a.Id);
+        modelBuilder.Entity<SchedulingServiceAccount>().Property(a => a.Id).ValueGeneratedNever();
+        modelBuilder.Entity<SchedulingServiceAccount>().Property(a => a.UpdatedAt).IsConcurrencyToken();
         modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.UserId, i.AccountId, i.Address });
         modelBuilder.Entity<TrustedSender>().HasKey(t => new { t.UserId, t.Address });
         modelBuilder.Entity<Contact>().HasKey(c => c.Id);
@@ -180,7 +183,7 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<CalendarRevision>()
             .Property(r => r.Cause)
             .HasConversion(v => v.ToString().ToLowerInvariant(), v => Enum.Parse<RevisionCause>(v, true))
-            .HasMaxLength(8);
+            .HasMaxLength(16); // "scheduling" (10) is the longest name; ContactRevision never writes it, and stays at 8.
     }
 
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
@@ -188,6 +191,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<UserPreference> UserPreferences { get; set; }
 
     public DbSet<AppSetting> AppSettings { get; set; }
+
+    public DbSet<SchedulingServiceAccount> SchedulingServiceAccounts { get; set; }
 
     public DbSet<SendingIdentity> SendingIdentities { get; set; }
 

@@ -23,7 +23,7 @@ function detailOf(fields: Partial<EventDetail> & { id: string }): EventDetail {
       calendarId: 'a', isAllDay: false, reminderMinutesBefore: [],
       availability: 'Busy', visibility: 'Default',
     },
-    attendees: [], repeatIsExact: true, foreignAlarms: [],
+    attendees: [], repeatIsExact: true, foreignAlarms: [], canInvite: true,
     ...fields,
   }
 }
@@ -242,7 +242,7 @@ describe('EventPreview', () => {
   it('a received event says who organises it and names the attendees, without their state',
     async () => {
       api.getEvent.mockResolvedValue(detailOf({
-        id: 'e1', attendees: [
+        id: 'e1', canInvite: false, attendees: [
           { email: 'marc@example.org', name: 'Marc Dupont', isOrganizer: true },
           { email: 'alice@weesky.be', name: 'Alice', partStat: 'ACCEPTED', isOrganizer: false },
           { email: 'jean@example.net', partStat: 'NEEDS-ACTION', isOrganizer: false },
@@ -273,7 +273,7 @@ describe('EventPreview', () => {
   // answer, not the series — the bubble shows the master's organizer and guests regardless.
   it('reads the master\'s attendees, never an override\'s', async () => {
     api.getEvent.mockResolvedValue(detailOf({
-      id: 'e1', attendees: [
+      id: 'e1', canInvite: false, attendees: [
         { email: 'marc@example.org', name: 'Marc Dupont', isOrganizer: true },
         {
           email: 'marc@example.org', name: 'Marc Dupont', isOrganizer: true,
@@ -289,5 +289,33 @@ describe('EventPreview', () => {
     draw()
     expect(await screen.findByText('Organised by Marc Dupont')).toBeInTheDocument()
     expect(screen.getByText('Alice')).toBeInTheDocument()
+  })
+
+  it('draws a dot per guest on an event the user organizes', async () => {
+    api.getEvent.mockResolvedValue(detailOf({ id: 'e1', canInvite: true, attendees: [
+      { email: 'alice@weesky.be', isOrganizer: true },
+      { email: 'marc@example.org', name: 'Marc', isOrganizer: false, partStat: 'ACCEPTED' },
+      { email: 'julie@example.net', isOrganizer: false, partStat: 'NEEDS-ACTION' }] }))
+    const preview = draw(DENTIST)
+    await screen.findByText('Marc')
+    expect(preview.querySelectorAll('.attendee-dot.is-accepted')).toHaveLength(1)
+    expect(preview.querySelectorAll('.attendee-dot.is-pending')).toHaveLength(1)
+    expect(screen.getByText('no answer yet')).toBeInTheDocument()
+    expect(screen.queryByText(/Organised by/)).toBeNull()
+  })
+
+  it('draws names only on a received event', async () => {
+    api.getEvent.mockResolvedValue(detailOf({ id: 'e1', canInvite: false, attendees: [
+      { email: 'lea@example.net', name: 'Léa', isOrganizer: true }, { email: 'marc@example.org', name: 'Marc', isOrganizer: false, partStat: 'ACCEPTED' }] }))
+    const preview = draw(DENTIST)
+    await screen.findByText(/Organised by Léa/)
+    expect(preview.querySelector('.attendee-dot')).toBeNull()
+  })
+
+  it('draws a dot for each line of a guest listed twice', async () => {
+    const julie = { email: 'julie@example.net', isOrganizer: false, partStat: 'DECLINED' }
+    api.getEvent.mockResolvedValue(detailOf({ id: 'e1', attendees: [julie, julie] }))
+    const preview = draw(DENTIST)
+    await waitFor(() => expect(preview.querySelectorAll('.attendee-dot.is-declined')).toHaveLength(2))
   })
 })
