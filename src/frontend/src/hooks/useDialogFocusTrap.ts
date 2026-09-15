@@ -35,8 +35,17 @@ export function useDialogFocusTrap(
       if (target !== null) { event.preventDefault(); items[target].focus() }
     }
 
-    // Read at close, not at open: the fallback is whatever that ref holds once the dialog goes.
-    const restoreFocus = () => (previouslyFocused?.isConnected ? previouslyFocused : fallbackFocusRef?.current)?.focus()
+    // Read at close, not at open: the fallback is whatever that ref holds once the dialog goes,
+    // and "usable" has to be judged at that same moment — computing it up here, at mount, would
+    // freeze it on a captured element that was of course still connected the instant it was
+    // clicked. <body> is excluded even though it is always .isConnected: a sibling dialog (not
+    // this one's own opener) unmounting in the same commit this one mounts in resets focus to
+    // <body> before this effect ever runs, and body.focus() is a silent no-op — the exact
+    // "drops to <body>" symptom this hook exists to prevent.
+    const restoreFocus = () => {
+      const usable = previouslyFocused?.isConnected && previouslyFocused !== document.body
+      ;(usable ? previouslyFocused : fallbackFocusRef?.current)?.focus()
+    }
 
     document.addEventListener('keydown', onKeyDown)
     return () => {

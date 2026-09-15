@@ -516,6 +516,18 @@ export const api = {
   adminTestSchedulingAccount: (account) =>
     request('POST', '/api/SchedulingAccount/Test', account),
 
+  adminGetDeliveryReplyKey: () =>
+    request('GET', '/api/DeliveryReplyKey'),
+
+  adminGenerateDeliveryReplyKey: () =>
+    request('POST', '/api/DeliveryReplyKey'),
+
+  adminSetDeliveryReplies: (body) =>
+    request('PUT', '/api/DeliveryReplyKey', body),
+
+  adminDeleteDeliveryReplyKey: () =>
+    request('DELETE', '/api/DeliveryReplyKey'),
+
   // ── Preferences ───────────────────────────────────────────────────────────
   // The response covers every known key: defaults live on the backend, so there is no second
   // copy here to drift from.

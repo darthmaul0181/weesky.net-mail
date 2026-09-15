@@ -1228,8 +1228,9 @@ body {
 .svc-account-warn-text { font-size: 13px; color: var(--danger); margin: 2px 0 0; }
 .svc-account-empty-text { flex: 1; min-width: 200px; margin: 2px 0; color: var(--text-muted); font-size: 13px; }
 
-/* The last-test pill, mock-up "B": a tinted fill, not the identities page's plain-outline .row-tag. */
-.svc-account-pill { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex: none; }
+/* The last-test pill, mock-up "B": a tinted fill, not the identities page's plain-outline .row-tag.
+   Muted by default (mock-up "5e3"'s "no call yet" pill) — .is-ok/.is-fail override it. */
+.svc-account-pill { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex: none; color: var(--text-muted); background: color-mix(in oklab, var(--text-muted) 12%, transparent); }
 .svc-account-pill.is-ok { color: var(--success); background: color-mix(in oklab, var(--success) 12%, transparent); }
 .svc-account-pill.is-fail { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
 
@@ -1259,6 +1260,18 @@ body {
 /* Pushes Tester to the leading edge of .folder-pick-submit's flex-end row (mock-up "B"'s footer)
    instead of a second copy of that row's own layout and phone stacking (mail.css). */
 .svc-account-test-btn { margin-right: auto; }
+
+/* ── Delivery replies (Application tab, spec 5e3) ────────────────────────── */
+
+/* Its own row, not `.field-h.is-setting`: that modifier's 260px fixed label column is what put
+   the switch ~150px right of the label text — this row wants the switch immediately after the
+   words instead, mock-up "5e3"'s own layout. */
+.dlv-toggle { display: flex; align-items: center; gap: 12px; margin: 0; }
+.dlv-toggle > label:first-child { font-size: 14px; font-weight: 600; color: var(--text); }
+.dlv-toggle.is-off > label:first-child { color: var(--text-muted); }
+.dlv-key-intro { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+.dlv-key-row { display: flex; gap: 8px; align-items: center; }
+.dlv-key-value { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 
 /* ── Ownership tiles ─────────────────────────────────────── */
 

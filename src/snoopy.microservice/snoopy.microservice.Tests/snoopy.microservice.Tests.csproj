@@ -29,6 +29,7 @@
     <Content Include="Fixtures\VCards\*.vcf" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\ICalendar\*.ics" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\Invitations\*.ics" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\Mails\*.eml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

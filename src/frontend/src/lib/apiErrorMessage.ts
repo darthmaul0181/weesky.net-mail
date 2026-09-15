@@ -59,6 +59,8 @@ const CODES = {
   connection_test_in_progress: 'errors:connectionTestInProgress',
   security_none_disallowed: 'errors:securityNoneDisallowed',
   password_required_for_new_endpoint: 'errors:passwordRequiredForNewEndpoint',
+  delivery_key_missing: 'errors:deliveryKeyMissing',
+  delivery_key_changed_concurrently: 'errors:deliveryKeyChangedConcurrently',
 } as const
 
 // hasOwnProperty, not `CODES[code]` directly: `code` comes off the wire, and 'constructor'

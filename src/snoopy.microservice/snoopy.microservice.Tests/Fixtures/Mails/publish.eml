@@ -1,0 +1,12 @@
+From: someone@example.org
+To: alice@weesky.be
+Subject: publish
+Date: Sun, 13 Sep 2026 10:00:00 +0000
+Message-ID: <pub-1@example.org>
+Content-Type: text/calendar; charset="utf-8"; method=PUBLISH
+MIME-Version: 1.0
+
+BEGIN:VCALENDAR
+METHOD:PUBLISH
+VERSION:2.0
+END:VCALENDAR

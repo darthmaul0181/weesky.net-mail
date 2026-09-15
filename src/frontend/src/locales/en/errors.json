@@ -45,6 +45,8 @@
   "connectionTestInProgress": "A connection test is already running.",
   "securityNoneDisallowed": "Unencrypted connections are not allowed: choose STARTTLS or SSL/TLS.",
   "passwordRequiredForNewEndpoint": "A password is required: the host or port no longer matches the saved account.",
+  "deliveryKeyMissing": "Generate a key before enabling delivery-time replies.",
+  "deliveryKeyChangedConcurrently": "The key changed in the meantime: it was reloaded.",
   "contactImport": {
     "noNameOrAddress": "Neither a name nor a valid e-mail address",
     "ambiguousAddress": "An address on this row already belongs to more than one contact",

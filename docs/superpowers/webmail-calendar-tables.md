@@ -106,7 +106,7 @@ CREATE TABLE `calendar_revisions` (
   `dav_name`    VARCHAR(255) NULL COLLATE utf8mb4_bin,
   `ics_hash`    CHAR(64)     NOT NULL,
   `ics_raw`     MEDIUMTEXT   NOT NULL COMMENT 'Les octets remplacés ou refusés — même type que calendar_events.ics_raw',
-  `cause`       ENUM('put','webmail','import','delete','rejected','scheduling') NOT NULL,
+  `cause`       ENUM('put','webmail','import','delete','rejected','scheduling','delivery') NOT NULL,
   `replaced_at` DATETIME     NOT NULL COMMENT 'UTC ; posée par le code, jamais par le schéma',
   PRIMARY KEY (`id`),
   KEY `ix_calendar_revisions_user_time` (`user_id`, `replaced_at`),
@@ -142,6 +142,24 @@ ALTER TABLE `calendar_events`
 ALTER TABLE `calendar_revisions`
   MODIFY `cause` ENUM('put','webmail','import','delete','rejected','scheduling') NOT NULL;
 ```
+
+## Tranche 5e3 — une cause de révision
+
+Une réponse d'invité appliquée par le serveur mail à la livraison (spec 5e3, décision 11) n'est
+ni un `PUT` ni la main de l'utilisateur : l'historique doit le dire. Valeur ajoutée en fin de
+liste, compatible avec le service en place, à passer **avant** le déploiement sur les deux bases.
+
+```sql
+ALTER TABLE `calendar_revisions`
+  MODIFY `cause` ENUM('put','webmail','import','delete','rejected','scheduling','delivery') NOT NULL;
+```
+
+L'`ALTER` de la tranche 5e2 ci-dessus n'est pas retouché : c'est un instantané historique, à
+rejouer tel quel sur une base qui n'a pas encore cette tranche ; seuls le `CREATE` en tête de ce
+fichier et la présente section portent la liste complète des valeurs de l'enum.
+
+`contact_revisions.cause` partage l'enum C# mais pas la valeur : un contact n'est jamais archivé
+pour cette cause, son ENUM MariaDB reste tel quel.
 
 ## Trois écarts par rapport au DDL du plan
 

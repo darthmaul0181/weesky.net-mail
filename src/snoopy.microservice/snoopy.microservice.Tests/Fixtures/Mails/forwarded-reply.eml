@@ -1,0 +1,32 @@
+From: alice@weesky.be
+To: alice@weesky.be
+Subject: Fwd: Declined
+Date: Sun, 13 Sep 2026 11:00:00 +0000
+Message-ID: <fwd-1@weesky.be>
+Content-Type: multipart/mixed; boundary="fwd"
+MIME-Version: 1.0
+
+--fwd
+Content-Type: text/plain
+
+forwarded
+--fwd
+Content-Type: message/rfc822
+
+From: marc.dupont@example.org
+To: alice@weesky.be
+Subject: Declined
+Content-Type: text/calendar; charset="utf-8"; method=REPLY
+MIME-Version: 1.0
+
+BEGIN:VCALENDAR
+METHOD:REPLY
+VERSION:2.0
+BEGIN:VEVENT
+UID:aaaa1111-bbbb-2222-cccc-3333dddd4444
+ATTENDEE;PARTSTAT=DECLINED:mailto:marc.dupont@example.org
+DTSTAMP:20260913T100000Z
+DTSTART:20261005T080000Z
+END:VEVENT
+END:VCALENDAR
+--fwd--
