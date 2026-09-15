@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
   getConnectedAccounts: vi.fn(),
   getDavCredentials: vi.fn(),
+  getVersion: vi.fn(() => Promise.resolve({ version: '1.0.0-dev', commit: 'f4e5d6c' })),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -40,6 +41,7 @@ vi.mock('../../api.js', () => ({
     getPreferences: mocks.getPreferences,
     getConnectedAccounts: mocks.getConnectedAccounts,
     getDavCredentials: mocks.getDavCredentials,
+    getVersion: mocks.getVersion,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
@@ -117,6 +119,7 @@ describe('settings section', () => {
     expect(nav.getByText('Identities')).toBeInTheDocument()
     expect(nav.getByText('Sync')).toBeInTheDocument()
     expect(nav.getByText('Rules')).toBeInTheDocument()
+    expect(nav.getByText('About')).toBeInTheDocument()
     await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(false))
     expect(nav.queryByText('Administration')).not.toBeInTheDocument()
   })
@@ -135,6 +138,7 @@ describe('settings section', () => {
     ['/settings/sync', 'Sync'],
     ['/settings/rules', 'Rules'],
     ['/settings/admin', 'Administration'],
+    ['/settings/about', 'About'],
   ])('%s pairs an icon with its <h1> title', async (path, title) => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
     renderAt(path)

@@ -23,6 +23,7 @@ const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage.jsx'))
 const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage.jsx'))
 const MessageSourceView = lazy(() => import('./modules/mail/source/MessageSourceView'))
 const SyncPage = lazy(() => import('./modules/settings/sync/SyncPage'))
+const AboutPage = lazy(() => import('./modules/settings/about/AboutPage'))
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginRoute /> },
@@ -74,6 +75,7 @@ export const routes: RouteObject[] = [
               // The folders page grew out of the old system-folders one; keep its URL working.
               { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
               { path: 'identities', element: <Suspense fallback={null}><IdentitiesPage /></Suspense> },
+              { path: 'about', element: <Suspense fallback={null}><AboutPage /></Suspense> },
               {
                 element: <RequireSieve />,
                 children: [{ path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> }],

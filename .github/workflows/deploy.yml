@@ -2,6 +2,9 @@ name: deploy
 
 on:
   push:
+    # The deploy pushes v<VERSION> itself, and a tag ref carries no environment of its own:
+    # a tag push would build and deploy `dev` under ref_name = v1.0.0.
+    tags-ignore: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -18,12 +21,18 @@ jobs:
           filters: |
             frontend:
               - 'src/frontend/**'
+              # Both halves stamp their version from these two, so a release commit that
+              # touches nothing else must still build and deploy — and tag.
+              - 'VERSION'
+              - 'src/Directory.Build.props'
             backend:
               - 'src/snoopy.microservice/**'
               - 'src/snoopy.microservice.host/**'
               - 'src/snoopy.providers.weesky/**'
               - 'src/snoopy.providers.weesky.Tests/**'
               - 'src/snoopy.microservice.sln'
+              - 'VERSION'
+              - 'src/Directory.Build.props'
 
   ci-frontend:
     needs: detect-changes
@@ -76,7 +85,12 @@ jobs:
           echo "VITE_API_BASE=${{ secrets.API_ENDPOINT_PROD }}" > .env.production
           echo "VITE_API_BASE=${{ secrets.API_ENDPOINT_DEV }}" > .env.dev
       - name: Build
+        env:
+          # The same switch the API build reads as -p:ReleaseBuild: without it a build is -dev.
+          RELEASE_BUILD: ${{ github.ref_name == 'master' }}
         run: npm run build ${{ github.ref_name != 'master' && '-- --mode dev' || '' }}
+      - name: The licence notices ship with the bundle
+        run: test -s dist/third-party-licenses.txt
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
@@ -117,6 +131,7 @@ jobs:
         run: >
           dotnet publish src/snoopy.microservice.host/snoopy.microservice.host.csproj
           -c Release -r linux-x64 --self-contained
+          -p:ReleaseBuild=${{ github.ref_name == 'master' }}
           --no-restore
           -p:SatelliteResourceLanguages=
           -p:DebugType=None -p:DebugSymbols=false
@@ -160,6 +175,8 @@ jobs:
     environment: ${{ github.ref_name == 'master' && 'prod' || 'dev' }}
     permissions:
       actions: write
+      # The release tag below is pushed from here.
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -244,6 +261,20 @@ jobs:
           credentials: ${{ secrets.OPNSENSE_CREDENTIALS }}
           endpoint: ${{ secrets.OPNSENSE_ENDPOINT }}
           rule_id: ${{ secrets.OPNSENSE_RULE_ID }}
+
+      # The VERSION file is the source of the number both halves ship; the tag is how a release
+      # is found again afterwards. A warning rather than a failure when it already exists: an
+      # urgent fix must still reach production when nobody bumped the file.
+      - name: Tag the release
+        if: success() && github.ref_name == 'master'
+        run: |
+          TAG="v$(cat VERSION)"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::warning::$TAG already exists — VERSION was not bumped for this release"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
 
       - name: Delete artifacts
         if: success()

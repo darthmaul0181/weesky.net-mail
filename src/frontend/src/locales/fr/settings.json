@@ -10,7 +10,8 @@
     "identities": "Identités",
     "sync": "Synchronisation",
     "rules": "Règles",
-    "admin": "Administration"
+    "admin": "Administration",
+    "about": "À propos"
   },
   "refreshFailed": "Impossible d’actualiser cette liste — elle n’est peut-être plus à jour.",
   "account": {
@@ -431,5 +432,16 @@
     "loadFailed": "Impossible de charger les réglages de synchronisation",
     "unavailable": "Ce serveur ne propose pas de synchronisation.",
     "saveFailed": "Impossible d’enregistrer la modification"
+  },
+  "about": {
+    "version": "Version {{version}}",
+    "webApp": "Application web",
+    "server": "Serveur",
+    "serverUnavailable": "Serveur indisponible",
+    "copy": "Copier les informations de version",
+    "copied": "Informations de version copiées",
+    "copyFailed": "Impossible de copier les informations de version",
+    "thirdParty": "Composants tiers",
+    "rights": "© {{year}} darth-weesky.net. Tous droits réservés."
   }
 }

@@ -413,6 +413,10 @@
           // which is the one thing this file may never do.
           clipped: Math.max(0, ...[...stage.querySelectorAll('*')]
             .filter(el => !(getComputedStyle(el).textOverflow === 'ellipsis' && el.childElementCount === 0))
+            // A box hidden from the eye and kept for the accessibility tree — index.css's own
+            // `.visually-hidden` shape, which the About page's phone heading wears — is 1x1 with
+            // its content clipped away on purpose: it reported 82 with nothing wrong.
+            .filter(el => !getComputedStyle(el).clipPath.startsWith('inset(50%'))
             .map(el => {
               const excess = el.scrollWidth - el.clientWidth
               const box = pseudoBox(el)
@@ -2170,6 +2174,41 @@
       contrast: '.event-preview-when, .event-preview-row',
     })
 
+    // 6. About. The one settings page that takes the whole content box: `.settings-content:has(>
+    //    .about-page)` drops that box's padding, so the mobile bar's own negative margins have to
+    //    be cancelled with it — the bar is a SIBLING of the page and would otherwise bleed 16px
+    //    outside the screen. The fixture therefore keeps the bar, which is the only thing that can
+    //    show that. `height` is read because the defect this layout can have is vertical: the
+    //    illustration is bounded in both axes and a window shorter than it must still show the
+    //    name, the versions and the copyright.
+    CASES.push({
+      name: 'settings-about',
+      html: settingsPage(`
+        <div class="about-page">
+          <div class="settings-page-header"><h1 class="settings-page-title"><svg width="17" height="17"></svg>About</h1></div>
+          <img class="about-logo" src="/src/assets/scotty-720.webp" width="720" height="499" alt="" />
+          <p class="about-product">Scotty <span class="about-product-kind">webmail</span></p>
+          <span class="about-badge">Version 1.0.0-dev</span>
+          <p class="about-builds">
+            <span>Application web 1.0.0-dev (a1b2c3d)</span>
+            <span>Serveur 1.0.0-dev (f4e5d6c)</span>
+            <span>16 septembre 2026</span>
+          </p>
+          <div class="about-actions">
+            <button type="button" class="about-action"><svg width="15" height="15"></svg>Copier les informations de version</button>
+            <a class="about-action" href="#">Composants tiers<svg width="13" height="13"></svg></a>
+          </div>
+          <p class="about-rights">© 2026 darth-weesky.net. Tous droits réservés.</p>
+        </div>`),
+      touch: '.about-action',
+      escape: ['.about-page > *', '.settings-content'],
+      height: '.about-page',
+      contrast: '.about-builds, .about-action, .about-rights',
+    })
+
+    // Exposed for a driving session: measure() clears the stage behind itself, so a case that
+    // reports a number worth chasing can be re-rendered and inspected element by element.
+    window.CASES = CASES
     window.addEventListener('resize', measure)
     measure()
   </script>

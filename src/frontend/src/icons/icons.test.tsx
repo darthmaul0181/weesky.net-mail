@@ -58,6 +58,7 @@ import PeopleIcon from './PeopleIcon'
 import BellIcon from './BellIcon'
 import RepeatIcon from './RepeatIcon'
 import ClockIcon from './ClockIcon'
+import InfoIcon from './InfoIcon'
 import PlusIcon from './PlusIcon'
 import CloseIcon from './CloseIcon'
 
@@ -118,6 +119,7 @@ const icons = [
   { name: 'DownloadIcon', Icon: DownloadIcon, defaultSize: '16' },
   { name: 'PeopleIcon', Icon: PeopleIcon, defaultSize: '16' },
   { name: 'BellIcon', Icon: BellIcon, defaultSize: '16' },
+  { name: 'InfoIcon', Icon: InfoIcon, defaultSize: '16' },
   { name: 'RepeatIcon', Icon: RepeatIcon, defaultSize: '16' },
   { name: 'ClockIcon', Icon: ClockIcon, defaultSize: '16' },
   { name: 'PlusIcon', Icon: PlusIcon, defaultSize: '16' },

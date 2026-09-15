@@ -132,7 +132,10 @@
 
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
 .topbar-logo { height: 26px; width: 26px; border-radius: 50%; }
-.topbar-wordmark { height: 16px; }
+/* Written rather than drawn, so it takes the palette's own topbar foregrounds: the wordmark it
+   replaced was one flat image and went muddy on the two palettes with a pale top bar. */
+.topbar-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--topbar-fg); }
+.topbar-name-kind { font-weight: 300; color: var(--rail-fg); }
 
 /* ── Account block, at the foot of the folder column ──────────────────────── */
 /* It sits at the bottom of the screen, so its menu opens upward — inside the column, which is
@@ -905,6 +908,105 @@ a.dropdown-item { text-decoration: none; }
 .contacts-scopes-scroll:hover::-webkit-scrollbar-thumb,
 .calendar-sidebar-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
 
+/* ── About ────────────────────────────────────────────────────────────────────
+   The one settings page that takes the whole content box rather than sitting in its padding:
+   it is a product card, not a list of rows. The padding is cancelled on the container rather
+   than by negative margins here, so the two numbers live in one place — and `:has()` is what
+   lets the page ask for that without the layout learning which route is open. */
+/* A column rather than a bare box: below 1024px the drawer's hamburger band is an in-flow
+   sibling of the page inside this scroller, so a page claiming the scroller's whole height put
+   bar + page 45px past it and pushed the copyright under the fold at rest. Measured in
+   probes/mobile-layout.html's settings-about case, which reads the SCROLLER's own overflow. */
+.settings-content:has(> .about-page) { padding: 0; display: flex; flex-direction: column; }
+/* The drawer's hamburger band bleeds out to .settings-content's padding edges, and that box has
+   none here — so it hangs outside the screen instead. Measured at 768: 28px of overflow on
+   .settings-content, the desktop padding it was cancelling. A base rule rather than one per
+   tier: the band only exists below 1024px, and its two tiers cancel two different paddings. */
+.settings-content:has(> .about-page) .settings-mobile-bar { margin: 0; top: 0; }
+
+/* --topbar-bg, not a colour of its own: the panel is the dark band the shell already draws, so
+   it follows the palette and the theme. Its foregrounds are that band's too. */
+.about-page {
+  flex: 1 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 28px 20px;
+  background: var(--topbar-bg);
+  color: var(--topbar-fg);
+  text-align: center;
+}
+
+.about-page .settings-page-header { align-self: stretch; }
+.about-page .settings-page-title { color: var(--topbar-fg); }
+
+/* The whole illustration, never cropped: width and height both bounded, so the drawing keeps
+   its ratio and still fits a 768px-tall window beside the name and the lines under it. */
+.about-logo {
+  width: min(560px, 100%);
+  max-height: 46vh;
+  height: auto;
+  object-fit: contain;
+  margin-top: 4px;
+}
+
+.about-product { display: flex; gap: 10px; margin: 10px 0 0; font-size: 34px; font-weight: 700; letter-spacing: -0.01em; }
+.about-product-kind { font-weight: 300; color: var(--rail-fg); }
+
+.about-badge {
+  margin-top: 14px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--topbar-fg) 14%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* One line on a desktop, one line per fact on a phone: the separator is drawn by the rule below
+   rather than written into the text, so the phone block only has to change the direction. */
+.about-builds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 10px;
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--rail-fg);
+}
+.about-builds > span + span::before { content: '·'; margin-right: 10px; }
+
+.about-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 22px; margin-top: 18px; }
+
+/* The button and the link are one control in two shapes: same size, same colour, so the page
+   does not read as two vocabularies. They wear the band's OWN foreground and are told apart by
+   the underline, not by the accent: measured off the palette files, --rail-item-active on
+   --topbar-bg falls to 2.36:1 in indigo and 2.37 in slate — that accent is a fill behind
+   --rail-item-active-fg, never 13px text on the band itself. */
+.about-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--topbar-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.about-action:hover { text-decoration-thickness: 2px; }
+
+/* --rail-fg flat, not faded: a 78% fade of it measured 3.55:1 on classic's light top bar. */
+.about-rights {
+  margin: auto 0 0;
+  padding-top: 20px;
+  font-size: 12px;
+  color: var(--rail-fg);
+}
+
 /* ── Narrow tiers ─────────────────────────────────────────────────────────────
    Desktop is the unqualified base above. These two blocks only override it, the
    second refining the first through the ordinary cascade. Never invert this:
@@ -1032,6 +1134,12 @@ a.dropdown-item { text-decoration: none; }
   .palette-zoom { opacity: 1; }
 }
 
+/* The same floor for a touch tablet, where --touch does not resolve: this answers to the
+   pointer, not to the window — the contact card's and the mail row's clusters do the same. */
+@media (hover: none) {
+  .about-action { min-height: 44px; }
+}
+
 @media (max-width: 639px) {
   :root { --touch: 44px; }
 
@@ -1105,6 +1213,30 @@ a.dropdown-item { text-decoration: none; }
      band's negative margin has to follow the padding it is cancelling. */
   .settings-content { padding: 14px 16px; }
   .settings-mobile-bar { margin: -14px -16px 12px; top: -14px; }
+
+  /* The page keeps the whole screen here too, and the mobile bar above it is the drawer's only
+     door — so the padding it cancels is the phone block's, not the desktop one's. */
+  /* Measured at 360 in probes/mobile-layout.html: the two are 20px tall text controls, two
+     undersized targets, and the floor is the only thing that answers for it. */
+  .about-action { min-height: var(--touch); }
+  .about-page { padding: 14px 16px 16px; }
+  /* The band above already names the page, so the header is hidden from the eye — never from the
+     accessibility tree, which would leave the only settings page with no heading at all. Same
+     shape as index.css's .visually-hidden, spelled here because the class is not on the element:
+     the header is only hidden on this tier. probes/mobile-layout.html skips a box of this shape,
+     which otherwise reports 82px of clip on a box that is invisible by design. */
+  .about-page .settings-page-header {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .about-product { font-size: 26px; }
+  /* Three facts, three lines: at 360 the joined line wrapped mid-version. */
+  .about-builds { flex-direction: column; gap: 4px; }
+  .about-builds > span + span::before { content: none; }
 
   /* index.css's phone block stacks .field-h and resets `label:first-child` — an ELEMENT selector,
      which a settings row's <span class="setting-label"> never matches, so the 300px wrapper

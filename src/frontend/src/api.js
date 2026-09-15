@@ -544,6 +544,11 @@ export const api = {
   getAppSettings: (options) =>
     request('GET', '/api/AppSettings', undefined, options),
 
+  // The running API's own version, for the About tab. Authenticated: an exact version is a
+  // fingerprint, and only a signed-in user has a use for it.
+  getVersion: (options) =>
+    request('GET', '/api/Version', undefined, options),
+
   setAppSetting: (key, value) =>
     request('PUT', '/api/AppSettings', { key, value }),
 }

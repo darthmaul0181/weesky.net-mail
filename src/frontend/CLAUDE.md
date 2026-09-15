@@ -30,7 +30,7 @@ Split across `docs/` for readability only. **`@` imports are inlined at load, so
 - `docs/architecture-mail.md` — the mail module: folders, list, reader, composer, polling, sanitising
 - `docs/architecture-contacts.md` — the contacts module
 - `docs/architecture-calendar.md` — the calendar module
-- `docs/architecture-settings.md` — the settings module and its nine pages
+- `docs/architecture-settings.md` — the settings module, its ten pages and the product's own name and icons
 - `docs/architecture-api.md` — `src/api.js` and `ApiError`
 
 What stays below is what no single module owns: the shared row idioms, preferences, and `src/components/`.

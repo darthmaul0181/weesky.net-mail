@@ -10,7 +10,8 @@
     "identities": "Identities",
     "sync": "Sync",
     "rules": "Rules",
-    "admin": "Administration"
+    "admin": "Administration",
+    "about": "About"
   },
   "refreshFailed": "Could not refresh this list — it may be out of date.",
   "account": {
@@ -431,5 +432,16 @@
     "loadFailed": "Could not load the sync settings",
     "unavailable": "This server does not offer synchronisation.",
     "saveFailed": "Could not save the change"
+  },
+  "about": {
+    "version": "Version {{version}}",
+    "webApp": "Web app",
+    "server": "Server",
+    "serverUnavailable": "Server unavailable",
+    "copy": "Copy version details",
+    "copied": "Version details copied",
+    "copyFailed": "Could not copy the version details",
+    "thirdParty": "Third-party components",
+    "rights": "© {{year}} darth-weesky.net. All rights reserved."
   }
 }
