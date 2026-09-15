@@ -1,0 +1,8 @@
+<Project>
+  <!-- One product version for the API and the web app, read from the repository's VERSION file.
+       Anything but a release build (-p:ReleaseBuild=true, set by the deploy on master) is -dev. -->
+  <PropertyGroup>
+    <VersionPrefix>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../VERSION').Trim())</VersionPrefix>
+    <VersionSuffix Condition="'$(ReleaseBuild)' != 'true'">dev</VersionSuffix>
+  </PropertyGroup>
+</Project>

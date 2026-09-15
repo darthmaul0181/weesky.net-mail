@@ -6,7 +6,11 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/src/assets/favicon-32.png" />
     <link rel="apple-touch-icon" href="/src/assets/logo-192.png" />
     <title></title>
-    <script>document.title = window.location.hostname</script>
+    <script>
+      // The name the last load learned from the server, so the tab never flashes the hostname.
+      try { document.title = localStorage.getItem('app_name') || window.location.hostname }
+      catch (e) { document.title = window.location.hostname }
+    </script>
     <script>
       (function(){
         var t=localStorage.getItem('appearance_theme')||'system';

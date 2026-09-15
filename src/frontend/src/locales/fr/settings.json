@@ -10,7 +10,8 @@
     "identities": "Identités",
     "sync": "Synchronisation",
     "rules": "Règles",
-    "admin": "Administration"
+    "admin": "Administration",
+    "about": "À propos"
   },
   "refreshFailed": "Impossible d’actualiser cette liste — elle n’est peut-être plus à jour.",
   "account": {
@@ -421,7 +422,6 @@
     "lastUsed": "Dernière utilisation",
     "neverUsed": "Jamais utilisé",
     "copyValue": "Copier {{label}}",
-    "copied": "Copié",
     "shownOnce": "Copiez-le maintenant : il ne sera plus affiché.",
     "regenerate": "Régénérer",
     "regenerateTitle": "Régénérer le mot de passe de synchronisation ?",
@@ -430,6 +430,15 @@
     "notConfigured": "Activez Contacts (CardDAV) ou Agenda (CalDAV) pour obtenir un mot de passe",
     "loadFailed": "Impossible de charger les réglages de synchronisation",
     "unavailable": "Ce serveur ne propose pas de synchronisation.",
-    "saveFailed": "Impossible d’enregistrer la modification"
+    "saveFailed": "Impossible d’enregistrer la modification",
+    "copied": "Copié"
+  },
+  "about": {
+    "version": "Version {{version}}",
+    "webApp": "Application web",
+    "server": "Serveur",
+    "serverUnavailable": "Serveur indisponible",
+    "thirdParty": "Composants tiers",
+    "rights": "© {{year}} darth-weesky.net. Tous droits réservés."
   }
 }

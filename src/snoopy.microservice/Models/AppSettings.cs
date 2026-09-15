@@ -27,8 +27,8 @@ public static class AppSettings
     public static IReadOnlyList<AppSettingDefinition> All { get; } =
     [
         new(Installable, "false", 5, Booleans),
-        new(Name, "Snoopy mail", 60),
-        new(ShortName, "Snoopy", 12),
+        new(Name, "Scotty webmail", 60),
+        new(ShortName, "Scotty", 12),
     ];
 
     public static bool IsValid(string key, string value)

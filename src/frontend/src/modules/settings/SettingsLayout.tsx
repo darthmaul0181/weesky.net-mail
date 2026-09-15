@@ -16,6 +16,7 @@ import MailIcon from '../../icons/MailIcon'
 import FunnelIcon from '../../icons/FunnelIcon'
 import ShieldIcon from '../../icons/ShieldIcon.jsx'
 import RefreshIcon from '../../icons/RefreshIcon'
+import InfoIcon from '../../icons/InfoIcon'
 
 function paneClass({ isActive }: { isActive: boolean }) {
   return isActive ? 'pane-item is-active' : 'pane-item'
@@ -61,6 +62,9 @@ export default function SettingsLayout() {
     ...(isPrimary && davAvailable ? [{ to: '/settings/sync', label: t('nav.sync'), icon: <RefreshIcon size={16} /> }] : []),
     ...(rulesAvailable ? [{ to: '/settings/rules', label: t('nav.rules'), icon: <FunnelIcon size={16} /> }] : []),
     ...(isAdmin && isPrimary && adminAvailable ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} /> }] : []),
+    // Last, and gated on nothing: every account reads the same product, on its own mailbox or an
+    // attached one.
+    { to: '/settings/about', label: t('nav.about'), icon: <InfoIcon size={16} /> },
   ]
 
   // The module name is the fallback, not the answer: it is what /settings shows for the frame of

@@ -12,8 +12,8 @@ public sealed class AppSettingsTests
         var values = AppSettings.Effective([]);
 
         Assert.Equal("false", values[AppSettings.Installable]);
-        Assert.Equal("Snoopy mail", values[AppSettings.Name]);
-        Assert.Equal("Snoopy", values[AppSettings.ShortName]);
+        Assert.Equal("Scotty webmail", values[AppSettings.Name]);
+        Assert.Equal("Scotty", values[AppSettings.ShortName]);
     }
 
     [Fact]
