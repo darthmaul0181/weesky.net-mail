@@ -2,8 +2,11 @@ name: deploy
 
 on:
   push:
-    # The deploy pushes v<VERSION> itself, and a tag ref carries no environment of its own:
-    # a tag push would build and deploy `dev` under ref_name = v1.0.0.
+    # Both lines, always: with `tags-ignore` alone GitHub stops running the workflow on BRANCH
+    # pushes altogether — the ref type left undefined is the one excluded, and the whole pipeline
+    # went silent for a branch push. The tag filter is there because the deploy pushes v<VERSION>
+    # itself and a tag ref carries no environment: it would build and deploy `dev` as v1.0.0.
+    branches: ['**']
     tags-ignore: ['v*']
   workflow_dispatch:
 
