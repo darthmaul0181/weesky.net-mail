@@ -129,7 +129,18 @@ exit 0
 `timeout` (coreutils) borne tout, résolution comprise, sous les 10 s de
 `sieve_execute_exec_timeout` ; `--max-time` seul ne borne que le transfert.
 
-## 5. nginx
+## 5. Le reverse proxy — n'accepter que le serveur mail
+
+Apache (le `<Location>` avant les `ProxyPass` du `<VirtualHost>`) :
+
+```apache
+<Location "/api/Delivery/">
+    Require ip <ip du serveur mail>
+    LimitRequestBody 6291456
+</Location>
+```
+
+nginx :
 
 ```
 location /api/Delivery/ {
@@ -139,6 +150,13 @@ location /api/Delivery/ {
     # … le proxy_pass et les en-têtes du bloc /api/ existant
 }
 ```
+
+**L'adresse à autoriser est celle que voit le proxy.** Quand Dovecot et le microservice partagent
+la machine et que le script appelle le nom public, la connexion arrive avec l'IP publique du
+serveur, ou `127.0.0.1` si le nom est résolu en local dans `/etc/hosts` : faire un appel
+`curl` de test depuis le serveur mail et lire l'adresse dans le journal d'accès du proxy. Toute
+autre adresse reçoit un 403 du proxy, avant la clé. La borne de taille laisse passer les 5 Mo
+que le microservice accepte, qui répond lui-même 413 au-delà.
 
 ## 6. Avant d'activer — la procédure
 

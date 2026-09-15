@@ -102,21 +102,34 @@ is ever wanted, it belongs behind a delay that grows rather than a hard refusal.
 
 The `POST /api/Delivery/CalendarReplies` route is meant to be reachable from the mail server only —
 everything that actually keeps a stranger out (the key, the 404 that does not say whether the door
-exists) lives in the application, but nginx is the cheap extra layer named by spec 5e3, décision 5:
+is open) lives in the application, but the proxy is the cheap extra layer named by spec 5e3,
+décision 5. Apache, inside the `<VirtualHost>` before its `ProxyPass` lines:
+
+```apache
+<Location "/api/Delivery/">
+    Require ip <ip of the mail server>
+    LimitRequestBody 6291456
+</Location>
+```
+
+nginx:
 
 ```
 location /api/Delivery/ {
-    allow <ip du serveur mail>;
+    allow <ip of the mail server>;
     deny all;
     client_max_body_size 6m;
     # … the proxy_pass and headers of the existing /api/ block
 }
 ```
 
-The default `client_max_body_size` is 1 MB, which would refuse a reply larger than that before the
-service's own 5 MB limit ever runs. See § 5 of
-`docs/superpowers/webmail-delivery-replies-prerequisite.md` for the full nginx block and the rest
-of the mail-server-side setup.
+The address to allow is the one the proxy sees: with Dovecot and the service on one machine and
+the script calling the public name, that is the server's own public IP, or `127.0.0.1` when the
+name resolves locally — read it off the proxy's access log after one test call. nginx's default
+`client_max_body_size` is 1 MB and would refuse a reply larger than that before the service's own
+5 MB limit ever runs; Apache's default is far higher, so its line only bounds. See § 5 of
+`docs/superpowers/webmail-delivery-replies-prerequisite.md` for the rest of the mail-server-side
+setup.
 
 ## CardDAV
 
