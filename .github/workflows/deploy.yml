@@ -93,7 +93,7 @@ jobs:
           RELEASE_BUILD: ${{ github.ref_name == 'master' }}
         run: npm run build ${{ github.ref_name != 'master' && '-- --mode dev' || '' }}
       - name: The licence notices ship with the bundle
-        run: test -s dist/third-party-licenses.txt
+        run: test -s dist/third-party-licenses.html
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist

@@ -24,11 +24,13 @@ SOURCE = ROOT / "assets/brand/scotty.png"
 ASSETS = ROOT / "src/frontend/src/assets"
 PUBLIC = ROOT / "src/frontend/public"
 
-HEAD_BOX = (280, 20, 880, 620)
+HEAD_BOX = (300, 30, 840, 570)
 # The disc's fill is --pane-item-active-bg of the default palette: the cat sits on the same cream
 # the active settings row wears, and it reads on a light tab strip as well as on the dark top bar.
 DISC_FILL = (253, 243, 240, 255)
-HEAD_INSET = 0.115  # of the disc's diameter, so the ears clear the rim
+# Of the disc's diameter. Small on purpose: the head has to fill the disc to still read as a
+# cat at 26px in the top bar — at 0.115 it was a pale smudge with a lot of cream around it.
+HEAD_INSET = 0.02
 
 
 def resized(image: Image.Image, size: tuple[int, int]) -> Image.Image:

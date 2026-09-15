@@ -134,7 +134,7 @@
 .topbar-logo { height: 26px; width: 26px; border-radius: 50%; }
 /* Written rather than drawn, so it takes the palette's own topbar foregrounds: the wordmark it
    replaced was one flat image and went muddy on the two palettes with a pale top bar. */
-.topbar-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--topbar-fg); }
+.topbar-name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: var(--topbar-fg); }
 .topbar-name-kind { font-weight: 300; color: var(--rail-fg); }
 
 /* ── Account block, at the foot of the folder column ──────────────────────── */

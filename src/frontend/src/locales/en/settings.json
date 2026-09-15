@@ -422,7 +422,6 @@
     "lastUsed": "Last used",
     "neverUsed": "Never used",
     "copyValue": "Copy {{label}}",
-    "copied": "Copied",
     "shownOnce": "Copy it now — it will not be shown again.",
     "regenerate": "Regenerate",
     "regenerateTitle": "Regenerate the sync password?",
@@ -431,16 +430,14 @@
     "notConfigured": "Turn Contacts (CardDAV) or Calendar (CalDAV) on to get a password",
     "loadFailed": "Could not load the sync settings",
     "unavailable": "This server does not offer synchronisation.",
-    "saveFailed": "Could not save the change"
+    "saveFailed": "Could not save the change",
+    "copied": "Copied"
   },
   "about": {
     "version": "Version {{version}}",
     "webApp": "Web app",
     "server": "Server",
     "serverUnavailable": "Server unavailable",
-    "copy": "Copy version details",
-    "copied": "Version details copied",
-    "copyFailed": "Could not copy the version details",
     "thirdParty": "Third-party components",
     "rights": "© {{year}} darth-weesky.net. All rights reserved."
   }

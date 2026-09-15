@@ -422,7 +422,6 @@
     "lastUsed": "Dernière utilisation",
     "neverUsed": "Jamais utilisé",
     "copyValue": "Copier {{label}}",
-    "copied": "Copié",
     "shownOnce": "Copiez-le maintenant : il ne sera plus affiché.",
     "regenerate": "Régénérer",
     "regenerateTitle": "Régénérer le mot de passe de synchronisation ?",
@@ -431,16 +430,14 @@
     "notConfigured": "Activez Contacts (CardDAV) ou Agenda (CalDAV) pour obtenir un mot de passe",
     "loadFailed": "Impossible de charger les réglages de synchronisation",
     "unavailable": "Ce serveur ne propose pas de synchronisation.",
-    "saveFailed": "Impossible d’enregistrer la modification"
+    "saveFailed": "Impossible d’enregistrer la modification",
+    "copied": "Copié"
   },
   "about": {
     "version": "Version {{version}}",
     "webApp": "Application web",
     "server": "Serveur",
     "serverUnavailable": "Serveur indisponible",
-    "copy": "Copier les informations de version",
-    "copied": "Informations de version copiées",
-    "copyFailed": "Impossible de copier les informations de version",
     "thirdParty": "Composants tiers",
     "rights": "© {{year}} darth-weesky.net. Tous droits réservés."
   }

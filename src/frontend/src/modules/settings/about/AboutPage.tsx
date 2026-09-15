@@ -1,18 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../../api.js'
-import Toasts from '../../../components/Toasts.jsx'
-import { useToasts } from '../../../hooks/useToasts.js'
-import CopyIcon from '../../../icons/CopyIcon'
 import ExternalLinkIcon from '../../../icons/ExternalLinkIcon'
 import InfoIcon from '../../../icons/InfoIcon'
 import { BUILT_AT, WEB_COMMIT, WEB_VERSION, versionLabel } from '../../../lib/appVersion'
-import { PRODUCT, PRODUCT_NAME } from '../../../lib/product'
+import { PRODUCT } from '../../../lib/product'
 import scotty from '../../../assets/scotty-720.webp'
 import scottyLarge from '../../../assets/scotty-1440.webp'
 
-/** The licence notices the build writes beside the bundle — the bundled libraries plus our own. */
-const LICENCES = '/third-party-licenses.txt'
+/** The page the build writes beside the bundle — the bundled libraries plus our own assets. */
+const LICENCES = '/third-party-licenses.html'
 
 interface ServerVersion {
   version: string
@@ -22,7 +19,6 @@ interface ServerVersion {
 
 export default function AboutPage() {
   const { t, i18n } = useTranslation('settings')
-  const { toasts, addToast, removeToast } = useToasts()
   // Instance-wide rather than account-scoped, and it only moves on a deploy.
   const { data: server, isError } = useQuery({
     queryKey: ['version'],
@@ -37,16 +33,6 @@ export default function AboutPage() {
   const serverLine = server ? `${t('about.server')} ${versionLabel(server.version, server.commit ?? null)}`
     : isError ? t('about.serverUnavailable')
       : `${t('about.server')} …`
-
-  async function copy() {
-    const details = [PRODUCT_NAME, webLine, server ? serverLine : null].filter(Boolean).join(' · ')
-    try {
-      await navigator.clipboard.writeText(details)
-      addToast(t('about.copied'))
-    } catch {
-      addToast(t('about.copyFailed'), 'error')
-    }
-  }
 
   return (
     <div className="about-page">
@@ -74,17 +60,12 @@ export default function AboutPage() {
       </p>
 
       <div className="about-actions">
-        <button type="button" className="about-action" onClick={copy}>
-          <CopyIcon size={15} />{t('about.copy')}
-        </button>
         <a className="about-action" href={LICENCES} target="_blank" rel="noopener noreferrer">
           {t('about.thirdParty')}<ExternalLinkIcon size={13} />
         </a>
       </div>
 
       <p className="about-rights">{t('about.rights', { year: built.getFullYear() })}</p>
-
-      <Toasts toasts={toasts} onRemove={removeToast} />
     </div>
   )
 }
