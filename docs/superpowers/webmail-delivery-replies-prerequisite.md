@@ -23,7 +23,7 @@ sieve_script calendar_replies {
   type = before
   driver = file
   path = /etc/dovecot/sieve/calendar-replies.sieve
-  bin_path = /var/lib/dovecot/sieve/calendar-replies.svbin
+  bin_path = /var/lib/dovecot/sieve   # un répertoire : Dovecot y ajoute calendar-replies.svbin
 }
 ```
 
@@ -39,7 +39,7 @@ sieve_extensions {
 }
 ```
 
-`/var/lib/dovecot/sieve/` doit exister et appartenir à `vmail` (le `.svbin` s'y dépose, sinon
+`bin_path` nomme un **répertoire**, jamais le fichier : `/var/lib/dovecot/sieve/` doit exister et appartenir à `vmail` (le `.svbin` s'y dépose, sinon
 Dovecot recompile à chaque livraison).
 
 ## 2. La règle — `/etc/dovecot/sieve/calendar-replies.sieve`
@@ -135,7 +135,7 @@ Apache (le `<Location>` avant les `ProxyPass` du `<VirtualHost>`) :
 
 ```apache
 <Location "/api/Delivery/">
-    Require ip <ip du serveur mail>
+    Require ip <ipv4 du serveur mail> <ipv6 du serveur mail>
     LimitRequestBody 6291456
 </Location>
 ```
@@ -144,7 +144,8 @@ nginx :
 
 ```
 location /api/Delivery/ {
-    allow <ip du serveur mail>;
+    allow <ipv4 du serveur mail>;
+    allow <ipv6 du serveur mail>;
     deny all;
     client_max_body_size 6m;   # le défaut, 1 Mo, refuserait une réponse plus grosse
     # … le proxy_pass et les en-têtes du bloc /api/ existant
@@ -155,7 +156,8 @@ location /api/Delivery/ {
 la machine et que le script appelle le nom public, la connexion arrive avec l'IP publique du
 serveur, ou `127.0.0.1` si le nom est résolu en local dans `/etc/hosts` : faire un appel
 `curl` de test depuis le serveur mail et lire l'adresse dans le journal d'accès du proxy. Toute
-autre adresse reçoit un 403 du proxy, avant la clé. La borne de taille laisse passer les 5 Mo
+autre adresse reçoit un 403 du proxy, avant la clé. Une machine qui a une IPv4 et une IPv6 appelle par l'une ou l'autre
+selon la résolution du moment : autoriser les deux, ou forcer une famille dans le fichier `curl` (`ipv4`). La borne de taille laisse passer les 5 Mo
 que le microservice accepte, qui répond lui-même 413 au-delà.
 
 ## 6. Avant d'activer — la procédure

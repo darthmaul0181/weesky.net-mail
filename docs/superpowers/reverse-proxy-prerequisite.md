@@ -107,7 +107,7 @@ décision 5. Apache, inside the `<VirtualHost>` before its `ProxyPass` lines:
 
 ```apache
 <Location "/api/Delivery/">
-    Require ip <ip of the mail server>
+    Require ip <ipv4 of the mail server> <ipv6 of the mail server>
     LimitRequestBody 6291456
 </Location>
 ```
@@ -116,7 +116,8 @@ nginx:
 
 ```
 location /api/Delivery/ {
-    allow <ip of the mail server>;
+    allow <ipv4 of the mail server>;
+    allow <ipv6 of the mail server>;
     deny all;
     client_max_body_size 6m;
     # … the proxy_pass and headers of the existing /api/ block
