@@ -7,6 +7,7 @@ using weesky.Snoopy.Microservice.Repositories;
 using weesky.Snoopy.Microservice.RuleProviders;
 using weesky.Snoopy.Microservice.RuleProviders.Rainloop;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Calendar.Delivery;
 using weesky.Snoopy.Microservice.Services.Calendar.Invitations;
 using weesky.Snoopy.Microservice.Services.Calendar.Scheduling;
 using weesky.Snoopy.Microservice.Services.Dav;
@@ -109,6 +110,8 @@ internal static class ApplicationServicesConfiguration
 
         // Singleton, so the account is read once rather than per mail; the admin screen invalidates it.
         services.AddSingleton<IServiceAccountProvider, ServiceAccountProvider>();
+        services.AddSingleton<IDeliveryKeyProvider, DeliveryKeyProvider>();
+        services.AddSingleton<DeliveryRefusals>();
         // One instance under two faces: the scheduler enqueues, the host runs the sending loop.
         services.AddSingleton<ServiceMailQueue>();
         services.AddSingleton<IServiceMailQueue>(sp => sp.GetRequiredService<ServiceMailQueue>());
@@ -154,6 +157,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
         services.AddScoped<IAppSettingStore, AppSettingStore>();
         services.AddScoped<ISchedulingAccountStore, SchedulingAccountStore>();
+        services.AddScoped<IDeliveryKeyStore, DeliveryKeyStore>();
         services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
         services.AddScoped<IWebmailUserStore, WebmailUserStore>();
         services.AddScoped<ITrustedSenderStore, TrustedSenderStore>();
@@ -184,7 +188,9 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IInvitationReader>(provider => provider.GetRequiredService<InvitationReader>());
         services.AddScoped<InvitationPartLoader>();
         services.AddScoped<IInvitationResponder, InvitationResponder>();
-        services.AddScoped<IInvitationReplyApplier, InvitationReplyApplier>();
+        services.AddScoped<InvitationReplyApplier>();
+        services.AddScoped<IInvitationReplyApplier>(provider => provider.GetRequiredService<InvitationReplyApplier>());
+        services.AddScoped<IDeliveryReplyApplier>(provider => provider.GetRequiredService<InvitationReplyApplier>());
 
         return services;
     }

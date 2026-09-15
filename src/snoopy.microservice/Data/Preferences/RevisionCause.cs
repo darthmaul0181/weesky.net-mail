@@ -26,5 +26,9 @@ public enum RevisionCause
 
     /// <summary>The server advanced a component's SEQUENCE after a device wrote a change the
     /// invitees have to receive (spec 5e, décision 9) — neither a PUT nor the user's gesture.</summary>
-    Scheduling
+    Scheduling,
+
+    /// <summary>A guest's REPLY applied by the mail server at delivery (spec 5e3, décision 11): the
+    /// user was not there, and the history must not say they were.</summary>
+    Delivery
 }

@@ -1,0 +1,27 @@
+From: someone@example.org
+To: alice@weesky.be
+Subject: reply
+Date: Sun, 13 Sep 2026 10:00:00 +0000
+Message-ID: <att-1@example.org>
+Content-Type: multipart/mixed; boundary="m"
+MIME-Version: 1.0
+
+--m
+Content-Type: text/plain
+
+see attached
+--m
+Content-Type: application/octet-stream; name="reply.ics"
+Content-Disposition: attachment; filename="reply.ics"
+
+BEGIN:VCALENDAR
+METHOD:REPLY
+VERSION:2.0
+BEGIN:VEVENT
+UID:aaaa1111-bbbb-2222-cccc-3333dddd4444
+ATTENDEE;PARTSTAT=TENTATIVE:mailto:marc.dupont@example.org
+DTSTAMP:20260913T100000Z
+DTSTART:20261005T080000Z
+END:VEVENT
+END:VCALENDAR
+--m--

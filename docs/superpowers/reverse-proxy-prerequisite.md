@@ -16,16 +16,23 @@ POST /api/login                              5 requests per minute, per address
 POST /api/ConnectedAccounts                  (attaching a mailbox verifies a password)
 PUT  /api/ConnectedAccounts/{id}/Password    (so does re-entering one)
 PATCH /api/Account/ChangeSecret              (and so does changing your own)
+POST /api/Delivery/CalendarReplies           concurrency, not per address
 ```
 
 Behind the reverse proxy, every request reaches Kestrel **from the proxy**, so before this change
-all four endpoints shared **one global bucket**. Two things followed from that, and only the
-second one is obvious:
+the first four endpoints above — the ones that verify a password — shared **one global bucket**.
+Two things followed from that, and only the second one is obvious:
 
 - Five attempts from anybody answered `429` to **every user of the service** — a denial of
   service that costs an attacker five requests a minute.
 - Nothing about the limiter discriminated the source of a password-guessing run, because every
   source had the same partition key.
+
+The fifth entry, the delivery door, is not part of that story at all: it carries a **concurrency**
+limiter on purpose, one partition shared by every caller, because every legitimate caller is the
+one mail server — an address-partitioned bucket would protect nobody there and a shared one is
+exactly the point (spec 5e3, décision 13). It needs the forwarded-address fix below for its own
+HTTP log line to read true, not for its rate limit.
 
 `UseForwardedHeaders` puts the client's own address back on the request. It is not enabled by
 default, and it must not be enabled blindly: `X-Forwarded-For` is a caller-supplied header, so a
@@ -90,6 +97,26 @@ five attempts per minute from each address it controls. Adding a per-account cou
 considered and left out on purpose: it lets anyone lock a mailbox they do not own out of its own
 webmail, which is a denial of service against a named person rather than against a botnet. If it
 is ever wanted, it belongs behind a delay that grows rather than a hard refusal.
+
+## Delivery door
+
+The `POST /api/Delivery/CalendarReplies` route is meant to be reachable from the mail server only —
+everything that actually keeps a stranger out (the key, the 404 that does not say whether the door
+exists) lives in the application, but nginx is the cheap extra layer named by spec 5e3, décision 5:
+
+```
+location /api/Delivery/ {
+    allow <ip du serveur mail>;
+    deny all;
+    client_max_body_size 6m;
+    # … the proxy_pass and headers of the existing /api/ block
+}
+```
+
+The default `client_max_body_size` is 1 MB, which would refuse a reply larger than that before the
+service's own 5 MB limit ever runs. See § 5 of
+`docs/superpowers/webmail-delivery-replies-prerequisite.md` for the full nginx block and the rest
+of the mail-server-side setup.
 
 ## CardDAV
 

@@ -1,0 +1,38 @@
+From: =?utf-8?Q?Micha=C3=ABl?= <mick0181@hotmail.com>
+To: Mick <darth@weesky.be>
+Subject: =?utf-8?Q?Accept=C3=A9=C2=A0:_Hello_World!_(4)?=
+Date: Mon, 14 Sep 2026 16:40:01 +0000
+Message-ID: <AS8P251MB0958@AS8P251MB0958.EURP251.PROD.OUTLOOK.COM>
+Content-Type: multipart/alternative; boundary="_000_outlook_"
+MIME-Version: 1.0
+
+--_000_outlook_
+Content-Type: text/plain; charset="windows-1256"
+Content-Transfer-Encoding: quoted-printable
+
+
+--_000_outlook_
+Content-Type: text/html; charset="windows-1256"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body></body></html>
+--_000_outlook_
+Content-Type: text/calendar; charset="utf-8"; method=REPLY
+Content-Transfer-Encoding: 8bit
+
+BEGIN:VCALENDAR
+METHOD:REPLY
+PRODID:Microsoft Exchange Server 2010
+VERSION:2.0
+BEGIN:VEVENT
+ATTENDEE;PARTSTAT=ACCEPTED;CN=Michaël:mailto:marc.dupont@example.org
+UID:aaaa1111-bbbb-2222-cccc-3333dddd4444
+SUMMARY;LANGUAGE=fr-BE:Accepté : Réunion de rentrée
+DTSTART;TZID=Romance Standard Time:20261005T100000
+DTEND;TZID=Romance Standard Time:20261005T110000
+DTSTAMP:20260914T163957Z
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR
+
+--_000_outlook_--

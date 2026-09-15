@@ -19,12 +19,15 @@ public class PreferencesDbContext : DbContext
     {
         modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.AccountId, o.Role });
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
-        // No relation edge on these two, unlike the five per-account tables below: both belong to
-        // no one, so there is nothing to order ahead of users.
+        // No relation edge on these three, unlike the five per-account tables below: none of them
+        // belongs to anyone, so there is nothing to order ahead of users.
         modelBuilder.Entity<AppSetting>().HasKey(s => s.SettingKey);
         modelBuilder.Entity<SchedulingServiceAccount>().HasKey(a => a.Id);
         modelBuilder.Entity<SchedulingServiceAccount>().Property(a => a.Id).ValueGeneratedNever();
         modelBuilder.Entity<SchedulingServiceAccount>().Property(a => a.UpdatedAt).IsConcurrencyToken();
+        modelBuilder.Entity<DeliveryReplyKey>().HasKey(k => k.Id);
+        modelBuilder.Entity<DeliveryReplyKey>().Property(k => k.Id).ValueGeneratedNever();
+        modelBuilder.Entity<DeliveryReplyKey>().Property(k => k.UpdatedAt).IsConcurrencyToken();
         modelBuilder.Entity<SendingIdentity>().HasKey(i => new { i.UserId, i.AccountId, i.Address });
         modelBuilder.Entity<TrustedSender>().HasKey(t => new { t.UserId, t.Address });
         modelBuilder.Entity<Contact>().HasKey(c => c.Id);
@@ -193,6 +196,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<AppSetting> AppSettings { get; set; }
 
     public DbSet<SchedulingServiceAccount> SchedulingServiceAccounts { get; set; }
+
+    public DbSet<DeliveryReplyKey> DeliveryReplyKeys { get; set; }
 
     public DbSet<SendingIdentity> SendingIdentities { get; set; }
 

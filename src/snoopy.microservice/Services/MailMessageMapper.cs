@@ -91,22 +91,35 @@ internal static class MailMessageMapper
 
     /// <summary>A calendar part by type or by name: Google and Outlook slip the invitation into the
     /// multipart/alternative as text/calendar with no name, and attach an invite.ics besides.</summary>
-    internal static bool IsCalendarPart(BodyPartBasic part) =>
-        part.ContentType is { } type && (type.IsMimeType("text", "calendar") || type.IsMimeType("application", "ics"))
-        || part.FileName is { } name && name.EndsWith(".ics", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsCalendarPart(ContentType? type, string? fileName) =>
+        type is not null && (type.IsMimeType("text", "calendar") || type.IsMimeType("application", "ics"))
+        || fileName is { } name && name.EndsWith(".ics", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsCalendarPart(BodyPartBasic part) => IsCalendarPart(part.ContentType, part.FileName);
 
     /// <summary>The one calendar part worth downloading (décision 1): a part whose Content-Type
     /// announces a handled method wins, then one announcing none; a part announcing another method
-    /// (PUBLISH…) is never it. Document order otherwise.</summary>
-    internal static BodyPartBasic? CalendarPart(IEnumerable<BodyPartBasic> parts)
+    /// (PUBLISH…) is never it. Document order otherwise. One rule for the two doors (spec 5e3,
+    /// décision 2): the IMAP structure and a MimeKit message project onto it.</summary>
+    internal static T? CalendarPart<T>(IEnumerable<T> parts, Func<T, ContentType?> typeOf, Func<T, string?> nameOf) where T : class
     {
-        BodyPartBasic? unannounced = null;
-        foreach (var part in parts.Where(IsCalendarPart))
+        T? unannounced = null;
+        foreach (var part in parts)
         {
-            var method = part.ContentType?.Parameters["method"]?.Trim().ToUpperInvariant();
+            var type = typeOf(part);
+            if (!IsCalendarPart(type, nameOf(part))) continue;
+            var method = type?.Parameters["method"]?.Trim().ToUpperInvariant();
             if (method is "REQUEST" or "CANCEL" or "REPLY") return part;
             if (method is null) unannounced ??= part;
         }
         return unannounced;
     }
+
+    internal static BodyPartBasic? CalendarPart(IEnumerable<BodyPartBasic> parts) =>
+        CalendarPart(parts, p => p.ContentType, p => p.FileName);
+
+    /// <summary>BodyParts, never MimeIterator: BodyParts stops at message/rfc822 exactly as MailKit's
+    /// does, and that is what keeps the two doors reading the same parts (measured on 4.17).</summary>
+    internal static MimePart? CalendarPart(MimeMessage message) =>
+        CalendarPart(message.BodyParts.OfType<MimePart>(), p => p.ContentType, p => p.FileName);
 }

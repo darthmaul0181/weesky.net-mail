@@ -45,6 +45,8 @@
   "connectionTestInProgress": "Un test de connexion est déjà en cours.",
   "securityNoneDisallowed": "Les connexions sans chiffrement ne sont pas autorisées : choisissez STARTTLS ou SSL/TLS.",
   "passwordRequiredForNewEndpoint": "Un mot de passe est requis : l’hôte ou le port ne correspond plus au compte enregistré.",
+  "deliveryKeyMissing": "Générez une clé avant d’activer le traitement à la livraison.",
+  "deliveryKeyChangedConcurrently": "La clé a été modifiée entre-temps : elle a été rechargée.",
   "contactImport": {
     "noNameOrAddress": "Ni un nom ni une adresse e-mail valide",
     "ambiguousAddress": "Une adresse de cette ligne appartient déjà à plusieurs contacts",

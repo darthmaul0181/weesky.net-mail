@@ -116,6 +116,8 @@ public sealed class CalendarEntitiesTests
 
         Assert.Equal("rejected", converter.ConvertToProvider(RevisionCause.Rejected));
         Assert.Equal(RevisionCause.Webmail, converter.ConvertFromProvider("webmail"));
+        Assert.Equal("delivery", converter.ConvertToProvider(RevisionCause.Delivery));
+        Assert.Equal(RevisionCause.Delivery, converter.ConvertFromProvider("delivery"));
     }
 
     // "scheduling" (10 chars) is the longest RevisionCause name; the column has to fit it, and the

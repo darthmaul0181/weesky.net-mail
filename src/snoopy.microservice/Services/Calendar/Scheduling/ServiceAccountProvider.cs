@@ -4,61 +4,28 @@ using weesky.Snoopy.Microservice.Repositories;
 namespace weesky.Snoopy.Microservice.Services.Calendar.Scheduling;
 
 /// <summary>
-/// A singleton over a scoped store, hence the scope per load. The cache lives in this process: the
-/// admin screen's invalidation reaches no other instance.
+/// A <see cref="CachedSingleton{T}"/> over a scoped store, hence the scope per load. The cache
+/// lives in this process: the admin screen's invalidation reaches no other instance.
 /// </summary>
 internal sealed class ServiceAccountProvider(
     IServiceScopeFactory scopes, IServiceAccountSecretProtector protector, ILogger<ServiceAccountProvider> logger)
     : IServiceAccountProvider
 {
-    private readonly SemaphoreSlim loading = new(1, 1);
-    private readonly Lock swap = new();
-    private LoadedServiceAccount? loaded;
-    private long generation;
+    private readonly CachedSingleton<ServiceSmtpAccount> cache = new(ct => LoadAsync(scopes, protector, logger, ct));
 
-    public bool? IsConfigured => Volatile.Read(ref loaded) is { } known ? known.Account is not null : null;
+    public bool? IsConfigured => cache.IsKnown;
 
-    public async Task<ServiceSmtpAccount?> GetAsync(CancellationToken cancellationToken)
-    {
-        if (Volatile.Read(ref loaded) is { } cached) return cached.Account;
-
-        await loading.WaitAsync(cancellationToken);
-        try
-        {
-            if (Volatile.Read(ref loaded) is { } loadedMeanwhile) return loadedMeanwhile.Account;
-
-            long loadedFor;
-            lock (swap) loadedFor = generation;
-            var account = await LoadAsync(cancellationToken);
-            // An invalidation that landed during the read: this result may predate the save, so it is not kept.
-            lock (swap)
-                if (loadedFor == generation) loaded = new LoadedServiceAccount(account);
-            return account;
-        }
-        finally
-        {
-            loading.Release();
-        }
-    }
+    public Task<ServiceSmtpAccount?> GetAsync(CancellationToken cancellationToken) => cache.GetAsync(cancellationToken);
 
     public async Task InvalidateAsync(CancellationToken cancellationToken)
     {
-        lock (swap)
-        {
-            generation++;
-            loaded = null;
-        }
-        try
-        {
-            await GetAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
+        if (await cache.InvalidateAsync(cancellationToken) is { } ex)
             logger.LogWarning(ex, "The calendar service account could not be reloaded; the next invitation mail retries");
-        }
     }
 
-    private async Task<ServiceSmtpAccount?> LoadAsync(CancellationToken cancellationToken)
+    private static async Task<ServiceSmtpAccount?> LoadAsync(
+        IServiceScopeFactory scopes, IServiceAccountSecretProtector protector, ILogger<ServiceAccountProvider> logger,
+        CancellationToken cancellationToken)
     {
         using var scope = scopes.CreateScope();
         var row = await scope.ServiceProvider.GetRequiredService<ISchedulingAccountStore>().FindAsync(cancellationToken);

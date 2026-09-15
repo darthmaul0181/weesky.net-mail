@@ -1,0 +1,41 @@
+From: Marc Dupont <marc.dupont@example.org>
+To: alice@weesky.be
+Subject: Declined: Reunion de rentree
+Date: Sun, 13 Sep 2026 10:00:00 +0000
+Message-ID: <gmail-1@mail.gmail.com>
+Content-Type: multipart/mixed; boundary="mixed"
+MIME-Version: 1.0
+
+--mixed
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset="UTF-8"
+
+Marc Dupont a refuse.
+--alt
+Content-Type: text/calendar; charset="UTF-8"; method=REPLY
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+METHOD:REPLY
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+BEGIN:VEVENT
+UID:aaaa1111-bbbb-2222-cccc-3333dddd4444
+ATTENDEE;PARTSTAT=DECLINED;CN=Marc Dupont:mailto:marc.dupont@example.org
+DTSTAMP:20260913T100000Z
+SEQUENCE:0
+SUMMARY:Declined: Reunion de rentree
+DTSTART;TZID=Europe/Brussels:20261005T100000
+DTEND;TZID=Europe/Brussels:20261005T110000
+END:VEVENT
+END:VCALENDAR
+--alt--
+--mixed
+Content-Type: application/ics; name="invite.ics"
+Content-Disposition: attachment; filename="invite.ics"
+Content-Transfer-Encoding: base64
+
+QkVHSU46VkNBTEVOREFSDQpNRVRIT0Q6UFVCTElTSA0KVkVSU0lPTjoyLjANCkVORDpWQ0FMRU5EQVINCg==
+--mixed--

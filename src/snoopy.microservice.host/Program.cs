@@ -20,7 +20,7 @@ builder.Services
     .AddSnoopyAuthentication()
     .AddFrontendCors(builder.Configuration)
     .AddProxyForwardedHeaders(builder.Configuration, builder.Environment)
-    .AddLoginRateLimiter()
+    .AddRateLimiters()
     .AddApiDocumentation()
     .AddProblemDetails();
 

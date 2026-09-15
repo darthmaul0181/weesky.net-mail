@@ -8,7 +8,9 @@ using weesky.Snoopy.Microservice.Authentication.Authorization;
 using weesky.Snoopy.Microservice.Authentication.Dav;
 using weesky.Snoopy.Microservice.Authentication.Extensions;
 using weesky.Snoopy.Microservice.Authentication.Services;
+using weesky.Snoopy.Microservice.Controllers;
 using weesky.Snoopy.Microservice.Services;
+using weesky.Snoopy.Microservice.Services.Calendar.Delivery;
 
 namespace weesky.Snoopy.Microservice.Configuration;
 
@@ -92,6 +94,10 @@ internal static class SecurityConfiguration
                 .WithMethods("GET", "POST", "PATCH", "DELETE", "PUT")
                 // The account header must pass preflight, or every mail request carrying it
                 // dies on a CORS error before the server ever sees the account id.
+                //
+                // X-Delivery-Key stays OUT of this list: it is what makes a browser's preflight fail
+                // on POST /api/Delivery/CalendarReplies, so no page can be steered into that door
+                // (spec 5e3). Adding it here would open the door to CSRF.
                 .WithHeaders("Authorization", "Content-Type", IAccountConnectionResolver.HeaderName)
                 // Content-Disposition is not CORS-safelisted, so a browser hides it from
                 // JavaScript unless the server exposes it explicitly — without this, the
@@ -104,7 +110,7 @@ internal static class SecurityConfiguration
 
     /// <summary>
     /// Restores the caller's own address on <c>RemoteIpAddress</c>, which is what
-    /// <see cref="AddLoginRateLimiter"/> partitions on. Behind the reverse proxy every request
+    /// <see cref="AddRateLimiters"/>'s <c>login</c> policy partitions on. Behind the reverse proxy every request
     /// arrives from the proxy, so without this the login limiter holds one bucket for the whole
     /// world: five attempts answer 429 to every user of the service, and no partition ever
     /// discriminates the source of a password-guessing run.
@@ -153,13 +159,15 @@ internal static class SecurityConfiguration
     }
 
     /// <summary>
-    /// Bounds password guessing on the three endpoints that verify one: the login itself, attaching
-    /// a mailbox, and re-entering an attached mailbox's password.
-    ///
-    /// The partition is the caller's address, which only means anything once
-    /// <see cref="AddProxyForwardedHeaders"/> has put the real one there.
+    /// Two policies. <c>login</c> bounds password guessing on the three endpoints that verify one
+    /// (the login itself, attaching a mailbox, re-entering an attached mailbox's password),
+    /// partitioned by the caller's address — which only means anything once
+    /// <see cref="AddProxyForwardedHeaders"/> has put the real one there. <c>delivery</c> bounds
+    /// the concurrency of the mail server's door: every legitimate call comes from one address, so
+    /// a per-address window would be one global bucket anyone could drain (spec 5e3, décision 13);
+    /// what this protects is the process, 503 past 8 in flight and 16 queued, and it says so.
     /// </summary>
-    public static IServiceCollection AddLoginRateLimiter(this IServiceCollection services) =>
+    public static IServiceCollection AddRateLimiters(this IServiceCollection services) =>
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -173,7 +181,32 @@ internal static class SecurityConfiguration
                         PermitLimit = 5,
                         QueueLimit = 0
                     }));
+
+            options.AddPolicy(DeliveryPolicy, _ =>
+                RateLimitPartition.GetConcurrencyLimiter(DeliveryPolicy, _ => new ConcurrencyLimiterOptions
+                {
+                    PermitLimit = 8,
+                    QueueLimit = 16,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+            options.OnRejected = (context, _) =>
+            {
+                var policy = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+                if (policy != DeliveryPolicy) return ValueTask.CompletedTask;
+                context.HttpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                // Runs ahead of the controller, so this is the one entry point the concurrency
+                // limiter's own refusals can multiply; it gets the same one-a-minute throttle as a
+                // wrong key, through its own counter on the shared singleton (décision 8, 13).
+                var refusals = context.HttpContext.RequestServices.GetRequiredService<DeliveryRefusals>();
+                if (refusals.NoteOverload() is { } count)
+                    context.HttpContext.RequestServices.GetRequiredService<ILogger<DeliveryController>>()
+                        .LogWarning("Delivery calls refused by the concurrency limiter: {Count} since the last notice", count);
+                return ValueTask.CompletedTask;
+            };
         });
+
+    public const string DeliveryPolicy = "delivery";
 
     /// <summary>
     /// The Data Protection key ring encrypts the IMAP credentials cookie, so it must survive
