@@ -130,7 +130,8 @@
   margin: 0 7px 7px 0;
 }
 
-.topbar-brand { display: flex; align-items: center; gap: 10px; }
+/* 3px below centre: optical, asked for after the logo and the name grew. */
+.topbar-brand { display: flex; align-items: center; gap: 10px; padding-top: 6px; }
 .topbar-logo { height: 29px; width: 29px; border-radius: 50%; }
 /* Written rather than drawn, so it takes the palette's own topbar foregrounds: the wordmark it
    replaced was one flat image and went muddy on the two palettes with a pale top bar. */
