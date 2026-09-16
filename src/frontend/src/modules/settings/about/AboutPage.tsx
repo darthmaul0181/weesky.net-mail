@@ -40,15 +40,20 @@ export default function AboutPage() {
         <h1 className="settings-page-title"><InfoIcon size={17} />{t('nav.about')}</h1>
       </div>
 
-      <img
-        className="about-logo"
-        src={scotty}
-        srcSet={`${scotty} 720w, ${scottyLarge} 1440w`}
-        sizes="(max-width: 639px) calc(100vw - 32px), 560px"
-        width={720}
-        height={499}
-        alt=""
-      />
+      {/* The halo is the same drawing, blurred behind itself: it lights the panel without
+          bringing a colour or an asset of its own. */}
+      <div className="about-art">
+        <img className="about-halo" src={scotty} alt="" aria-hidden="true" />
+        <img
+          className="about-logo"
+          src={scotty}
+          srcSet={`${scotty} 720w, ${scottyLarge} 1440w`}
+          sizes="(max-width: 639px) calc(100vw - 32px), 560px"
+          width={720}
+          height={499}
+          alt=""
+        />
+      </div>
 
       <p className="about-product">{PRODUCT.name} <span className="about-product-kind">{PRODUCT.kind}</span></p>
       <span className="about-badge">{t('about.version', { version: WEB_VERSION })}</span>

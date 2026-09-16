@@ -130,11 +130,21 @@
   margin: 0 7px 7px 0;
 }
 
-.topbar-brand { display: flex; align-items: center; gap: 10px; }
-.topbar-logo { height: 26px; width: 26px; border-radius: 50%; }
+/* 3px below centre: optical, asked for after the logo and the name grew. */
+.topbar-brand { display: flex; align-items: center; gap: 10px; padding-top: 6px; }
+.topbar-logo { height: 29px; width: 29px; border-radius: 50%; }
 /* Written rather than drawn, so it takes the palette's own topbar foregrounds: the wordmark it
    replaced was one flat image and went muddy on the two palettes with a pale top bar. */
-.topbar-name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: var(--topbar-fg); }
+/* Raised 3px: the text BOX centres on the disc, but the glyphs drawn inside it sit 3.5px
+   lower, the font reserving more room above the baseline than below. Measured, not guessed. */
+.topbar-name {
+  position: relative;
+  top: -3px;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--topbar-fg);
+}
 .topbar-name-kind { font-weight: 300; color: var(--rail-fg); }
 
 /* ── Account block, at the foot of the folder column ──────────────────────── */
@@ -943,15 +953,46 @@ a.dropdown-item { text-decoration: none; }
 
 /* The whole illustration, never cropped: width and height both bounded, so the drawing keeps
    its ratio and still fits a 768px-tall window beside the name and the lines under it. */
+.about-art { position: relative; width: min(560px, 100%); margin-top: 4px; }
+
+/* The same drawing again, blurred behind itself — the panel's only light source, so it costs no
+   colour and no second asset. Decorative: `aria-hidden`, and it never takes a pointer. */
+.about-halo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* No transform to enlarge it, deliberately: a scaled child counts as scrollable overflow and
+     put 42px of `clipped` on the art box, while a filter's spill does not — the blur alone
+     already paints ~58px outside the box. Strength chosen off three renders: 0.55 is barely
+     there, 0.9 hazes the drawing's own edges. */
+  filter: blur(58px) saturate(1.3);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
 .about-logo {
-  width: min(560px, 100%);
+  position: relative;
+  display: block;
+  width: 100%;
   max-height: 46vh;
   height: auto;
   object-fit: contain;
-  margin-top: 4px;
 }
 
-.about-product { display: flex; gap: 10px; margin: 10px 0 0; font-size: 34px; font-weight: 700; letter-spacing: -0.01em; }
+/* Under the drawing and clear of it: an overlap was tried and dropped — the drawing's bottom is
+   the cat's white paws, and white letters laid over them stop being letters. The shadow is what
+   holds the name against the halo's light. */
+.about-product {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0 0;
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  text-shadow: 0 2px 4px rgba(8, 12, 22, 0.55), 0 8px 34px rgba(8, 12, 22, 0.5);
+}
 .about-product-kind { font-weight: 300; color: var(--rail-fg); }
 
 .about-badge {
@@ -1233,7 +1274,7 @@ a.dropdown-item { text-decoration: none; }
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .about-product { font-size: 26px; }
+  .about-product { font-size: 30px; }
   /* Three facts, three lines: at 360 the joined line wrapped mid-version. */
   .about-builds { flex-direction: column; gap: 4px; }
   .about-builds > span + span::before { content: none; }
