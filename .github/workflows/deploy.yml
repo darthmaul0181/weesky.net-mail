@@ -29,11 +29,11 @@ jobs:
               - 'VERSION'
               - 'src/Directory.Build.props'
             backend:
-              - 'src/snoopy.microservice/**'
-              - 'src/snoopy.microservice.host/**'
-              - 'src/snoopy.providers.weesky/**'
-              - 'src/snoopy.providers.weesky.Tests/**'
-              - 'src/snoopy.microservice.sln'
+              - 'src/scotty.microservice/**'
+              - 'src/scotty.microservice.host/**'
+              - 'src/scotty.providers.weesky/**'
+              - 'src/scotty.providers.weesky.Tests/**'
+              - 'src/scotty.microservice.sln'
               - 'VERSION'
               - 'src/Directory.Build.props'
 
@@ -129,10 +129,10 @@ jobs:
           recreate: true
           path: code-coverage-results.md
       - name: Restore for publish
-        run: dotnet restore src/snoopy.microservice.host/snoopy.microservice.host.csproj -r linux-x64
+        run: dotnet restore src/scotty.microservice.host/scotty.microservice.host.csproj -r linux-x64
       - name: Publish
         run: >
-          dotnet publish src/snoopy.microservice.host/snoopy.microservice.host.csproj
+          dotnet publish src/scotty.microservice.host/scotty.microservice.host.csproj
           -c Release -r linux-x64 --self-contained
           -p:ReleaseBuild=${{ github.ref_name == 'master' }}
           --no-restore
@@ -239,11 +239,11 @@ jobs:
         if: needs.detect-changes.outputs.backend == 'true'
         run: |
           if [ "${{ github.ref_name }}" = "master" ]; then
-            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}/snoopy.microservice"
-            SERVICE_NAME="snoopy.microservice"
+            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}/scotty.microservice"
+            SERVICE_NAME="scotty.microservice"
           else
-            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}-dev/snoopy.microservice"
-            SERVICE_NAME="snoopy.microservice-dev"
+            DEPLOY_PATH="${{ secrets.DEPLOY_BASE_PATH }}-dev/scotty.microservice"
+            SERVICE_NAME="scotty.microservice-dev"
           fi
           tar -cf - -C publish . | ssh -i ~/.ssh/deploy_key \
             -o ConnectTimeout=30 -o ServerAliveInterval=60 \
@@ -252,7 +252,7 @@ jobs:
              sudo tar -xf - -C $DEPLOY_PATH && \
              sudo find $DEPLOY_PATH -type d -exec chmod 770 {} + && \
              sudo find $DEPLOY_PATH -type f -exec chmod 660 {} + && \
-             sudo chmod 760 $DEPLOY_PATH/snoopy.microservice && \
+             sudo chmod 760 $DEPLOY_PATH/scotty.microservice && \
              sudo chown -R root:${{ secrets.DEPLOY_USER }} $DEPLOY_PATH && \
              sudo systemctl restart $SERVICE_NAME"
 

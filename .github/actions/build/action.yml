@@ -1,5 +1,5 @@
 name: Build and test
-description: Build snoopy.microservice, run tests and publish coverage
+description: Build scotty.microservice, run tests and publish coverage
 
 inputs:
   working-directory:

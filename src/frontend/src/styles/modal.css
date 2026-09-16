@@ -1,6 +1,6 @@
 /* The whole dialog contract. A modal sizes to its own content between a floor and a reading
    measure; the overlay owns the scroll. See
-   docs/superpowers/specs/2026-07-31-webmail-content-sized-modals-design.md */
+   docs/history/specs/2026-07-31-webmail-content-sized-modals-design.md */
 
 /* margin:auto on the child, not align-items:center on the overlay: centred while the dialog fits,
    anchored to the top and scrollable once it does not. align-items:center plus a scroll makes the

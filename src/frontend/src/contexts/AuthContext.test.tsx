@@ -75,7 +75,7 @@ const connected = [
 ]
 
 const appSettings = {
-  'app.installable': 'true', 'app.name': 'Snoopy mail', 'app.shortName': 'Snoopy',
+  'app.installable': 'true', 'app.name': 'Scotty mail', 'app.shortName': 'Scotty',
 }
 
 /** App.tsx's InstallManifest: mounted beside the provider, above the router, never unmounted. */

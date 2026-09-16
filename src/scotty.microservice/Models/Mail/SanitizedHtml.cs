@@ -1,0 +1,20 @@
+namespace weesky.Scotty.Microservice.Models.Mail;
+
+/// <summary>A message body made safe to render, plus what was withheld.</summary>
+public sealed class SanitizedHtml
+{
+    public string Html { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Remote images moved to data-blocked-src. The client offers "show images" and swaps
+    /// them back in without another round trip. Loading them would tell the sender the
+    /// message was opened, which is why they are withheld until the user asks.
+    /// </summary>
+    public int BlockedImageCount { get; set; }
+
+    /// <summary>
+    /// True when the body exceeded the sanitiser's input ceiling and only its leading part
+    /// was kept (then fully sanitised). Lets the client signal the cut to the reader.
+    /// </summary>
+    public bool Truncated { get; set; }
+}

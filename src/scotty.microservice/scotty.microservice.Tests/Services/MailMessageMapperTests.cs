@@ -1,0 +1,322 @@
+using MailKit;
+using MimeKit;
+using Moq;
+using weesky.Scotty.Microservice.Models.Mail;
+using weesky.Scotty.Microservice.Services;
+using Xunit;
+
+namespace weesky.Scotty.Microservice.Tests.Services;
+
+public sealed class MailMessageMapperTests
+{
+    [Fact]
+    public void FillSummary_TranscribesTheEnvelopeRecipients()
+    {
+        var envelope = new Envelope();
+        envelope.To.Add(new MailboxAddress("Bob", "bob@ext.example"));
+        envelope.To.Add(new MailboxAddress(string.Empty, "carol@ext.example"));
+        var item = new Mock<IMessageSummary>();
+        item.SetupGet(i => i.UniqueId).Returns(new UniqueId(7));
+        item.SetupGet(i => i.Envelope).Returns(envelope);
+
+        var summary = MailMessageMapper.FillSummary(new MailMessageSummary(), item.Object);
+
+        Assert.Equal(2, summary.To.Count);
+        Assert.Equal("Bob", summary.To[0].Name);
+        Assert.Equal("bob@ext.example", summary.To[0].Address);
+        Assert.Equal("carol@ext.example", summary.To[1].Address);
+    }
+
+    [Fact]
+    public void FillSummary_LeavesToEmptyWithoutAnEnvelope()
+    {
+        var item = new Mock<IMessageSummary>();
+        item.SetupGet(i => i.UniqueId).Returns(new UniqueId(7));
+        item.SetupGet(i => i.Envelope).Returns((Envelope?)null);
+
+        var summary = MailMessageMapper.FillSummary(new MailMessageSummary(), item.Object);
+
+        Assert.Empty(summary.To);
+    }
+
+    /// <summary>A fetched summary carrying the headers the priority is read out of.</summary>
+    private static IMessageSummary FakeSummary(HeaderList? headers)
+    {
+        var item = new Mock<IMessageSummary>();
+        item.SetupGet(i => i.UniqueId).Returns(new UniqueId(7));
+        item.SetupGet(i => i.Headers).Returns(headers!);
+        return item.Object;
+    }
+
+    /// <summary>The list row's marker comes from here, and search hits share the mapping.</summary>
+    [Fact]
+    public void FillSummary_ReadsThePriorityOffTheFetchedHeaders()
+    {
+        var headers = new HeaderList();
+        headers.Add("X-Priority", "1 (Highest)");
+
+        var summary = MailMessageMapper.FillSummary(new MailMessageSummary(), FakeSummary(headers));
+
+        Assert.Equal(MailPriority.High, summary.Priority);
+    }
+
+    [Fact]
+    public void FillSummary_IsNormalWhenTheMessageCarriesNoPriorityHeader()
+    {
+        var summary = MailMessageMapper.FillSummary(new MailMessageSummary(), FakeSummary(new HeaderList()));
+
+        Assert.Equal(MailPriority.Normal, summary.Priority);
+    }
+
+    /// <summary>A server that answered without the header set must not throw or invent a priority.</summary>
+    [Fact]
+    public void FillSummary_IsNormalWhenTheServerReturnedNoHeadersAtAll()
+    {
+        var summary = MailMessageMapper.FillSummary(new MailMessageSummary(), FakeSummary(headers: null));
+
+        Assert.Equal(MailPriority.Normal, summary.Priority);
+    }
+
+    // ── Address info conversion ──────────────────────────────────────
+
+    [Fact]
+    public void ToAddressInfos_PreservesDisplayNameWhenPresent()
+    {
+        var addresses = new InternetAddressList { new MailboxAddress("Bob Smith", "bob@example.com") };
+
+        var result = MailMessageMapper.ToAddressInfos(addresses);
+
+        Assert.Single(result);
+        Assert.Equal("Bob Smith", result[0].Name);
+        Assert.Equal("bob@example.com", result[0].Address);
+    }
+
+    [Fact]
+    public void ToAddressInfos_UsesEmptyStringWhenDisplayNameIsNull()
+    {
+        var addresses = new InternetAddressList { new MailboxAddress(null, "alice@example.com") };
+
+        var result = MailMessageMapper.ToAddressInfos(addresses);
+
+        Assert.Single(result);
+        Assert.Equal(string.Empty, result[0].Name);
+        Assert.Equal("alice@example.com", result[0].Address);
+    }
+
+    [Fact]
+    public void ToAddressInfos_ReturnsEmptyListForNullAddressList()
+    {
+        var result = MailMessageMapper.ToAddressInfos(null);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ToAddressInfos_ReturnsEmptyListForEmptyAddressList()
+    {
+        var addresses = new InternetAddressList();
+
+        var result = MailMessageMapper.ToAddressInfos(addresses);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ToAddressInfos_PreservesOrderWithMultipleRecipients()
+    {
+        var addresses = new InternetAddressList
+        {
+            new MailboxAddress("Charlie", "charlie@example.com"),
+            new MailboxAddress("Diana", "diana@example.com"),
+            new MailboxAddress(null, "eve@example.com")
+        };
+
+        var result = MailMessageMapper.ToAddressInfos(addresses);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal("Charlie", result[0].Name);
+        Assert.Equal("charlie@example.com", result[0].Address);
+        Assert.Equal("Diana", result[1].Name);
+        Assert.Equal("diana@example.com", result[1].Address);
+        Assert.Equal(string.Empty, result[2].Name);
+        Assert.Equal("eve@example.com", result[2].Address);
+    }
+
+    [Fact]
+    public void ApplyThreading_TranscribesTheHeaders()
+    {
+        var message = new MimeMessage();
+        message.MessageId = "current@id";
+        message.InReplyTo = "parent@id";
+        message.References.Add("grandparent@id");
+        message.References.Add("parent@id");
+        message.ReplyTo.Add(new MailboxAddress("List", "list@x.example"));
+        message.Bcc.Add(new MailboxAddress("Hidden", "bcc@x.example"));
+
+        var detail = new MailMessageDetail();
+        MailMessageMapper.ApplyThreading(detail, message);
+
+        Assert.Equal("current@id", detail.MessageId);
+        Assert.Equal("parent@id", detail.InReplyTo);
+        Assert.Equal(new[] { "grandparent@id", "parent@id" }, detail.References);
+        Assert.Equal("list@x.example", Assert.Single(detail.ReplyTo).Address);
+        Assert.Equal("bcc@x.example", Assert.Single(detail.Bcc).Address);
+    }
+
+    [Fact]
+    public void ApplyThreading_DefaultsToNullAndEmptyWhenAbsent()
+    {
+        // MimeMessage's constructor generates a Message-Id — remove it to model a header-less original.
+        var message = new MimeMessage();
+        message.Headers.Remove(HeaderId.MessageId);
+
+        var detail = new MailMessageDetail();
+        MailMessageMapper.ApplyThreading(detail, message);
+
+        Assert.Null(detail.MessageId);
+        Assert.Null(detail.InReplyTo);
+        Assert.Empty(detail.References);
+        Assert.Empty(detail.ReplyTo);
+        Assert.Empty(detail.Bcc);
+    }
+
+    // ── Content-Id normalisation ─────────────────────────────────────
+    //
+    // GetMessageAsync itself is not unit-testable: it drives a real MailKit ImapClient
+    // (ImapSession wraps a concrete ImapClient, not an interface) through GetFolderAsync/
+    // FetchAsync/GetMessageAsync, none of which can be produced from a fixture without a
+    // live or fake IMAP server. The transcription this task adds is the pure normalisation
+    // step, exercised here directly instead — the closest seam the rest of this suite
+    // already uses for the mapper's other pure static helpers (ApplyThreading, ToAddressInfos, ...).
+
+    [Fact]
+    public void TrimAngleBrackets_StripsAngleBracketsFromAServerReportedContentId()
+    {
+        Assert.Equal("logo@mail", MailMessageMapper.TrimAngleBrackets("<logo@mail>"));
+    }
+
+    [Fact]
+    public void TrimAngleBrackets_LeavesABareContentIdUnchanged()
+    {
+        Assert.Equal("logo@mail", MailMessageMapper.TrimAngleBrackets("logo@mail"));
+    }
+
+    [Fact]
+    public void TrimAngleBrackets_ReturnsNullForNull()
+    {
+        Assert.Null(MailMessageMapper.TrimAngleBrackets(null));
+    }
+
+    [Fact]
+    public void TrimAngleBrackets_ReturnsNullForWhitespaceOrEmpty()
+    {
+        Assert.Null(MailMessageMapper.TrimAngleBrackets(string.Empty));
+        Assert.Null(MailMessageMapper.TrimAngleBrackets("   "));
+    }
+
+    // ── Which body parts reach the client ────────────────────────────
+    //
+    // Same seam as above: the enumeration itself needs a live FETCH, the decision it makes does
+    // not. A Vaultwarden logo arrives inline, unnamed, with a Content-ID; dropping it left the
+    // reader holding a cid: with nothing to resolve it against.
+
+    private static BodyPartBasic Part(
+        string? contentId = null, string? fileName = null, bool attachment = false) =>
+        new(new ContentType("image", "png"), "1")
+        {
+            ContentId = contentId,
+            ContentDisposition = attachment || fileName != null
+                ? new ContentDisposition(attachment ? "attachment" : "inline") { FileName = fileName }
+                : null
+        };
+
+    [Fact]
+    public void IsListedPart_KeepsAnUnnamedInlinePartCarryingAContentId()
+    {
+        Assert.True(MailMessageMapper.IsListedPart(Part(contentId: "<logo@mail>")));
+    }
+
+    [Fact]
+    public void IsListedPart_KeepsAnAttachmentAndANamedPart()
+    {
+        Assert.True(MailMessageMapper.IsListedPart(Part(attachment: true)));
+        Assert.True(MailMessageMapper.IsListedPart(Part(fileName: "photo.png")));
+    }
+
+    // The message's own text and html carry none of the three, and must not read as attachments.
+    [Fact]
+    public void IsListedPart_DropsAPartThatIsNeitherAttachedNorNamedNorReferenced()
+    {
+        Assert.False(MailMessageMapper.IsListedPart(Part()));
+    }
+
+    [Fact]
+    public void IsListedPart_DropsAPartWhoseContentIdIsEmptyBrackets()
+    {
+        Assert.False(MailMessageMapper.IsListedPart(Part(contentId: "<>")));
+    }
+
+    // ── Which calendar part the detail downloads ─────────────────────
+    //
+    // Same seam again: BODYSTRUCTURE comes off a live FETCH, the choice it feeds does not.
+
+    private static BodyPartBasic IcsPart(
+        string specifier, string mediaType, string mediaSubtype, string? method = null, string? name = null)
+    {
+        var contentType = new ContentType(mediaType, mediaSubtype);
+        if (method is not null) contentType.Parameters.Add("method", method);
+        if (name is not null) contentType.Name = name;
+        return new BodyPartBasic(contentType, specifier);
+    }
+
+    [Fact]
+    public void CalendarPart_PrefersAPartWhoseMethodIsHandled_ThenOneWithoutMethod_NeverAnotherMethod()
+    {
+        var publish = IcsPart("1", "text", "calendar", method: "PUBLISH");
+        var plain = IcsPart("2", "application", "ics", name: "invite.ics");
+        var request = IcsPart("3", "text", "calendar", method: "REQUEST");
+        var text = IcsPart("4", "text", "plain");
+
+        Assert.Same(request, MailMessageMapper.CalendarPart([publish, plain, request, text]));
+        Assert.Same(plain, MailMessageMapper.CalendarPart([publish, plain, text]));
+        Assert.Null(MailMessageMapper.CalendarPart([publish, text]));
+    }
+
+    /// <summary>Outlook.com answers with the announced part alone, no invite.ics beside it.</summary>
+    [Fact]
+    public void CalendarPart_TakesAnAnnouncedReply_OverAPartWithoutMethod()
+    {
+        var reply = IcsPart("3", "text", "calendar", method: "REPLY");
+        var plain = IcsPart("4", "application", "ics", name: "invite.ics");
+
+        Assert.Same(reply, MailMessageMapper.CalendarPart([IcsPart("1", "text", "plain"), reply]));
+        Assert.Same(reply, MailMessageMapper.CalendarPart([plain, reply]));
+    }
+
+    [Fact]
+    public void CalendarPart_TakesACancelAsWillingly_AndReadsTheMethodCaseInsensitively()
+    {
+        var cancel = IcsPart("1", "text", "calendar", method: " cancel ");
+        var plain = IcsPart("2", "text", "calendar");
+
+        Assert.Same(cancel, MailMessageMapper.CalendarPart([plain, cancel]));
+    }
+
+    /// <summary>A single-part message: the calendar file is the body itself, specifier and all.</summary>
+    [Fact]
+    public void CalendarPart_TakesTheWholeBodyWhenTheMessageIsTheInvitation()
+    {
+        var body = IcsPart(string.Empty, "text", "calendar", method: "REQUEST");
+
+        Assert.Same(body, MailMessageMapper.CalendarPart([body]));
+    }
+
+    [Fact]
+    public void IsCalendarPart_ByTypeOrByName()
+    {
+        Assert.True(MailMessageMapper.IsCalendarPart(IcsPart("1", "text", "calendar")));
+        Assert.True(MailMessageMapper.IsCalendarPart(IcsPart("1", "application", "ics")));
+        Assert.True(MailMessageMapper.IsCalendarPart(IcsPart("1", "application", "octet-stream", name: "Invite.ICS")));
+        Assert.False(MailMessageMapper.IsCalendarPart(IcsPart("1", "text", "plain", name: "notes.txt")));
+    }
+}

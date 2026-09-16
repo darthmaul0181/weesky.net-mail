@@ -129,8 +129,8 @@ describe('App composition', () => {
     mocks.getMailFolders.mockResolvedValue([])
     mocks.getAppSettings.mockResolvedValue({
       'app.installable': 'true',
-      'app.name': 'Snoopy mail',
-      'app.shortName': 'Snoopy',
+      'app.name': 'Scotty mail',
+      'app.shortName': 'Scotty',
     })
     URL.createObjectURL = vi.fn(() => 'blob:mock')
     URL.revokeObjectURL = vi.fn()

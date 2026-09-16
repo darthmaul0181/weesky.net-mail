@@ -1,6 +1,6 @@
 # Database — `dovecot`
 
-MariaDB database used by Dovecot for mail authentication and by the `snoopy.microservice` API for account/domain management.
+MariaDB database used by Dovecot for mail authentication and by the `scotty.microservice` API for account/domain management.
 
 ## Ecosystem role
 
@@ -17,7 +17,7 @@ The `dovecot` database is the **single source of truth** for the entire weesky.n
                │                     │                      │
                ▼                     ▼                      ▼
          ┌──────────┐          ┌──────────┐         ┌─────────────────┐
-         │ Postfix  │          │ Dovecot  │         │    snoopy       │
+         │ Postfix  │          │ Dovecot  │         │    scotty       │
          │ (MTA)    │          │ (IMAP /  │         │ microservice    │
          │          │          │  LDA)    │         │ (ASP.NET REST)  │
          └──────────┘          └──────────┘         └─────────────────┘
@@ -52,17 +52,17 @@ Dovecot's `passdb` is also called by Postfix during SMTP SUBMISSION: when a clie
 
 The `userdb` alias branch is queried by the Postfix quota-status plugin **before** alias resolution — at that point Postfix only knows the alias address, so the `UNION ALL` branch resolves it to the real mailbox and its quota on the fly.
 
-### snoopy microservice
+### scotty microservice
 
-The `snoopy.microservice` (ASP.NET Core REST API) is the **only component that writes** to the database. Postfix and Dovecot are read-only consumers; `snoopy` is the sole administration path.
+The `scotty.microservice` (ASP.NET Core REST API) is the **only component that writes** to the database. Postfix and Dovecot are read-only consumers; `scotty` is the sole administration path.
 
-Through its React web frontend, `snoopy` exposes:
+Through its React web frontend, `scotty` exposes:
 
 - Domain management (create / delete primary and virtual domains, assign ownerships)
 - Account management (create / update / delete mailboxes, change password, set quota, toggle active state)
 - Alias management (create / delete aliases across owned domains)
 
-Because the database is shared with live Postfix and Dovecot processes, every write performed by `snoopy` takes effect immediately — there is no configuration reload step.
+Because the database is shared with live Postfix and Dovecot processes, every write performed by `scotty` takes effect immediately — there is no configuration reload step.
 
 ---
 

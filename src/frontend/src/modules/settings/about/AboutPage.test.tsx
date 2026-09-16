@@ -79,10 +79,19 @@ describe('AboutPage', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
+  it('offers the source, which the licence obliges a modified deployment to', () => {
+    renderPage()
+
+    const link = screen.getByRole('link', { name: 'Source code' })
+    expect(link).toHaveAttribute('href', 'https://github.com/darthmaul0181/weesky.net-mail')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
   it('carries the copyright for the year of the build', () => {
     renderPage()
 
     const year = new Date(BUILT_AT).getFullYear()
-    expect(screen.getByText(`© ${year} darth-weesky.net. All rights reserved.`)).toBeInTheDocument()
+    expect(screen.getByText(`© ${year} darthmaul0181 — AGPL-3.0`)).toBeInTheDocument()
   })
 })

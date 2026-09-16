@@ -17,8 +17,8 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const enabled = {
   'app.installable': 'true',
-  'app.name': 'Snoopy mail',
-  'app.shortName': 'Snoopy',
+  'app.name': 'Scotty mail',
+  'app.shortName': 'Scotty',
 }
 
 function manifestLink() {

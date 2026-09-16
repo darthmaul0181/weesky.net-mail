@@ -4,8 +4,8 @@ Ce harnais lance `ccs-caldavtester`, l'outil de conformité de CalendarServer,
 contre un déploiement dev réel. Il existe depuis 4d (CardDAV) ; 5d y ajoute
 CalDAV plutôt que d'en dupliquer le clonage, le `PYTHONPATH` et l'épuration
 (« pas de doublon » vaut aussi pour l'outillage). Voir
-`docs/superpowers/specs/2026-08-31-webmail-contacts-4d-conformance-design.md`
-et `docs/superpowers/specs/2026-09-07-webmail-calendar-5d-conformance-design.md`
+`docs/history/specs/2026-08-31-webmail-contacts-4d-conformance-design.md`
+et `docs/history/specs/2026-09-07-webmail-calendar-5d-conformance-design.md`
 pour pourquoi ce harnais existe et comment ses résultats sont lus dans un rapport.
 
 ## Prérequis
