@@ -4,6 +4,7 @@ import PencilIcon from '../../../icons/PencilIcon.jsx'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
 import { ApiError } from '../../../api.js'
+import ModalOverlay from '../../../components/ModalOverlay'
 import { useDialogFocusTrap } from '../../../hooks/useDialogFocusTrap'
 import { apiErrorMessage, messageForCode } from '../../../lib/apiErrorMessage'
 import { isValidHost, isValidPort, SECURITY_OPTIONS, securityLabel } from '../../../lib/mailEndpointValidation'
@@ -138,7 +139,7 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   }
 
   return (
-    <div className="modal-overlay" onClick={requestClose}>
+    <ModalOverlay onClose={requestClose}>
       <div className="modal" ref={dialogRef} tabIndex={-1} onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-labelledby={DIALOG_TITLE_ID}>
         <div className="modal-header">
@@ -212,6 +213,6 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

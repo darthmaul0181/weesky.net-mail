@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 interface MenuItemBase {
   label: string
@@ -52,6 +52,11 @@ interface Props {
   align?: 'right' | 'left'
 }
 
+/** Closing unmounts the menu, so focus held inside it would fall to <body>: it goes back to the trigger. */
+function refocusTrigger(menu: HTMLElement | null, trigger: HTMLElement | null) {
+  if (menu?.contains(document.activeElement)) trigger?.focus()
+}
+
 /** Click-toggled dropdown on the IdentityMenu pattern: outside mousedown and Escape close it. */
 export default function DropdownMenu(
   { ariaLabel, trigger, items, className, direction = 'down', align = 'right' }: Props) {
@@ -100,8 +105,12 @@ export default function DropdownMenu(
     function onMouseDown(e: MouseEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
     }
+    // Marked as spent, so a window listener behind this one (the reader's back) leaves it alone.
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      refocusTrigger(menuRef.current, triggerRef.current)
+      setOpen(false)
     }
     document.addEventListener('mousedown', onMouseDown)
     document.addEventListener('keydown', onKey)
@@ -125,10 +134,25 @@ export default function DropdownMenu(
     }
   }, [open, placement])
 
+  // React's root listener runs before the document one: an Escape pressed inside the menu is
+  // stopped here, or an ancestor's onKeyDown (the list clearing its selection) would spend it too.
+  function onRootKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!open || e.key !== 'Escape') return
+    e.preventDefault()
+    e.stopPropagation()
+    closeAndRefocus()
+  }
+
+  function closeAndRefocus() {
+    refocusTrigger(menuRef.current, triggerRef.current)
+    setOpen(false)
+  }
+
   return (
     <div
       className={`dropdown-root${placement === 'up' ? ' is-up' : ''}${align === 'left' ? ' is-left' : ''}`}
       ref={rootRef}
+      onKeyDown={onRootKeyDown}
     >
       <button type="button" className={className} aria-label={ariaLabel} aria-expanded={open}
         ref={triggerRef} onClick={() => setOpen(o => !o)}>
@@ -141,15 +165,15 @@ export default function DropdownMenu(
               <hr key={index} className="dropdown-rule" />
             ) : entry.href !== undefined ? (
               <a key={entry.label} role="menuitem" className="dropdown-item" href={entry.href}
-                target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}
-                onAuxClick={() => setOpen(false)}>
+                target="_blank" rel="noopener noreferrer" onClick={closeAndRefocus}
+                onAuxClick={closeAndRefocus}>
                 {entry.icon}
                 {entry.node ?? entry.label}
               </a>
             ) : (
               <button key={entry.label} type="button" role="menuitem" className="dropdown-item"
                 disabled={entry.disabled} title={entry.title}
-                onClick={() => { setOpen(false); entry.onSelect() }}>
+                onClick={() => { closeAndRefocus(); entry.onSelect() }}>
                 {entry.icon}
                 {entry.node ?? entry.label}
               </button>

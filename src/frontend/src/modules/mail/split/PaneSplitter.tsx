@@ -23,12 +23,18 @@ export default function PaneSplitter(
   const { t } = useTranslation('mail')
   const vertical = orientation === 'vertical'
 
-  function startDrag(event: PointerEvent<HTMLDivElement>) {
-    event.preventDefault()
-    const parent = event.currentTarget.parentElement
+  // Shared by the drag and the arrow keys, so neither can crush the other pane past what the
+  // parent actually has to give.
+  function ceilingOf(element: HTMLElement): number {
+    const parent = element.parentElement
     const span = vertical ? parent?.clientWidth : parent?.clientHeight
     // jsdom and a not-yet-laid-out parent both answer 0: no ceiling rather than a crushed pane.
-    const limit = span ? Math.max(min, span - reserve) : Number.POSITIVE_INFINITY
+    return span ? Math.max(min, span - reserve) : Number.POSITIVE_INFINITY
+  }
+
+  function startDrag(event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    const limit = ceilingOf(event.currentTarget)
     const origin = vertical ? event.clientX : event.clientY
     const base = size
 
@@ -48,13 +54,14 @@ export default function PaneSplitter(
     window.addEventListener('pointercancel', stop)
   }
 
-  function nudge(event: KeyboardEvent) {
+  function nudge(event: KeyboardEvent<HTMLDivElement>) {
     const grow = vertical ? 'ArrowRight' : 'ArrowDown'
     const shrink = vertical ? 'ArrowLeft' : 'ArrowUp'
     if (event.key !== grow && event.key !== shrink) return
 
     event.preventDefault()
-    onResize(Math.max(min, size + (event.key === grow ? NUDGE : -NUDGE)))
+    const grown = size + (event.key === grow ? NUDGE : -NUDGE)
+    onResize(Math.min(ceilingOf(event.currentTarget), Math.max(min, grown)))
   }
 
   return (

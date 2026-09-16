@@ -10,6 +10,12 @@
     "remove": "Remove"
   },
   "loading": "Loading",
+  "appError": {
+    "message": "Something went wrong on this page.",
+    "updated": "A new version of the app is available.",
+    "offline": "You are offline. Reconnect, then reload.",
+    "reload": "Reload"
+  },
   "sizes": { "b": "{{value}} B", "kb": "{{value}} KB", "mb": "{{value}} MB", "gb": "{{value}} GB" },
   "rail": {
     "label": "Modules",

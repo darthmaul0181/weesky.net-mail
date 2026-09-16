@@ -85,18 +85,21 @@ vi.mock('./SquireEditor', async () => {
     would query the DOM against that spinner. */
 let prefs: Record<string, string> = {}
 
-function renderCompose(from = 'INBOX', seed?: ComposeSeed, search = '') {
+function renderCompose(
+  from: string | undefined = 'INBOX', seed?: ComposeSeed, search = '',
+  { cold = false, backTo }: { cold?: boolean; backTo?: string } = {}) {
   const onNotify = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  client.setQueryData(['preferences'], prefs)
+  if (!cold) client.setQueryData(['preferences'], prefs)
   const router = createMemoryRouter(
     [
       { path: '/mail', element: <span data-testid="mail-view">mail</span> },
       { path: '/mail/compose', element: <ComposeView onNotify={onNotify} /> },
+      { path: '/contacts/:id', element: <span data-testid="contact-view">contact</span> },
     ],
-    { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed } }], initialIndex: 1 },
+    { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed, backTo } }], initialIndex: 1 },
   )
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return { onNotify, router }
@@ -1623,6 +1626,64 @@ describe('the default composing editor', () => {
 
     await waitFor(() => expect(screen.getByDisplayValue('Half written')).toBeInTheDocument())
     expect(screen.queryByRole('textbox', { name: 'Message body' })).toBeNull()
+  })
+
+  // Cold: nothing in the cache yet, as when a mailto: link opens the app or the page is reloaded.
+  it.each([
+    ['a new message', '', 0],
+    ['a mailto link', '?mailto=' + encodeURIComponent('mailto:a@b.c'), 1],
+  ])('opens %s in the text editor when the preferences arrive after mount', async (_, search, seededTokens) => {
+    prefs = { 'mail.composeFormat': 'text' }
+    mocks.getPreferences.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve(prefs), 0)))
+    renderCompose('INBOX', undefined, search, { cold: true })
+
+    await screen.findByTestId('compose-view')
+    expect(screen.queryAllByText('a@b.c')).toHaveLength(seededTokens)
+    expect(screen.queryByTestId('compose-editor')).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Message body' })).toBeInstanceOf(HTMLTextAreaElement)
+  })
+})
+
+describe('a composer whose preferences cannot be loaded', () => {
+  it('says so and offers a retry that mounts the form once they answer', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    renderCompose('INBOX', undefined, '', { cold: true })
+
+    const retry = await screen.findByRole('button', { name: 'Retry' })
+    expect(screen.getByText('Could not load the settings.')).toBeInTheDocument()
+    expect(screen.queryByTestId('compose-view')).toBeNull()
+
+    fireEvent.click(retry)
+    expect(await screen.findByTestId('compose-view')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('offers a way out of the composer route', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    const { router } = renderCompose('INBOX', undefined, '', { cold: true })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByTestId('mail-view')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail')
+  })
+
+  it('closes back to the folder it was opened from, as the form does', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    const { router } = renderCompose('Archive/2026', undefined, '', { cold: true })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByTestId('mail-view')).toBeInTheDocument()
+    expect(router.state.location.search).toBe('?folder=Archive%2F2026')
+  })
+
+  it('closes back to the contact card that opened it', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    const { router } = renderCompose(undefined, undefined, '', { cold: true, backTo: '/contacts/c-1' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByTestId('contact-view')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/contacts/c-1')
   })
 })
 

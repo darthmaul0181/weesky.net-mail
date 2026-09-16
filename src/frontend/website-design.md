@@ -134,9 +134,9 @@ When a rule is ambiguous, copy what those screens do.
 
 ## Modals & dialogs
 
-- **Shell:** `.modal-overlay` (a click on the backdrop closes the dialog) wraps a `.modal` (clicks
-  inside are contained via `stopPropagation`). Width is set per dialog — roughly `380px` for a
-  compact form, up to `600px` for a rich one.
+- **Shell:** `.modal-overlay` (a click that starts and ends on the backdrop closes the dialog —
+  `ModalOverlay`) wraps a `.modal` (clicks inside are contained via `stopPropagation`). Width is
+  set per dialog — roughly `380px` for a compact form, up to `600px` for a rich one.
 - **A modal never carries a Cancel or Close button.** The `.modal-close` ✕ in the top-right corner is
   the only dismissal control — do not add a second one beside the primary action.
 - **Icon continuity:** when the control that opens the dialog carries an icon, the **same icon

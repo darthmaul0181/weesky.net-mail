@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ContactCard from './ContactCard'
@@ -325,5 +325,71 @@ describe('ContactCard', () => {
 
     expect(onRemoveFromGroup).toHaveBeenCalledWith('g1')
     expect(onRemoveFromGroup).toHaveBeenCalledTimes(1)
+  })
+
+  // (X1) A javascript: URL written by another CardDAV client must never reach an href — scoped
+  // to the website row itself, rather than a link name match, since the row holds no link at all.
+  it('renders a javascript: website as text with no link', async () => {
+    api.getContact.mockResolvedValue(detail({ website: 'javascript:alert(1)' }))
+    setup()
+
+    const value = await screen.findByText('javascript:alert(1)')
+    const row = value.closest('.contact-card-row') as HTMLElement
+    expect(within(row).queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('links a scheme-less website through https', async () => {
+    api.getContact.mockResolvedValue(detail({ website: 'example.com' }))
+    setup()
+
+    const link = await screen.findByRole('link', { name: /example\.com/i })
+    expect(link).toHaveAttribute('href', 'https://example.com/')
+  })
+
+  // (X2) An address opens the in-app composer rather than the OS mail client, and the row must
+  // carry no mailto: link a CardDAV value could inject headers through.
+  it('opens the composer when an address is clicked, with no mailto: link left', async () => {
+    const onWrite = vi.fn()
+    setup({ onWrite })
+
+    const addresses = await screen.findAllByTestId('card-address')
+    expect(addresses[0].querySelector('a[href^="mailto:"]')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'bruno@x.be' }))
+
+    expect(onWrite).toHaveBeenCalledWith('bruno@x.be')
+  })
+
+  // (K6) Duplicate addresses are legitimate and must both render — never de-duplicated by key.
+  // Uses the list-based fallback (`contact.addresses`, what paints before the detail query
+  // resolves) rather than the detail fixture: it renders synchronously, in the same pass React
+  // validates keys in, so the check does not depend on timing the query's async resolution.
+  it('renders two identical addresses without a duplicate-key warning', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      setup({ contact: contact({ id: 'd', addresses: ['same@x.be', 'same@x.be'] }) })
+
+      expect(screen.getAllByTestId('card-address')).toHaveLength(2)
+      expect(warn.mock.calls.some(c => String(c[0]).includes('same key'))).toBe(false)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  // (K6) Locality and region can be equal — postal lines must render every one, never de-duplicate.
+  it('renders two identical postal lines without a duplicate-key warning', async () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      api.getContact.mockResolvedValue(detail({
+        postalAddresses: [postalOf({ locality: 'Bruxelles', region: 'Bruxelles' })],
+      }))
+      setup()
+
+      const postal = await screen.findByTestId('card-postal')
+      expect(within(postal).getAllByText('Bruxelles')).toHaveLength(2)
+      expect(warn.mock.calls.some(c => String(c[0]).includes('same key'))).toBe(false)
+    } finally {
+      warn.mockRestore()
+    }
   })
 })

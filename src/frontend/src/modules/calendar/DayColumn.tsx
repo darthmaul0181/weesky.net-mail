@@ -3,7 +3,7 @@ import type { Occurrence } from './calendarTypes'
 import EventChip from './EventChip'
 import type { GridGestures } from './gridGestures'
 import { HOUR_PX, HOURS, minutesToPx } from './gridGeometry'
-import type { SliceEntry } from './multiDay'
+import { durationMinutesOf, resizePreviewMinutes, type SliceEntry } from './multiDay'
 import { colorOf, occurrenceKey } from './occurrenceStyle'
 import { layoutColumn } from './overlapLayout'
 import type { PlainDate } from './plainDate'
@@ -31,7 +31,7 @@ const MIN_CHIP_PX = 20
 export default function DayColumn({
   day, isToday, entries, onOpen, onOpenEditor, selectedKey, hoverKey, onHover, gestures,
 }: DayColumnProps) {
-  const { calendarById } = useCalendar()
+  const { calendarById, tz } = useCalendar()
   const placed = layoutColumn(entries, entry => entry.slice.startMinute,
     entry => entry.slice.endMinute, HOUR_PX, MIN_CHIP_PX)
   const ghost = gestures?.ghost?.day === day ? gestures.ghost : null
@@ -46,7 +46,21 @@ export default function DayColumn({
         // occurrence rather than the piece: the move is previewed on the head and the stretch on
         // the tail, so one event is never drawn moving twice.
         const drag = gestures?.drag?.key === key && item.first ? gestures.drag : null
-        const resize = gestures?.resize?.key === key && item.last ? gestures.resize : null
+        // Every slice of the resized event previews, not only the one carrying the grip: the
+        // grip always sits on the last *visible* slice, which in a day view showing an overnight
+        // event's head is that head chip, not the event's real tail.
+        const resize = gestures?.resize?.key === key ? gestures.resize : null
+        // `resize.durationMinutes` is counted in the occurrence's own zone (`useResizeEvent`'s
+        // `durationMinutesOf(o)`); the grid's own zone may read a different length across a DST
+        // change, so only the drag's *delta* crosses over, added to the grid-zone duration.
+        const previewMinutes = resize
+          ? resizePreviewMinutes(item.occurrence, item.slice,
+            durationMinutesOf(item.occurrence, tz) + (resize.durationMinutes - resize.baseMinutes),
+            tz)
+          : null
+        // A slice the drag has shrunk past is dropped rather than drawn at a stub: the gesture's
+        // listeners are on window/document, so losing the grip's pointer capture is harmless.
+        if (resize && previewMinutes === null) return null
         return (
           <EventChip key={`${key}@${item.slice.startMinute}`}
             occurrence={item.occurrence} color={colorOf(item.occurrence, calendarById)}
@@ -54,7 +68,8 @@ export default function DayColumn({
             onHover={onHover} dragging={drag !== null}
             style={{
               top,
-              height: resize ? Math.max(MIN_CHIP_PX, minutesToPx(resize.durationMinutes)) : height,
+              height: previewMinutes !== null
+                ? Math.max(MIN_CHIP_PX, minutesToPx(previewMinutes)) : height,
               left: `calc(${column} * 100% / ${columns})`, width: `calc(100% / ${columns})`,
               // A chip is a fraction of its column wide, so one column of travel is that many
               // times its own width: the block follows the pointer into the next day without

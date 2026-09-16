@@ -4,6 +4,7 @@ import { api, ApiError } from '../../../api.js'
 import type { DavCredentials } from '../../../types/dav'
 import ToggleRow from '../../../components/ToggleRow'
 import LoadingBlock from '../../../components/LoadingBlock'
+import ModalOverlay from '../../../components/ModalOverlay'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import { relativeFromNow } from '../../../lib/intl'
@@ -155,11 +156,12 @@ export default function SyncPage() {
       )}
 
       {confirming && (
-        <div className="modal-overlay" onClick={() => setConfirming(false)}>
+        <ModalOverlay onClose={() => setConfirming(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title">{t('sync.regenerateTitle')}</span>
-              <button className="modal-close" onClick={() => setConfirming(false)}>✕</button>
+              <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} 
+                onClick={() => setConfirming(false)}>✕</button>
             </div>
             <p>{t('sync.regenerateWarning')}</p>
             <div className="modal-actions">
@@ -169,7 +171,7 @@ export default function SyncPage() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       <Toasts toasts={toasts} onRemove={removeToast} />

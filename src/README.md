@@ -32,7 +32,7 @@ See [`scotty.microservice/DESIGN.md`](scotty.microservice/DESIGN.md) for archite
 
 ## frontend
 
-React SPA (Vite) webmail shell — Mail/Calendar/Contacts modules (Mail/Calendar/Contacts are placeholder pages today) plus a settings area (account, appearance, aliases, mail rules, admin). Talks to the API at `https://api.mail.weesky.net`.
+React SPA (Vite) webmail shell — Mail/Calendar/Contacts modules (Mail/Calendar/Contacts are placeholder pages today) plus a settings area (account, appearance, aliases, mail rules, admin). Talks to the backend named by `VITE_API_BASE`.
 
 - `react-router-dom` routing (`AppShell` + `SettingsLayout`), route guards for auth (`RequireAuth`) and admin (`RequireAdmin`).
 - Cookie-based session (`HttpOnly` cookie set by the backend); `AuthContext` tracks login/account state, prepared for multi-account (sub-project 2).

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import ModalOverlay from '../../../components/ModalOverlay'
 import SearchIcon from '../../../icons/SearchIcon'
 import { criteriaFromForm, daysSinceYearStart } from './searchCriteria'
 import type { AdvancedForm } from './searchCriteria'
@@ -47,7 +48,7 @@ export default function AdvancedSearchModal({ folderTitle, initialSubject, onSea
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{t('search.advanced.title')}</span>
@@ -113,6 +114,6 @@ export default function AdvancedSearchModal({ folderTitle, initialSubject, onSea
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

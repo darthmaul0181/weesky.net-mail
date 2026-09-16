@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isHexColor } from './calendarColors'
 import ColorSwatches from './ColorSwatches'
+import ModalOverlay from '../../components/ModalOverlay'
 
 export interface CalendarValues {
   displayName: string
@@ -35,7 +36,7 @@ export default function CalendarDialog({
   const submittable = trimmedName !== '' && isHexColor(trimmedColor) && !saving
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>
@@ -75,6 +76,6 @@ export default function CalendarDialog({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

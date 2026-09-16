@@ -111,6 +111,15 @@ function nextHour(): Date {
   return new Date(now.getTime() + HOUR_MS)
 }
 
+/** `null` for anything `Date` cannot parse, rather than an Invalid Date travelling further into
+    the form and throwing the first time something reads it (`toISOString`, `getHours`, …). A
+    hand-edited or stale `start`/`end` query param is the case this exists for. */
+function parseDraftDate(value: string | null): Date | null {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 /** Same day of the month, clamped: 31 January plus a month is the last day of February. */
 function addMonths(day: PlainDate, delta: number): PlainDate {
   const [year, month, date] = day.split('-').map(Number)
@@ -145,6 +154,11 @@ function windowErrorOf(error: unknown, t: TFunction<'calendar'>): string {
     return t('errors.windowTooLarge')
   }
   return apiErrorMessage(error, t('errors.load'))
+}
+
+function eventErrorOf(error: unknown, t: TFunction<'calendar'>): string {
+  return (error as { status?: number }).status === 404 ? t('errors.notFound')
+    : apiErrorMessage(error, t('errors.load'))
 }
 
 type Editing =
@@ -293,7 +307,9 @@ export default function CalendarLayout() {
   const refetchWindow = windowQuery.refetch
   const retryWindow = useCallback(() => { void refetchWindow() }, [refetchWindow])
 
-  const windowError = windowQuery.isError ? windowErrorOf(windowQuery.error, t) : null
+  // A refetch that fails keeps the data it had: only a window with nothing to draw is an error.
+  const windowError = windowQuery.isError && windowQuery.data === undefined
+    ? windowErrorOf(windowQuery.error, t) : null
 
   // A calendar the list has not answered for yet is drawn rather than withheld: a box nobody
   // has unticked hiding its own events would read as a load that lost them.
@@ -480,10 +496,12 @@ export default function CalendarLayout() {
 
   // The slot the grid named, or the next hour when the sidebar's button was the door.
   const newDraft = (): EventFormState => {
-    const rawStart = params.get('start')
-    const rawEnd = params.get('end')
-    const start = rawStart ? new Date(rawStart) : nextHour()
-    const end = rawEnd ? new Date(rawEnd) : new Date(start.getTime() + HOUR_MS)
+    const start = parseDraftDate(params.get('start')) ?? nextHour()
+    const parsedEnd = parseDraftDate(params.get('end'))
+    // An end that does not follow start — missing, unparsable, or from a URL whose start fell
+    // back to a different instant — is not a duration worth keeping.
+    const end = parsedEnd && parsedEnd.getTime() > start.getTime()
+      ? parsedEnd : new Date(start.getTime() + HOUR_MS)
     return newEventForm(start, end, params.get('allDay') === '1', defaultCalendarId(), tz)
   }
 
@@ -502,7 +520,9 @@ export default function CalendarLayout() {
   // what was being typed. A form already sown never waits for anything again.
   // A detail being read again after it went stale is not sown from: a save's own invalidation is
   // one, and the hash it holds is the version that save replaced (the invitation hook writes again).
-  const detailCurrent = detail != null && !(eventQuery.isStale && eventQuery.isFetching)
+  // Nor is one whose last read failed: a cached copy of an event deleted elsewhere would sow a form.
+  const detailCurrent = detail != null && !eventQuery.isError
+    && !(eventQuery.isStale && eventQuery.fetchStatus !== 'idle')
   const editorReady = seed?.key === editorKey
     || ((routeId ? detailCurrent : calendarsQuery.data !== undefined) && occurrenceFound)
   if (editorKey && editorReady && seed?.key !== editorKey) {
@@ -526,12 +546,13 @@ export default function CalendarLayout() {
   }
 
   // An id the server no longer resolves is an obsolete bookmark, never an invitation to create.
-  const eventError = eventQuery.isError ? eventQuery.error : null
+  // Decided on the seed, not on the cache: before the form is sown a failed read is a target gone,
+  // after it the form keeps the event it already read.
+  const eventError = eventQuery.isError && eventQuery.fetchStatus === 'idle' && seed?.key !== editorKey
+    ? eventQuery.error : null
   useEffect(() => {
     if (!eventError) return
-    const status = (eventError as { status?: number }).status
-    addToast(status === 404 ? t('errors.notFound')
-      : apiErrorMessage(eventError, t('errors.load')), 'error')
+    addToast(eventErrorOf(eventError, t), 'error')
     navigate('/calendar', { replace: true })
   }, [eventError, addToast, navigate, t])
 
@@ -645,10 +666,12 @@ export default function CalendarLayout() {
   }
 
   /** The user's own choice, never a consequence of the refusal: the form stands untouched behind
-      the band until this runs. A refetch that failed has nothing to seed from, so nothing moves. */
+      the band until this runs. A refetch that failed has nothing to seed from, so nothing moves
+      but the band, which says why and keeps the Reload. */
   async function reloadEvent() {
-    const { isError: failed } = await eventQuery.refetch()
-    if (!failed) setReloads(previous => previous + 1)
+    const { isError: failed, error } = await eventQuery.refetch()
+    if (failed) setSaveError(eventErrorOf(error, t))
+    else setReloads(previous => previous + 1)
   }
 
   async function runDelete(id: string, scope: EditScope, instanceId?: string) {
@@ -711,7 +734,8 @@ export default function CalendarLayout() {
 
   const sidebar = (
     <CalendarSidebar calendars={calendars} anchor={anchor} today={today} rules={rules}
-      locale={locale} loading={calendarsQuery.isLoading} failed={calendarsQuery.isError}
+      locale={locale} loading={calendarsQuery.isLoading}
+      failed={calendarsQuery.isError && calendarsQuery.data === undefined}
       onPickDay={setAnchor} onNewEvent={openNewEvent}
       onNewCalendar={() => setEditing({ mode: 'create' })}
       onRename={calendar => setEditing({ mode: 'rename', calendar })}
@@ -739,7 +763,10 @@ export default function CalendarLayout() {
     </>
   )
 
-  const ready = calendarsQuery.data !== undefined && windowQuery.data !== undefined
+  // Wait for the list to answer or be refused: drawn earlier, chips would wear the default colour
+  // and hidden calendars' events would show.
+  const ready = windowQuery.data !== undefined
+    && (calendarsQuery.data !== undefined || calendarsQuery.isError)
   // Every chip of that occurrence lights, wherever it is drawn — both slices of an evening
   // crossing midnight, and the one the open bubble hangs off (décisions 3 and 10).
   const selectedKey = preview ? occurrenceKey(preview.occurrence) : undefined

@@ -13,7 +13,7 @@ describe('DeleteConfirmModal', () => {
     const onClose = vi.fn()
     render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={onClose} loading={false} />)
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledOnce()
   })
 

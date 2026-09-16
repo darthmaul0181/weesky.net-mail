@@ -183,10 +183,10 @@ export default function MessageList(
     ? t('list.alreadyEmpty')
     : (!purges && !roles.trash ? t('actions.noTrashFolder') : undefined)
 
-  // The hook keeps no row list; the effective selection is what it holds intersected with what
-  // is on screen, so a departed row stops counting on its own. resetKey clears on folder change
-  // and paged-page change, never while streaming more blocks into the same folder.
+  // Clears the selection, expanded threads and scroll on a folder, page or search change (the
+  // criteria too: two searches both sit on `search:0`), never while streaming into one folder.
   const resetKey = `${folderPath}::${searching ? `search:${searchPage}` : (paging ? paging.page : 'stream')}`
+    + `::${JSON.stringify(search ?? null)}`
   const selection = useSelection(resetKey)
   const loadedUids = memberUids(groups)
 
@@ -252,8 +252,11 @@ export default function MessageList(
     setPicker(null)
   }
 
+  // The dialogs render inside this root, so their Escape bubbles here: it is theirs, not the selection's.
+  const dialogOpen = expunging !== null || picker !== null || confirmingBulk || confirmingEmpty || advanced !== null
+
   function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape' && count > 0) {
+    if (event.key === 'Escape' && count > 0 && !dialogOpen) {
       event.stopPropagation()
       selection.clear()
     }
@@ -367,8 +370,9 @@ export default function MessageList(
   }
 
   // The page index resets on its own; the DOM scroll position does not, and would drop the
-  // reader into the middle of a folder whose blocks are not loaded.
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0 }, [folderPath])
+  // reader into the middle of a folder whose blocks are not loaded, or leave a fresh search
+  // scrolled to wherever the previous list or search left it.
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0 }, [resetKey])
 
   // The rows in view, for whoever has to pick the next selection when one of them leaves.
   // Cross-folder results carry no navigable uid for this folder, so the reader is handed none.

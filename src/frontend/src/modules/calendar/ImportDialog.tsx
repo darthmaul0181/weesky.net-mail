@@ -4,6 +4,7 @@ import { CALENDAR_COLORS, isHexColor } from './calendarColors'
 import type { Calendar } from './calendarTypes'
 import ColorSwatches from './ColorSwatches'
 import { calendarHeaderOf } from './icsHeader'
+import ModalOverlay from '../../components/ModalOverlay'
 
 export type ImportChoice =
   | { mode: 'existing'; id: string; file: File }
@@ -58,7 +59,7 @@ export default function ImportDialog({
     && (mode === 'existing' ? id !== '' : trimmedName !== '' && isHexColor(color))
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{t('import.title')}</span>
@@ -134,6 +135,6 @@ export default function ImportDialog({
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

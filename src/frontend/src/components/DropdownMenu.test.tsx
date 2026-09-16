@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
+import { useRef, useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import DropdownMenu, { type MenuItem, type MenuEntry } from './DropdownMenu'
+import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap'
 
 function items(overrides?: Partial<{ onSelect: () => void; disabled: boolean; title: string }>[]): MenuItem[] {
   return [
@@ -46,6 +49,106 @@ describe('DropdownMenu', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
+  it('marks the Escape it spends, so a window listener behind it can tell', () => {
+    const behind = vi.fn((e: KeyboardEvent) => e.defaultPrevented)
+    window.addEventListener('keydown', behind)
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
+    window.removeEventListener('keydown', behind)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(behind).toHaveReturnedWith(true)
+  })
+
+  it('keeps an Escape pressed inside it from reaching the ancestors', () => {
+    const parentKey = vi.fn()
+    const windowKey = vi.fn()
+    window.addEventListener('keydown', windowKey)
+    render(
+      <div onKeyDown={parentKey}>
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </div>)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+
+    fireEvent.keyDown(trigger, { key: 'Escape' })
+
+    window.removeEventListener('keydown', windowKey)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(parentKey).not.toHaveBeenCalled()
+    expect(windowKey).not.toHaveBeenCalled()
+  })
+
+  it('hands focus back to the trigger when Escape closes it from an item', () => {
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+    const item = screen.getByRole('menuitem', { name: 'Mark as read' })
+    item.focus()
+
+    fireEvent.keyDown(item, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('hands focus back to the trigger when the document listener closes it', () => {
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+    screen.getByRole('menuitem', { name: 'Star' }).focus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('leaves focus alone when it was not inside the menu', () => {
+    render(
+      <>
+        <input aria-label="Elsewhere" />
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </>)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    const elsewhere = screen.getByLabelText('Elsewhere')
+    elsewhere.focus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(elsewhere).toHaveFocus()
+  })
+
+  it('lets any other key through while it is open', () => {
+    const parentKey = vi.fn()
+    render(
+      <div onKeyDown={parentKey}>
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </div>)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+
+    fireEvent.keyDown(trigger, { key: 'Tab' })
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Star' }), { key: 'Enter' })
+
+    expect(parentKey).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+
+  it('lets an Escape through once it is closed', () => {
+    const parentKey = vi.fn()
+    render(
+      <div onKeyDown={parentKey}>
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </div>)
+
+    fireEvent.keyDown(screen.getByLabelText('Message actions'), { key: 'Escape' })
+
+    expect(parentKey).toHaveBeenCalledTimes(1)
+  })
+
   it('registers document listeners only while open, and cleans them up on close and unmount', () => {
     const addSpy = vi.spyOn(document, 'addEventListener')
     const removeSpy = vi.spyOn(document, 'removeEventListener')
@@ -89,6 +192,51 @@ describe('DropdownMenu', () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('hands focus back to the trigger when a keyboard-activated item closes it', async () => {
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+    screen.getByRole('menuitem', { name: 'Star' }).focus()
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('hands focus back to the trigger when a link item is activated', () => {
+    render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
+      items={[{ label: 'View source', href: '/mail/source' }]} />)
+    open()
+    const link = screen.getByRole('menuitem', { name: 'View source' })
+    link.focus()
+
+    fireEvent.click(link)
+
+    expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
+  })
+
+  it('lets a dialog opened by an item take the focus into itself', async () => {
+    function Harness() {
+      const [dialog, setDialog] = useState(false)
+      const panel = useRef<HTMLDivElement>(null)
+      useDialogFocusTrap(panel, { active: dialog })
+      return (
+        <>
+          <DropdownMenu ariaLabel="Menu" trigger="⋮" items={[{ label: 'Rename', onSelect: () => setDialog(true) }]} />
+          {dialog && <div ref={panel} role="dialog" aria-modal="true"><input aria-label="Name" /></div>}
+        </>
+      )
+    }
+    render(<Harness />)
+    open()
+    screen.getByRole('menuitem', { name: 'Rename' }).focus()
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(screen.getByLabelText('Name')).toHaveFocus()
   })
 
   it('reflects state through aria-expanded', () => {

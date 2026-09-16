@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocale } from '../../../contexts/LocaleContext'
 import { useTheme, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
+import ModalOverlay from '../../../components/ModalOverlay'
 import DropletIcon from '../../../icons/DropletIcon'
 import SearchIcon from '../../../icons/SearchIcon'
 
@@ -84,7 +85,7 @@ function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: st
   }, [onClose])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal palette-zoom-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           {/* The loupe again, so the dialog reads as the enlargement of what was clicked. */}
@@ -101,7 +102,7 @@ function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: st
           ))}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

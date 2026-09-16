@@ -37,7 +37,7 @@ describe('useResizeEvent', () => {
     const { result, onResize } = resizing()
     result.current.onPointerDown(DENTIST, pointerDownOn(grip, 100, 560))
     firePointer('pointermove', 100, 588)
-    expect(result.current.resize).toEqual({ key: 'a1#', durationMinutes: 90 })
+    expect(result.current.resize).toEqual({ key: 'a1#', durationMinutes: 90, baseMinutes: 60 })
     firePointer('pointerup', 100, 588)
     expect(onResize).toHaveBeenCalledWith(DENTIST, 90)
   })

@@ -499,7 +499,7 @@ describe('ContactsLayout', () => {
       await conflictBox()
       await settle()
 
-      await userEvent.click(screen.getByRole('button', { name: '✕' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }))
       await save()
 
       await waitFor(() => expect(api.updateContact).toHaveBeenCalledTimes(2))

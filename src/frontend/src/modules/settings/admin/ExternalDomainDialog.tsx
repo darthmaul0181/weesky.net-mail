@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import ModalOverlay from '../../../components/ModalOverlay'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import GlobeIcon from '../../../icons/GlobeIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -117,7 +118,7 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">
@@ -255,6 +256,6 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
           </button>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

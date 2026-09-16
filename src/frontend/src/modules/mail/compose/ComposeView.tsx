@@ -9,7 +9,7 @@ import { groupOptionsOf } from '../../contacts/contactSearch'
 import { capturable } from '../../contacts/captureModel'
 import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
-import { captureRecipientsOf, composeFormatOf, usePreferences } from '../../../hooks/usePreferences'
+import { captureRecipientsOf, composeFormatOf, usePreferences, type Preferences } from '../../../hooks/usePreferences'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { registerLeaveGuard } from '../../../lib/leaveGuard'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
@@ -56,6 +56,14 @@ function priorityLabel(value: MailPriority, t: TFunction<'compose'>): string {
     : value === 'low' ? t('priority.low') : t('priority.normal')
 }
 
+type ComposeState = { from?: string; seed?: ComposeSeed; backTo?: string } | null
+
+/* `from` is a folder and only the mail module has one. `backTo` is a whole path, for a caller
+   outside the module — the contact card's Write — so leaving returns to the card that opened it. */
+function backTargetOf(state: ComposeState): string {
+  return state?.backTo ?? (state?.from ? `/mail?folder=${encodeURIComponent(state.from)}` : '/mail')
+}
+
 interface Props {
   onNotify: (
     message: string, kind?: string, action?: { label: string; onClick: () => void }) => void
@@ -67,7 +75,30 @@ interface Props {
  * to file a draft instead; beforeunload covers the tab.
  * A reply/forward/draft arrives as `location.state.seed`; a plain new message carries none.
  */
-export default function ComposeView({ onNotify }: Props) {
+export default function ComposeView(props: Props) {
+  const { t } = useTranslation('compose')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { data: preferences, isError, isFetching, refetch } = usePreferences()
+  // The form reads the default editor once, at mount: mounted before preferences are known, a cold
+  // load (a mailto: link, a reload) would open in HTML whatever the account chose.
+  if (preferences) return <ComposeForm {...props} preferences={preferences} />
+  if (!isError || isFetching) return <div className="mail-full-pane"><LoadingBlock /></div>
+  // Close as well as Retry: on a phone the composer hides every other way out of this route.
+  return (
+    <div className="mail-full-pane">
+      <p>{t('general.loadFailed', { ns: 'settings' })}</p>
+      <button type="button" className="btn btn-primary" onClick={() => void refetch()}>
+        {t('list.retry', { ns: 'mail' })}
+      </button>
+      <button type="button" className="btn btn-ghost" onClick={() => navigate(backTargetOf(location.state as ComposeState))}>
+        {t('actions.close', { ns: 'common' })}
+      </button>
+    </div>
+  )
+}
+
+function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferences }) {
   const { t } = useTranslation('compose')
   const narrow = useViewport() === 'phone'
   const { identity } = useAuth()
@@ -92,7 +123,6 @@ export default function ComposeView({ onNotify }: Props) {
   // easier to follow than three.
   const { data: contacts } = useContacts()
   const { data: groups } = useContactGroups()
-  const { data: preferences } = usePreferences()
   const capture = useCaptureContacts()
   // Resolved once for the three fields, and by the same function the contacts band reads, so a
   // group the field expands and one « Write to group » writes to can never be two sets.
@@ -106,14 +136,12 @@ export default function ComposeView({ onNotify }: Props) {
   const [editor, setEditor] = useState<EditorHandle | null>(null)
   const [active, setActive] = useState<ActiveFormats>(NO_FORMATS)
 
-  const state = location.state as
-    { from?: string; seed?: ComposeSeed; backTo?: string } | null
-  const from = state?.from
+  const state = location.state as ComposeState
   // A mailto: arrives through the URL, not through the history state: the operating system opens
   // a cold address, with no React navigation behind it.
   const rawSeed = useMemo(
     () => state?.seed ?? mailtoSeedFrom(location.search), [state?.seed, location.search])
-  const openedFormat = preferences ? composeFormatOf(preferences) : 'html'
+  const openedFormat = composeFormatOf(preferences)
   // Empty deps deliberately: the editor is chosen when the composer opens. Changing the setting
   // mid-message must never reformat what is already being written.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,7 +161,7 @@ export default function ComposeView({ onNotify }: Props) {
   // owns and the field the payload carries. Null means Squire owns the body.
   // applyComposeFormat has already settled every seeded case, so this only answers the no-seed one.
   const [text, setText] = useState<string | null>(
-    seed ? seed.text : (preferences && composeFormatOf(preferences) === 'text' ? '' : null))
+    seed ? seed.text : (openedFormat === 'text' ? '' : null))
   // Squire reads initialHtml once, at mount, so a switch back has to hand it the converted body
   // here — a prop change would never reach the editor it already built.
   const [editorHtml, setEditorHtml] = useState(seed?.html)
@@ -326,11 +354,7 @@ export default function ComposeView({ onNotify }: Props) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
 
-  /* `from` is a folder and only the mail module has one. `backTo` is a whole path, for a caller
-     outside the module — the contact card's Write — so leaving the composer returns to the fiche
-     that opened it rather than dropping the reader into a mailbox they never asked for. */
-  const backTarget = state?.backTo
-    ?? (from ? `/mail?folder=${encodeURIComponent(from)}` : '/mail')
+  const backTarget = backTargetOf(state)
 
   const leave = useCallback(() => {
     leavingRef.current = true
@@ -421,7 +445,7 @@ export default function ComposeView({ onNotify }: Props) {
   ]), [identity, identityList])
 
   function captureNewRecipients() {
-    if (!preferences || !captureRecipientsOf(preferences) || !contacts) return
+    if (!captureRecipientsOf(preferences) || !contacts) return
 
     const candidates = capturable(contacts, [...to, ...cc, ...bcc], seed?.nameHints ?? {}, mine)
     if (candidates.length === 0) return
@@ -475,11 +499,6 @@ export default function ComposeView({ onNotify }: Props) {
     // Dirty: navigate anyway — the blocker turns it into the save-or-discard question.
     navigate(backTarget)
   }
-
-  // Read at mount, unlike captureRecipientsOf which is read at send. Without this the composer
-  // opens in HTML and flips to a textarea a moment later, under whoever has started typing.
-  // It sits after every hook: an early return above one changes the hook order between renders.
-  if (!preferences) return <LoadingBlock />
 
   return (
     <div className="compose-view" data-testid="compose-view"

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { CalendarImportReport } from './calendarTypes'
+import ModalOverlay from '../../components/ModalOverlay'
 
 interface Props {
   report: CalendarImportReport
@@ -24,7 +25,7 @@ export default function CalendarImportReportModal({ report, onClose }: Props) {
   const hidden = report.totalErrors - report.errors.length
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{t('import.reportTitle')}</span>
@@ -54,6 +55,6 @@ export default function CalendarImportReportModal({ report, onClose }: Props) {
           </ul>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

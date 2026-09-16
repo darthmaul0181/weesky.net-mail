@@ -10,6 +10,12 @@
     "remove": "Retirer"
   },
   "loading": "Chargement",
+  "appError": {
+    "message": "Un problème est survenu sur cette page.",
+    "updated": "Une nouvelle version de l’application est disponible.",
+    "offline": "Vous êtes hors ligne. Reconnectez-vous, puis rechargez la page.",
+    "reload": "Recharger"
+  },
   "sizes": { "b": "{{value}} o", "kb": "{{value}} Ko", "mb": "{{value}} Mo", "gb": "{{value}} Go" },
   "rail": {
     "label": "Modules",

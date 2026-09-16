@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAliases } from '../../mail/queries'
 import { MAX_DISPLAY_NAME_LENGTH } from './identityRows'
+import ModalOverlay from '../../../components/ModalOverlay'
 import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 
@@ -50,7 +51,7 @@ export default function IdentityDialog({
   function submit() { if (canSubmit) onSubmit(address!, name.trim()) }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal identity-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">
@@ -131,6 +132,6 @@ export default function IdentityDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

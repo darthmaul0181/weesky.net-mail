@@ -416,7 +416,7 @@ describe('ExternalDomainsTab — delete', () => {
     renderTab()
     await screen.findByText('Gmail')
     await userEvent.click(screen.getAllByTitle('Delete')[0])
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(mocks.adminDeleteExternalDomain).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })

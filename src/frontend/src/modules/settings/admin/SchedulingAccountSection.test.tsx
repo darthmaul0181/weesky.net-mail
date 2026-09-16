@@ -214,7 +214,7 @@ describe('SchedulingAccountSection — delete', () => {
     renderSection()
     await screen.findByText('agenda@weesky.net')
     await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(mocks.adminDeleteSchedulingAccount).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })

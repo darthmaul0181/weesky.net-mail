@@ -86,6 +86,35 @@ describe('PaneSplitter', () => {
     expect(onResize).toHaveBeenLastCalledWith(296)
   })
 
+  it('never nudges past the parent span minus the reserve', () => {
+    const { onResize, separator } = renderSplitter({ size: 670 })
+    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 1000 })
+
+    fireEvent.keyDown(separator, { key: 'ArrowRight' })
+
+    expect(onResize).toHaveBeenLastCalledWith(680) // 1000 − reserve(320)
+  })
+
+  it('stays at the ceiling rather than crushing the other pane', () => {
+    const { onResize, separator } = renderSplitter({ size: 680 })
+    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 1000 })
+
+    fireEvent.keyDown(separator, { key: 'ArrowRight' })
+
+    expect(onResize).toHaveBeenLastCalledWith(680) // never 696
+  })
+
+  // ceilingOf reads clientHeight, not clientWidth, on this axis — the vertical cases above
+  // cannot exercise that branch.
+  it('never nudges past the ceiling horizontally either', () => {
+    const { onResize, separator } = renderSplitter({ orientation: 'horizontal', size: 670 })
+    Object.defineProperty(separator.parentElement!, 'clientHeight', { value: 1000 })
+
+    fireEvent.keyDown(separator, { key: 'ArrowDown' })
+
+    expect(onResize).toHaveBeenLastCalledWith(680) // 1000 − reserve(320)
+  })
+
   it('resets to the default on double-click', () => {
     const { onResize, separator } = renderSplitter({ size: 500 })
 

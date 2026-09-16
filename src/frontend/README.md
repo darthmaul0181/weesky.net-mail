@@ -1,6 +1,6 @@
 # frontend
 
-A React SPA for managing email aliases on the weesky.net mail service. It talks to the backend at `https://api.mail.weesky.net`.
+A React SPA for managing email aliases on the weesky.net mail service. It talks to the backend named by `VITE_API_BASE`.
 
 ## Stack
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
+import ModalOverlay from '../../../components/ModalOverlay'
 import SlidersIcon from '../../../icons/SlidersIcon'
 import { flatten, indent, sortFolders } from '../../mail/folders/folderNodes'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -59,7 +60,7 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal modal-folders" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title"><SlidersIcon />{t('folders.systemFolders')}</span>
@@ -111,7 +112,7 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

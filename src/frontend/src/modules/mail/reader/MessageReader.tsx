@@ -1,5 +1,4 @@
 ﻿import { cloneElement, useEffect, useMemo, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
@@ -52,7 +51,7 @@ import { substituteInlineImages } from './inlineImages'
 import { isCalendarType, isImageType } from './mediaType'
 import InvitationCard from './InvitationCard'
 import { bodyInlineParts, useInlineImages } from './useInlineImages'
-import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
+import { useCachedSummaryFlags, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
 interface Props {
   folderPath: string | null
@@ -81,17 +80,12 @@ export default function MessageReader(
   // the body and throwing a reader midway through a long message back to the top. Adjusted during
   // render rather than in an effect, per React's own pattern for resetting state when a prop
   // changes: an effect fires after commit, so the message that just opened would paint one frame
-  // with the PREVIOUS message's padding before the effect corrected it. Calling setState here
+  // with the PREVIOUS message's padding before the effect corrected it. Calling setState below
   // instead discards this render's output and replays the component immediately with the new
   // state already in place — the freeze takes effect in the same render that opens the message,
   // with no extra reload and no visible frame in between.
   const readerKey = `${folderPath ?? ''}:${uid ?? ''}`
   const [frozenNarrow, setFrozenNarrow] = useState(() => ({ key: readerKey, value: viewportNarrow }))
-  // The guarded write means a committed render always has frozenNarrow.key === readerKey — the
-  // mismatched render it corrects is discarded before commit — so reading `.value` needs no
-  // fallback for the case that never reaches the screen.
-  if (frozenNarrow.key !== readerKey) setFrozenNarrow({ key: readerKey, value: viewportNarrow })
-  const narrow = frozenNarrow.value
   const { data: preferences } = usePreferences()
   const { data: folders } = useFolders()
   const [imagesShown, setImagesShown] = useState(false)
@@ -101,8 +95,21 @@ export default function MessageReader(
   const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [viewed, setViewed] = useState<MailAttachmentInfo | null>(null)
+  // The guarded write means a committed render always has frozenNarrow.key === readerKey — the
+  // mismatched render it corrects is discarded before commit — so no committed render pairs a
+  // message with the previous one's consent, colour choice or open dialog either.
+  if (frozenNarrow.key !== readerKey) {
+    setFrozenNarrow({ key: readerKey, value: viewportNarrow })
+    setImagesShown(false)
+    setOriginalColours(false)
+    setDownloadError(null)
+    setDetailsOpen(false)
+    setPicker(null)
+    setConfirmDelete(false)
+    setViewed(null)
+  }
+  const narrow = frozenNarrow.value
   const accountId = useAccountId()
-  const queryClient = useQueryClient()
   const setFlags = useSetFlags(onNotify)
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
@@ -119,18 +126,7 @@ export default function MessageReader(
   const { data: contacts } = useContacts(trustContacts)
 
   useMarkSeenOnOpen(folderPath, uid, Boolean(data))
-
-  // Consent is per message and never carried to the next one. So is the colour choice: a mail
-  // that recolours badly says nothing about the next one.
-  useEffect(() => {
-    setImagesShown(false)
-    setOriginalColours(false)
-    setDownloadError(null)
-    setDetailsOpen(false)
-    setPicker(null)
-    setConfirmDelete(false)
-    setViewed(null)
-  }, [folderPath, uid])
+  const { seen, flagged } = useCachedSummaryFlags(folderPath, uid)
 
   // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
   // replaced the list and needs a way back. An open modal owns Escape, so the reader stays put
@@ -138,7 +134,7 @@ export default function MessageReader(
   useEffect(() => {
     if (!onBack || picker || confirmDelete || viewed) return
 
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onBack() }
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) onBack() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onBack, picker, confirmDelete, viewed])
@@ -191,13 +187,6 @@ export default function MessageReader(
   if (uid === null) return <p className="mail-empty">{t('reader.selectMessage')}</p>
   if (isLoading) return fallback(t('reader.loading'))
   if (isError || !data) return fallback(t('reader.loadFailed'))
-
-  // Recomputed on every re-render of THIS component — driven by its own useSetFlags settling
-  // or by useMessage refetching, never by the menu opening (that toggles state inside
-  // DropdownMenu). No summary (deep link): read and unstarred, since opening just marked it read.
-  const summary = findCachedSummary(queryClient, accountId, folderPath!, uid!)
-  const seen = summary?.seen ?? true
-  const flagged = summary?.flagged ?? false
 
   // Three ways a part is not an attachment to offer: the server calls it inline, the body
   // displays it — a cid-referenced image often arrives with an attachment disposition — or the

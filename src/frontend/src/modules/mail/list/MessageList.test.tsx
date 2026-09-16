@@ -100,15 +100,21 @@ const FINGER = { pointerType: 'touch', isPrimary: true, button: 0 }
    so every assertion about what a row action fires stays on the click that fires it. */
 const NOW: RowExit = { departing: new Set(), depart: (_uids, fire) => fire() }
 
+// The one place the required props default from — renderList and any test that rerenders
+// with a hand-built element both build on this, so a rerender can never silently drop one.
+function defaultListProps(): ListProps {
+  return {
+    folderPath: 'INBOX', selectedUid: null, onSelect: vi.fn(), rowExit: NOW,
+    search: null, onSearchChange: () => {},
+  }
+}
+
 function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record<string, string>) {
   if (preferencesOverride) {
     mocks.getPreferences.mockResolvedValue(
       { 'mail.pageSize': '50', 'mail.showPreview': 'true', ...preferencesOverride })
   }
-  return render(
-    <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()}
-      rowExit={NOW} search={null} onSearchChange={() => {}} {...props} />,
-    { wrapper })
+  return render(<MessageList {...defaultListProps()} {...props} />, { wrapper })
 }
 
 function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
@@ -189,9 +195,7 @@ describe('MessageList', () => {
     expect(screen.getByText(/loading messages/i)).toBeInTheDocument()
 
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], total: 0 }))
-    rerender(
-      <MessageList folderPath="INBOX" folderName="INBOX" selectedUid={null} onSelect={vi.fn()}
-        rowExit={NOW} search={null} onSearchChange={() => {}} />)
+    rerender(<MessageList {...defaultListProps()} folderName="INBOX" />)
 
     expect(screen.getByText(/no messages/i)).toBeInTheDocument()
     expect(bar().getByText('INBOX')).toBeInTheDocument()
@@ -702,7 +706,7 @@ describe('archive and trash from the row', () => {
     renderList({ folderPath: 'Corbeille', folderRole: 'trash' })
 
     fireEvent.click(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete permanently' }))
-    fireEvent.click(modal().getByRole('button', { name: '✕' }))
+    fireEvent.click(modal().getByRole('button', { name: 'Close' }))
 
     await settle()
     expect(mocks.remove).not.toHaveBeenCalled()
@@ -739,9 +743,7 @@ describe('archive and trash from the row', () => {
     expect(onRows).toHaveBeenLastCalledWith([2, 1])
 
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
-    rerender(
-      <MessageList folderPath="INBOX" selectedUid={null} onSelect={vi.fn()} onRows={onRows}
-        rowExit={NOW} search={null} onSearchChange={() => {}} />)
+    rerender(<MessageList {...defaultListProps()} onRows={onRows} />)
 
     await settle()
     expect(onRows).toHaveBeenLastCalledWith([3, 4])
@@ -1017,10 +1019,89 @@ describe('MessageList streaming', () => {
 
     const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
     band.scrollTop = 900
-    rerender(<MessageList folderPath="Archive" selectedUid={null} onSelect={vi.fn()}
-      rowExit={NOW} search={null} onSearchChange={() => {}} />)
+    rerender(<MessageList {...defaultListProps()} folderPath="Archive" />)
 
     expect(band.scrollTop).toBe(0)
+  })
+})
+
+// Paging, starting a search, and editing its criteria (even on the same page) reset the
+// scroll to the top; streaming more rows into the same folder, and a re-passed search object
+// that is equal but not the same reference, must not.
+describe('list scroll reset', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useSearchMessages.mockReturnValue({ data: undefined, isLoading: false, isError: false })
+  })
+
+  function props(overrides: Partial<ListProps> = {}): ListProps {
+    return { ...defaultListProps(), ...overrides }
+  }
+
+  it('returns to the top when paging to a new page', () => {
+    let page = 0
+    mocks.useMessageList.mockImplementation(() =>
+      pagedState({ lastPage: 2, page, onSelect: (p: number) => { page = p } }))
+    const { container, rerender } = renderList()
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 500
+
+    fireEvent.click(screen.getByRole('button', { name: 'Page 2' }))
+    rerender(<MessageList {...props()} />)
+
+    expect(band.scrollTop).toBe(0)
+  })
+
+  it('returns to the top when a search starts', () => {
+    mocks.useMessageList.mockReturnValue(pagedState())
+    const { container, rerender } = renderList()
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 500
+
+    rerender(<MessageList {...props(
+      { search: { folderPath: 'INBOX', allFolders: false, quick: 'x' } })} />)
+
+    expect(band.scrollTop).toBe(0)
+  })
+
+  it('returns to the top when the search criteria change, even on the same page', () => {
+    mocks.useMessageList.mockReturnValue(pagedState())
+    const criteria1 = { folderPath: 'INBOX', allFolders: false, quick: 'x' }
+    const criteria2 = { folderPath: 'INBOX', allFolders: false, quick: 'y' }
+    const { container, rerender } = renderList({ search: criteria1 })
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 500
+
+    rerender(<MessageList {...props({ search: criteria2 })} />)
+
+    expect(band.scrollTop).toBe(0)
+  })
+
+  it('keeps the scroll position when more rows stream into the same folder', () => {
+    mocks.useMessageList.mockReturnValue(streamingState())
+    const { container, rerender } = renderList()
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 500
+
+    mocks.useMessageList.mockReturnValue(streamingState({}, 150))
+    rerender(<MessageList {...props()} />)
+
+    expect(band.scrollTop).toBe(500)
+  })
+
+  it('keeps the scroll position when an equal but new search criteria object comes back', () => {
+    mocks.useMessageList.mockReturnValue(pagedState())
+    const criteria1 = { folderPath: 'INBOX', allFolders: false, quick: 'x' }
+    const { container, rerender } = renderList({ search: criteria1 })
+    const band = container.querySelector('.mail-list-scroll') as HTMLDivElement
+    band.scrollTop = 500
+
+    rerender(<MessageList {...props(
+      { search: { folderPath: 'INBOX', allFolders: false, quick: 'x' } })} />)
+
+    expect(band.scrollTop).toBe(500)
   })
 })
 
@@ -1209,8 +1290,7 @@ describe('multi-select', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
     expect(screen.getByText('2 selected')).toBeInTheDocument()
     rerender(
-      <MessageList folderPath="Archives" folderName="Archive" folderRole="archive"
-        selectedUid={null} onSelect={vi.fn()} rowExit={NOW} search={null} onSearchChange={() => {}} />)
+      <MessageList {...defaultListProps()} folderPath="Archives" folderName="Archive" folderRole="archive" />)
     await settle()
     expect(screen.queryByText('2 selected')).not.toBeInTheDocument()
   })
@@ -1219,6 +1299,65 @@ describe('multi-select', () => {
     renderWithRoles()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
     fireEvent.keyDown(screen.getByRole('checkbox', { name: 'Select all' }), { key: 'Escape' })
+    expect(screen.getByText('Inbox')).toBeInTheDocument()
+  })
+
+  it('Escape closes the selection kebab and keeps the selection', () => {
+    renderWithRoles()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    const kebab = bar().getByRole('button', { name: 'More actions' })
+    fireEvent.click(kebab)
+
+    fireEvent.keyDown(kebab, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+  })
+
+  it('Escape under the bulk expunge confirm keeps the selection the confirm acts on', async () => {
+    renderWithRoles('trash')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    const del = bar().getByRole('button', { name: 'Delete permanently' })
+    fireEvent.click(del)
+    await settle()
+
+    fireEvent.keyDown(del, { key: 'Escape' })
+
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(mocks.remove).toHaveBeenCalledWith(
+      expect.objectContaining({ folderPath: 'Trash', uids: [2, 1] }))
+  })
+
+  it('Escape under the Move picker keeps the selection', async () => {
+    renderWithRoles()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    const kebab = bar().getByRole('button', { name: 'More actions' })
+    fireEvent.click(kebab)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to…' }))
+    await settle()
+    expect(screen.getByText('Move to folder')).toBeInTheDocument()
+
+    fireEvent.keyDown(kebab, { key: 'Escape' })
+
+    expect(screen.queryByText('Move to folder')).not.toBeInTheDocument()
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+  })
+
+  // Focus returns to the kebab, inside the list root, so the next Escape still reaches the selection.
+  it('Escape from a kebab item closes the menu, then the next one clears the selection', () => {
+    renderWithRoles()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    const kebab = bar().getByRole('button', { name: 'More actions' })
+    fireEvent.click(kebab)
+    const item = screen.getByRole('menuitem', { name: 'Move to…' })
+    item.focus()
+
+    fireEvent.keyDown(item, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+
+    fireEvent.keyDown(document.activeElement as Element, { key: 'Escape' })
     expect(screen.getByText('Inbox')).toBeInTheDocument()
   })
 
@@ -1464,6 +1603,20 @@ describe('MessageList searching', () => {
     expect(onSelect).toHaveBeenCalledWith(10)
   })
 
+  // resetKey used to stay `search:0` for any criteria edit that lands on the same page, so a
+  // row checked under one search stayed checked under a different one that also matched it.
+  it('clears the selection when the search criteria change on the same page', () => {
+    mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
+    const { rerender } = renderList({ search: criteria })
+
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select message from/i })[0])
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+    rerender(<MessageList {...defaultListProps()} search={{ ...criteria, quick: 'y' }} />)
+
+    expect(screen.queryByText('1 selected')).not.toBeInTheDocument()
+  })
+
   it('says "Searching…" while in flight and "No results." when empty', () => {
     mocks.useSearchMessages.mockReturnValue({ data: undefined, isLoading: true, isError: false })
     const { rerender } = renderList({ search: criteria })
@@ -1471,9 +1624,7 @@ describe('MessageList searching', () => {
     expect(screen.getByText('Searching…', { selector: '.mail-empty' })).toBeInTheDocument()
 
     mocks.useSearchMessages.mockReturnValue(page({ total: 0, page: 0, pageSize: 50, results: [] }))
-    rerender(
-      <MessageList rowExit={NOW} folderPath="INBOX" selectedUid={null} onSelect={vi.fn()}
-        search={criteria} onSearchChange={vi.fn()} />)
+    rerender(<MessageList {...defaultListProps()} search={criteria} />)
     expect(screen.getByText('No results.')).toBeInTheDocument()
   })
 
@@ -1905,9 +2056,7 @@ describe('conversation rows', () => {
     fireEvent.click(screen.getByLabelText('Expand conversation'))
     expect(container.querySelectorAll('.message-row')).toHaveLength(3)
 
-    rerender(
-      <MessageList folderPath="Archives" selectedUid={null} onSelect={vi.fn()}
-        rowExit={NOW} search={null} onSearchChange={() => {}} />)
+    rerender(<MessageList {...defaultListProps()} folderPath="Archives" />)
 
     expect(container.querySelectorAll('.message-row')).toHaveLength(1)
     expect(screen.getByLabelText('Expand conversation'))

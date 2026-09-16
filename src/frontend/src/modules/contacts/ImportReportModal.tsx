@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type { ContactImportReport } from './contactTypes'
+import ModalOverlay from '../../components/ModalOverlay'
 
 interface Props {
   report: ContactImportReport
@@ -57,11 +58,11 @@ export default function ImportReportModal({ report, onClose }: Props) {
   const hidden = report.totalErrors - report.errors.length
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{t('import.title')}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
 
         <div className="import-counters">
@@ -89,6 +90,6 @@ export default function ImportReportModal({ report, onClose }: Props) {
           </ul>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

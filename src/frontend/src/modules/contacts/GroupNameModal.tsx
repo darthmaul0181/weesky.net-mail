@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import ModalOverlay from '../../components/ModalOverlay'
 
 interface Props {
   title: string
@@ -22,7 +23,7 @@ export default function GroupNameModal({ title, initialName, saving, onSubmit, o
   const submittable = trimmed !== '' && trimmed !== initialName.trim() && !saving
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>
@@ -50,6 +51,6 @@ export default function GroupNameModal({ title, initialName, saving, onSubmit, o
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

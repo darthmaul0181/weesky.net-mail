@@ -163,6 +163,22 @@ describe('RuleEditorModal folder picker', () => {
   })
 })
 
+describe('RuleEditorModal close buttons', () => {
+  it('names the editor ✕ and the help ✕, each closing its own dialog', async () => {
+    const onClose = vi.fn()
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={onClose} />)
+    await userEvent.click(screen.getByTitle('Help'))
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2)
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Close' })[1])
+    expect(screen.queryByText('Rule editor — help')).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+})
+
 // ── Editor gating ─────────────────────────────────────────────
 
 describe('RuleEditorModal action gating', () => {
@@ -1241,5 +1257,13 @@ describe('ConvertConfirmModal', () => {
 
     await userEvent.click(screen.getByText('Delete & switch'))
     expect(onConfirm).toHaveBeenCalled()
+  })
+
+  it('closes on its named ✕', async () => {
+    const onClose = vi.fn()
+    render(<ConvertConfirmModal incompatible={[]} onConfirm={() => {}} onClose={onClose} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
   })
 })

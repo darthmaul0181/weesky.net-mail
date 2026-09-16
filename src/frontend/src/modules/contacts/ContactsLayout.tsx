@@ -5,6 +5,7 @@ import { ApiError } from '../../api.js'
 import { newMessageSeed } from '../mail/compose/composeSeed'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import FloatingAction from '../../components/FloatingAction'
+import ModalOverlay from '../../components/ModalOverlay'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
 import { useViewport } from '../../hooks/useViewport'
@@ -443,11 +444,12 @@ export default function ContactsLayout() {
       )}
 
       {conflict && (
-        <div className="modal-overlay" onClick={() => setConflict(false)}>
+        <ModalOverlay onClose={() => setConflict(false)}>
           <div className="modal" onClick={event => event.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title">{t('layout.conflictTitle')}</span>
-              <button className="modal-close" onClick={() => setConflict(false)}>✕</button>
+              <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
+                onClick={() => setConflict(false)}>✕</button>
             </div>
             <p>{t('layout.conflictBody')}</p>
             <div className="modal-actions">
@@ -456,7 +458,7 @@ export default function ContactsLayout() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {pendingDelete && (

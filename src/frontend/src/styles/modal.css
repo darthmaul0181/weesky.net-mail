@@ -31,6 +31,18 @@
   padding: 24px;
 }
 
+/* The root errorElement replaces the whole page, so there is nothing to dim: no overlay scrim,
+   just the dialog centred on the app's own background. */
+.app-error {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+}
+
 /* gap, because space-between distributes zero free space under max-content and would draw the
    title flush against the ✕ whenever the header is the widest element. */
 .modal-header {

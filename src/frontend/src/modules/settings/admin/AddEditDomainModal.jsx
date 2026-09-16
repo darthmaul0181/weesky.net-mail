@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../../api.js'
+import ModalOverlay from '../../../components/ModalOverlay'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import GlobeIcon from '../../../icons/GlobeIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -9,6 +10,7 @@ export const DOMAIN_RE = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA
 
 export function AddEditDomainModal({ domain, onSave, onClose }) {
   const { t } = useTranslation('admin')
+  const uid = useId()
   const [id, setId] = useState(domain?.id ?? '')
   const [name, setName] = useState(domain?.name ?? '')
   const [error, setError] = useState(null)
@@ -35,22 +37,22 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{isEdit ? <><PencilIcon /> {t('domains.editTitle')}</> : <><GlobeIcon /> {t('domains.addTitle')}</>}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && <div className="alert alert-error" role="alert">{error}</div>}
           <div className="field">
-            <label>{t('domains.id')}</label>
-            <input type="text" value={id} onChange={e => setId(e.target.value.toUpperCase())}
+            <label htmlFor={`${uid}-domain-id`}>{t('domains.id')}</label>
+            <input id={`${uid}-domain-id`} type="text" value={id} onChange={e => setId(e.target.value.toUpperCase())}
               maxLength={3} disabled={isEdit} required />
           </div>
           <div className="field">
-            <label>{t('domains.name')}</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} required
+            <label htmlFor={`${uid}-domain-name`}>{t('domains.name')}</label>
+            <input id={`${uid}-domain-name`} type="text" value={name} onChange={e => setName(e.target.value)} required
               className={name && !nameValid ? 'is-error' : undefined} />
           </div>
           <button className="btn btn-primary" type="submit"
@@ -61,7 +63,7 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
           </button>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

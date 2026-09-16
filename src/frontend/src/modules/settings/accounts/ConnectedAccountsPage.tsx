@@ -4,6 +4,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import LoadingBlock from '../../../components/LoadingBlock'
+import ModalOverlay from '../../../components/ModalOverlay'
 import Toasts from '../../../components/Toasts.jsx'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useToasts } from '../../../hooks/useToasts.js'
@@ -53,7 +54,7 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title"><KeyIcon /> {t('accounts.reenterPassword')}</span>
@@ -75,7 +76,7 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

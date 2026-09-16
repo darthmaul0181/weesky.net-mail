@@ -1,4 +1,5 @@
 import { Trans, useTranslation } from 'react-i18next'
+import ModalOverlay from './ModalOverlay'
 
 // Closing is the ✕ alone, as in the admin dialogs — no Cancel button. `message` overrides the
 // default one-liner (e.g. the emptying warning). The danger fallback (var(--danger, #dc2626)) is
@@ -20,11 +21,11 @@ export function DeleteConfirmModal({
 }) {
   const { t } = useTranslation()
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{title ?? t('deleteConfirm.title')}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
         <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
           {/* Self-closing <name/>: entityLabel is a node, so it travels as a component rather
@@ -40,7 +41,7 @@ export function DeleteConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

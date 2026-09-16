@@ -19,6 +19,7 @@ import { formatBirthday } from './contactBirthday'
 import { typeLabel, visibleType } from './contactLineTypes'
 import { displayNameOf, initialsOf } from './contactName'
 import type { Contact, ContactDetailPostal } from './contactTypes'
+import { websiteHref } from './contactWebsite'
 import { useContact } from './queries'
 import { useContactPhotoUrl } from './useContactPhotoUrl'
 
@@ -108,6 +109,7 @@ export default function ContactCard({
   // What situates somebody belongs to their name, not to a row among the phone numbers.
   const role = detail?.jobTitle
   const org = [detail?.organization, detail?.department].filter(Boolean).join(' · ')
+  const websiteUrl = detail?.website ? websiteHref(detail.website) : null
 
   const favouriteLabel = t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')
   const editLabel = t('actions.edit', { ns: 'common' })
@@ -233,8 +235,10 @@ export default function ContactCard({
           {addresses.length > 0 && (
             <CardRow icon={<MailIcon size={15} />} label={t('fields.addresses')}>
               {addresses.map((line, index) => (
-                <span key={line.address} className="contact-card-value" data-testid="card-address">
-                  <a href={`mailto:${line.address}`}>{line.address}</a>
+                <span key={index} className="contact-card-value" data-testid="card-address">
+                  <button type="button" className="contact-card-link" onClick={() => onWrite(line.address)}>
+                    {line.address}
+                  </button>
                   <TypeChip type={line.type} t={t} />
                   {index === 0 && <span className="contact-card-primary">{t('fields.primary')}</span>}
                 </span>
@@ -260,7 +264,7 @@ export default function ContactCard({
                 <span key={postal.position} className="contact-card-value is-postal"
                   data-testid="card-postal">
                   <TypeChip type={postal.type} t={t} />
-                  {postalLines(postal).map(line => <span key={line}>{line}</span>)}
+                  {postalLines(postal).map((line, index) => <span key={index}>{line}</span>)}
                 </span>
               ))}
             </CardRow>
@@ -272,7 +276,9 @@ export default function ContactCard({
           {detail?.website && (
             <CardRow icon={<GlobeIcon />} label={t('fields.website')}>
               <span className="contact-card-value">
-                <a href={detail.website} target="_blank" rel="noreferrer noopener">{detail.website}</a>
+                {websiteUrl
+                  ? <a href={websiteUrl} target="_blank" rel="noreferrer noopener">{detail.website}</a>
+                  : detail.website}
               </span>
             </CardRow>
           )}

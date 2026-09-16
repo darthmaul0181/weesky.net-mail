@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import ModalOverlay from '../../../components/ModalOverlay'
 import FolderPlusIcon from '../../../icons/FolderPlusIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { useCreateFolder } from '../queries'
@@ -24,7 +25,7 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
   const all = flatten(sortFolders(folders))
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title"><FolderPlusIcon />{t('folders.create.title')}</span>
@@ -75,6 +76,6 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
           </button>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

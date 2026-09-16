@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CalendarLayout from './CalendarLayout'
+import { calendarKeys } from './queries'
 import type { Calendar } from './calendarTypes'
 import {
   firePointer, installPointerEvents, mockViewport, resetViewport, settle,
@@ -108,12 +109,14 @@ const routes = [
   { path: '/calendar/:id/edit', element: <CalendarLayout /> },
 ]
 
-function renderAt(path = '/calendar') {
+function mount(path = '/calendar') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
-  return router
+  return { router, client }
 }
+
+const renderAt = (path?: string) => mount(path).router
 
 const params = (router: ReturnType<typeof renderAt>) =>
   new URLSearchParams(router.state.location.search)
@@ -121,6 +124,20 @@ const params = (router: ReturnType<typeof renderAt>) =>
 /** Today as the browser's own zone reads it — what the layout falls back to. */
 function today() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: BROWSER_TZ }).format(new Date())
+}
+
+/** `nextHour()`'s own arithmetic, read back as the `'HH:mm'` clock the Start/End time inputs
+    show — the top of the next hour, on the wall clock this machine (and the layout) reads. */
+function nextHourClock(): string {
+  const now = new Date()
+  now.setMinutes(0, 0, 0)
+  const next = new Date(now.getTime() + 3_600_000)
+  return String(next.getHours()).padStart(2, '0') + ':00'
+}
+
+function clockPlusOneHour(clock: string): string {
+  const hour = (Number(clock.slice(0, 2)) + 1) % 24
+  return String(hour).padStart(2, '0') + ':00'
 }
 
 describe('CalendarLayout', () => {
@@ -195,6 +212,60 @@ describe('CalendarLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() =>
       expect(screen.queryByText('The window holds too many occurrences; narrow it')).toBeNull())
+  })
+
+  // TanStack keeps the data of a query whose refetch failed: a grid already drawn is still the
+  // best answer on hand, and swapping it for the error band would throw away what the user sees.
+  it('keeps the grid when a background read of the window fails', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
+    const { client } = mount('/calendar?view=week&date=2026-09-16')
+    expect(await screen.findByRole('button', { name: /Stand-up/ })).toBeInTheDocument()
+
+    const reads = api.getOccurrences.mock.calls.length
+    api.getOccurrences.mockRejectedValue(new ApiError('boom', 500))
+    await client.refetchQueries()
+    await settle()
+    expect(api.getOccurrences.mock.calls.length).toBeGreaterThan(reads)
+    expect(screen.getByRole('button', { name: /Stand-up/ })).toBeInTheDocument()
+    expect(document.querySelector('.calendar-error')).toBeNull()
+  })
+
+  // A refetch that fails keeps the list it had, so the sidebar has nothing to apologise for.
+  it('keeps the calendar list quiet when a background read of it fails', async () => {
+    const { client } = mount('/calendar?view=week&date=2026-09-16')
+    expect(await screen.findByLabelText('Work')).toBeInTheDocument()
+
+    const reads = api.getCalendars.mock.calls.length
+    api.getCalendars.mockRejectedValue(new ApiError('boom', 500))
+    await client.refetchQueries()
+    await settle()
+    expect(api.getCalendars.mock.calls.length).toBeGreaterThan(reads)
+    expect(document.querySelector('.calendar-sidebar-error')).toBeNull()
+    expect(screen.getByLabelText('Work')).toBeInTheDocument()
+  })
+
+  // Drawn before the list answers, every chip would wear the default colour and a hidden
+  // calendar's events would show, then vanish.
+  it('waits for the calendar list before drawing the grid', async () => {
+    let answer: (value: { calendars: Calendar[] }) => void = () => {}
+    api.getCalendars.mockReturnValue(new Promise(resolve => { answer = resolve }))
+    api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
+    renderAt('/calendar?view=week&date=2026-09-16')
+    await waitFor(() => expect(api.getOccurrences).toHaveBeenCalled())
+    await settle()
+    expect(screen.queryByRole('button', { name: /Stand-up/ })).toBeNull()
+
+    answer({ calendars: CALENDARS })
+    expect(await screen.findByRole('button', { name: /Stand-up/ })).toBeInTheDocument()
+  })
+
+  // The sidebar says the list was refused; the grid has its occurrences and draws them.
+  it('draws the grid when the calendar list is refused', async () => {
+    api.getCalendars.mockRejectedValue(new ApiError('nope', 500))
+    api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
+    renderAt('/calendar?view=week&date=2026-09-16')
+    expect(await screen.findByRole('button', { name: /Stand-up/ })).toBeInTheDocument()
+    expect(document.querySelector('.calendar-sidebar-error')).not.toBeNull()
   })
 
   it('reads the event and sows the editor from the occurrence in the window', async () => {
@@ -334,6 +405,28 @@ describe('CalendarLayout', () => {
     await waitFor(() => expect(api.createEvent).toHaveBeenCalledWith(
       expect.objectContaining({ summary: 'Retro', calendarId: 'a' })))
     await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+  })
+
+  // An unparsable start/end (a hand-edited link, a stale bookmark) must fall back rather than
+  // hand an Invalid Date into the form.
+  it('opens the editor with fallback times when start/end are unparsable', async () => {
+    const expectedStart = nextHourClock()
+    renderAt('/calendar/new?view=week&date=2026-09-16&start=x&end=y')
+
+    expect(await screen.findByLabelText('Title')).toBeInTheDocument()
+    expect(screen.getByLabelText('Start time')).toHaveValue(expectedStart)
+    expect(screen.getByLabelText('End time')).toHaveValue(clockPlusOneHour(expectedStart))
+  })
+
+  // A parsed end that would land before, or at, a fallback start is not a real duration — the
+  // fallback start (an unparsable start) must not inherit a stale or reversed end from the URL.
+  it('falls back to start + 1h when the parsed end is not after the fallback start', async () => {
+    const expectedStart = nextHourClock()
+    renderAt('/calendar/new?view=week&date=2026-09-16&start=x&end=2000-01-01T00:00:00.000Z')
+
+    expect(await screen.findByLabelText('Title')).toBeInTheDocument()
+    expect(screen.getByLabelText('Start time')).toHaveValue(expectedStart)
+    expect(screen.getByLabelText('End time')).toHaveValue(clockPlusOneHour(expectedStart))
   })
 
   // A stale write keeps the form: bouncing back to a grid that kept nothing is how somebody loses
@@ -534,6 +627,100 @@ describe('CalendarLayout', () => {
     const router = renderAt('/calendar/gone/edit?view=week&date=2026-09-16')
     expect(await screen.findByText('This event no longer exists')).toBeInTheDocument()
     await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+  })
+
+  // A detail left in the cache by the bubble is not proof the event still exists: the read the
+  // editor makes on opening decides, and a 404 there is a bookmark gone, not a form to sow.
+  it('says so and goes back when a cached event is gone by the time the editor opens', async () => {
+    api.getEvent.mockRejectedValue(new ApiError('Not found', 404))
+    const { router, client } = mount('/calendar?view=week&date=2026-09-16')
+    await screen.findByRole('button', { name: 'Today' })
+    client.setQueryData(calendarKeys.event('primary', 'e1'), detail(),
+      { updatedAt: Date.now() - 120_000 })
+
+    await router.navigate('/calendar/e1/edit?view=week&date=2026-09-16')
+    expect(await screen.findByText('This event no longer exists')).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+    expect(screen.queryByLabelText('Title')).toBeNull()
+  })
+
+  // Offline, the read the editor makes on opening is paused, not fetching: it must still be waited
+  // for, neither sown from the stale copy nor taken for a settled failure.
+  describe('while the read of the event is paused offline', () => {
+    afterEach(() => onlineManager.setOnline(true))
+
+    it('does not sow the editor from a stale cached copy', async () => {
+      api.getEvent.mockResolvedValue({ ...detail(), icsHash: 'h2' })
+      const { router, client } = mount('/calendar?view=week&date=2026-09-16')
+      await screen.findByRole('button', { name: 'Today' })
+      client.setQueryData(calendarKeys.event('primary', 'e1'), detail({ summary: 'Old' }),
+        { updatedAt: Date.now() - 120_000 })
+      onlineManager.setOnline(false)
+
+      await router.navigate('/calendar/e1/edit?view=week&date=2026-09-16')
+      await settle()
+      expect(screen.queryByLabelText('Title')).toBeNull()
+
+      onlineManager.setOnline(true)
+      expect(await screen.findByLabelText('Title')).toHaveValue('Dentist')
+    })
+
+    it('does not bounce on an earlier failure the paused read may still undo', async () => {
+      const { router, client } = mount('/calendar?view=week&date=2026-09-16')
+      await screen.findByRole('button', { name: 'Today' })
+      client.setQueryData(calendarKeys.event('primary', 'e1'), detail({ summary: 'Old' }),
+        { updatedAt: Date.now() - 120_000 })
+      await client.fetchQuery({
+        queryKey: calendarKeys.event('primary', 'e1'),
+        queryFn: () => Promise.reject(new ApiError('boom', 500)),
+      }).catch(() => {})
+      onlineManager.setOnline(false)
+
+      await router.navigate('/calendar/e1/edit?view=week&date=2026-09-16')
+      await settle()
+      expect(router.state.location.pathname).toBe('/calendar/e1/edit')
+
+      onlineManager.setOnline(true)
+      expect(await screen.findByLabelText('Title')).toHaveValue('Dentist')
+      expect(router.state.location.pathname).toBe('/calendar/e1/edit')
+    })
+  })
+
+  // Only a first read that failed is a target gone: a refetch failing behind an open form keeps
+  // the event it already read, and closing the editor would throw the draft away.
+  it('keeps the editor and what was typed when a background read of the event fails', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const { router, client } = mount('/calendar/e1/edit?view=week&date=2026-09-16')
+    await userEvent.type(await screen.findByLabelText('Title'), '!')
+
+    const reads = api.getEvent.mock.calls.length
+    api.getEvent.mockRejectedValue(new ApiError('boom', 500))
+    await client.refetchQueries()
+    await settle()
+    expect(api.getEvent.mock.calls.length).toBeGreaterThan(reads)
+    expect(screen.getByLabelText('Title')).toHaveValue('Dentist!')
+    expect(router.state.location.pathname).toBe('/calendar/e1/edit')
+  })
+
+  // Reload is the user's lever: a read that fails there is said in the band, and the form stays.
+  it('says a failed reload out loud and keeps the form', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    api.updateEvent.mockRejectedValue(new ApiError('conflict', 409))
+    const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+
+    await userEvent.type(await screen.findByLabelText('Title'), '!')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByText(/changed elsewhere/)
+    await waitFor(() => expect(api.getEvent.mock.calls.length).toBeGreaterThan(1))
+
+    api.getEvent.mockRejectedValue(new ApiError('Not found', 404))
+    await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    const band = await screen.findByText('This event no longer exists')
+    expect(band.closest('.editor-error')).not.toBeNull()
+    expect(screen.getByLabelText('Title')).toHaveValue('Dentist!')
+    expect(router.state.location.pathname).toBe('/calendar/e1/edit')
   })
 
   it('asks before dropping what was typed, and closes a clean form outright', async () => {

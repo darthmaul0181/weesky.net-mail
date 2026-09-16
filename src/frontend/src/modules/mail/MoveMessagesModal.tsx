@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { flatten, indent, sortFolders } from './folders/folderNodes'
 import { folderMatches } from './folders/folderFilter'
 import { roleLabel } from './roleLabel'
+import ModalOverlay from '../../components/ModalOverlay'
 import FolderMoveIcon from '../../icons/FolderMoveIcon'
 import CopyIcon from '../../icons/CopyIcon'
 import type { MailFolderNode } from './api/mailTypes'
@@ -58,7 +59,7 @@ export default function MoveMessagesModal(
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <form
         className="modal folder-pick-modal"
         onClick={e => e.stopPropagation()}
@@ -128,6 +129,6 @@ export default function MoveMessagesModal(
           </button>
         </div>
       </form>
-    </div>
+    </ModalOverlay>
   )
 }

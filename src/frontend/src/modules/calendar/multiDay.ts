@@ -44,6 +44,31 @@ export function durationMinutesOf(o: Occurrence, tz: string = o.timeZone ?? 'UTC
   return daysBetween(start.day, end.day) * MINUTES_PER_DAY + end.minute - start.minute
 }
 
+/** The day an occurrence's slicing truly ends on — not the last *visible* one a resize's
+    `item.last` names, which can be an earlier day the event's real end never reached (day view,
+    only the head on screen). An event ending exactly at midnight opens no day of its own. */
+export function lastDayOf(o: Occurrence, tz: string): PlainDate {
+  const end = wallClockOf(o, tz)[1]
+  return end.minute === 0 ? addDays(end.day, -1) : end.day
+}
+
+/** How tall a slice previews while its event resizes to `previewDuration`, in minutes: a slice
+    only owns the part past its own `offset` into the event, capped at its own midnight; the day
+    the event actually ends on tracks the drag past what it already drew, every earlier day not. */
+export function resizePreviewMinutes(
+  o: Occurrence, slice: Slice, previewDuration: number, tz: string,
+): number | null {
+  const start = wallClockOf(o, tz)[0]
+  const offset = daysBetween(start.day, slice.day) * MINUTES_PER_DAY
+    + slice.startMinute - start.minute
+  const newLength = previewDuration - offset
+  if (newLength <= 0) return null
+
+  const midnightCap = MINUTES_PER_DAY - slice.startMinute
+  if (slice.day === lastDayOf(o, tz)) return Math.min(newLength, midnightCap)
+  return Math.min(slice.endMinute - slice.startMinute, newLength, midnightCap)
+}
+
 function clamp(from: PlainDate, to: PlainDate, visible: PlainDate[]): Placement {
   const first = visible[0]
   const last = visible[visible.length - 1]
@@ -61,8 +86,7 @@ export function placeOccurrence(o: Occurrence, tz: string, visible: PlainDate[])
   }
 
   const [start, end] = wallClockOf(o, tz)
-  // An event ending exactly at midnight closes the evening it belongs to, and opens no day.
-  const lastDay = end.minute === 0 ? addDays(end.day, -1) : end.day
+  const lastDay = lastDayOf(o, tz)
   // Measured on the wall clock rather than on the instants: the band is a rendering decision, and
   // an event drawn as a band would become a pair of columns across a clock change.
   const minutes = durationMinutesOf(o, tz)

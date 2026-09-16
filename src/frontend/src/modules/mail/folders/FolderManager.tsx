@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import ModalOverlay from '../../../components/ModalOverlay'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -119,7 +120,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
       </ul>
 
       {renaming && (
-        <div className="modal-overlay" onClick={() => setRenaming(null)}>
+        <ModalOverlay onClose={() => setRenaming(null)}>
           <div className="modal" onClick={event => event.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title"><PencilIcon />{t('folders.manage.renameTitle')}</span>
@@ -160,7 +161,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
               </button>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {pendingDelete && (

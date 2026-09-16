@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { requestBlob } from '../../../api.js'
 import LoadingBlock from '../../../components/LoadingBlock'
+import ModalOverlay from '../../../components/ModalOverlay'
 import ChevronLeftIcon from '../../../icons/ChevronLeftIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -72,7 +73,7 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
   }, [onClose, images.length])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal attachment-viewer" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{image.fileName}</span>
@@ -110,6 +111,6 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
           <button type="button" className="btn btn-ghost" onClick={() => onDownload(image)}>{t('reader.download')}</button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

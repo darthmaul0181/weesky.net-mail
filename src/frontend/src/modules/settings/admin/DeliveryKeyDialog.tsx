@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
+import ModalOverlay from '../../../components/ModalOverlay'
 import { useDialogFocusTrap } from '../../../hooks/useDialogFocusTrap'
 
 interface Props {
@@ -35,7 +36,7 @@ export default function DeliveryKeyDialog({ keyValue, addToast, onClose, returnF
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="dlv-key-title" ref={dialogRef}
         onClick={e => e.stopPropagation()}>
         <div className="modal-header">
@@ -49,6 +50,6 @@ export default function DeliveryKeyDialog({ keyValue, addToast, onClose, returnF
           <button type="button" className="btn btn-primary btn-auto" onClick={() => void copy()}>{t('deliveryReplies.copy')}</button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

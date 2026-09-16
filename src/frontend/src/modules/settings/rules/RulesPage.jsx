@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { api } from '../../../api.js'
+import ModalOverlay from '../../../components/ModalOverlay'
 import { useAccountId } from '../../../hooks/useAccountId'
 import { useToasts } from '../../../hooks/useToasts.js'
 import { flatten } from '../../mail/folders/folderNodes'
@@ -468,11 +469,11 @@ function RuleHelpModal({ onClose }) {
   const pair = (a, b) => t('rules.help.termPair', { a, b })
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal rule-help-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{t('rules.help.title')}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
         <div className="rule-help-body">
 
@@ -548,7 +549,7 @@ function RuleHelpModal({ onClose }) {
 
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 
@@ -637,13 +638,13 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{t(isNew ? 'rules.newRule' : 'rules.editRule')}</span>
           <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)}
             title={t('rules.helpTitle')}>?</button>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
         {helpOpen && <RuleHelpModal onClose={() => setHelpOpen(false)} />}
         <form onSubmit={handleSubmit}>
@@ -789,7 +790,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 
@@ -798,11 +799,11 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading }) {
   const { t } = useTranslation('settings')
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <ModalOverlay onClose={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{t('rules.convertTitle')}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
         </div>
         <p style={{ margin: '0 0 12px', fontSize: '14px' }}>
           <Trans i18nKey="rules.convertBody" ns="settings" count={incompatible.length} />
@@ -826,7 +827,7 @@ export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading 
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

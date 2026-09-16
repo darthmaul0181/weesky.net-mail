@@ -49,7 +49,7 @@ describe('ImportReportModal', () => {
     const onClose = vi.fn()
     render(<ImportReportModal report={report()} onClose={onClose} />)
 
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(onClose).toHaveBeenCalled()
   })

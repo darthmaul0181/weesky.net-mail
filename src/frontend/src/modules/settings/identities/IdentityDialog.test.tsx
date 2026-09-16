@@ -85,6 +85,7 @@ describe('IdentityDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
     fireEvent.click(screen.getByLabelText('Close'))
     expect(onClose).toHaveBeenCalledTimes(1)
+    fireEvent.mouseDown(container.firstChild as Element)
     fireEvent.click(container.firstChild as Element)
     expect(onClose).toHaveBeenCalledTimes(2)
   })

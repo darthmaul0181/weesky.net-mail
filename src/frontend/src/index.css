@@ -2600,8 +2600,20 @@ body {
 .contact-card-value.is-postal > .contact-card-type {
   display: inline-block; margin: 0 0 3px;
 }
-.contact-card-value a { color: var(--action-primary); text-decoration: none; }
-.contact-card-value a:hover { text-decoration: underline; }
+.contact-card-value a, .contact-card-link {
+  color: var(--action-primary); text-decoration: none;
+}
+.contact-card-value a:hover, .contact-card-link:hover { text-decoration: underline; }
+/* The address row's button reset: it wears the same link colour as the website row, with none of
+   a <button>'s own chrome, since an address is a link the card renders as a button on purpose
+   (Write opens the composer, never mailto:) rather than a control that happens to look like one. */
+.contact-card-link {
+  background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
+  max-width: 100%; text-align: start;
+}
+.contact-card-link:focus-visible {
+  outline: 2px solid var(--action-primary); outline-offset: 2px;
+}
 .contact-card-primary {
   margin-left: 8px; color: var(--text-muted); font-size: 10px; text-transform: uppercase;
   letter-spacing: .04em; white-space: nowrap;
