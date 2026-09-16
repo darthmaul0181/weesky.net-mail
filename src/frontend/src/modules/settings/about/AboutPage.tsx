@@ -11,6 +11,10 @@ import scottyLarge from '../../../assets/scotty-1440.webp'
 /** The page the build writes beside the bundle — the bundled libraries plus our own assets. */
 const LICENCES = '/third-party-licenses.html'
 
+/** AGPL-3.0 section 13: whoever runs a modified version owes its users the source. Written here
+    rather than configured, so a fork edits it instead of forgetting it. */
+const SOURCE = 'https://github.com/darthmaul0181/weesky.net-mail'
+
 interface ServerVersion {
   version: string
   /** Optional, not just nullable: the API omits a null field entirely. */
@@ -65,6 +69,9 @@ export default function AboutPage() {
       </p>
 
       <div className="about-actions">
+        <a className="about-action" href={SOURCE} target="_blank" rel="noopener noreferrer">
+          {t('about.sourceCode')}<ExternalLinkIcon size={13} />
+        </a>
         <a className="about-action" href={LICENCES} target="_blank" rel="noopener noreferrer">
           {t('about.thirdParty')}<ExternalLinkIcon size={13} />
         </a>

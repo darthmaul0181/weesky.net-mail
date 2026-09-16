@@ -18,7 +18,7 @@
 -- Thunderbird (voir plus bas) : l'étendue de la rotation doit donc être exactement celle du dégât.
 
 -- FORME « BASE ENTIÈRE » — après une restauration. C'est le geste que décrit
--- docs/superpowers/carddav-restore-prerequisite.md, et c'est celui que joue un `mariadb < ce
+-- docs/operations/restore-sync-epoch-rotation.md, et c'est celui que joue un `mariadb < ce
 -- fichier` : une restauration ne rembobine pas un agenda, elle rembobine la base, et rien ne dit
 -- lesquels de ses agendas ont divergé.
 

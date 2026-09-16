@@ -1,0 +1,14 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace weesky.Scotty.Microservice.Models;
+
+public sealed class SecretChange
+{
+    [Required]
+    [StringLength(256, MinimumLength = 8)]
+    public string NewPassword { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(256, MinimumLength = 1)]
+    public string OldPassword { get; set; } = string.Empty;
+}

@@ -23,7 +23,7 @@ function wrapper({ children }: { children: ReactNode }) {
 const addToast = vi.fn()
 
 function renderTab(settings: Record<string, string> = {
-  'app.installable': 'true', 'app.name': 'Snoopy mail', 'app.shortName': 'Snoopy',
+  'app.installable': 'true', 'app.name': 'Scotty mail', 'app.shortName': 'Scotty',
 }) {
   mocks.getAppSettings.mockResolvedValue(settings)
   mocks.setAppSetting.mockResolvedValue(undefined)
@@ -60,7 +60,7 @@ describe('ApplicationTab', () => {
   // Naming an app that is not exposed is meaningless; greying the fields says so without
   // removing the values from the screen.
   it('disables the names while the app is off', async () => {
-    renderTab({ 'app.installable': 'false', 'app.name': 'Snoopy mail', 'app.shortName': 'Snoopy' })
+    renderTab({ 'app.installable': 'false', 'app.name': 'Scotty mail', 'app.shortName': 'Scotty' })
 
     expect(await screen.findByLabelText('Application name')).toBeDisabled()
     expect(screen.getByLabelText('Short name')).toBeDisabled()
@@ -75,7 +75,7 @@ describe('ApplicationTab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mocks.setAppSetting).toHaveBeenCalledWith('app.name', 'Weesky Mail'))
-    expect(mocks.setAppSetting).toHaveBeenCalledWith('app.shortName', 'Snoopy')
+    expect(mocks.setAppSetting).toHaveBeenCalledWith('app.shortName', 'Scotty')
   })
 
   // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
@@ -104,7 +104,7 @@ describe('ApplicationTab', () => {
 
     await waitFor(() => expect(addToast)
       .toHaveBeenCalledWith('Could not save the name', 'error'))
-    await waitFor(() => expect(screen.getByLabelText('Application name')).toHaveValue('Snoopy mail'))
+    await waitFor(() => expect(screen.getByLabelText('Application name')).toHaveValue('Scotty mail'))
   })
 
   // The two names save sequentially. If the name's own save already succeeded, a refusal on the
@@ -127,6 +127,6 @@ describe('ApplicationTab', () => {
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the name', 'error'))
     expect(screen.getByLabelText('Application name')).toHaveValue('Weesky Mail')
-    await waitFor(() => expect(screen.getByLabelText('Short name')).toHaveValue('Snoopy'))
+    await waitFor(() => expect(screen.getByLabelText('Short name')).toHaveValue('Scotty'))
   })
 })

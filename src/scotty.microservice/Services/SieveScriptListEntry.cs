@@ -1,0 +1,6 @@
+namespace weesky.Scotty.Microservice.Services;
+
+/// <summary>
+/// One entry in the LISTSCRIPTS response from a ManageSieve server.
+/// </summary>
+public sealed record SieveScriptListEntry(string Name, bool IsActive);

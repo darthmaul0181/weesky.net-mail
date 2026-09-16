@@ -6,11 +6,11 @@ Mail administration services for weesky.net: a REST API backed by the Dovecot da
 
 ```
 src/
-├── snoopy.microservice/   # Backend REST API (ASP.NET Core .NET 10)
+├── scotty.microservice/   # Backend REST API (ASP.NET Core .NET 10)
 └── frontend/              # React + Vite SPA
 ```
 
-## snoopy.microservice — weesky.mail.snoopy
+## scotty.microservice — weesky.mail.scotty
 
 ASP.NET Core (.NET 10) REST API on top of the `dovecot` database (MariaDB/MySQL).
 
@@ -23,12 +23,12 @@ ASP.NET Core (.NET 10) REST API on top of the `dovecot` database (MariaDB/MySQL)
 Stack: ASP.NET Core, EF Core (Pomelo MySQL), JWT Bearer, `CSharpFunctionalExtensions` (`Result<T>` pattern), Serilog, Swashbuckle. Passwords are stored plaintext — MariaDB triggers apply the Dovecot-compatible SHA-512 crypt encryption.
 
 ```bash
-cd snoopy.microservice
+cd scotty.microservice
 dotnet run                    # http://localhost:5104 (Swagger UI)
 dotnet build -c Release
 ```
 
-See [`snoopy.microservice/DESIGN.md`](snoopy.microservice/DESIGN.md) for architecture details and [`snoopy.microservice/CLAUDE.md`](snoopy.microservice/CLAUDE.md) for commands.
+See [`scotty.microservice/DESIGN.md`](scotty.microservice/DESIGN.md) for architecture details and [`scotty.microservice/CLAUDE.md`](scotty.microservice/CLAUDE.md) for commands.
 
 ## frontend
 

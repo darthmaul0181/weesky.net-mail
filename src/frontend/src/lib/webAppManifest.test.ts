@@ -5,8 +5,8 @@ const ORIGIN = 'https://account.mail.weesky.net'
 
 const enabled = {
   'app.installable': 'true',
-  'app.name': 'Snoopy mail',
-  'app.shortName': 'Snoopy',
+  'app.name': 'Scotty mail',
+  'app.shortName': 'Scotty',
 }
 
 describe('buildManifest', () => {
@@ -27,8 +27,8 @@ describe('buildManifest', () => {
   it('carries the names the admin set', () => {
     const manifest = buildManifest(enabled, ORIGIN)!
 
-    expect(manifest.name).toBe('Snoopy mail')
-    expect(manifest.short_name).toBe('Snoopy')
+    expect(manifest.name).toBe('Scotty mail')
+    expect(manifest.short_name).toBe('Scotty')
   })
 
   // A blob: has an opaque path: a relative URL is not reliably resolvable against it.

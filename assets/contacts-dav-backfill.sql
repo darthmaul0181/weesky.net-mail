@@ -7,7 +7,7 @@
 -- 4c-ii-c ; ce fichier est écrit maintenant parce que le DDL qu'il complète l'est aussi.
 --
 -- ET APRÈS LE RATTRAPAGE DE CARTES DE LA TRANCHE 4a, ACHEVÉ — POST /api/Contacts/Backfill rejoué
--- jusqu'à remaining = 0, voir docs/superpowers/contacts-4a-backfill.md. Cet ordre-là est
+-- jusqu'à remaining = 0, voir docs/operations/contacts-vcard-backfill.md. Cet ordre-là est
 -- OBLIGATOIRE et l'enfreindre ne se rattrape pas : ce script pose sync_sequence = 1 sur TOUTES les
 -- fiches, y compris celles qui n'ont pas encore de carte. Le rattrapage 4a leur en donnerait une
 -- ensuite sans prendre de rang — c'est un balayage d'exploitation, pas une porte d'écriture — et

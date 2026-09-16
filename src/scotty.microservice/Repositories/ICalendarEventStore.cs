@@ -1,0 +1,81 @@
+using CSharpFunctionalExtensions;
+using weesky.Scotty.Microservice.Models.Calendar;
+
+namespace weesky.Scotty.Microservice.Repositories;
+
+/// <summary>
+/// The resources: one row per UID per calendar, its whole VCALENDAR sovereign in <c>ics_raw</c> and
+/// the columns around it an index over it. Every write takes its rank from
+/// <see cref="ICalendarSyncStore.NextSequenceAsync"/> first, and nothing here hashes on its own.
+/// </summary>
+public interface ICalendarEventStore
+{
+    /// <summary>
+    /// Every instance falling in <c>[fromUtc, toUtc[</c>, across every calendar of the user —
+    /// hidden ones included, since each occurrence carries its own <c>CalendarId</c> and the client
+    /// is what filters. <paramref name="viewTimeZone"/> only decides which day a floating instance
+    /// falls on; a dated one is already an instant. A window holding more than
+    /// <see cref="CalendarEventStore.MaxWindowOccurrences"/> instances is refused, never truncated.
+    /// </summary>
+    Task<Result<IReadOnlyList<EventOccurrence>>> WindowAsync(
+        Guid userId, DateTime fromUtc, DateTime toUtc, string viewTimeZone,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The user's own answer on each of these events — the PARTSTAT of the master's ATTENDEE whose
+    /// address is one of <paramref name="ownAddresses"/>, compared without case — keyed by event id;
+    /// an event with no such line is absent, and a guest line under the ORGANIZER's own address is
+    /// not an answer. Events of another user are never answered for.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> OwnPartStatsAsync(
+        Guid userId, IReadOnlyCollection<Guid> eventIds, IReadOnlyCollection<string> ownAddresses,
+        CancellationToken cancellationToken);
+
+    /// <summary>One resource as the editor opens it, or null — a resource of another user is
+    /// indistinguishable from one that does not exist.</summary>
+    Task<EventDetail?> GetAsync(Guid userId, Guid eventId, CancellationToken cancellationToken);
+
+    Task<Result<EventWriteResult>> CreateAsync(Guid userId, EventWrite write, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// <paramref name="ifHash"/>, when given, must still be the resource's <c>ics_hash</c> or the
+    /// write is refused as <see cref="CalendarEventStore.EventMoved"/>.
+    /// <paramref name="instanceId"/> names the occurrence for the two narrow scopes, spelled in the
+    /// master's own DTSTART form.
+    /// </summary>
+    Task<Result<EventWriteResult>> UpdateAsync(
+        Guid userId, Guid eventId, EditScope scope, string? instanceId, EventWrite write,
+        string? ifHash, CancellationToken cancellationToken);
+
+    Task<Result<EventWriteResult>> DeleteAsync(
+        Guid userId, Guid eventId, EditScope scope, string? instanceId,
+        CancellationToken cancellationToken);
+
+    /// <summary>The two columns the scheduler owns — silent when the row named by
+    /// <paramref name="calendarId"/>/<paramref name="davName"/> no longer exists. Never touches
+    /// <c>sync_sequence</c>, <c>updated_at</c> nor <c>ics_hash</c>: these columns are not part of the
+    /// resource.</summary>
+    Task SetSchedulingAsync(
+        Guid userId, Guid calendarId, string davName, string? owner, string? hash,
+        CancellationToken cancellationToken);
+
+    /// <summary>Fonctionnalité 5: one result per event, at the occurrence that comes next — or the
+    /// last one it ever had, for a series already over.</summary>
+    Task<IReadOnlyList<EventOccurrence>> SearchAsync(
+        Guid userId, string text, CancellationToken cancellationToken);
+
+    /// <summary>Every event of the user carrying this UID, the default calendar's first, then the
+    /// sidebar's order — a UID is unique per calendar, not per user (RFC 4791 § 4.1).</summary>
+    Task<IReadOnlyList<StoredEventRef>> FindByUidAsync(Guid userId, string uid, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// One file in, grouped by UID into resources (fonctionnalité 6). An existing UID is replaced
+    /// whole and its previous bytes archived; VTODO and VJOURNAL are counted, never stored.
+    /// </summary>
+    Task<CalendarImportOutcome> ImportAsync(
+        Guid userId, Guid calendarId, string vcalendar, CancellationToken cancellationToken);
+
+    /// <summary>One VCALENDAR carrying every resource of the collection, its VTIMEZONEs written
+    /// once each, and the collection's own name and colour.</summary>
+    Task<string> ExportAsync(Guid userId, Guid calendarId, CancellationToken cancellationToken);
+}

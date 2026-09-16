@@ -31,7 +31,7 @@ describe('useAppSettings', () => {
     const invalidate = vi.spyOn(client, 'invalidateQueries')
 
     const { result } = renderHook(() => useSetAppSetting(), { wrapper })
-    result.current.mutate({ key: 'app.name', value: 'Snoopy mail' })
+    result.current.mutate({ key: 'app.name', value: 'Scotty mail' })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['appSettings'] })
@@ -44,7 +44,7 @@ describe('useAppSettings', () => {
     const invalidate = vi.spyOn(client, 'invalidateQueries')
 
     const { result } = renderHook(() => useSetAppSetting(), { wrapper })
-    result.current.mutate({ key: 'app.name', value: 'Snoopy mail' })
+    result.current.mutate({ key: 'app.name', value: 'Scotty mail' })
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['appSettings'] })

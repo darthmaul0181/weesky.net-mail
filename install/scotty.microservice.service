@@ -1,0 +1,49 @@
+# Example systemd unit for the Scotty webmail backend.
+#
+# Copy to /etc/systemd/system/scotty.microservice.service, edit the four marked
+# lines, then:
+#
+#   systemctl daemon-reload
+#   systemctl enable --now scotty.microservice
+#
+# The unit's name is yours to choose; the executable's is not. The host project
+# pins its assembly name to `scotty.microservice`, so ExecStart names that file
+# whatever you decide to call the service.
+
+[Unit]
+Description=Scotty webmail backend
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+# Type=exec, not notify: the host does not call UseSystemd(), so a notify unit
+# would wait for a readiness signal that never comes and time out.
+Type=exec
+
+# --- edit these four ---------------------------------------------------------
+User=scotty
+Group=scotty
+WorkingDirectory=/var/www/scotty/scotty.microservice
+ExecStart=/var/www/scotty/scotty.microservice/scotty.microservice
+EnvironmentFile=/etc/scotty/scotty.microservice.env
+# -----------------------------------------------------------------------------
+
+# The Data Protection key ring. Without it every credentials cookie becomes
+# undecryptable on the next deployment and every user is signed out of mail;
+# the service refuses to start outside Development rather than let that happen
+# quietly. systemd creates /var/lib/scotty.microservice and owns its mode.
+StateDirectory=scotty.microservice
+StateDirectoryMode=0700
+
+# A crash loop is the intended failure mode for a missing prerequisite: visible
+# in the journal, once a minute, rather than a service that looks healthy.
+Restart=always
+RestartSec=60
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1209,10 +1209,10 @@ describe('preferences', () => {
 
 describe('app settings', () => {
   it('reads every app setting in one call', async () => {
-    mockFetch(200, { json: { 'app.name': 'Snoopy mail' } })
+    mockFetch(200, { json: { 'app.name': 'Scotty mail' } })
     const { api } = await import('./api.js')
 
-    await expect(api.getAppSettings()).resolves.toEqual({ 'app.name': 'Snoopy mail' })
+    await expect(api.getAppSettings()).resolves.toEqual({ 'app.name': 'Scotty mail' })
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/AppSettings'),
       expect.objectContaining({ method: 'GET' }))
@@ -1222,13 +1222,13 @@ describe('app settings', () => {
     mockFetch(204)
     const { api } = await import('./api.js')
 
-    await api.setAppSetting('app.name', 'Snoopy mail')
+    await api.setAppSetting('app.name', 'Scotty mail')
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/AppSettings'),
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ key: 'app.name', value: 'Snoopy mail' }),
+        body: JSON.stringify({ key: 'app.name', value: 'Scotty mail' }),
       }))
   })
 })

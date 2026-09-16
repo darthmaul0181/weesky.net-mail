@@ -438,7 +438,8 @@
     "webApp": "Application web",
     "server": "Serveur",
     "serverUnavailable": "Serveur indisponible",
+    "sourceCode": "Code source",
     "thirdParty": "Composants tiers",
-    "rights": "© {{year}} darth-weesky.net. Tous droits réservés."
+    "rights": "© {{year}} darthmaul0181 — AGPL-3.0"
   }
 }

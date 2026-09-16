@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>weesky.Scotty.Providers.Weesky</RootNamespace>
+    <!-- Swagger reads it at startup, so it must reach the output directory in every configuration. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- 1591: missing XML comments; nullable warnings are configured in .editorconfig -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The Web SDK adds these to every ASP.NET project; this one is a library, so it spells them
+         out rather than having every file re-declare what the host takes for granted. -->
+    <Using Include="Microsoft.AspNetCore.Builder" />
+    <Using Include="Microsoft.AspNetCore.Hosting" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <Using Include="Microsoft.AspNetCore.Routing" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Hosting" />
+    <Using Include="Microsoft.Extensions.Logging" />
+    <Using Include="System.Net.Http.Json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="scotty.providers.weesky.Tests" />
+    <!-- The core's suite composes both platforms side by side to prove each answers every port. -->
+    <InternalsVisibleTo Include="scotty.microservice.Tests" />
+    <!-- Moq/Castle generate their proxies into this assembly. On .NET Core, AssemblyBuilder cannot
+         be strong-named at run time, so Castle emits it unsigned (PublicKeyToken=null) regardless
+         of the well-known key Castle.Core ships in older guides — a PublicKey= friend declaration
+         here never matches it, and every attempt to mock an internal interface throws
+         TypeLoadException. Unsigned, matching an unsigned DynamicProxyGenAssembly2 and this
+         (also unsigned) assembly, is what actually grants the access. -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CryptSharp.Core" Version="2.0.0" />
+    <PackageReference Include="CSharpFunctionalExtensions" Version="2.27.1" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\scotty.microservice\scotty.microservice.core.csproj" />
+  </ItemGroup>
+
+</Project>

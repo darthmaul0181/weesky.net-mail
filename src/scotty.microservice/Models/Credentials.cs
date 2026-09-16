@@ -1,0 +1,21 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace weesky.Scotty.Microservice.Models;
+
+public sealed class Credentials
+{
+    /// <summary>
+    /// The email of the user
+    /// </summary>
+    [Required]
+    [EmailAddress]
+    [StringLength(159)]
+    public string Email { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The password of the user
+    /// </summary>
+    [Required]
+    [StringLength(256, MinimumLength = 1)]
+    public string Password { get; set; } = string.Empty;
+}
