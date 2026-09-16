@@ -135,7 +135,16 @@
 .topbar-logo { height: 29px; width: 29px; border-radius: 50%; }
 /* Written rather than drawn, so it takes the palette's own topbar foregrounds: the wordmark it
    replaced was one flat image and went muddy on the two palettes with a pale top bar. */
-.topbar-name { font-size: 21px; font-weight: 600; letter-spacing: -0.01em; color: var(--topbar-fg); }
+/* Raised 3px: the text BOX centres on the disc, but the glyphs drawn inside it sit 3.5px
+   lower, the font reserving more room above the baseline than below. Measured, not guessed. */
+.topbar-name {
+  position: relative;
+  top: -3px;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--topbar-fg);
+}
 .topbar-name-kind { font-weight: 300; color: var(--rail-fg); }
 
 /* ── Account block, at the foot of the folder column ──────────────────────── */
