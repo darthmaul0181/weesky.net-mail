@@ -370,3 +370,5 @@ tools/caldavtester/.caldavtester/
 tools/caldavtester/results/
 tools/caldavtester/serverinfo.xml
 tools/caldavtester/serverinfo.local.json
+# Data Protection key ring a local dotnet run creates in Development (production uses StateDirectory)
+src/scotty.microservice.host/keys/

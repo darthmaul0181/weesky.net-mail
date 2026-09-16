@@ -83,7 +83,7 @@ internal static class SecurityConfiguration
         {
             throw new InvalidOperationException(
                 "No CORS origin is configured. Set Cors__AllowedOrigins__0 in the service's " +
-                "EnvironmentFile — for example Cors__AllowedOrigins__0=https://account.mail.weesky.net. " +
+                "EnvironmentFile — for example Cors__AllowedOrigins__0=https://mail.example.net. " +
                 "Additional origins are Cors__AllowedOrigins__1, __2, and so on.");
         }
 
@@ -135,7 +135,7 @@ internal static class SecurityConfiguration
                 "No reverse proxy is configured. Set ForwardedHeaders__KnownProxies__0 in the service's " +
                 "EnvironmentFile to the address the proxy connects from — 127.0.0.1 when it runs on this " +
                 "host, plus ::1 if Kestrel listens on the IPv6 loopback. See " +
-                "install/README.md, step 3. Refusing to start rather than " +
+                "install/README.md. Refusing to start rather than " +
                 "rate-limiting every account against one shared bucket.");
         }
 

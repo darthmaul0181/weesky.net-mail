@@ -23,12 +23,10 @@ accounts*. That is what lets the same registration serve an Office 365 mailbox a
 one.
 
 **Redirect URI, type Web** — the **API's** callback, not the webmail's. Microsoft redirects to the
-microservice, which exchanges the code server-side. Register both; they coexist on one
-registration:
+API, which exchanges the code itself:
 
 ```
-https://api.mail.example.net/api/ConnectedAccounts/OAuth/Callback
-https://api-dev.mail.example.net/api/ConnectedAccounts/OAuth/Callback
+https://api.example.net/api/ConnectedAccounts/OAuth/Callback
 ```
 
 It must match `Mail__OAuthRedirectUri` (step 2) byte for byte: same scheme, same case in the path,
@@ -61,12 +59,12 @@ addresses:
   knows only its own address. The service appends `/settings/accounts` itself, so give the root
   only, with no trailing slash.
 
-These do not go in `appsettings.json`. Put them in the `EnvironmentFile` the systemd unit already
-uses, one unit per environment, then `systemctl restart`:
+Add them to the settings file, `/etc/scotty/scotty.microservice.env`, then
+`systemctl restart scotty.microservice`:
 
 ```ini
-Mail__WebmailBaseUrl=https://account.mail.example.net
-Mail__OAuthRedirectUri=https://api.mail.example.net/api/ConnectedAccounts/OAuth/Callback
+Mail__WebmailBaseUrl=https://mail.example.net
+Mail__OAuthRedirectUri=https://api.example.net/api/ConnectedAccounts/OAuth/Callback
 ```
 
 Left empty, `WebmailBaseUrl` produces a relative redirect that only works when the API and the SPA

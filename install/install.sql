@@ -2,33 +2,24 @@
 --  Scotty webmail - database installation
 -- =============================================================================
 --
---  Creates the webmail database, its MySQL service account, and the 26 tables
---  the service expects. It creates no rows: an empty schema is the correct
---  initial state, and every setting is entered later in the Administration
---  screens.
+--  Creates Scotty's database, the MySQL account the service uses, and the 26
+--  tables. It adds no rows: every setting starts at its default value.
 --
---  This is NOT the mail server's own `dovecot` database, which Dovecot and
---  Postfix own and which this script never touches.
+--  It does not touch the mail server's own `dovecot` database.
 --
---  BEFORE RUNNING, replace the two placeholders below:
+--  BEFORE RUNNING, replace the two placeholders:
 --
---    __HOST__      the host the service connects FROM - `localhost` when the
---                  service and MySQL share a machine, otherwise the service's
---                  address or pattern, e.g. `10.0.0.%`
---    __PASSWORD__  a generated password, never reused elsewhere
+--    __HOST__      the address the service connects FROM: 127.0.0.1 when the
+--                  database and the service share a server
+--    __PASSWORD__  a new password, made up for this; the settings file needs it
 --
---  To install a second environment, replace `scotty_webmail` throughout with the
---  name you want and run the script again.
+--  Then, as a database administrator (MySQL 8.0+ or MariaDB 10.5+):
 --
---  Run as a MySQL administrator:
+--    mysql -u root -p < install/install.sql       (or: mariadb -u root -p ...)
 --
---    mysql -u root -p < install.sql
---
---  This script installs a NEW database. Run against one that already holds the
---  schema, it stops in section 4 on a duplicate-key error - which is the script
---  telling you the database is already installed, not a failure to fix. To
---  change a database that is already in service, use the migration notes under
---  docs/history/migrations/ instead.
+--  For a NEW installation only. Run on a database that already holds these
+--  tables, it stops with "Multiple primary key defined": nothing is damaged,
+--  the database was simply installed already.
 --
 -- =============================================================================
 
@@ -588,18 +579,11 @@ SELECT COUNT(*) AS tables_created,
 SHOW GRANTS FOR 'scotty_webmail'@'__HOST__';
 -- expected: GRANT SELECT, INSERT, UPDATE, DELETE ON `scotty_webmail`.* - and nothing more
 
---  Connection string to configure on the service (never in a versioned file):
---
---    ConnectionStrings__WebmailPreferencesDatabase =
---      Server=<host>;Port=3306;Database=scotty_webmail;User=scotty_webmail;Password=<...>;
---
---  The service refuses to start without it, in every environment.
+--  Next: put the password in the service's settings file (install/README.md, step 3).
 
 
--- -----------------------------------------------------------------------------
 -- -----------------------------------------------------------------------------
 --  Uninstall
--- -----------------------------------------------------------------------------
 -- -----------------------------------------------------------------------------
 --  DROP DATABASE IF EXISTS `scotty_webmail`;
 --  DROP USER IF EXISTS 'scotty_webmail'@'__HOST__';
