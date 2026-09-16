@@ -1,333 +1,481 @@
 # Installing Scotty webmail
 
-Everything a new deployment needs, in the order it needs it. Follow the five steps below and the
-service starts; skip one and it refuses to start, on purpose, with a message naming what is
-missing.
+This guide installs Scotty on a Linux server. When you are done,
+your users open **https://mail.example.net**, sign in with their usual mail address and password,
+and find their mail, contacts and calendar.
 
-Two of these steps are server configuration that lives outside this repository — systemd units
-and Apache vhosts are not versioned here, so this document is their only record. Two commented
-examples come with it, to copy and edit rather than write from scratch:
-[`scotty.microservice.service`](scotty.microservice.service) and
-[`scotty.microservice.env`](scotty.microservice.env).
+There are five steps. Each one ends with a check: do not move on until it passes.
 
-| # | Step | Without it |
-|---|---|---|
-| 1 | [The database](#1-the-database) | The service refuses to start |
-| 2 | [The service unit and its key ring](#2-the-service-unit-and-its-key-ring) | Refuses to start outside Development |
-| 3 | [The reverse proxy's address](#3-the-reverse-proxys-address) | Refuses to start outside Development |
-| 4 | [SPA routing in Apache](#4-spa-routing-in-apache) | Reloading any page but `/` returns 404 |
-| 5 | [Configuration and first sign-in](#5-configuration-and-first-sign-in) | — |
-
-Two optional features have setups of their own, and most deployments need neither:
-[connecting external mailboxes over OAuth](optional/oauth-providers.md) and
-[applying guests' calendar replies at delivery](optional/delivery-replies.md).
+1. [Build the application](#step-1--build-the-application)
+2. [Create the database](#step-2--create-the-database)
+3. [Install the API as a service](#step-3--install-the-api-as-a-service)
+4. [Publish it through your web server](#step-4--publish-it-through-your-web-server)
+5. [Sign in](#step-5--sign-in)
 
 ---
 
-## 1. The database
+## Before you start
 
-The webmail keeps its own database, separate from the mail server's `dovecot` database. That
-separation is deliberate: `dovecot` belongs to Dovecot and may be rebuilt by the mail server's
-provisioning, which would take the webmail's data with it, and the two have different backup and
-retention policies.
+### What your mail service needs
 
-**This project has no EF migrations.** The schema is created by hand, once, and the service never
-alters it — it is not even granted the right to.
+Scotty does not host mail. Like a mail app on a phone, it connects to a mail service that already
+exists — your own server or a provider — and works through it. That service can be anything that
+offers:
 
-```bash
-# Edit the two placeholders at the top of the file first: __HOST__ and __PASSWORD__
-mysql -u root -p < install.sql
-```
+| | |
+|---|---|
+| **IMAP** | To read mail. Users must be able to log in with their **full mail address** and their password. |
+| **SMTP with authentication** | To send mail, usually on port 587 or 465. |
+| **ManageSieve** *(optional)* | Only for mail rules. Without it, everything else works. |
 
-[`install.sql`](install.sql) creates the database, a MySQL account with rights on the data and
-nothing else, and the 26 tables. It inserts no rows: an empty schema is the correct initial
-state, and every setting is entered later in the Administration screens.
+One installation serves the users of **one** mail service: all of them read and send through the
+same IMAP and SMTP servers. Scotty keeps no copy of anyone's mail.
 
-The script ends with two verification queries. Run them.
+### What the server needs
 
-To bring up a second environment — a development database alongside production — replace
-`scotty_webmail` throughout with the name you want and run it again. Keep the MySQL accounts
-distinct, so that a leak on one side does not reach the other.
+| | |
+|---|---|
+| **Linux with systemd** | To run the API in the background and restart it if it stops. |
+| **MySQL or MariaDB** | Scotty keeps a small database of its own there: settings, contacts, calendars. It can run on this server or another one. See [Which database](#which-database). |
+| **A web server** | Apache, nginx or any other that can serve files and relay requests, with HTTPS. It shows the web pages and passes everything else to the API. |
 
-Then set the connection string on the service, never in a versioned file:
+Commands in this guide use Debian and Ubuntu paths; where the Red Hat family differs, it says so.
 
-```
-ConnectionStrings__WebmailPreferencesDatabase =
-  Server=<host>;Port=3306;Database=scotty_webmail;User=scotty_webmail;Password=<...>;
-```
+#### Which database
 
-The service refuses to start without it, in every environment including Development. A silently
-inert feature is worse than a failure to start. It goes in the `EnvironmentFile` of step 2, with
-the other secrets — [`scotty.microservice.env`](scotty.microservice.env) is a filled-in example.
+Scotty talks to its database through the MySQL protocol and writes MySQL's dialect of SQL, so it
+needs a server from that family:
 
-> **Changing a database that is already in service** is a different job: `install.sql` builds a
-> new one, and stops rather than touch an existing schema. Why the schema looks the way it does is
-> in [`../docs/schema-notes.md`](../docs/schema-notes.md).
+| | Versions |
+|---|---|
+| **MySQL** | 8.0, 8.4 |
+| **MariaDB** | 10.5, 10.6, 10.11, 11.x |
+
+These are the versions tested by the database library Scotty is built on. `install.sql` and the
+service itself have also been run on MySQL 8.4 and MariaDB 11.4. Other
+MySQL-compatible servers — Percona Server for MySQL, or a managed MySQL such as Amazon RDS or
+Aurora, Azure Database for MySQL, Google Cloud SQL — usually work too, but nobody has tested them.
+
+**PostgreSQL, SQLite, SQL Server and Oracle are not supported.** It is not a setting: using them
+would mean changing Scotty's code and rewriting its database script.
+
+### Two addresses, on the same domain
+
+Scotty comes in two parts:
+
+- the **web interface** — the pages the browser shows;
+- the **API** — the service behind them, which talks to your mail server.
+
+Each part gets its own address, and each address needs an HTTPS certificate. This guide uses
+`mail.example.net` for the web interface and `api.example.net` for the API: replace them with your
+own wherever they appear.
+
+> **Both addresses must be on the same domain.** `mail.example.net` and `api.example.net` work
+> together; `mail.example.net` and `api.other.org` do not. The browser only sends the sign-in cookie
+> between addresses of the same domain, so on two domains signing in seems to work and every page
+> after it fails.
+
+### Two platforms: generic or weesky
+
+Scotty runs in one of two modes, chosen by a single line of its settings.
+
+**`generic` — any mail service.** Scotty is a webmail and nothing more: it reads and sends through
+whatever IMAP and SMTP service you point it at, and knows nothing about how the mailboxes behind
+them are managed. You keep managing them where you already do.
+
+**`weesky` — everything in one place.** Scotty is also the control panel of the mail server itself.
+The same interface users read their mail in lets an administrator create mailboxes, domains and
+aliases, and lets each user change their own mail password or manage their aliases — no separate
+admin tool, no second login. And because Scotty then knows every mailbox and every alias, it can do
+what a plain webmail cannot:
+
+| | `generic` | `weesky` |
+|---|:---:|:---:|
+| Mail, contacts, calendar, phone sync, mail rules | ✓ | ✓ |
+| Administration: mailboxes, domains, aliases, quotas | — | ✓ |
+| Users change their own mail password and display name | — | ✓ |
+| Users manage their own aliases | — | ✓ |
+| Sending only from addresses the user really owns | left to your SMTP server | checked by Scotty |
+| A mailbox disabled by the administrator is signed out on its next action | — | ✓ |
+| Administrator settings: product name, calendar service account for invitations sent from phones, connecting Outlook mailboxes | — | ✓ |
+
+The price of `weesky` is that it only works with the mail server it was built for: Dovecot and
+Postfix, reading their mailboxes from a MySQL or MariaDB database that Scotty administers. It cannot be
+pointed at just any mail service.
+
+> **This guide installs the `generic` platform.** The `weesky` platform and the mail server it
+> expects will be documented in a separate repository, coming soon.
+
+### Where everything goes
+
+| What | Where |
+|---|---|
+| The API | `/opt/scotty` |
+| The web interface | `/var/www/scotty` |
+| The settings | `/etc/scotty/scotty.microservice.env` |
 
 ---
 
-## 2. The service unit and its key ring
+## Step 1 — Build the application
 
-**Symptom if skipped:** the service throws at startup outside Development, naming this fix. Under
-`Restart=always` it crash-loops once a minute and fills the journal — visible and intentional,
-rather than a working-looking service that signs everyone out at the next deployment.
+You need the **.NET 10 SDK** and **Node.js 20** for this step only. The simplest is to build on the
+server itself. If you would rather not install them there, build on another machine and copy three
+folders to the server, keeping their place in the repository: `out/api`, `src/frontend/dist` and
+`install`.
 
-### Why
-
-The mail endpoints open IMAP with the user's own password, which cannot be read back from the
-database — MariaDB stores SHA-512 crypt. The password is captured at login and kept in a cookie
-encrypted with ASP.NET Core Data Protection.
-
-That encryption depends on a **key ring**: a directory of key files, one active for encrypting,
-the rest retained for decrypting. Lose the directory and every live credentials cookie becomes
-undecryptable, signing every user out of mail at once.
-
-The framework's default location is `$HOME/.aspnet/DataProtection-Keys`, which works today only
-because the unit runs as `root` and systemd populates `$HOME`. Moving the service to a dedicated
-user — a good change in itself — would silently relocate the keys. `StateDirectory=` makes the
-location explicit, keeps it out of the deployment path (where the release `chmod` and `chown` run
-recursively), and hands systemd the ownership of its permissions.
-
-### Apply
-
-**Setting up a new deployment:** copy the two examples, edit the marked lines in each, and start
-the service.
+Every command in this guide runs **as root, from the repository folder**.
 
 ```bash
-install -m 0600 -D scotty.microservice.env /etc/scotty/scotty.microservice.env
-cp scotty.microservice.service /etc/systemd/system/
+git clone https://github.com/darthmaul0181/weesky.net-mail.git
+cd weesky.net-mail
+```
+
+**1.1 Build the API.** The result runs on its own: the server does not need .NET.
+
+```bash
+dotnet publish src/scotty.microservice.host -c Release -r linux-x64 --self-contained \
+  -p:ReleaseBuild=true -o out/api
+```
+
+**1.2 Build the web interface.** It has to know where the API is, and it writes that address into
+the pages while building them — so set it first:
+
+```bash
+cd src/frontend
+echo "VITE_API_BASE=https://api.example.net" > .env.production
+npm ci
+RELEASE_BUILD=true npm run build
+cd ../..
+```
+
+If the API's address ever changes, build the web interface again.
+
+✅ **Check:** both `out/api/scotty.microservice` and `src/frontend/dist/index.html` exist.
+
+---
+
+## Step 2 — Create the database
+
+This creates Scotty's own database. Your mail service is not involved.
+
+**2.1 Fill in the script.** Open `install/install.sql` and replace its two placeholders:
+
+| Placeholder | Replace with |
+|---|---|
+| `__HOST__` | The address the API connects **from**: `127.0.0.1` if the database runs on the same server as the API, otherwise the API server's address |
+| `__PASSWORD__` | A new password, made up for this. Write it down: step 3 needs it. |
+
+**2.2 Run it** as a database administrator:
+
+```bash
+mysql -u root -p < install/install.sql
+```
+
+On MariaDB the command may be called `mariadb` instead of `mysql`. If the database runs on another
+machine, add `-h` followed by its address.
+
+✅ **Check:** at the end, the output shows `26` twice — twenty-six tables created, all twenty-six
+with the right character set — followed by the account's rights: `SELECT, INSERT, UPDATE, DELETE`
+on `scotty_webmail`.
+
+---
+
+## Step 3 — Install the API as a service
+
+**3.1 Create an account for it.** The API runs under its own user, which has no password and
+cannot log in.
+
+```bash
+useradd --system --no-create-home --shell /usr/sbin/nologin scotty
+```
+
+**3.2 Copy its files.**
+
+```bash
+mkdir -p /opt/scotty
+cp -r out/api/. /opt/scotty/
+chown -R root:scotty /opt/scotty
+chmod -R u=rwX,g=rX,o= /opt/scotty
+chmod 750 /opt/scotty/scotty.microservice
+```
+
+**3.3 Write its settings.** Copy the example file, then open it:
+
+```bash
+install -D -m 0640 -o root -g scotty install/scotty.microservice.env /etc/scotty/scotty.microservice.env
+nano /etc/scotty/scotty.microservice.env
+```
+
+Change these lines, and leave the others as they are:
+
+| Line | What to put |
+|---|---|
+| `ConnectionStrings__WebmailPreferencesDatabase` | Replace `CHANGE_ME` with the password from step 2. If the database is on another machine, replace `127.0.0.1` with its address too. |
+| `TokenConstants__Key` | A long random value. Generate one with `openssl rand -base64 48` |
+| `Cors__AllowedOrigins__0` | The web interface's address, `https://mail.example.net` |
+| `Mail__ImapHost` | Your IMAP server's name |
+| `Mail__SmtpHost` | Your SMTP server's name |
+| `Sieve__Host` | Your ManageSieve server's name — usually the same as IMAP. No ManageSieve? Put the IMAP name anyway. |
+
+Scotty reaches IMAP on port **143** and SMTP on port **587**, both with STARTTLS.
+If yours uses **993** and **465** instead, add these four lines:
+
+```ini
+Mail__ImapPort=993
+Mail__ImapSecurity=SslOnConnect
+Mail__SmtpPort=465
+Mail__SmtpSecurity=SslOnConnect
+```
+
+**3.4 Start it.**
+
+```bash
+cp install/scotty.microservice.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now scotty.microservice
 ```
 
-The unit already carries the two lines that matter here:
-
-```ini
-StateDirectory=scotty.microservice
-StateDirectoryMode=0700
-```
-
-**Already running a unit of your own:** add those two lines to its `[Service]` section
-(`systemctl edit --full <unit>`), then `systemctl daemon-reload && systemctl restart <unit>`.
-
-If you run a second environment alongside production, give it a `StateDirectory` of its own —
-separate key rings mean a compromise on one side cannot decrypt the other's cookies.
-
-### Verify
+✅ **Check:** wait a few seconds, then
 
 ```bash
-ls -ld /var/lib/scotty.microservice
+curl http://127.0.0.1:5000/health
 ```
 
-Expect `drwx------` owned by the unit's `User=`. Then check the path the service resolved:
+It answers `Healthy`.
 
-```bash
-journalctl -u scotty.microservice --since "5 min ago" | grep "key ring"
-```
-
-Expect `Data Protection key ring: /var/lib/scotty.microservice/keys`. A path under `/var/www/...`
-means the change did not take.
-
-**The test that proves the design works:** sign in to the webmail, `systemctl restart
-scotty.microservice`, then use the mail view again without signing in. If mail fails to
-authenticate while the session still looks valid, the key ring is not persisting.
-
-### Not backed up, on purpose
-
-Losing the key ring costs one re-login for everyone, and the graceful path already exists: a
-decryption failure returns `401 credentials_unavailable` and the client signs in again. A backup
-copy would be a second set of keys able to decrypt live credentials, for a benefit worth one
-re-login. The trade is not worth it.
+- `Unhealthy` means the database password in the settings is wrong.
+- No answer at all means the service did not start: see
+  [When the service won't start](#when-the-service-wont-start).
 
 ---
 
-## 3. The reverse proxy's address
+## Step 4 — Publish it through your web server
 
-**Symptom if skipped:** the service throws at startup outside Development, exactly as in step 2.
+Your web server does two jobs:
 
-### Why
+- on `mail.example.net`, it serves the web interface's files;
+- on `api.example.net`, it passes every request on to the service, at `http://127.0.0.1:5000`.
 
-The login rate limiter partitions on the caller's address — 5 requests per minute per address on
-`POST /api/login` and on the three other endpoints that verify a password. Behind a reverse proxy
-every request reaches Kestrel **from the proxy**, so without this setting all four share **one
-global bucket**. Five attempts from anybody would answer `429` to every user of the service: a
-denial of service costing an attacker five requests a minute.
-
-`UseForwardedHeaders` puts the client's own address back on the request. It must not be enabled
-blindly: `X-Forwarded-For` is caller-supplied, so honouring it from any peer hands anybody the
-ability to choose their own partition key — and to write whatever address they like into the
-audit log. It is honoured only from the proxies named here, and the framework's default
-known-proxy entries are cleared so that trust is only ever what you spelled out.
-
-### Apply
-
-The example `EnvironmentFile` already carries it:
-
-```ini
-ForwardedHeaders__KnownProxies__0=127.0.0.1
-```
-
-Add `ForwardedHeaders__KnownProxies__1=::1` as well if Kestrel listens on the IPv6 loopback (an
-`ASPNETCORE_URLS` naming `localhost` rather than `127.0.0.1` usually does). If the proxy runs on
-another host, name that host's address instead — the loopback entries are then wrong, not merely
-redundant. Then `systemctl restart scotty.microservice`.
-
-### Verify
-
-The backend writes its own HTTP log, which is neither the web server's access log nor
-`journalctl`:
+**4.1 Copy the web interface.**
 
 ```bash
-tail -f /var/log/scotty.microservice/log*http*.log
+mkdir -p /var/www/scotty
+cp -r src/frontend/dist/. /var/www/scotty/
 ```
 
-Each line reads `HTTP GET /api/... from <address> responded 200 in … ms`. Browse from another
-machine: the address must be that machine's. Lines still reading `127.0.0.1` mean the header is
-not being honoured — the address configured above is not the one the proxy really uses.
+**4.2 Configure the two sites.** Below are ready-made configurations for **Apache** and **nginx**.
+Any other web server that can serve files and relay requests works too, as long as it does what
+these do:
 
-**The test that proves the partition works:** fail a login five times from one machine, then sign
-in normally from another. The second machine must not see `429`.
+| On | The web server must |
+|---|---|
+| Both addresses | Serve HTTPS. |
+| `mail.example.net` | Answer any address that is not a file with `/index.html`. The application draws its pages itself: without this, reloading any page but the first one shows "Not Found". |
+| `mail.example.net` | Keep a real "Not Found" under `/assets/`. A missing script served as a page breaks the application with an error that points nowhere. |
+| `api.example.net` | Pass every request to `http://127.0.0.1:5000`, adding the `X-Forwarded-For` and `X-Forwarded-Proto` headers. They tell the service who is asking, and that the visitor came over HTTPS. |
+| `api.example.net` | Accept uploads of at least 30 MB. Attachments go up to 25 MB. |
 
-### What it does not do
+Replace the names and certificate paths with your own.
 
-It bounds guessing per address, not per account. A distributed run against one mailbox still gets
-five attempts a minute from each address it controls. A per-account counter was considered and
-left out on purpose: it would let anyone lock a mailbox they do not own out of its own webmail — a
-denial of service against a named person rather than against a botnet.
+#### With Apache
 
-### If you serve CardDAV or CalDAV through this proxy
-
-**Set `Dav__PublicUrl` first, or the feature is silently absent.** It goes in the same
-`EnvironmentFile` (`Dav:PublicUrl` in `appsettings.json`, shipped empty) and holds the origin the
-reverse proxy serves — a bare origin, exactly: no path, no trailing slash, no port, no
-credentials, because clients append `/.well-known/carddav` themselves. The service refuses to
-start on any other shape rather than let the value reach the screen.
-
-Leaving it empty is legal and is the default: the deployment serves no `/dav`,
-`GET /api/DavCredentials` answers `404`, and the Sync tab does not appear. **Nothing says so at
-startup** — this is the failure to know about, a whole feature staying quiet because a variable is
-missing.
-
-Then check four things before opening the `/dav` routes, because the failure mode is expensive: a
-`limit_except` rule or a web application firewall rejects silently, and **what the client sees is
-an empty address book, with no error.**
-
-- `PROPFIND`, `PROPPATCH`, `REPORT`, `OPTIONS`, `HEAD`, `PUT` and `DELETE` pass through. Many
-  configurations allow only `GET`/`POST`/`HEAD`.
-- `Depth`, `If-Match`, `If-None-Match` and `Authorization` are not stripped. Some configurations
-  swallow `Authorization` on routes they believe are public.
-- No body-size ceiling lower than ours (1 MB).
-- **The proxy does not answer `/.well-known/` itself.** This is the most common failure of a CDN
-  or WAF in front of a DAV server: the path is intercepted at the edge, the `301` never reaches
-  the client, and pairing fails on a `404` before the first authenticated request. One
-  `curl -X PROPFIND` from outside is the whole check.
-
----
-
-## 4. SPA routing in Apache
-
-**Symptom if skipped:** `/` and `/index.html` answer 200; every other path 404s. Navigating
-inside the app works, because the router changes the URL client-side and never asks the server
-for it. Pressing F5 does ask, and there is no file named `mail` on disk.
-
-### Apply
-
-The build produces exactly one HTML file. Every application route must be answered with it, and
-the router then reads `window.location` and renders the right page.
+Turn on the modules it needs (Debian and Ubuntu; on the Red Hat family they are already loaded):
 
 ```bash
-grep -rl account.frontend /etc/apache2/sites-available/
+a2enmod ssl proxy proxy_http headers
 ```
 
-Add **one line** to the existing `<Directory>`, and one nested block after it:
+Create `/etc/apache2/sites-available/scotty.conf` (Red Hat family: `/etc/httpd/conf.d/scotty.conf`):
 
 ```apache
-        <Directory /var/www/<deployment-path>/account.frontend>
-                Options +FollowSymLinks
-                AllowOverride None
-                Require all granted
+# The web interface
+<VirtualHost *:443>
+    ServerName mail.example.net
+    DocumentRoot /var/www/scotty
 
-                FallbackResource /index.html
-        </Directory>
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/mail.example.net/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/mail.example.net/privkey.pem
 
-        # Hashed assets must keep 404ing. An index.html served in place of a
-        # missing .js is worse than a 404: the browser reports a syntax error
-        # at "<!DOCTYPE", which says nothing about the real cause - a stale
-        # index.html asking for a bundle the last deployment replaced.
-        <Directory /var/www/<deployment-path>/account.frontend/assets>
-                FallbackResource disabled
-        </Directory>
+    <Directory /var/www/scotty>
+        Require all granted
+        AllowOverride None
+        FallbackResource /index.html
+    </Directory>
+    <Directory /var/www/scotty/assets>
+        FallbackResource disabled
+    </Directory>
+</VirtualHost>
+
+# The API
+<VirtualHost *:443>
+    ServerName api.example.net
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/api.example.net/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/api.example.net/privkey.pem
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+    ProxyPass        / http://127.0.0.1:5000/
+    ProxyPassReverse / http://127.0.0.1:5000/
+</VirtualHost>
 ```
 
-`FallbackResource` fires only when the requested path does not exist on disk, so real files are
-still served directly. It needs no `mod_rewrite`.
+Apache adds `X-Forwarded-For` by itself, and accepts large uploads by default. Then:
 
 ```bash
-apachectl configtest && systemctl reload apache2
+a2ensite scotty          # Debian and Ubuntu only
+apachectl configtest && systemctl reload apache2     # Red Hat family: httpd
 ```
 
-### Verify
+#### With nginx
+
+Create `/etc/nginx/conf.d/scotty.conf`:
+
+```nginx
+# The web interface
+server {
+    listen 443 ssl;
+    server_name mail.example.net;
+
+    ssl_certificate     /etc/letsencrypt/live/mail.example.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mail.example.net/privkey.pem;
+
+    root /var/www/scotty;
+
+    location / {
+        try_files $uri /index.html;
+    }
+    location /assets/ {
+        try_files $uri =404;
+    }
+}
+
+# The API
+server {
+    listen 443 ssl;
+    server_name api.example.net;
+
+    ssl_certificate     /etc/letsencrypt/live/api.example.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.net/privkey.pem;
+
+    # nginx refuses anything over 1 MB by default: attachments would fail.
+    client_max_body_size 30m;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Then:
 
 ```bash
-for p in / /mail '/mail?folder=INBOX&uid=1' /settings/general /assets/nope.js; do
-  echo "$(curl -s -o /dev/null -w '%{http_code}' "https://<your-host>$p")  $p"
-done
+nginx -t && systemctl reload nginx
 ```
 
-Expect `200` for the first four and `404` for `/assets/nope.js`. Then reload the browser on a
-deep URL: the same message must still be open, since the folder and uid travel in the query
-string.
+> **Web server on another machine?** Point it at the API server's address instead of `127.0.0.1`,
+> make the service listen on that address (`ASPNETCORE_URLS` in the settings file), and put the web
+> server's own address in `ForwardedHeaders__KnownProxies__0`. The service only believes the
+> forwarded headers of the machines listed there.
 
-### Why the vhost and not a `.htaccess` in the build
-
-A `.htaccess` shipped in `public/` would deploy itself, which is tempting. Both vhosts set
-`AllowOverride None`, so it would be **ignored without a word** — the worst kind of fix. Even
-enabled it would cost a directory walk with a stat per request, and would put server routing in a
-file the deployment wipes and rewrites. The vhost is read once at startup.
+✅ **Check:** `curl https://api.example.net/health` answers `Healthy`, and
+**https://mail.example.net** shows the sign-in page.
 
 ---
 
-## 5. Configuration and first sign-in
+## Step 5 — Sign in
 
-Nothing else is a file. There is no seeding step and no default password to change: the webmail
-authenticates every user against the mail server itself, with an IMAP login.
+Open **https://mail.example.net** and sign in with the address and password of any mailbox your
+mail server knows.
 
-What you can configure afterwards depends on the `Platform` you set in step 2.
+There is no account to create and no default password. Scotty asks your mail server whether the
+password is right, and never stores it.
 
-**`Platform=weesky`** — a Dovecot database backs the accounts. Sign in with an account whose
-`admin` flag is set there, and **Administration** opens:
+✅ **Check:** the inbox appears. Open a message and reload the page: the same message is still open.
 
-- **Application** — the product name shown in the tab and top bar, the calendar service account,
-  and the delivery key of the optional feature below.
-- **Accounts, aliases, domains** — the mail server's own data, read from `dovecot`.
-
-**`Platform=generic`** — any IMAP server, with nothing behind the mailbox. There is no directory
-to administer, so those screens are absent, and **the administrator-only settings cannot be set
-at all**: the product name keeps its default, and the calendar service account and the delivery
-key stay unconfigured. Mail, contacts and calendar work; the two optional features below do not.
-
-### One thing to check on Postfix
-
-Sending with a `From` set to one of the user's aliases requires `smtpd_sender_login_maps` to let
-the authenticated user use their aliases as envelope sender. Without it Postfix answers 553 and
-the webmail shows "The mail server refused to send from *address*".
-
-```bash
-postconf smtpd_sender_login_maps
-```
-
-A query against the alias table is the usual value. Check too that
-`reject_sender_login_mismatch` — or `reject_authenticated_sender_login_mismatch` — appears in
-`smtpd_sender_restrictions`.
+**Scotty is installed.**
 
 ---
 
-## Once it runs
+## Optional
 
-- **Restoring a backup of the webmail database** is not just a restore: the CardDAV and CalDAV
-  sync epochs must be rotated before clients reconnect, or devices silently keep a stale view.
-  See [`../docs/operations/restore-sync-epoch-rotation.md`](../docs/operations/restore-sync-epoch-rotation.md).
-- **Architecture** lives next to the code it describes:
-  [`../src/scotty.microservice/DESIGN.md`](../src/scotty.microservice/DESIGN.md) for the backend,
-  the `CLAUDE.md` of each component, and [`../docs/README.md`](../docs/README.md) for the rest of
-  the documentation.
+### Mail rules
+
+Users can manage their mail filters in **Settings → Rules** if your mail service offers
+**ManageSieve** (port 4190). There is nothing more to set: the `Sieve__Host` line from step 3 is
+enough. Without ManageSieve, that page shows an error and nothing else is affected.
+
+### Contacts and calendars on phones
+
+Scotty can sync contacts and calendars with iPhones, Android phones (through DAVx⁵) and Thunderbird.
+Add this line to the settings file, with your API's address:
+
+```ini
+Dav__PublicUrl=https://api.example.net
+```
+
+then restart the service:
+
+```bash
+systemctl restart scotty.microservice
+```
+
+A **Sync** tab appears in each user's settings, with the server address, user name and password to
+enter on the phone. Without this line the tab is simply not there, and nothing warns you.
+
+The configurations of step 4 already let phones through. If a CDN or a firewall sits in front of
+`api.example.net`, it must let through the requests phones use — `PROPFIND`, `REPORT`, `PUT`,
+`DELETE` — and anything under `/.well-known/`: when it blocks them, the phone simply shows an empty
+address book, with no error.
+
+### Features of the weesky platform
+
+These two are configured from the administration screens, so they need the `weesky` platform (see
+[Two platforms](#two-platforms-generic-or-weesky)):
+
+- [Connecting Outlook and Office 365 mailboxes](optional/oauth-providers.md)
+- [Updating calendars as guests' replies arrive](optional/delivery-replies.md) — also needs your mail
+  server to be Dovecot
+
+---
+
+## When the service won't start
+
+If something essential is missing, the service refuses to start and writes down why. Read the last
+lines of its log:
+
+```bash
+journalctl -u scotty.microservice -n 30
+```
+
+| If the log says | Do this |
+|---|---|
+| `Connection string 'WebmailPreferencesDatabase' is missing` | The settings file is not being read. Check the `EnvironmentFile=` line of `/etc/systemd/system/scotty.microservice.service` |
+| `TokenConstants:Key must be at least 32 bytes` | `TokenConstants__Key` is empty or too short. Generate one with `openssl rand -base64 48` |
+| `No CORS origin is configured` | Fill in `Cors__AllowedOrigins__0` |
+| `No reverse proxy is configured` | Put back `ForwardedHeaders__KnownProxies__0=127.0.0.1` |
+| `'Platform' is missing`, or `Connection string 'Weesky:ConnectionStrings:MailUserAccountsDatabase' is missing` | Put back `Platform=generic` |
+| `STATE_DIRECTORY is not set` | Start the service with `systemctl`, not by hand, and keep the `StateDirectory=` line of the service file |
+
+After any change to the settings: `systemctl restart scotty.microservice`.
+
+---
+
+## Keeping it running
+
+**Updating.** Build the new version (step 1), copy the files again (3.2 and 4.1), then
+`systemctl restart scotty.microservice`. `install.sql` is only for a new installation: never run
+it on a database that is already in use.
+
+**Backups.** Back up the `scotty_webmail` database. After restoring it, follow
+[`../docs/operations/restore-sync-epoch-rotation.md`](../docs/operations/restore-sync-epoch-rotation.md)
+before users reconnect — otherwise their phones quietly keep an out-of-date copy of their contacts
+and calendars.
+
+**The encryption keys** in `/var/lib/scotty.microservice` need no backup. If they are lost, users
+just sign in again.

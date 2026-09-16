@@ -23,7 +23,7 @@ internal static class DatabaseConfiguration
         {
             throw new InvalidOperationException(
                 "Connection string 'WebmailPreferencesDatabase' is missing. " +
-                "Run install/install.sql (install/README.md, step 1), then configure the connection string. " +
+                "Create the database with install/install.sql, then set the connection string (install/README.md). " +
                 "Refusing to start rather than running with folder roles silently inert.");
         }
 

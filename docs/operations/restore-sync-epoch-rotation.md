@@ -35,7 +35,6 @@ mariadb -u <user> -p scotty_webmail < assets/contacts-sync-epoch-rotate.sql
 mariadb -u <user> -p scotty_webmail < assets/calendar-sync-epoch-rotate.sql
 ```
 
-Repeat for any other environment the restore touched.
 
 Each file also carries, in a comment, a single-row form (`WHERE user_id = …` or
 `WHERE calendar_id = …`). That is **not** the restore gesture — it serves incidents that name one

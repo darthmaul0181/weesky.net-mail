@@ -24,7 +24,7 @@ A backend that projects before the tables exist falls over on its first write. T
 round, running the backfill against the old backend does nothing at all — the route does not exist
 yet.
 
-Run it on every environment holding contacts older than 4a.
+Run it once per database holding contacts older than 4a.
 
 ---
 
@@ -49,7 +49,7 @@ is cautious, but the selection sweeps the table on every call, so fewer calls co
 ### Open a session
 
 ```bash
-BASE=https://mail.example.net          # the target environment
+BASE=https://api.example.net           # the API's address
 JAR=$(mktemp)
 
 curl -s -c "$JAR" -X POST "$BASE/api/Login" \
