@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../contexts/AuthContext'
 import { registerLeaveGuard } from '../lib/leaveGuard'
+import ContextDrawer from './ContextDrawer'
 import IdentityMenu from './IdentityMenu'
 
 const mocks = vi.hoisted(() => ({
@@ -121,6 +122,29 @@ describe('IdentityMenu', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
+  })
+
+  // Below 1024px the account block sits inside the context drawer, which answers Escape through
+  // its layer. One key must close the menu and leave the navigation column standing.
+  it('closes alone on Escape inside the context drawer', async () => {
+    const onDrawerClose = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <AuthProvider>
+            <ContextDrawer open onClose={onDrawerClose}><IdentityMenu /></ContextDrawer>
+          </AuthProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await openMenu()
+    onDrawerClose.mockClear() // the drawer's route effect calls it once at mount
+    toggle().focus()
+
+    fireEvent.keyDown(toggle(), { key: 'Escape' })
+
+    expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
+    expect(onDrawerClose).not.toHaveBeenCalled()
   })
 
   it('marks the toggle expanded only while the menu is open', async () => {

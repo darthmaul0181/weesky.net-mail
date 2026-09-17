@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, type ActiveAccount } from '../contexts/AuthContext'
@@ -47,6 +47,16 @@ export default function IdentityMenu() {
     }
   }, [open])
 
+  // DropdownMenu's rule: React's root listener runs before the document one, so an Escape pressed
+  // inside the menu is spent here — the context drawer this block sits in below 1024px answers
+  // Escape through its layer and would collapse the whole column on the same key.
+  function onRootKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!open || e.key !== 'Escape') return
+    e.preventDefault()
+    e.stopPropagation()
+    setOpen(false)
+  }
+
   if (!identity) return null
 
   async function handleSignOut() {
@@ -80,7 +90,7 @@ export default function IdentityMenu() {
     : activeAccount.isPrimary ? 'identity-pill' : 'identity-pill is-connected'
 
   return (
-    <div className="identity-root" ref={rootRef}>
+    <div className="identity-root" ref={rootRef} onKeyDown={onRootKeyDown}>
       <span className={pillClass} aria-hidden="true">
         {bandLabel ? initialsOf(bandLabel) : ''}
       </span>
