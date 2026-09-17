@@ -64,7 +64,7 @@ describe('modal roots', () => {
   })
 
   // Enabled in Task 5 by dropping the `.todo`, once the last caller draws its backdrop through
-  // <Modal>: until then ScopeModal, ComposeView and the calendar editor write the class out.
+  // <Modal>: until then ScopeModal and the calendar editor write the class out.
   it.todo('draw the backdrop from the Modal shell alone', () => {
     const shell = ['../components/Modal.tsx', '../components/ModalOverlay.tsx']
     const writers = Object.entries(sources)

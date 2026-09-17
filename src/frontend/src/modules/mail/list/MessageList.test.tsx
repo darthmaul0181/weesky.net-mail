@@ -1314,7 +1314,7 @@ describe('multi-select', () => {
     expect(screen.getByText('2 selected')).toBeInTheDocument()
   })
 
-  it('Escape under the bulk expunge confirm keeps the selection the confirm acts on', async () => {
+  it('Escape closes the bulk expunge confirm and keeps the selection it acts on', async () => {
     renderWithRoles('trash')
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
     const del = bar().getByRole('button', { name: 'Delete permanently' })
@@ -1323,7 +1323,12 @@ describe('multi-select', () => {
 
     fireEvent.keyDown(del, { key: 'Escape' })
 
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByText('2 selected')).toBeInTheDocument()
+
+    // Re-asked, the confirm still acts on the two rows the Escape left checked.
+    fireEvent.click(bar().getByRole('button', { name: 'Delete permanently' }))
+    await settle()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(mocks.remove).toHaveBeenCalledWith(
       expect.objectContaining({ folderPath: 'Trash', uids: [2, 1] }))

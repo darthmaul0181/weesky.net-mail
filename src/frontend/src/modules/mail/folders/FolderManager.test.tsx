@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import FolderManager from './FolderManager'
+import { fireEscape } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
 
 const mocks = vi.hoisted(() => ({
@@ -204,6 +205,32 @@ describe('renaming a folder', () => {
     await waitFor(() => expect(mocks.rename).toHaveBeenCalledWith({
       path: 'Projects/Alpha', newParentPath: 'Projects', newName: 'Beta',
     }))
+  })
+
+  it('is a modal dialog named by its own title, opening on the name it renames', () => {
+    renderManager()
+    const trigger = screen.getByRole('button', { name: 'Rename Projects' })
+    trigger.focus()
+
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: 'Rename folder' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(screen.getByLabelText('New name')).toHaveFocus()
+  })
+
+  // Owner decision: every dialog carrying a ✕ closes on Escape too.
+  it('closes the rename dialog on Escape and hands the focus back', () => {
+    renderManager()
+    const trigger = screen.getByRole('button', { name: 'Rename Projects' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    fireEscape()
+
+    expect(mocks.rename).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('New name')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 
   it('closes the rename dialog on the ✕ without renaming', () => {

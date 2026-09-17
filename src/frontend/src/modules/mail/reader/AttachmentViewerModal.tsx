@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { requestBlob } from '../../../api.js'
 import LoadingBlock from '../../../components/LoadingBlock'
-import ModalOverlay from '../../../components/ModalOverlay'
+import Modal from '../../../components/Modal'
 import ChevronLeftIcon from '../../../icons/ChevronLeftIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -61,56 +61,56 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
     }
   }, [image.src])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-      // Clamped, never wrapped — same ends as the disabled arrows.
-      if (event.key === 'ArrowLeft') setIndex(i => Math.max(0, i - 1))
-      if (event.key === 'ArrowRight') setIndex(i => Math.min(images.length - 1, i + 1))
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, images.length])
+  // Bound to the dialog's own box rather than to the document: a viewer under another dialog
+  // never sees these, and Escape stays the layer stack's. Clamped, never wrapped — the same
+  // ends as the disabled arrows.
+  function onArrow(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'ArrowLeft') setIndex(i => Math.max(0, i - 1))
+    if (event.key === 'ArrowRight') setIndex(i => Math.min(images.length - 1, i + 1))
+  }
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="modal attachment-viewer" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{image.fileName}</span>
+    <Modal
+      className="attachment-viewer"
+      title={image.fileName}
+      onClose={onClose}
+      onKeyDown={onArrow}
+      headerExtra={(
+        <>
           {several && <span className="attachment-viewer-count">{index + 1} / {images.length}</span>}
           <span className="attachment-viewer-size">{formatSize(image.size)}</span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
+        </>
+      )}
+    >
+      <div className="attachment-viewer-body">
+        {several && (
+          <button type="button" className="attachment-viewer-nav" aria-label={t('viewer.previous')}
+            disabled={index === 0} onClick={() => setIndex(i => Math.max(0, i - 1))}>
+            <ChevronLeftIcon size={18} />
+          </button>
+        )}
+        <div className="attachment-viewer-stage">
+          {error
+            ? (
+              <span className="attachment-viewer-error" role="alert">
+                {apiErrorMessage(error, t('viewer.loadFailed'))}
+              </span>
+            )
+            : objectUrl
+              ? <img src={objectUrl} alt={image.fileName} className="attachment-viewer-img" />
+              : <LoadingBlock />}
         </div>
-        <div className="attachment-viewer-body">
-          {several && (
-            <button type="button" className="attachment-viewer-nav" aria-label={t('viewer.previous')}
-              disabled={index === 0} onClick={() => setIndex(i => Math.max(0, i - 1))}>
-              <ChevronLeftIcon size={18} />
-            </button>
-          )}
-          <div className="attachment-viewer-stage">
-            {error
-              ? (
-                <span className="attachment-viewer-error" role="alert">
-                  {apiErrorMessage(error, t('viewer.loadFailed'))}
-                </span>
-              )
-              : objectUrl
-                ? <img src={objectUrl} alt={image.fileName} className="attachment-viewer-img" />
-                : <LoadingBlock />}
-          </div>
-          {several && (
-            <button type="button" className="attachment-viewer-nav" aria-label={t('viewer.next')}
-              disabled={index === images.length - 1}
-              onClick={() => setIndex(i => Math.min(images.length - 1, i + 1))}>
-              <ChevronRightIcon size={18} />
-            </button>
-          )}
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={() => onDownload(image)}>{t('reader.download')}</button>
-        </div>
+        {several && (
+          <button type="button" className="attachment-viewer-nav" aria-label={t('viewer.next')}
+            disabled={index === images.length - 1}
+            onClick={() => setIndex(i => Math.min(images.length - 1, i + 1))}>
+            <ChevronRightIcon size={18} />
+          </button>
+        )}
       </div>
-    </ModalOverlay>
+      <div className="modal-actions">
+        <button type="button" className="btn btn-ghost" onClick={() => onDownload(image)}>{t('reader.download')}</button>
+      </div>
+    </Modal>
   )
 }

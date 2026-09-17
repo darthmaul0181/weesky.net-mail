@@ -7,7 +7,7 @@ import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
 import type { ComposeSeed } from './composeSeed'
 import type { EditorHandle } from './SquireEditor'
-import { settle } from '../../../test-utils'
+import { fireEscape, settle } from '../../../test-utils'
 import { confirmLeave } from '../../../lib/leaveGuard'
 
 const mocks = vi.hoisted(() => ({
@@ -953,6 +953,23 @@ describe('drafts in the composer', () => {
     expect(router.state.location.pathname).toBe('/mail/compose')
   })
 
+  // No ✕: both of its answers are on its buttons, so Escape means the harmless one.
+  it('the leave dialog is a named alertdialog with no ✕, and Escape keeps editing', async () => {
+    const kept = renderCompose('INBOX', withParts)
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    const modal = await discardModal()
+    expect(screen.getByRole('alertdialog', { name: 'Save this draft?' })).toBe(modal)
+    expect(within(modal).queryByRole('button', { name: 'Close' })).toBeNull()
+
+    fireEscape()
+
+    await waitFor(() => expect(screen.queryByText('Save this draft?')).toBeNull())
+    expect(kept.router.state.location.pathname).toBe('/mail/compose')
+    expect(mocks.deleteAttachment).not.toHaveBeenCalled()
+  })
+
   it('the leave dialog offers Save draft / Discard / Keep editing', async () => {
     const kept = renderCompose('INBOX', withParts)
 
@@ -1340,6 +1357,20 @@ describe('what a plain-text switch costs', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch' }))
     expect(textArea().value).toBe('bold')
+  })
+
+  it('is a named alertdialog with no ✕, and Escape cancels the switch', () => {
+    editorState.html = '<div><b>bold</b></div>'
+    renderCompose()
+    fireEvent.click(plainToggle())
+    const modal = screen.getByRole('alertdialog', { name: 'Switch to plain text?' })
+    expect(within(modal).queryByRole('button', { name: 'Close' })).toBeNull()
+
+    fireEscape()
+
+    expect(screen.queryByText('Switch to plain text?')).toBeNull()
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+    expect(screen.getByTestId('compose-editor')).toBeInTheDocument()
   })
 
   it('keeps the editor when the switch is declined', () => {

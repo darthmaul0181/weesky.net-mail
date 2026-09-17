@@ -1,4 +1,4 @@
-import { useId, useRef, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { useId, useRef, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLayer } from '../hooks/useLayer'
 import ModalOverlay from './ModalOverlay'
@@ -29,6 +29,9 @@ export interface ModalProps {
   labelledBy?: string
   /** Given, the `.modal` root is the `<form>`, so Enter submits. */
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void
+  /** Keys the dialog answers itself. Bound to the root, so it hears them only while the trap
+      holds the focus — a dialog opened over this one takes them with it. */
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void
   children: ReactNode
 }
 
@@ -39,7 +42,7 @@ export interface ModalProps {
 export default function Modal({
   title, icon, onClose, onEscape, closeLabel, busy = false, role = 'dialog',
   initialFocusRef, returnFocusRef, className, overlayClassName, headerExtra, header = true,
-  labelledBy, onSubmit, children,
+  labelledBy, onSubmit, onKeyDown, children,
 }: ModalProps) {
   const { t } = useTranslation('common')
   const generatedId = useId()
@@ -64,6 +67,7 @@ export default function Modal({
     'aria-labelledby': nameId,
     tabIndex: -1,
     className: className ? `modal ${className}` : 'modal',
+    onKeyDown,
   }
 
   const body = (

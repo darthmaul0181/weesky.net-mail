@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { flatten, indent, sortFolders } from './folders/folderNodes'
 import { folderMatches } from './folders/folderFilter'
 import { roleLabel } from './roleLabel'
-import ModalOverlay from '../../components/ModalOverlay'
+import Modal from '../../components/Modal'
 import FolderMoveIcon from '../../icons/FolderMoveIcon'
 import CopyIcon from '../../icons/CopyIcon'
 import type { MailFolderNode } from './api/mailTypes'
@@ -22,19 +22,14 @@ interface Props {
  *
  * Shaped as the site's list filter (website-design.md, search shape 1): the .search-input sits in
  * the .admin-list-header carrying the matching/total count, the way Administration and the
- * contacts list do it. The ✕ is the only way out, and the body is a form so Enter commits.
+ * contacts list do it. The dialog root is the form, so Enter commits.
  */
 export default function MoveMessagesModal(
   { mode, folders, currentFolderPath, onPick, onClose }: Props) {
   const { t } = useTranslation('mail')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const filterRef = useRef<HTMLInputElement>(null)
 
   // Depth comes from the whole tree, so a match keeps its true nesting even once its parent
   // has been filtered away — it reads as a child instead of pretending to be top-level.
@@ -59,76 +54,69 @@ export default function MoveMessagesModal(
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <form
-        className="modal folder-pick-modal"
-        onClick={e => e.stopPropagation()}
-        onSubmit={e => { e.preventDefault(); commit() }}
-      >
-        <div className="modal-header">
-          <span className="modal-title">
-            {mode === 'move' ? <FolderMoveIcon size={17} /> : <CopyIcon size={17} />}
-            {t(mode === 'move' ? 'move.titleMove' : 'move.titleCopy')}
+    <Modal
+      className="folder-pick-modal"
+      icon={mode === 'move' ? <FolderMoveIcon size={17} /> : <CopyIcon size={17} />}
+      title={t(mode === 'move' ? 'move.titleMove' : 'move.titleCopy')}
+      onClose={onClose}
+      initialFocusRef={filterRef}
+      onSubmit={e => { e.preventDefault(); commit() }}
+    >
+      <div className="admin-list-header">
+        <span className="admin-list-title">
+          {t('move.destination')}
+          <span className="folder-pick-count">
+            {query
+              ? t('move.countFiltered', { shown: rows.length, count: all.length })
+              : t('move.count', { count: all.length })}
           </span>
-          <button type="button" className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
-        </div>
+        </span>
+        <input
+          className="search-input folder-pick-filter"
+          type="search"
+          aria-label={t('move.searchLabel')}
+          placeholder={t('move.searchPlaceholder')}
+          ref={filterRef}
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          // preventDefault, so the implicit submission this keystroke would also trigger
+          // cannot commit the same pick twice.
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
+        />
+      </div>
 
-        <div className="admin-list-header">
-          <span className="admin-list-title">
-            {t('move.destination')}
-            <span className="folder-pick-count">
-              {query
-                ? t('move.countFiltered', { shown: rows.length, count: all.length })
-                : t('move.count', { count: all.length })}
-            </span>
-          </span>
-          <input
-            className="search-input folder-pick-filter"
-            type="search"
-            aria-label={t('move.searchLabel')}
-            placeholder={t('move.searchPlaceholder')}
-            value={query}
-            autoFocus
-            onChange={e => setQuery(e.target.value)}
-            // preventDefault, so the implicit submission this keystroke would also trigger
-            // cannot commit the same pick twice.
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
-          />
-        </div>
-
-        <div className="folder-pick-list">
-          {rows.length === 0 && (
-            <div className="folder-pick-empty">{t('move.noMatch', { query })}</div>
-          )}
-          {rows.map(({ node, depth, disabledAs }) => (
-            <button
-              key={node.path}
-              type="button"
-              className={`folder-pick-row${selected === node.path ? ' is-selected' : ''}`}
-              disabled={Boolean(disabledAs)}
-              onClick={() => setSelected(node.path)}
-            >
-              <span className="folder-pick-indent">{indent(depth)}</span>
-              <span className="folder-pick-name">{node.name}</span>
-              {(disabledAs ?? (node.specialUse && roleLabel(node.specialUse, t))) && (
-                <span className="row-tag">
-                  {disabledAs
-                    ? t(disabledAs === 'current' ? 'move.tagCurrent' : 'move.tagContainer')
-                    : roleLabel(node.specialUse!, t)}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="folder-pick-submit">
-          <button className="btn btn-primary" type="submit" disabled={!target}>
-            {target
-              ? t(mode === 'move' ? 'move.submitMove' : 'move.submitCopy', { name: target.name })
-              : t(mode === 'move' ? 'move.actionMove' : 'move.actionCopy')}
+      <div className="folder-pick-list">
+        {rows.length === 0 && (
+          <div className="folder-pick-empty">{t('move.noMatch', { query })}</div>
+        )}
+        {rows.map(({ node, depth, disabledAs }) => (
+          <button
+            key={node.path}
+            type="button"
+            className={`folder-pick-row${selected === node.path ? ' is-selected' : ''}`}
+            disabled={Boolean(disabledAs)}
+            onClick={() => setSelected(node.path)}
+          >
+            <span className="folder-pick-indent">{indent(depth)}</span>
+            <span className="folder-pick-name">{node.name}</span>
+            {(disabledAs ?? (node.specialUse && roleLabel(node.specialUse, t))) && (
+              <span className="row-tag">
+                {disabledAs
+                  ? t(disabledAs === 'current' ? 'move.tagCurrent' : 'move.tagContainer')
+                  : roleLabel(node.specialUse!, t)}
+              </span>
+            )}
           </button>
-        </div>
-      </form>
-    </ModalOverlay>
+        ))}
+      </div>
+
+      <div className="folder-pick-submit">
+        <button className="btn btn-primary" type="submit" disabled={!target}>
+          {target
+            ? t(mode === 'move' ? 'move.submitMove' : 'move.submitCopy', { name: target.name })
+            : t(mode === 'move' ? 'move.actionMove' : 'move.actionCopy')}
+        </button>
+      </div>
+    </Modal>
   )
 }

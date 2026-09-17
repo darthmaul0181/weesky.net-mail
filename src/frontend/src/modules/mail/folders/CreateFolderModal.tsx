@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import ModalOverlay from '../../../components/ModalOverlay'
+import Modal from '../../../components/Modal'
 import FolderPlusIcon from '../../../icons/FolderPlusIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { useCreateFolder } from '../queries'
@@ -21,61 +21,60 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
   const [name, setName] = useState('')
   const [parent, setParent] = useState(defaultParent)
   const createFolder = useCreateFolder()
+  const nameRef = useRef<HTMLInputElement>(null)
 
   const all = flatten(sortFolders(folders))
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="modal" onClick={event => event.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title"><FolderPlusIcon />{t('folders.create.title')}</span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
+    <Modal
+      icon={<FolderPlusIcon />}
+      title={t('folders.create.title')}
+      onClose={onClose}
+      initialFocusRef={nameRef}
+    >
+      {/* A form, so Enter submits the way it does in the admin dialogs. */}
+      <form
+        onSubmit={async event => {
+          event.preventDefault()
+          try {
+            await createFolder.mutateAsync({ parentPath: parent, name: name.trim() })
+            onNotify(t('folders.create.created', { name: name.trim() }))
+            onClose()
+          } catch (error) {
+            onNotify(apiErrorMessage(error, t('folders.create.failed')), 'error')
+          }
+        }}
+      >
+        <div className="field-h">
+          <label htmlFor="new-folder-name">{t('folders.create.name')}</label>
+          <input
+            id="new-folder-name"
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            ref={nameRef}
+          />
         </div>
 
-        {/* A form, so Enter submits the way it does in the admin dialogs. */}
-        <form
-          onSubmit={async event => {
-            event.preventDefault()
-            try {
-              await createFolder.mutateAsync({ parentPath: parent, name: name.trim() })
-              onNotify(t('folders.create.created', { name: name.trim() }))
-              onClose()
-            } catch (error) {
-              onNotify(apiErrorMessage(error, t('folders.create.failed')), 'error')
-            }
-          }}
+        <div className="field-h">
+          <label htmlFor="new-folder-parent">{t('folders.create.parent')}</label>
+          <select id="new-folder-parent" value={parent} onChange={e => setParent(e.target.value)}>
+            <option value="">{t('folders.create.topLevel')}</option>
+            {all.map(({ node, depth }) => (
+              <option key={node.path} value={node.path}>{indent(depth)}{node.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="submit"
+          className="btn btn-primary"
+          style={{ marginTop: '8px' }}
+          disabled={!name.trim() || createFolder.isPending}
         >
-          <div className="field-h">
-            <label htmlFor="new-folder-name">{t('folders.create.name')}</label>
-            <input
-              id="new-folder-name"
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          <div className="field-h">
-            <label htmlFor="new-folder-parent">{t('folders.create.parent')}</label>
-            <select id="new-folder-parent" value={parent} onChange={e => setParent(e.target.value)}>
-              <option value="">{t('folders.create.topLevel')}</option>
-              {all.map(({ node, depth }) => (
-                <option key={node.path} value={node.path}>{indent(depth)}{node.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary"
-            style={{ marginTop: '8px' }}
-            disabled={!name.trim() || createFolder.isPending}
-          >
-            {createFolder.isPending ? <span className="spinner" /> : t('folders.create.submit')}
-          </button>
-        </form>
-      </div>
-    </ModalOverlay>
+          {createFolder.isPending ? <span className="spinner" /> : t('folders.create.submit')}
+        </button>
+      </form>
+    </Modal>
   )
 }

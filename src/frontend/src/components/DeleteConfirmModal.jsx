@@ -1,7 +1,7 @@
 import { Trans, useTranslation } from 'react-i18next'
-import ModalOverlay from './ModalOverlay'
+import Modal from './Modal'
 
-// Closing is the ✕ alone, as in the admin dialogs — no Cancel button. `message` overrides the
+// Closing is the ✕ and Escape, as in the admin dialogs — no Cancel button. `message` overrides the
 // default one-liner (e.g. the emptying warning). The danger fallback (var(--danger, #dc2626)) is
 // kept — --danger is defined in every theme, so it renders identically everywhere.
 // `title` and `confirmLabel` exist for the one question that is not a deletion — discarding an
@@ -21,27 +21,22 @@ export function DeleteConfirmModal({
 }) {
   const { t } = useTranslation()
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{title ?? t('deleteConfirm.title')}</span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
-        </div>
-        <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
-          {/* Self-closing <name/>: entityLabel is a node, so it travels as a component rather
-              than as an interpolated value. */}
-          {message ?? (
-            <Trans i18nKey="deleteConfirm.message" components={{ name: <strong>{entityLabel}</strong> }} />
-          )}
-        </p>
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
-            onClick={onConfirm} disabled={loading}>
-            {loading ? <span className="spinner" /> : confirmLabel ?? t('actions.delete')}
-          </button>
-        </div>
+    // alertdialog, not dialog: it interrupts to ask one question rather than offering a surface.
+    <Modal role="alertdialog" title={title ?? t('deleteConfirm.title')} onClose={onClose}>
+      <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
+        {/* Self-closing <name/>: entityLabel is a node, so it travels as a component rather
+            than as an interpolated value. */}
+        {message ?? (
+          <Trans i18nKey="deleteConfirm.message" components={{ name: <strong>{entityLabel}</strong> }} />
+        )}
+      </p>
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+        <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
+          onClick={onConfirm} disabled={loading}>
+          {loading ? <span className="spinner" /> : confirmLabel ?? t('actions.delete')}
+        </button>
       </div>
-    </ModalOverlay>
+    </Modal>
   )
 }
 

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
-import ModalOverlay from '../../../components/ModalOverlay'
+import Modal from '../../../components/Modal'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -25,6 +25,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
   const [renaming, setRenaming] = useState<MailFolderNode | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [pendingDelete, setPendingDelete] = useState<MailFolderNode | null>(null)
+  const renameRef = useRef<HTMLInputElement>(null)
 
   const renameFolder = useRenameFolder()
   const deleteFolder = useDeleteFolder()
@@ -120,48 +121,46 @@ export default function FolderManager({ folders, onNotify }: Props) {
       </ul>
 
       {renaming && (
-        <ModalOverlay onClose={() => setRenaming(null)}>
-          <div className="modal" onClick={event => event.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title"><PencilIcon />{t('folders.manage.renameTitle')}</span>
-              <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={() => setRenaming(null)}>✕</button>
+        <Modal
+          icon={<PencilIcon />}
+          title={t('folders.manage.renameTitle')}
+          onClose={() => setRenaming(null)}
+          initialFocusRef={renameRef}
+        >
+          <form
+            onSubmit={async event => {
+              event.preventDefault()
+              const ok = await run(
+                () => renameFolder.mutateAsync({
+                  path: renaming.path,
+                  newParentPath: parentOf(renaming),
+                  newName: renameValue.trim(),
+                }),
+                t('folders.manage.renamed'), t('folders.manage.renameFailed'))
+              if (ok) setRenaming(null)
+            }}
+          >
+            <div className="field-h">
+              <label htmlFor="rename-folder-name">{t('folders.manage.newName')}</label>
+              <input
+                id="rename-folder-name"
+                type="text"
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                ref={renameRef}
+              />
             </div>
 
-            <form
-              onSubmit={async event => {
-                event.preventDefault()
-                const ok = await run(
-                  () => renameFolder.mutateAsync({
-                    path: renaming.path,
-                    newParentPath: parentOf(renaming),
-                    newName: renameValue.trim(),
-                  }),
-                  t('folders.manage.renamed'), t('folders.manage.renameFailed'))
-                if (ok) setRenaming(null)
-              }}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ marginTop: '8px' }}
+              disabled={!renameValue.trim() || renameFolder.isPending}
             >
-              <div className="field-h">
-                <label htmlFor="rename-folder-name">{t('folders.manage.newName')}</label>
-                <input
-                  id="rename-folder-name"
-                  type="text"
-                  value={renameValue}
-                  onChange={e => setRenameValue(e.target.value)}
-                  autoFocus
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ marginTop: '8px' }}
-                disabled={!renameValue.trim() || renameFolder.isPending}
-              >
-                {renameFolder.isPending ? <span className="spinner" /> : t('folders.manage.renameAction')}
-              </button>
-            </form>
-          </div>
-        </ModalOverlay>
+              {renameFolder.isPending ? <span className="spinner" /> : t('folders.manage.renameAction')}
+            </button>
+          </form>
+        </Modal>
       )}
 
       {pendingDelete && (

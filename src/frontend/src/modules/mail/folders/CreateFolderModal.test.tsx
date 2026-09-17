@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import CreateFolderModal from './CreateFolderModal'
+import { fireEscape } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
 
 const mocks = vi.hoisted(() => ({ create: vi.fn() }))
@@ -40,7 +41,44 @@ function renderModal(props: Partial<React.ComponentProps<typeof CreateFolderModa
 describe('CreateFolderModal', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  // Closing is the ✕ alone, as in the admin dialogs — no separate Cancel button.
+  it('is a modal dialog named by its own title', () => {
+    renderModal()
+
+    const dialog = screen.getByRole('dialog', { name: 'New folder' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+  })
+
+  // Owner decision: every dialog carrying a ✕ closes on Escape too.
+  it('closes on Escape without creating anything', () => {
+    const { onClose } = renderModal()
+
+    fireEscape()
+
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens on the name field and hands the focus back to the opener on close', () => {
+    function Host({ open }: { open: boolean }) {
+      return (
+        <div>
+          <button type="button">New folder</button>
+          {open && <CreateFolderModal folders={tree} onClose={vi.fn()} onNotify={vi.fn()} />}
+        </div>
+      )
+    }
+    const { rerender } = render(<Host open={false} />)
+    const trigger = screen.getByRole('button', { name: 'New folder' })
+    trigger.focus()
+
+    rerender(<Host open />)
+    expect(screen.getByLabelText('Name')).toHaveFocus()
+
+    rerender(<Host open={false} />)
+    expect(trigger).toHaveFocus()
+  })
+
+  // Closing is the ✕ and Escape, as in the admin dialogs — no separate Cancel button.
   it('closes without creating anything', () => {
     const { onClose } = renderModal()
 

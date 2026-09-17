@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import AdvancedSearchModal from './AdvancedSearchModal'
+import { fireEscape } from '../../../test-utils'
 
 function setup(initialSubject = '') {
   const onSearch = vi.fn(); const onClose = vi.fn()
@@ -45,9 +46,38 @@ describe('AdvancedSearchModal', () => {
     expect(onSearch).not.toHaveBeenCalled()
   })
 
+  it('is a modal dialog named by its own title', () => {
+    setup()
+    const dialog = screen.getByRole('dialog', { name: 'Advanced search' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+  })
+
+  it('opens on the first field and hands the focus back to the opener on close', () => {
+    function Host({ open }: { open: boolean }) {
+      return (
+        <div>
+          <button type="button">Advanced</button>
+          {open && (
+            <AdvancedSearchModal folderTitle="Inbox" initialSubject=""
+              onSearch={vi.fn()} onClose={vi.fn()} />
+          )}
+        </div>
+      )
+    }
+    const { rerender } = render(<Host open={false} />)
+    const trigger = screen.getByRole('button', { name: 'Advanced' })
+    trigger.focus()
+
+    rerender(<Host open />)
+    expect(screen.getByLabelText('From')).toHaveFocus()
+
+    rerender(<Host open={false} />)
+    expect(trigger).toHaveFocus()
+  })
+
   it('closes on Escape and on the cross', () => {
     const { onClose } = setup()
-    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEscape()
     expect(onClose).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledTimes(2)

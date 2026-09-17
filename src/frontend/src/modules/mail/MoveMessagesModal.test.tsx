@@ -287,6 +287,36 @@ describe('MoveMessagesModal', () => {
     expect(copy.container.querySelector('.modal-title svg path')).not.toBeInTheDocument()
   })
 
+  it('is a modal dialog named by its own title', () => {
+    renderModal()
+
+    const dialog = screen.getByRole('dialog', { name: 'Move to folder' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveClass('folder-pick-modal')
+  })
+
+  it('hands the focus back to the opener on close', () => {
+    function Host({ open }: { open: boolean }) {
+      return (
+        <div>
+          <button type="button">Move to…</button>
+          {open && (
+            <MoveMessagesModal mode="move" folders={tree} currentFolderPath="INBOX"
+              onPick={vi.fn()} onClose={vi.fn()} />
+          )}
+        </div>
+      )
+    }
+    const { rerender } = render(<Host open={false} />)
+    const trigger = screen.getByRole('button', { name: 'Move to…' })
+    trigger.focus()
+    rerender(<Host open />)
+
+    rerender(<Host open={false} />)
+
+    expect(trigger).toHaveFocus()
+  })
+
   it('closes on the ✕ and on Escape, and offers no second way out', () => {
     const { onClose } = renderModal()
 

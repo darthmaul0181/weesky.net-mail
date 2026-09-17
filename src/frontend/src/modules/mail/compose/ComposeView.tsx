@@ -16,6 +16,7 @@ import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
 import DropdownMenu from '../../../components/DropdownMenu'
+import Modal from '../../../components/Modal'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import KebabIcon from '../../../icons/KebabIcon'
 import RocketIcon from '../../../icons/RocketIcon'
@@ -624,54 +625,46 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
 
       <AttachmentTray items={attachments.items} onRemove={removeFile} />
 
+      {/* No ✕ and no backdrop close: the three answers are on its buttons, so Escape takes the
+          harmless one rather than picking one of them. */}
       {(blocker.state === 'blocked' || leaveAsk !== null) && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <span className="modal-title">{t('leave.title')}</span>
-            </div>
-            <p>{t('leave.body')}</p>
-            <div className="folder-pick-submit">
-              <button type="button" className="btn btn-ghost" onClick={keepEditing}>{t('leave.keepEditing')}</button>
-              {/* Locked while busy: it deletes the staged ids a save, send or upload may still be reading. */}
-              <button type="button" className="btn btn-ghost" disabled={busy}
-                onClick={() => {
-                  // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
-                  attachments.discardAll()
-                  leaveBehind()
-                }}>
-                {t('leave.discard')}
-              </button>
-              {/* Locked on an invalid token too, where the reason is not on screen: say it. */}
-              <button type="button" className="btn btn-primary" disabled={!canSaveDraft}
-                title={allValid ? undefined : t('leave.fixAddress')}
-                onClick={() => saveDraft(() => {
-                  attachments.discardAll()
-                  leaveBehind()
-                })}>
-                {t('leave.saveDraft')}
-              </button>
-            </div>
+        <Modal role="alertdialog" title={t('leave.title')} onEscape={keepEditing}>
+          <p>{t('leave.body')}</p>
+          <div className="folder-pick-submit">
+            <button type="button" className="btn btn-ghost" onClick={keepEditing}>{t('leave.keepEditing')}</button>
+            {/* Locked while busy: it deletes the staged ids a save, send or upload may still be reading. */}
+            <button type="button" className="btn btn-ghost" disabled={busy}
+              onClick={() => {
+                // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
+                attachments.discardAll()
+                leaveBehind()
+              }}>
+              {t('leave.discard')}
+            </button>
+            {/* Locked on an invalid token too, where the reason is not on screen: say it. */}
+            <button type="button" className="btn btn-primary" disabled={!canSaveDraft}
+              title={allValid ? undefined : t('leave.fixAddress')}
+              onClick={() => saveDraft(() => {
+                attachments.discardAll()
+                leaveBehind()
+              })}>
+              {t('leave.saveDraft')}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* No ✕, like the leave guard: both of its answers are on its buttons. */}
       {confirmPlain && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <span className="modal-title">{t('plainText.title')}</span>
-            </div>
-            <p>{t('plainText.body')}</p>
-            <div className="folder-pick-submit">
-              <button type="button" className="btn btn-ghost" onClick={() => setConfirmPlain(false)}>
-                {t('plainText.keepFormatting')}
-              </button>
-              <button type="button" className="btn btn-primary" onClick={switchToPlainText}>{t('plainText.confirm')}</button>
-            </div>
+        <Modal role="alertdialog" title={t('plainText.title')} onEscape={() => setConfirmPlain(false)}>
+          <p>{t('plainText.body')}</p>
+          <div className="folder-pick-submit">
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirmPlain(false)}>
+              {t('plainText.keepFormatting')}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={switchToPlainText}>{t('plainText.confirm')}</button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {dropTarget && (
