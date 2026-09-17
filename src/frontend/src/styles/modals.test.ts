@@ -5,14 +5,37 @@ const sources = import.meta.glob('../**/*.{jsx,tsx}', {
   query: '?raw', import: 'default', eager: true,
 }) as Record<string, string>
 
+/** The line each `<Modal …>` opening tag carrying a width starts on. A caller's tag spans
+    several lines, so the line-by-line scan below cannot see a style prop sitting on one of
+    its own. */
+export function modalTagWidths(src: string): number[] {
+  const found: number[] = []
+  for (let start = src.indexOf('<Modal'); start !== -1; start = src.indexOf('<Modal', start + 1)) {
+    if (!/[\s/>]/.test(src.slice(start + 6, start + 7))) continue // <ModalOverlay is another tag
+    let depth = 0
+    for (let i = start; i < src.length; i++) {
+      if (src[i] === '{') depth++
+      else if (src[i] === '}') depth--
+      else if (src[i] === '>' && depth === 0) {
+        if (/[Ww]idth:/.test(src.slice(start, i + 1))) found.push(src.slice(0, start).split('\n').length)
+        break
+      }
+    }
+  }
+  return found
+}
+
 /** A dialog's width is the contract's business (styles/modal.css), never a component's. */
 function inlineWidths(): string[] {
   return Object.entries(sources)
     .filter(([path]) => !path.includes('.test.'))
-    .flatMap(([path, src]) => src.split('\n')
-      .map((line, i) => ({ path, at: i + 1, line }))
-      .filter(({ line }) => /className="modal[\s"]/.test(line) && /[Ww]idth:/.test(line))
-      .map(({ path, at }) => `${path}:${at}`))
+    .flatMap(([path, src]) => [
+      ...src.split('\n')
+        .map((line, i) => ({ at: i + 1, line }))
+        .filter(({ line }) => /className="modal[\s"]/.test(line) && /[Ww]idth:/.test(line))
+        .map(({ at }) => `${path}:${at}`),
+      ...modalTagWidths(src).map(at => `${path}:${at}`),
+    ])
 }
 
 describe('modal roots', () => {
@@ -21,9 +44,21 @@ describe('modal roots', () => {
     expect(Object.keys(sources).length).toBeGreaterThan(50)
   })
 
+  // The <Modal> half of the guard has no caller until Task 5, so its mechanism is proved here
+  // rather than by the repo-wide scan below, which would pass vacuously in the meantime.
+  it('sees a width anywhere in a <Modal> tag, and only in one', () => {
+    expect(modalTagWidths('<Modal\n  title="x"\n  style={{ width: 400 }}\n>')).toEqual([1])
+    expect(modalTagWidths('<ModalOverlay style={{ width: 400 }}>')).toEqual([])
+    expect(modalTagWidths('<Modal title="x">\n<p style={{ width: 400 }} />')).toEqual([])
+  })
+
   it('carry no inline width', () => {
     expect(inlineWidths()).toEqual([])
   })
+
+  // Enabled in Task 5, once the last caller draws its backdrop through <Modal> and the overlay
+  // is Modal's alone: until then ScopeModal, ComposeView and the calendar editor write it out.
+  it.todo('render the backdrop through Modal.tsx alone')
 })
 
 const modalCss = (import.meta.glob('./modal.css', {
