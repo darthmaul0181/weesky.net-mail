@@ -70,7 +70,12 @@ export function pushLayer(layer: Layer): LayerHandle {
       },
     },
   }
-  stack.push(entry)
+  // React commits a child's layout effect before its parent's, so a surface drawn inside another
+  // pushes first. A layer whose container holds one already on the stack therefore belongs under
+  // it, not over it. A layer with no container holds nothing and always goes on top.
+  const trap = layer.trap
+  const under = trap ? stack.findIndex(e => !!e.layer.trap && trap.contains(e.layer.trap)) : -1
+  stack.splice(under === -1 ? stack.length : under, 0, entry)
   return entry.handle
 }
 

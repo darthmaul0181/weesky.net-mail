@@ -138,6 +138,42 @@ describe('layerStack', () => {
     expect(press('Tab').defaultPrevented).toBe(false)
   })
 
+  // React commits a child's layout effect before its parent's, so a dialog nested in another's
+  // markup pushes first — and would own Escape for the dialog it is drawn inside.
+  it('puts a layer holding another one under it, whichever pushed first', () => {
+    const outer = boxOf('outer', 1)
+    const inner = boxOf('inner', 1)
+    outer.append(inner)
+    const onOuter = vi.fn()
+    const onInner = vi.fn()
+    push({ trap: inner, onEscape: onInner })
+    push({ trap: outer, onEscape: onOuter })
+
+    press('Escape')
+
+    expect(onInner).toHaveBeenCalledTimes(1)
+    expect(onOuter).not.toHaveBeenCalled()
+  })
+
+  it('leaves a trapless layer, and a layer holding nothing of the stack, on top', () => {
+    const dialog = boxOf('dialog', 1)
+    const elsewhere = boxOf('elsewhere', 1)
+    const onDialog = vi.fn()
+    const onMenu = vi.fn()
+    const onSibling = vi.fn()
+    push({ trap: dialog, onEscape: onDialog })
+    push({ onEscape: onMenu })
+
+    press('Escape')
+    expect(onMenu).toHaveBeenCalledTimes(1)
+
+    push({ trap: elsewhere, onEscape: onSibling })
+    press('Escape')
+
+    expect(onSibling).toHaveBeenCalledTimes(1)
+    expect(onDialog).not.toHaveBeenCalled()
+  })
+
   it('keeps a layer where it is when its handler is replaced', () => {
     const replaced = vi.fn()
     const upper = vi.fn()
