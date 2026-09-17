@@ -118,14 +118,24 @@ describe('Modal', () => {
   })
 
   describe('without onClose', () => {
-    it('draws no ✕ and ignores the backdrop', () => {
-      render(<Modal title="Keep editing?"><p>body</p></Modal>)
+    // A Modal holds no state and cannot close itself, so "the backdrop did nothing" is only
+    // observable from the dialog underneath — which also proves that dropping stopPropagation
+    // costs nothing across a nesting boundary: the press bubbles to the outer backdrop, whose
+    // own target check refuses it.
+    it('draws no ✕, and a press on its backdrop closes nothing under it either', () => {
+      const outer = vi.fn()
+      render(
+        <Modal title="Event" onClose={outer}>
+          <Modal title="Keep editing?"><p>body</p></Modal>
+        </Modal>,
+      )
+      expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1)
 
-      expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
-      fireEvent.mouseDown(backdrop())
-      fireEvent.mouseUp(backdrop())
-      fireEvent.click(backdrop())
+      fireEvent.mouseDown(backdrop(1))
+      fireEvent.mouseUp(backdrop(1))
+      fireEvent.click(backdrop(1))
 
+      expect(outer).not.toHaveBeenCalled()
       expect(screen.getByRole('dialog', { name: 'Keep editing?' })).toBeInTheDocument()
     })
 
@@ -176,7 +186,9 @@ describe('Modal', () => {
   })
 
   describe('with onSubmit', () => {
-    it('makes the dialog root the form, so Enter submits', () => {
+    // The root being the <form> is what gives Enter its implicit submission in a browser; jsdom
+    // implements no such thing, so the tag is asserted and the button stands in for the key.
+    it('makes the dialog root the form its primary button submits', () => {
       const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault())
       render(
         <Modal title="Create folder" onClose={vi.fn()} onSubmit={onSubmit}>
@@ -240,6 +252,27 @@ describe('Modal', () => {
       expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
     })
 
+    it('lands on the ✕ over a field\'s own autoFocus, which React commits earlier', () => {
+      function WithAutoFocus({ open }: { open: boolean }) {
+        return (
+          <div>
+            <button type="button">Move</button>
+            {open && (
+              <Modal title="Move messages" onClose={vi.fn()}>
+                <input autoFocus placeholder="filter" />
+              </Modal>
+            )}
+          </div>
+        )
+      }
+      const { rerender } = render(<WithAutoFocus open={false} />)
+
+      rerender(<WithAutoFocus open />)
+
+      expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+      expect(screen.getByPlaceholderText('filter')).not.toHaveFocus()
+    })
+
     it('goes back to the opener on close', () => {
       const { rerender } = render(<Host open={false} />)
       const trigger = screen.getByRole('button', { name: 'Move' })
@@ -295,15 +328,28 @@ describe('Modal', () => {
       expect(onOuter).not.toHaveBeenCalled()
     })
 
-    it('keeps Tab inside the inner dialog', () => {
+    // From the outer dialog's own button: the top layer's trap pulls focus back inside itself,
+    // which nothing but a trap can do — jsdom moves no focus on a Tab keydown.
+    it('pulls Tab into the inner dialog and keeps it there', () => {
       open(vi.fn(), vi.fn())
-      const closes = screen.getAllByRole('button', { name: 'Close' })
-      closes[1].focus()
+      screen.getByRole('button', { name: 'Help' }).focus()
 
       fireEvent.keyDown(document, { key: 'Tab' })
 
-      expect(closes[1]).toHaveFocus()
-      expect(screen.getByRole('button', { name: 'Help' })).not.toHaveFocus()
+      expect(screen.getAllByRole('button', { name: 'Close' })[1]).toHaveFocus()
+    })
+
+    // The realistic sequence is the one above; this is the commit where both arrive at once,
+    // which React mounts child-first and the stack has to put back the right way up.
+    it('gives Escape to the inner dialog when both mount in one commit', () => {
+      const onOuter = vi.fn()
+      const onInner = vi.fn()
+      render(<Nested inner onOuter={onOuter} onInner={onInner} />)
+
+      fireEscape()
+
+      expect(onInner).toHaveBeenCalledTimes(1)
+      expect(onOuter).not.toHaveBeenCalled()
     })
   })
 

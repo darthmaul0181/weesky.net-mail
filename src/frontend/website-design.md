@@ -149,6 +149,11 @@ When a rule is ambiguous, copy what those screens do.
   backdrop and Escape do nothing.
 - **A confirm is an `alertdialog`**, not a `dialog` — it interrupts to ask, rather than offering a
   surface to work on.
+- **Focus enters the dialog as it opens and goes back to the trigger as it closes.** It lands on
+  `initialFocusRef` when the dialog names one and on the dialog's first focusable otherwise —
+  which is the ✕, the header coming before the body. So a dialog meant to open on a field passes
+  `initialFocusRef`, never `autoFocus`: React commits that attribute earlier and the layer's own
+  focus then moves off it.
 - **Icon continuity:** when the control that opens the dialog carries an icon, the **same icon
   precedes the dialog title** (edit → pencil, add account → person-plus, add domain → globe), so the
   trigger and the dialog it produced read as one continuous action.

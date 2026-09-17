@@ -76,6 +76,11 @@
   color: var(--text);
 }
 
+/* Disabled while a write is in flight, it must stop inviting the click it will not take:
+   shell.css's own .dropdown-item:disabled idiom, so the two read alike. */
+.modal-close:disabled { opacity: 0.4; cursor: default; }
+.modal-close:disabled:hover { color: var(--text-muted); }
+
 .modal-success {
   color: var(--success);
   font-size: 14px;

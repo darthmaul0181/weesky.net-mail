@@ -45,7 +45,10 @@ export default function Modal({
   const generatedId = useId()
   // The root is a <div> or a <form>; both refs are read as the plain element the layer traps.
   const modalRef = useRef<HTMLDivElement & HTMLFormElement>(null)
-  const titleId = labelledBy ?? generatedId
+  // The name is the caller's element when it points at one, and the header's own title otherwise.
+  // Neither: no attribute at all, rather than one pointing at an id nothing carries.
+  const titleId = title && header && !labelledBy ? generatedId : undefined
+  const nameId = labelledBy ?? titleId
 
   useLayer({
     active: true,
@@ -58,7 +61,7 @@ export default function Modal({
   const rootProps = {
     role,
     'aria-modal': true,
-    'aria-labelledby': titleId,
+    'aria-labelledby': nameId,
     tabIndex: -1,
     className: className ? `modal ${className}` : 'modal',
   }
