@@ -38,6 +38,7 @@ import { useContacts } from '../../contacts/queries'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
 import { formatReaderDate, formatReaderDateShort } from './formatReaderDate'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
+import { hasOpenLayer } from '../../../lib/layerStack'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
 import SpamGauge from './SpamGauge'
@@ -129,15 +130,17 @@ export default function MessageReader(
   const { seen, flagged } = useCachedSummaryFlags(folderPath, uid)
 
   // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
-  // replaced the list and needs a way back. An open modal owns Escape, so the reader stays put
-  // rather than backing out from under the picker, the confirm, or the attachment viewer.
+  // replaced the list and needs a way back. Any open layer owns Escape — the reader's own
+  // dialogs and anything else on the screen alike — so the reader stays put under it.
   useEffect(() => {
-    if (!onBack || picker || confirmDelete || viewed) return
+    if (!onBack) return
 
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) onBack() }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onBack()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, picker, confirmDelete, viewed])
+  }, [onBack])
 
   // The body is computed above the early returns because useInlineImages hangs off it and hooks
   // cannot be conditional; before the detail lands it works on an empty document.

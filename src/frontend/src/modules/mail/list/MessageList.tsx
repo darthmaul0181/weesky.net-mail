@@ -15,6 +15,7 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import { hasOpenLayer } from '../../../lib/layerStack'
 import { rolePathsOf } from '../folders/folderNodes'
 import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSearchMessages, useSetFlags } from '../queries'
 import MoveMessagesModal from '../MoveMessagesModal'
@@ -252,11 +253,11 @@ export default function MessageList(
     setPicker(null)
   }
 
-  // The dialogs render inside this root, so their Escape bubbles here: it is theirs, not the selection's.
-  const dialogOpen = expunging !== null || picker !== null || confirmingBulk || confirmingEmpty || advanced !== null
-
+  // The dialogs render inside this root, so their Escape bubbles here: it belongs to whatever
+  // layer is open, not to the selection. Asking the stack rather than listing the dialogs keeps
+  // the sixth one from being forgotten here.
   function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape' && count > 0 && !dialogOpen) {
+    if (event.key === 'Escape' && count > 0 && !hasOpenLayer()) {
       event.stopPropagation()
       selection.clear()
     }

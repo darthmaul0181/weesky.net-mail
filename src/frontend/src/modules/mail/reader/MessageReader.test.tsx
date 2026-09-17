@@ -8,6 +8,7 @@ import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
 import type { Contact } from '../../contacts/contactTypes'
 import { mailKeys } from '../queries'
 import MessageReader from './MessageReader'
+import Modal from '../../../components/Modal'
 import { formatReaderDateShort } from './formatReaderDate'
 
 const mocks = vi.hoisted(() => ({
@@ -1484,6 +1485,27 @@ describe('MessageReader', () => {
 
       fireEvent.keyDown(document.body, { key: 'Escape' })
       expect(onBack).toHaveBeenCalledTimes(1)
+    })
+
+    // A surface the reader has no flag for — the list's own dialogs sit beside it in the same
+    // screen. The stack knows about every one of them; a list of the reader's three never can.
+    // Dispatched on window, so the stack's document listener never marks the event handled
+    // either: the reader has to ask the stack rather than read defaultPrevented.
+    it('does not back out while a dialog it knows nothing about owns Escape', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(
+        <>
+          <MessageReader folderPath="INBOX" uid={2} onBack={onBack} />
+          <Modal title="Advanced search" onClose={vi.fn()}><p>body</p></Modal>
+        </>,
+        { wrapper })
+      await screen.findByText('Re: facture')
+
+      fireEvent.keyDown(window, { key: 'Escape' })
+
+      expect(onBack).not.toHaveBeenCalled()
     })
 
     // An Escape dispatched below both listeners reaches the picker's document handler and then
