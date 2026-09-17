@@ -171,6 +171,48 @@ describe('useLayer', () => {
     trigger.remove()
   })
 
+  it('does not reach for its opener when a layer below the top one closes', () => {
+    function Stack({ lower, upper }: { lower: boolean; upper: boolean }) {
+      return (
+        <div>
+          <button type="button">trigger</button>
+          {lower && <Dialog name="lower" />}
+          {upper && <Dialog name="upper" />}
+        </div>
+      )
+    }
+    const { rerender, unmount } = render(<Stack lower={false} upper={false} />)
+    const trigger = screen.getByRole('button', { name: 'trigger' })
+    trigger.focus()
+    rerender(<Stack lower upper={false} />)
+    rerender(<Stack lower upper />)
+    // The opener's own focus(), not the resulting activeElement: React DOM restores the selection
+    // it recorded before each commit, so a misplaced restore is undone before anything can read it.
+    const stolen = vi.spyOn(trigger, 'focus')
+
+    rerender(<Stack lower={false} upper />)
+
+    expect(stolen).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'upper one' })).toHaveFocus()
+    stolen.mockRestore()
+    unmount()
+  })
+
+  it('pushes no layer at all while the container ref holds nothing', () => {
+    const lower = vi.fn()
+    function Detached() {
+      const box = useRef<HTMLDivElement>(null)
+      useLayer({ active: true, ref: box })
+      return <p>no container</p>
+    }
+    const { unmount } = render(<div><Dialog name="lower" onEscape={lower} /><Detached /></div>)
+
+    press('Escape')
+
+    expect(lower).toHaveBeenCalledTimes(1)
+    unmount()
+  })
+
   it('leaves the stack empty once the layer goes', () => {
     const { unmount } = render(<Dialog name="dialog" />)
     expect(hasOpenLayer()).toBe(true)

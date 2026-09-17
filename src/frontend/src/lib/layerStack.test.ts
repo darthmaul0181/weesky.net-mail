@@ -9,9 +9,9 @@ function push(layer: Layer) {
   return handle
 }
 
-function press(key: string, init: KeyboardEventInit = {}) {
+function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = document) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
-  document.dispatchEvent(event)
+  target.dispatchEvent(event)
   return event
 }
 
@@ -49,16 +49,44 @@ describe('layerStack', () => {
     expect(upper).toHaveBeenCalledTimes(1)
   })
 
-  it('ignores an Escape a handler before it already prevented', () => {
+  it('ignores an Escape a handler nearer the target already prevented', () => {
     const onEscape = vi.fn()
-    const guard = (event: Event) => event.preventDefault()
-    document.addEventListener('keydown', guard)
+    // Where React delegates its own onKeyDown: nearer the target, so it runs first.
+    const root = document.createElement('div')
+    document.body.append(root)
+    root.addEventListener('keydown', event => event.preventDefault())
+    push({ onEscape })
+
+    press('Escape', {}, root)
+
+    expect(onEscape).not.toHaveBeenCalled()
+  })
+
+  it('ignores a Tab a handler nearer the target already prevented', () => {
+    const root = document.createElement('div')
+    document.body.append(root)
+    root.addEventListener('keydown', event => event.preventDefault())
+    push({ trap: boxOf('trap', 2) })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+
+    press('Tab', {}, root)
+
+    expect(document.activeElement).not.toBe(document.getElementById('trap-0'))
+  })
+
+  it('hears Escape before any listener the app registers later', () => {
+    const onEscape = vi.fn()
+    const after = vi.fn()
+    // A menu's own document listener, registered long after this module loaded.
+    const later = (event: Event) => after(event.defaultPrevented)
+    document.addEventListener('keydown', later)
     push({ onEscape })
 
     press('Escape')
 
-    document.removeEventListener('keydown', guard)
-    expect(onEscape).not.toHaveBeenCalled()
+    document.removeEventListener('keydown', later)
+    expect(onEscape).toHaveBeenCalledTimes(1)
+    expect(after).toHaveBeenCalledWith(true)
   })
 
   it('swallows Escape for a layer that declares no handler', () => {
@@ -137,22 +165,17 @@ describe('layerStack', () => {
     expect(isTopLayer(lower)).toBe(true)
   })
 
-  it('holds one document listener while the stack is not empty', () => {
+  it('adds no listener of its own on a push, and reacts to nothing once empty', () => {
     const add = vi.spyOn(document, 'addEventListener')
-    const remove = vi.spyOn(document, 'removeEventListener')
-    const keydown = (calls: [string, ...unknown[]][]) => calls.filter(([type]) => type === 'keydown')
+    const onEscape = vi.fn()
 
-    const lower = push({})
-    const upper = push({})
-    expect(keydown(add.mock.calls as [string, ...unknown[]][])).toHaveLength(1)
-
-    upper.remove()
-    expect(keydown(remove.mock.calls as [string, ...unknown[]][])).toHaveLength(0)
-
-    lower.remove()
-    expect(keydown(remove.mock.calls as [string, ...unknown[]][])).toHaveLength(1)
+    const handle = push({ onEscape })
+    expect(add.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(0)
     add.mockRestore()
-    remove.mockRestore()
+
+    handle.remove()
+    expect(press('Escape').defaultPrevented).toBe(false)
+    expect(onEscape).not.toHaveBeenCalled()
   })
 
   it('ignores a second removal of the same handle', () => {

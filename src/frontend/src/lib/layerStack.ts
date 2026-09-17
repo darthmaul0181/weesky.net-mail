@@ -29,13 +29,6 @@ function topEntry(): Entry | undefined {
   return stack[stack.length - 1]
 }
 
-function takeEscape(event: KeyboardEvent, layer: Layer) {
-  if (event.defaultPrevented) return
-  // Prevented even with no handler: the point of a layer is that nothing underneath reacts.
-  event.preventDefault()
-  layer.onEscape?.()
-}
-
 function keepTab(event: KeyboardEvent, container: HTMLElement) {
   const items = focusablesIn(container)
   if (items.length === 0) { event.preventDefault(); return }
@@ -47,11 +40,20 @@ function keepTab(event: KeyboardEvent, container: HTMLElement) {
 }
 
 function onKeyDown(event: KeyboardEvent) {
+  if (event.defaultPrevented) return
   const layer = topEntry()?.layer
   if (!layer) return
-  if (event.key === 'Escape') takeEscape(event, layer)
-  else if (event.key === 'Tab' && layer.trap) keepTab(event, layer.trap)
+  if (event.key === 'Escape') {
+    // Prevented even with no handler: the point of a layer is that nothing underneath reacts.
+    event.preventDefault()
+    layer.onEscape?.()
+  } else if (event.key === 'Tab' && layer.trap) keepTab(event, layer.trap)
 }
+
+// Registered once, at load, and never moved: re-adding it on each push would put it behind every
+// listener the app installed in between — an open menu would then eat a dialog's Escape. It
+// returns at once while the stack is empty. Bubble phase, so a React handler still goes first.
+if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown)
 
 /**
  * Opens a layer on top of the stack: Escape and Tab go to it alone until it is removed or
@@ -64,13 +66,10 @@ export function pushLayer(layer: Layer): LayerHandle {
       update(next: Layer) { entry.layer = next },
       remove() {
         const at = stack.indexOf(entry)
-        if (at === -1) return
-        stack.splice(at, 1)
-        if (stack.length === 0) document.removeEventListener('keydown', onKeyDown)
+        if (at !== -1) stack.splice(at, 1)
       },
     },
   }
-  if (stack.length === 0) document.addEventListener('keydown', onKeyDown)
   stack.push(entry)
   return entry.handle
 }

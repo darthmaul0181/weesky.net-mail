@@ -1,5 +1,5 @@
 import { useInsertionEffect, useLayoutEffect, useRef, type RefObject } from 'react'
-import { focusablesIn, pushLayer, type LayerHandle } from '../lib/layerStack'
+import { focusablesIn, isTopLayer, pushLayer, type LayerHandle } from '../lib/layerStack'
 
 interface Options {
   active: boolean
@@ -24,9 +24,9 @@ export function useLayer({
   const opener = useRef<HTMLElement | null>(null)
   const latest = useRef({ onEscape, initialFocusRef, returnFocusRef })
 
-  // Before any DOM mutation of this commit, which is the last moment the opener still holds
-  // focus: a child rendered with `autoFocus` takes it during the layout phase, before the effects
-  // below run. Under StrictMode's remount focus is already inside — keep what was captured.
+  // React commits a child's `autoFocus` in the layout phase, before any layout effect, so no
+  // layout effect can still see the opener. An insertion effect can; and one that finds focus
+  // already inside keeps what it captured, rather than taking the layer's own field for it.
   useInsertionEffect(() => {
     if (!active) return
     const focused = document.activeElement as HTMLElement | null
@@ -45,15 +45,21 @@ export function useLayer({
   // re-created by a render must never move it above the one that opened after it.
   useLayoutEffect(() => {
     if (!active) return undefined
-    const container = ref?.current ?? null
+    const container = ref ? ref.current : null
+    // A ref was given but holds nothing: no container, so no trap, and a trapless layer here would
+    // swallow Escape and mask the trap under it. The old focus-trap hook no-opped the same way.
+    if (ref && !container) return undefined
     handle.current = pushLayer({ onEscape: latest.current.onEscape, trap: container })
     if (container && autoFocus) {
       (latest.current.initialFocusRef?.current ?? focusablesIn(container)[0] ?? container).focus()
     }
     return () => {
+      // Read before the removal: a layer closing under another one must leave focus where the
+      // user is, not yank it back to its own opener.
+      const wasTop = !!handle.current && isTopLayer(handle.current)
       handle.current?.remove()
       handle.current = null
-      if (!container || !restoreFocus) return
+      if (!container || !restoreFocus || !wasTop) return
       // Judged at close, not at open: an opener that was plainly connected may have gone since.
       // <body> is excluded because body.focus() is a silent no-op — the "focus drops to nowhere"
       // this exists to prevent.
