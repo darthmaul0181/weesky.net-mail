@@ -57,8 +57,14 @@ describe('ContextDrawer', () => {
   it('closes on Escape', async () => {
     const onClose = vi.fn()
     drawer(true, onClose)
+    // The route effect calls it once at mount, which a bare toHaveBeenCalled() is satisfied by
+    // before the key is ever pressed — this case was green through a drawer that had stopped
+    // answering Escape at all.
+    onClose.mockClear()
+
     await userEvent.keyboard('{Escape}')
-    expect(onClose).toHaveBeenCalled()
+
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   // A dialog opened from a row of the drawer (a calendar's rename, a group's delete) owns

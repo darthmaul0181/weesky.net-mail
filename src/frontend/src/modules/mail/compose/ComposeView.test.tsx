@@ -953,21 +953,26 @@ describe('drafts in the composer', () => {
     expect(router.state.location.pathname).toBe('/mail/compose')
   })
 
-  // No ✕: both of its answers are on its buttons, so Escape means the harmless one.
+  // No ✕: both of its answers are on its buttons, so Escape means the harmless one. With no ✕
+  // to be the dialog's first focusable, that first control is Keep editing.
   it('the leave dialog is a named alertdialog with no ✕, and Escape keeps editing', async () => {
     const kept = renderCompose('INBOX', withParts)
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    const trigger = screen.getByRole('button', { name: 'Close' })
+    trigger.focus()
+    fireEvent.click(trigger)
     const modal = await discardModal()
     expect(screen.getByRole('alertdialog', { name: 'Save this draft?' })).toBe(modal)
     expect(within(modal).queryByRole('button', { name: 'Close' })).toBeNull()
+    expect(within(modal).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
 
     fireEscape()
 
     await waitFor(() => expect(screen.queryByText('Save this draft?')).toBeNull())
     expect(kept.router.state.location.pathname).toBe('/mail/compose')
     expect(mocks.deleteAttachment).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
   })
 
   it('the leave dialog offers Save draft / Discard / Keep editing', async () => {
@@ -1362,15 +1367,20 @@ describe('what a plain-text switch costs', () => {
   it('is a named alertdialog with no ✕, and Escape cancels the switch', () => {
     editorState.html = '<div><b>bold</b></div>'
     renderCompose()
-    fireEvent.click(plainToggle())
+    const trigger = plainToggle()
+    trigger.focus()
+    fireEvent.click(trigger)
     const modal = screen.getByRole('alertdialog', { name: 'Switch to plain text?' })
     expect(within(modal).queryByRole('button', { name: 'Close' })).toBeNull()
+    // No ✕, so the first control is the first focusable the layer finds.
+    expect(within(modal).getByRole('button', { name: 'Keep formatting' })).toHaveFocus()
 
     fireEscape()
 
     expect(screen.queryByText('Switch to plain text?')).toBeNull()
     expect(screen.queryByTestId('compose-text-editor')).toBeNull()
     expect(screen.getByTestId('compose-editor')).toBeInTheDocument()
+    expect(plainToggle()).toHaveFocus()
   })
 
   it('keeps the editor when the switch is declined', () => {

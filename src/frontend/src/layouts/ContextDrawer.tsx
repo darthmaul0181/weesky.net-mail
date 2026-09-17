@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import MenuIcon from '../icons/MenuIcon'
-import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap'
+import { useLayer } from '../hooks/useLayer'
 import { useViewport } from '../hooks/useViewport'
-import { hasOpenLayer } from '../lib/layerStack'
 
 interface Props {
   open: boolean
@@ -38,17 +37,9 @@ export default function ContextDrawer({ open, onClose, children }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (open) onCloseRef.current() }, [pathname, search])
 
-  useDialogFocusTrap(panel, { active: open })
-
-  useEffect(() => {
-    if (!open) return
-    // A dialog opened from inside the drawer owns Escape; the column stays under it.
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  // A layer rather than a bare trap plus a listener of its own: the stack gives Escape to the
+  // topmost surface, so a dialog opened from a row of the drawer answers it and the column stays.
+  useLayer({ active: open, ref: panel, onEscape: onClose })
 
   return (
     <div className={`context-drawer${open ? ' is-open' : ''}`}>
