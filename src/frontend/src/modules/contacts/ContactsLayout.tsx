@@ -429,10 +429,8 @@ export default function ContactsLayout() {
           )}
           {!(phone && !selectedId) && (
             <div className="contacts-card" data-testid="contact-card">
-              {/* Withheld while the confirm is open so its Escape does not back out from under
-                  the dialog — the ← is behind the overlay by then and comes back with it. */}
               <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
-                onBack={phone && !pendingDelete ? backToList : undefined}
+                onBack={phone ? backToList : undefined}
                 bottomActions={phone}
                 onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)}
                 onWrite={writeTo}

@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 import MenuIcon from '../icons/MenuIcon'
 import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap'
 import { useViewport } from '../hooks/useViewport'
+import { hasOpenLayer } from '../lib/layerStack'
 
 interface Props {
   open: boolean
@@ -41,7 +42,10 @@ export default function ContextDrawer({ open, onClose, children }: Props) {
 
   useEffect(() => {
     if (!open) return
-    function onKey(event: KeyboardEvent) { if (event.key === 'Escape') onClose() }
+    // A dialog opened from inside the drawer owns Escape; the column stays under it.
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onClose()
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])

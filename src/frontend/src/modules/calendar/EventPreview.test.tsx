@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
+import DeleteConfirmModal from '../../components/DeleteConfirmModal.jsx'
 import EventPreview from './EventPreview'
 import type { EventDetail, Occurrence } from './calendarTypes'
 
@@ -208,6 +209,20 @@ describe('EventPreview', () => {
     draw(DENTIST, anchorAt(200, 300), { onClose })
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
+  })
+
+  // The bubble is what launched the confirm and is the screen behind it: one Escape must answer
+  // the dialog and leave the bubble standing.
+  it('stays open when a dialog over it answers Escape', async () => {
+    const onClose = vi.fn()
+    const onDialogClose = vi.fn()
+    draw(DENTIST, anchorAt(200, 300), { onClose })
+    render(<DeleteConfirmModal entityLabel="Dentist" onConfirm={vi.fn()} onClose={onDialogClose} />)
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(onDialogClose).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('closes on a click outside itself', async () => {

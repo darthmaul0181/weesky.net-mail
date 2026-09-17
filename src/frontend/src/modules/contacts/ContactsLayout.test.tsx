@@ -700,15 +700,29 @@ describe('ContactsLayout on a phone', () => {
     expect(screen.queryByText('Bruno')).not.toBeInTheDocument()
   })
 
-  // The confirm owns Escape while it is open: backing out from under it would leave a dialog
-  // acting on a contact the screen no longer shows.
-  it('withholds the card back while the delete confirm is open', async () => {
+  // The confirm owns Escape while it is open: one key closes it and leaves the card where it is,
+  // rather than also backing out and leaving a dialog acting on a contact nothing shows.
+  it('Escape under the delete confirm closes the confirm alone', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await bookLoaded()
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    expect(screen.getByRole('alertdialog', { name: 'Confirm deletion' })).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+  })
+
+  // Dispatched on window, so the stack's own document listener never runs and cannot mark the
+  // key handled: the card has to ask the stack itself.
+  it('does not back out on an Escape the stack never saw, under the confirm', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
     await bookLoaded()
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
 
-    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
 
     expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')

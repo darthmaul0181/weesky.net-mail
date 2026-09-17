@@ -19,6 +19,7 @@ import { myAnswerOf } from './myAnswer'
 import { useEvent } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
+import { hasOpenLayer } from '../../lib/layerStack'
 
 export interface EventPreviewProps {
   occurrence: Occurrence
@@ -63,7 +64,10 @@ export default function EventPreview({
   const { ref, left, top } = usePopoverPosition(rect)
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    // A dialog the bubble launched owns Escape; the bubble stays put under it.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onClose()
+    }
     const outside = (event: MouseEvent) => {
       const target = event.target as Node
       if (!anchor.contains(target) && !(target as Element).closest?.('.event-preview')) onClose()

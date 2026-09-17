@@ -21,6 +21,7 @@ import { displayNameOf, initialsOf } from './contactName'
 import type { Contact, ContactDetailPostal } from './contactTypes'
 import { websiteHref } from './contactWebsite'
 import { useContact } from './queries'
+import { hasOpenLayer } from '../../lib/layerStack'
 import { useContactPhotoUrl } from './useContactPhotoUrl'
 
 interface Props {
@@ -70,11 +71,13 @@ export default function ContactCard({
     contact?.id ?? null, detail?.hasPhoto ?? false, detail?.cardHash ?? null)
 
   // Escape mirrors the ← button, MessageReader's arrangement, and like it exists only where the
-  // card has replaced the list. The layout withholds onBack while its delete confirm is open, so
-  // Escape never backs out from under the dialog.
+  // card has replaced the list. Any open layer owns the key, so the card never backs out from
+  // under a dialog — its own delete confirm or anything else on the screen.
   useEffect(() => {
     if (!onBack) return
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onBack() }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onBack()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onBack])

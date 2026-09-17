@@ -3,6 +3,7 @@ import { act, render, renderHook, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import ContextDrawer, { useContextDrawer } from './ContextDrawer'
+import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import { changeViewport, mockViewport, resetViewport } from '../test-utils'
 
 afterEach(resetViewport)
@@ -58,6 +59,27 @@ describe('ContextDrawer', () => {
     drawer(true, onClose)
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
+  })
+
+  // A dialog opened from a row of the drawer (a calendar's rename, a group's delete) owns
+  // Escape: closing the column under the answer being given would take the row with it.
+  it('stays open when a dialog over it answers Escape', async () => {
+    const onClose = vi.fn()
+    const onDialogClose = vi.fn()
+    render(
+      <MemoryRouter>
+        <ContextDrawer open onClose={onClose}>
+          <button type="button">Inbox</button>
+        </ContextDrawer>
+        <DeleteConfirmModal entityLabel="Reports" onConfirm={vi.fn()} onClose={onDialogClose} />
+      </MemoryRouter>,
+    )
+    onClose.mockClear() // the route effect calls it once at mount, as it does above
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(onDialogClose).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('closes on a scrim click', async () => {
