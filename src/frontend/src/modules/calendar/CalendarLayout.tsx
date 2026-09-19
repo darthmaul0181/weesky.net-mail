@@ -527,6 +527,10 @@ export default function CalendarLayout() {
   // creation found it under the same `new##0` key and reused it: a click on the grid put its slot
   // in the URL and opened the draft of the last "New event" — the next hour of the clock.
   if (!editorKey && seed) setSeed(null)
+  // The discard question dies with the editor it belongs to, whatever took the route away — the
+  // browser's Back never passes through `backToGrid`. Hidden is not dropped: a flag left standing
+  // greeted the next editor with "Discard changes?" over an empty form.
+  if (!inEditor && discarding) setDiscarding(false)
   // Latched on the seed: `occurrenceFound` is recomputed every render, and any invalidation — one
   // of this module's own mutations, a focus refetch — can bring the window back without the
   // instance being edited, which flipped this false, unmounted the keyed editor and threw away
@@ -624,12 +628,7 @@ export default function CalendarLayout() {
     }
   }
 
-  const backToGrid = () => {
-    // The question belongs to the editor: left standing it would ask, over the grid, whether to
-    // discard what has just been saved.
-    setDiscarding(false)
-    navigate(`/calendar${searchWith()}`, { replace: true })
-  }
+  const backToGrid = () => navigate(`/calendar${searchWith()}`, { replace: true })
   /** The editor's one way out, whichever of the four was taken — the ✕, Escape, a press on the
       backdrop, or the phone screen's own Escape. */
   const closeEditor = (dirty: boolean) => (dirty ? setDiscarding(true) : backToGrid())

@@ -813,6 +813,26 @@ describe('CalendarLayout', () => {
     expect(screen.queryByText('Discard changes?')).toBeNull()
   })
 
+  // Hiding the question is not dropping it: left standing in the state, it greeted the next
+  // editor — an empty New event asking whether to discard, and a Discard that threw the user out of
+  // the form they had just opened.
+  it('leaves no discard question behind for the next editor', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const { router } = mount(
+      '/calendar/e1/edit?view=week&date=2026-09-16', '/calendar?view=week&date=2026-09-16')
+
+    await userEvent.type(await screen.findByLabelText('Title'), '!')
+    fireEscape()
+    await screen.findByText('Discard changes?')
+    await act(async () => { await router.navigate(-1) })
+
+    await act(async () => { await router.navigate('/calendar/new?view=week&date=2026-09-16') })
+
+    expect(await screen.findByLabelText('Title')).toHaveValue('')
+    expect(screen.queryByText('Discard changes?')).toBeNull()
+  })
+
   // A save in flight owns the editor. Without that, Escape opened the discard question over a
   // write already on the wire, and the save's own `backToGrid` then left it standing over the grid,
   // asking whether to discard what had just been saved.
@@ -1060,6 +1080,21 @@ describe('CalendarLayout', () => {
     await screen.findByText('Delete a recurring event')
     expect(screen.getByText(/repeats/)).toHaveTextContent('Repeats')
     expect(document.body.textContent).not.toMatch(/FREQ=/)
+  })
+
+  // The other half of the same rule: an opener still on screen is where focus belongs, and the
+  // region it covered is the fallback rather than the answer.
+  it('hands focus back to the button that opened it', async () => {
+    renderAt('/calendar?view=week&date=2026-09-16')
+    // The sidebar's, the first of the two: the floating + carries the same name, drawn at every
+    // width and hidden by CSS.
+    const opener = (await screen.findAllByRole('button', { name: 'New event' }))[0]
+    await userEvent.click(opener)
+    await screen.findByLabelText('Title')
+
+    fireEscape()
+
+    await waitFor(() => expect(opener).toHaveFocus())
   })
 
   // The Edit that opened the editor left with the bubble it sat in, so there is no opener to go
