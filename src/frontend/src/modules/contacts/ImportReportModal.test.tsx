@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import ImportReportModal from './ImportReportModal'
 import type { ContactImportReport } from './contactTypes'
+import { fireEscape, pressBackdrop } from '../../test-utils'
 
 const report = (fields: Partial<ContactImportReport> = {}): ContactImportReport => ({
   created: 0, merged: 0, skipped: 0, failed: 0, totalErrors: 0, errors: [], ...fields,
@@ -44,13 +45,25 @@ describe('ImportReportModal', () => {
     expect(screen.queryByText(/line /i)).not.toBeInTheDocument()
   })
 
-  // The cross is the only way out, as in every dialog on the site.
-  it('closes on the cross', async () => {
+  it('is a dialog named by its own title', () => {
+    render(<ImportReportModal report={report()} onClose={vi.fn()} />)
+
+    expect(screen.getByRole('dialog', { name: 'Import finished' }))
+      .toHaveAttribute('aria-modal', 'true')
+  })
+
+  // The three ways out of every dialog on the site.
+  it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
     const onClose = vi.fn()
     render(<ImportReportModal report={report()} onClose={onClose} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
 
-    expect(onClose).toHaveBeenCalled()
+    fireEscape()
+    expect(onClose).toHaveBeenCalledTimes(2)
+
+    pressBackdrop()
+    expect(onClose).toHaveBeenCalledTimes(3)
   })
 })

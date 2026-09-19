@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { CalendarImportReport } from './calendarTypes'
-import ModalOverlay from '../../components/ModalOverlay'
+import Modal from '../../components/Modal'
 
 interface Props {
   report: CalendarImportReport
@@ -25,36 +25,28 @@ export default function CalendarImportReportModal({ report, onClose }: Props) {
   const hidden = report.totalErrors - report.errors.length
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="modal" onClick={event => event.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{t('import.reportTitle')}</span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
-            onClick={onClose}>✕</button>
-        </div>
-
-        <div className="import-counters is-grid">
-          {counters.map(([key, value, label]) => (
-            <div className="import-counter" key={key}>
-              <span className="import-counter-value">{value}</span>
-              <span className="import-counter-label">{label}</span>
-            </div>
-          ))}
-        </div>
-
-        {report.errors.length > 0 && (
-          <ul className="import-errors">
-            {/* Keyed by position: one entry can carry the same reason twice, and the list never
-                reorders. */}
-            {report.errors.map((error, index) => (
-              <li key={index}>{t('import.errorLine', { line: error.line, reason: error.reason })}</li>
-            ))}
-            {hidden > 0 && (
-              <li className="import-errors-more">{t('import.moreErrors', { count: hidden })}</li>
-            )}
-          </ul>
-        )}
+    <Modal title={t('import.reportTitle')} onClose={onClose}>
+      <div className="import-counters is-grid">
+        {counters.map(([key, value, label]) => (
+          <div className="import-counter" key={key}>
+            <span className="import-counter-value">{value}</span>
+            <span className="import-counter-label">{label}</span>
+          </div>
+        ))}
       </div>
-    </ModalOverlay>
+
+      {report.errors.length > 0 && (
+        <ul className="import-errors">
+          {/* Keyed by position: one entry can carry the same reason twice, and the list never
+              reorders. */}
+          {report.errors.map((error, index) => (
+            <li key={index}>{t('import.errorLine', { line: error.line, reason: error.reason })}</li>
+          ))}
+          {hidden > 0 && (
+            <li className="import-errors-more">{t('import.moreErrors', { count: hidden })}</li>
+          )}
+        </ul>
+      )}
+    </Modal>
   )
 }

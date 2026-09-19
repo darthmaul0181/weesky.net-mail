@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import CalendarDialog from './CalendarDialog'
 import { CALENDAR_COLORS } from './calendarColors'
+import { fireEscape, pressBackdrop } from '../../test-utils'
 
 function open(props: Partial<Parameters<typeof CalendarDialog>[0]> = {}) {
   const onSubmit = vi.fn()
@@ -49,14 +50,32 @@ describe('CalendarDialog', () => {
     expect(onSubmit).toHaveBeenCalledWith({ displayName: 'Work', color: '#abcdef' })
   })
 
-  it('closes on the ✕ and on nothing else', async () => {
+  it('is a dialog named by its own title', () => {
+    open()
+    expect(screen.getByRole('dialog', { name: 'New calendar' }))
+      .toHaveAttribute('aria-modal', 'true')
+  })
+
+  it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
     const { onClose } = open()
+
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onClose).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    fireEscape()
+    expect(onClose).toHaveBeenCalledTimes(2)
+
+    pressBackdrop()
+    expect(onClose).toHaveBeenCalledTimes(3)
   })
 
   it('opens on the field its door named', () => {
     open({ initialName: 'Work', focus: 'colour' })
     expect(screen.getByLabelText('Hex code')).toHaveFocus()
+  })
+
+  it('opens on the name when that is the door', () => {
+    open()
+    expect(screen.getByLabelText('Name')).toHaveFocus()
   })
 })

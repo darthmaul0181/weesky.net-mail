@@ -5,7 +5,7 @@ import { ApiError } from '../../api.js'
 import { newMessageSeed } from '../mail/compose/composeSeed'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import FloatingAction from '../../components/FloatingAction'
-import ModalOverlay from '../../components/ModalOverlay'
+import Modal from '../../components/Modal'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
 import { useViewport } from '../../hooks/useViewport'
@@ -441,22 +441,18 @@ export default function ContactsLayout() {
         </div>
       )}
 
+      {/* An alertdialog: it interrupts the save to say the card moved under it, and offers the one
+          way forward. */}
       {conflict && (
-        <ModalOverlay onClose={() => setConflict(false)}>
-          <div className="modal" onClick={event => event.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">{t('layout.conflictTitle')}</span>
-              <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
-                onClick={() => setConflict(false)}>✕</button>
-            </div>
-            <p>{t('layout.conflictBody')}</p>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-primary" onClick={reloadEdited}>
-                {t('layout.conflictReload')}
-              </button>
-            </div>
+        <Modal role="alertdialog" title={t('layout.conflictTitle')}
+          onClose={() => setConflict(false)}>
+          <p>{t('layout.conflictBody')}</p>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-primary" onClick={reloadEdited}>
+              {t('layout.conflictReload')}
+            </button>
           </div>
-        </ModalOverlay>
+        </Modal>
       )}
 
       {pendingDelete && (

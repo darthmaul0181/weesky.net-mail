@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import ContactCard from './ContactCard'
+import Modal from '../../components/Modal'
 import type { Contact, ContactDetail } from './contactTypes'
 
 vi.mock('../../api.js', () => ({
@@ -60,6 +62,41 @@ function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}) {
 }
 
 describe('ContactCard', () => {
+  // The card is a page rather than a layer: it does not trap Tab and it must not swallow a key
+  // something over it owns, so its back-out asks the stack instead of joining it. Dispatched on
+  // `window`, where the listener is — the stack's own listener never runs on that path, so a bare
+  // `defaultPrevented` check could not have seen the dialog.
+  describe('the way back', () => {
+    function card(extra?: ReactNode) {
+      const onBack = vi.fn()
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <ContactCard contact={bruno} onBack={onBack} onEdit={vi.fn()} onDelete={vi.fn()}
+            onToggleFavorite={vi.fn()} onWrite={vi.fn()} />
+          {extra}
+        </QueryClientProvider>,
+      )
+      return onBack
+    }
+
+    it('backs out on Escape while it is the whole screen', () => {
+      const onBack = card()
+
+      fireEvent.keyDown(window, { key: 'Escape' })
+
+      expect(onBack).toHaveBeenCalledTimes(1)
+    })
+
+    it('stays put on an Escape any open dialog owns', () => {
+      const onBack = card(<Modal title="Rename group" onClose={vi.fn()}><p>body</p></Modal>)
+
+      fireEvent.keyDown(window, { key: 'Escape' })
+
+      expect(onBack).not.toHaveBeenCalled()
+    })
+  })
+
   it('heads the card with the display name', () => {
     setup()
 

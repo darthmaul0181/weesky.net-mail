@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import GroupNameModal from './GroupNameModal'
+import { fireEscape, pressBackdrop } from '../../test-utils'
 
 function renderModal(props: Partial<Parameters<typeof GroupNameModal>[0]> = {}) {
   const onSubmit = vi.fn()
@@ -71,12 +72,32 @@ describe('GroupNameModal', () => {
     expect(field()).toHaveAttribute('maxLength', '255')
   })
 
-  it('closes on the ✕ and never submits from it', async () => {
+  it('is a dialog named by its own title', () => {
+    renderModal()
+
+    expect(screen.getByRole('dialog', { name: 'New group' }))
+      .toHaveAttribute('aria-modal', 'true')
+  })
+
+  // Le champ, pas la ✕ : une boîte ouverte pour être remplie ouvre sur son champ, et c'est le ref
+  // qui le dit maintenant — `autoFocus` est posé avant que la couche ne déplace le focus.
+  it('opens on the name field', () => {
+    renderModal()
+
+    expect(field()).toHaveFocus()
+  })
+
+  it('closes on the ✕, on Escape and on a press on the backdrop, and never submits', async () => {
     const { onClose, onSubmit } = renderModal({ initialName: 'Friends' })
 
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
 
-    expect(onClose).toHaveBeenCalled()
+    fireEscape()
+    expect(onClose).toHaveBeenCalledTimes(2)
+
+    pressBackdrop()
+    expect(onClose).toHaveBeenCalledTimes(3)
     expect(onSubmit).not.toHaveBeenCalled()
   })
 

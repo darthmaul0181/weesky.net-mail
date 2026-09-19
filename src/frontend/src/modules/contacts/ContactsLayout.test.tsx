@@ -7,7 +7,7 @@ import ContactsLayout from './ContactsLayout'
 import type { Contact, ContactDetail } from './contactTypes'
 import type { ContactGroup } from './contactGroupTypes'
 import { CONTACT_DRAG_MIME } from './dragContacts'
-import { mockViewport, resetViewport, settle } from '../../test-utils'
+import { fireEscape, mockViewport, pressBackdrop, resetViewport, settle } from '../../test-utils'
 
 afterEach(resetViewport)
 
@@ -430,6 +430,29 @@ describe('ContactsLayout', () => {
 
       await waitFor(() => expect(api.updateContact).toHaveBeenCalled())
       expect(api.updateContact.mock.calls[0][1]).not.toHaveProperty('cardHash')
+    })
+
+    // It interrupts the save to say the card moved under it, so it is named and it takes the
+    // three ways out every other dialog takes.
+    it('names the conflict box and closes it on Escape and on the backdrop', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+
+      await save()
+      await conflictBox()
+      expect(screen.getByRole('alertdialog', { name: 'This contact changed elsewhere' }))
+        .toHaveAttribute('aria-modal', 'true')
+
+      fireEscape()
+      await waitFor(() => expect(
+        screen.queryByRole('alertdialog', { name: 'This contact changed elsewhere' })).toBeNull())
+
+      await save()
+      await conflictBox()
+      pressBackdrop()
+      await waitFor(() => expect(
+        screen.queryByRole('alertdialog', { name: 'This contact changed elsewhere' })).toBeNull())
     })
 
     it('offers to reload when the write is refused as stale', async () => {
