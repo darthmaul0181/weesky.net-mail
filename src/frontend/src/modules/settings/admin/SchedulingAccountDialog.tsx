@@ -4,8 +4,7 @@ import PencilIcon from '../../../icons/PencilIcon.jsx'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
 import { ApiError } from '../../../api.js'
-import ModalOverlay from '../../../components/ModalOverlay'
-import { useDialogFocusTrap } from '../../../hooks/useDialogFocusTrap'
+import Modal from '../../../components/Modal'
 import { apiErrorMessage, messageForCode } from '../../../lib/apiErrorMessage'
 import { isValidHost, isValidPort, SECURITY_OPTIONS, securityLabel } from '../../../lib/mailEndpointValidation'
 import { schedulingErrorMessage } from './schedulingAccountErrors'
@@ -15,7 +14,6 @@ import {
 } from './useSchedulingAccount'
 
 const PASSWORD_MAX_BYTES = 512
-const DIALOG_TITLE_ID = 'svc-account-dialog-title'
 
 function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).length
@@ -39,9 +37,7 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   const { t } = useTranslation('admin')
   const saveAccount = useSaveSchedulingAccount()
   const testAccount = useTestSchedulingAccount()
-  const dialogRef = useRef<HTMLDivElement>(null)
   const hostFieldRef = useRef<HTMLInputElement>(null)
-  useDialogFocusTrap(dialogRef, { initialFocusRef: hostFieldRef, fallbackFocusRef: returnFocusRef })
 
   const [host, setHost] = useState(account.host ?? '')
   const [port, setPort] = useState(String(account.port ?? 587))
@@ -51,26 +47,22 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   const [error, setError] = useState<string | null>(null)
 
   const pending = saveAccount.isPending
-  const busy = pending || testAccount.isPending
+  // Only a save in flight blocks the dialog's ways out — a connection test answers in place and
+  // never risks losing what was typed, so it must not also freeze the ✕ and Escape.
+  const anyBusy = pending || testAccount.isPending
 
   // A stored None stays listed where the server now refuses it, so the admin can see it and move away.
   const securityOptions = SECURITY_OPTIONS.filter(o =>
     o.value !== 'None' || account.allowCleartext || account.security === 'None')
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !pending) onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, pending])
-
-  // Disabling the focused Save or Tester drops focus to <body>; once the work settles, hand it back.
+  // Disabling the focused Save or Tester drops focus to <body>; once the work settles, hand it
+  // back — to the button itself once it is usable again, else to the field the dialog opens on.
   const actionRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
-    const dialog = dialogRef.current
-    if (busy || !dialog || dialog.contains(document.activeElement)) return
+    if (anyBusy || document.activeElement !== document.body) return
     const action = actionRef.current
-    ;(action && dialog.contains(action) && !action.matches(':disabled') ? action : dialog).focus()
-  }, [busy])
+    ;(action && !action.matches(':disabled') ? action : hostFieldRef.current)?.focus()
+  }, [anyBusy])
 
   const hostValid = isValidHost(host)
   const portValid = isValidPort(port)
@@ -108,10 +100,6 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   }
   const testResult = testVerdict()
 
-  function requestClose() {
-    if (!pending) onClose()
-  }
-
   function handleTest() {
     if (!formValid) return
     actionRef.current = document.activeElement as HTMLElement
@@ -139,80 +127,68 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   }
 
   return (
-    <ModalOverlay onClose={requestClose}>
-      <div className="modal" ref={dialogRef} tabIndex={-1} onClick={e => e.stopPropagation()}
-        role="dialog" aria-modal="true" aria-labelledby={DIALOG_TITLE_ID}>
-        <div className="modal-header">
-          <span className="modal-title" id={DIALOG_TITLE_ID}><PencilIcon /> {t('scheduling.dialogTitle')}</span>
-          <button type="button" className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
-            disabled={pending} onClick={requestClose}>✕</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          {error && <div className="alert alert-error" role="alert">{error}</div>}
+    <Modal icon={<PencilIcon />} title={t('scheduling.dialogTitle')} onClose={onClose} busy={pending}
+      initialFocusRef={hostFieldRef} returnFocusRef={returnFocusRef} onSubmit={handleSubmit}>
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
 
-          <div className="field-h">
-            <label htmlFor="svc-account-host">{t('scheduling.host')}</label>
-            <input id="svc-account-host" type="text" value={host} ref={hostFieldRef}
-              className={host && !hostValid ? 'is-error' : undefined}
-              onChange={e => setHost(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="svc-account-port">{t('scheduling.port')}</label>
-            <input id="svc-account-port" type="number" min={1} max={65535} value={port}
-              className={!portValid ? 'is-error' : undefined}
-              onChange={e => setPort(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="svc-account-security">{t('scheduling.security')}</label>
-            <select id="svc-account-security" value={security}
-              onChange={e => setSecurity(e.target.value as SchedulingSecurity)}>
-              {securityOptions.map(o => <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
-            </select>
-          </div>
-          <div className="field-h">
-            <label htmlFor="svc-account-login">{t('scheduling.login')}</label>
-            <input id="svc-account-login" type="text" value={login}
-              className={login && !loginValid ? 'is-error' : undefined}
-              onChange={e => setLogin(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="svc-account-password">{t('scheduling.password')}</label>
-            <input id="svc-account-password" type="password" autoComplete="new-password" value={password}
-              className={passwordFilled && !passwordValid ? 'is-error' : undefined}
-              placeholder={passwordStoredNoteShown ? t('scheduling.passwordUnchanged') : undefined}
-              onChange={e => setPassword(e.target.value)} />
-          </div>
-          {passwordStoredNoteShown && (
-            <p className="settings-note svc-account-field-indent">{t('scheduling.passwordStoredNote')}</p>
-          )}
-          {passwordRequired && !passwordFilled && (
-            <p className="settings-note is-warn svc-account-field-indent">{t('scheduling.passwordRequiredHint')}</p>
-          )}
-
-          {testResult && (
-            <div className={`svc-account-test-result svc-account-field-indent${testResult.ok ? ' is-ok' : ' is-fail'}`}
-              role="status">
-              {testResult.ok ? <ShieldCheckIcon size={16} /> : <ShieldAlertIcon size={16} />}
-              <span>{testResult.message}</span>
-            </div>
-          )}
-
-          <div className="folder-pick-submit">
-            <button type="button" className="btn btn-ghost btn-auto svc-account-test-btn"
-              disabled={!formValid || testAccount.isPending}
-              aria-label={t('scheduling.testConnection')} aria-busy={testAccount.isPending} onClick={handleTest}>
-              {testAccount.isPending ? <span className="spinner" /> : t('scheduling.testConnection')}
-            </button>
-            <button type="button" className="btn btn-ghost btn-auto" disabled={pending} onClick={requestClose}>
-              {t('actions.cancel', { ns: 'common' })}
-            </button>
-            <button type="submit" className="btn btn-primary btn-auto" disabled={pending || !formValid}
-              aria-label={t('actions.save', { ns: 'common' })} aria-busy={pending}>
-              {pending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
-            </button>
-          </div>
-        </form>
+      <div className="field-h">
+        <label htmlFor="svc-account-host">{t('scheduling.host')}</label>
+        <input id="svc-account-host" type="text" value={host} ref={hostFieldRef}
+          className={host && !hostValid ? 'is-error' : undefined}
+          onChange={e => setHost(e.target.value)} />
       </div>
-    </ModalOverlay>
+      <div className="field-h">
+        <label htmlFor="svc-account-port">{t('scheduling.port')}</label>
+        <input id="svc-account-port" type="number" min={1} max={65535} value={port}
+          className={!portValid ? 'is-error' : undefined}
+          onChange={e => setPort(e.target.value)} />
+      </div>
+      <div className="field-h">
+        <label htmlFor="svc-account-security">{t('scheduling.security')}</label>
+        <select id="svc-account-security" value={security}
+          onChange={e => setSecurity(e.target.value as SchedulingSecurity)}>
+          {securityOptions.map(o => <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
+        </select>
+      </div>
+      <div className="field-h">
+        <label htmlFor="svc-account-login">{t('scheduling.login')}</label>
+        <input id="svc-account-login" type="text" value={login}
+          className={login && !loginValid ? 'is-error' : undefined}
+          onChange={e => setLogin(e.target.value)} />
+      </div>
+      <div className="field-h">
+        <label htmlFor="svc-account-password">{t('scheduling.password')}</label>
+        <input id="svc-account-password" type="password" autoComplete="new-password" value={password}
+          className={passwordFilled && !passwordValid ? 'is-error' : undefined}
+          placeholder={passwordStoredNoteShown ? t('scheduling.passwordUnchanged') : undefined}
+          onChange={e => setPassword(e.target.value)} />
+      </div>
+      {passwordStoredNoteShown && (
+        <p className="settings-note svc-account-field-indent">{t('scheduling.passwordStoredNote')}</p>
+      )}
+      {passwordRequired && !passwordFilled && (
+        <p className="settings-note is-warn svc-account-field-indent">{t('scheduling.passwordRequiredHint')}</p>
+      )}
+
+      {testResult && (
+        <div className={`svc-account-test-result svc-account-field-indent${testResult.ok ? ' is-ok' : ' is-fail'}`}
+          role="status">
+          {testResult.ok ? <ShieldCheckIcon size={16} /> : <ShieldAlertIcon size={16} />}
+          <span>{testResult.message}</span>
+        </div>
+      )}
+
+      <div className="folder-pick-submit">
+        <button type="button" className="btn btn-ghost btn-auto svc-account-test-btn"
+          disabled={!formValid || testAccount.isPending}
+          aria-label={t('scheduling.testConnection')} aria-busy={testAccount.isPending} onClick={handleTest}>
+          {testAccount.isPending ? <span className="spinner" /> : t('scheduling.testConnection')}
+        </button>
+        <button type="submit" className="btn btn-primary btn-auto" disabled={pending || !formValid}
+          aria-label={t('actions.save', { ns: 'common' })} aria-busy={pending}>
+          {pending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
+        </button>
+      </div>
+    </Modal>
   )
 }

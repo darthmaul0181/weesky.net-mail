@@ -4,7 +4,7 @@ import { api, ApiError } from '../../../api.js'
 import type { DavCredentials } from '../../../types/dav'
 import ToggleRow from '../../../components/ToggleRow'
 import LoadingBlock from '../../../components/LoadingBlock'
-import ModalOverlay from '../../../components/ModalOverlay'
+import Modal from '../../../components/Modal'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import { relativeFromNow } from '../../../lib/intl'
@@ -156,22 +156,15 @@ export default function SyncPage() {
       )}
 
       {confirming && (
-        <ModalOverlay onClose={() => setConfirming(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">{t('sync.regenerateTitle')}</span>
-              <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} 
-                onClick={() => setConfirming(false)}>✕</button>
-            </div>
-            <p>{t('sync.regenerateWarning')}</p>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-primary" aria-label={t('sync.regenerateTitle')}
-                onClick={() => { setConfirming(false); write(() => api.regenerateDavSecret()) }}>
-                {t('sync.regenerate')}
-              </button>
-            </div>
+        <Modal role="alertdialog" title={t('sync.regenerateTitle')} onClose={() => setConfirming(false)}>
+          <p>{t('sync.regenerateWarning')}</p>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-primary" aria-label={t('sync.regenerateTitle')}
+              onClick={() => { setConfirming(false); write(() => api.regenerateDavSecret()) }}>
+              {t('sync.regenerate')}
+            </button>
           </div>
-        </ModalOverlay>
+        </Modal>
       )}
 
       <Toasts toasts={toasts} onRemove={removeToast} />

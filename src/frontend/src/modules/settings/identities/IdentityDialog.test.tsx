@@ -79,6 +79,20 @@ describe('IdentityDialog', () => {
     expect(screen.getByText('Could not load your aliases.')).toBeInTheDocument()
   })
 
+  // The combobox's own Escape must not skip past its list straight to the dialog.
+  it('the first Escape closes the alias list; the second closes the dialog', () => {
+    const { onClose } = renderAdd()
+    fireEvent.change(screen.getByLabelText('Alias'), { target: { value: 'mich' } })
+    expect(screen.getByRole('button', { name: 'michel@weesky.be' })).toBeInTheDocument()
+
+    fireEvent.keyDown(screen.getByLabelText('Alias'), { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'michel@weesky.be' })).toBeNull()
+    expect(onClose).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(screen.getByLabelText('Alias'), { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('closes on the ✕ and on the overlay, never on the panel', () => {
     const { onClose, container } = renderAdd()
     fireEvent.click(screen.getByText('Add identity'))

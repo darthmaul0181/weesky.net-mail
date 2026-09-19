@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocale } from '../../../contexts/LocaleContext'
 import { useTheme, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
-import ModalOverlay from '../../../components/ModalOverlay'
+import Modal from '../../../components/Modal'
 import DropletIcon from '../../../icons/DropletIcon'
 import SearchIcon from '../../../icons/SearchIcon'
 
@@ -78,31 +78,18 @@ function PalettePreview({ value, dark, large }: { value: Palette; dark: boolean;
     mode in use, and a palette is chosen once for both. */
 function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: string; onClose: () => void }) {
   const { t } = useTranslation('settings')
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="modal palette-zoom-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          {/* The loupe again, so the dialog reads as the enlargement of what was clicked. */}
-          <span className="modal-title"><SearchIcon size={16} /> {label}</span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
-            onClick={onClose}>✕</button>
-        </div>
-        <div className="palette-zoom-pair">
-          {[false, true].map(dark => (
-            <figure key={String(dark)}>
-              <PalettePreview value={value} dark={dark} large />
-              <figcaption>{t(dark ? 'appearance.theme.dark' : 'appearance.theme.light')}</figcaption>
-            </figure>
-          ))}
-        </div>
+    // The loupe again, so the dialog reads as the enlargement of what was clicked.
+    <Modal icon={<SearchIcon size={16} />} title={label} onClose={onClose} className="palette-zoom-modal">
+      <div className="palette-zoom-pair">
+        {[false, true].map(dark => (
+          <figure key={String(dark)}>
+            <PalettePreview value={value} dark={dark} large />
+            <figcaption>{t(dark ? 'appearance.theme.dark' : 'appearance.theme.light')}</figcaption>
+          </figure>
+        ))}
       </div>
-    </ModalOverlay>
+    </Modal>
   )
 }
 

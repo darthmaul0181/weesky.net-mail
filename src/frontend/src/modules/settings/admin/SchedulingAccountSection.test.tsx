@@ -557,7 +557,7 @@ describe('SchedulingAccountSection — save', () => {
     expect(screen.queryByLabelText('SMTP host')).not.toBeInTheDocument()
   })
 
-  it('blocks Escape, an overlay click and Annuler while a save is pending', async () => {
+  it('blocks Escape, the ✕ and an overlay click while a save is pending', async () => {
     await openEditDialog()
     let resolveSave: () => void = () => {}
     mocks.adminSaveSchedulingAccount.mockReturnValue(new Promise<void>(resolve => { resolveSave = resolve }))
@@ -568,8 +568,7 @@ describe('SchedulingAccountSection — save', () => {
     await userEvent.keyboard('{Escape}')
     expect(screen.getByLabelText('SMTP host')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByLabelText('SMTP host')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
 
     const overlay = screen.getByRole('dialog').parentElement as HTMLElement
     await userEvent.click(overlay)
@@ -601,12 +600,12 @@ describe('SchedulingAccountSection — save', () => {
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
       await act(() => vi.advanceTimersByTimeAsync(29_000))
-      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
 
       await act(() => vi.advanceTimersByTimeAsync(1_000))
 
       expect(screen.getByRole('alert')).toHaveTextContent('Saving is not responding.')
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()

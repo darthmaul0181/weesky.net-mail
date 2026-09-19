@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAliases } from '../../mail/queries'
 import { MAX_DISPLAY_NAME_LENGTH } from './identityRows'
-import ModalOverlay from '../../../components/ModalOverlay'
+import Modal from '../../../components/Modal'
 import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 
@@ -20,8 +20,8 @@ interface Props {
   onClose: () => void
 }
 
-/** Add or rename a sending identity in the site's admin-modal shape: two rows, one action, the ✕
-    as the only way out. The alias is a type-to-filter combobox (like the virtual-domain owner
+/** Add or rename a sending identity in the site's admin-modal shape: two rows, one action, `Modal`
+    owning the ways out. The alias is a type-to-filter combobox (like the virtual-domain owner
     picker), fixed once an existing identity is being edited. */
 export default function IdentityDialog({
   mode, taken, editAddress, initialName = '', freeAddress = false, onSubmit, onClose,
@@ -33,6 +33,8 @@ export default function IdentityDialog({
   const [selected, setSelected] = useState<string | null>(isEdit ? editAddress ?? null : null)
   const [name, setName] = useState(initialName)
   const [open, setOpen] = useState(false)
+  const addressRef = useRef<HTMLInputElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
 
   const takenSet = new Set(taken.map(a => a.toLowerCase()))
   // The row being renamed is its own address' only holder — it must not read as a duplicate.
@@ -51,87 +53,80 @@ export default function IdentityDialog({
   function submit() { if (canSubmit) onSubmit(address!, name.trim()) }
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="modal identity-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">
-            {isEdit ? <PencilIcon /> : <PersonPlusIcon />}
-            {t(isEdit ? 'identities.editIdentity' : 'identities.addIdentity')}
-          </span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
-        </div>
-
-        {freeAddress ? (
-          <>
-            <div className="field-h">
-              <label htmlFor="identity-address">{t('identities.address')}</label>
+    <Modal
+      icon={isEdit ? <PencilIcon /> : <PersonPlusIcon />}
+      title={t(isEdit ? 'identities.editIdentity' : 'identities.addIdentity')}
+      onClose={onClose} initialFocusRef={isEdit ? nameRef : addressRef}
+      onSubmit={event => { event.preventDefault(); submit() }}
+    >
+      {freeAddress ? (
+        <>
+          <div className="field-h">
+            <label htmlFor="identity-address">{t('identities.address')}</label>
+            <input
+              id="identity-address" type="email" autoComplete="off" ref={addressRef}
+              disabled={isEdit} value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+          {!isEdit && (
+            <p className="identity-combo-hint">{t('identities.freeAddressHint')}</p>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="field-h">
+            <label htmlFor="identity-alias">{t('identities.alias')}</label>
+            <div className="identity-combo">
               <input
-                id="identity-address" type="email" autoComplete="off"
-                autoFocus={!isEdit} disabled={isEdit} value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Escape') onClose() }}
+                id="identity-alias" type="text" autoComplete="off" ref={addressRef}
+                placeholder={t('identities.searchAliases')} disabled={isEdit}
+                value={query}
+                onChange={e => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setOpen(false)}
+                // The list is this field's own business: the first Escape closes it, and only a
+                // second, unclaimed one reaches the layer stack to close the dialog.
+                onKeyDown={e => { if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false) } }}
               />
+              {open && matches.length > 0 && (
+                <div className="ownership-dropdown">
+                  {matches.map(match => (
+                    <button
+                      key={match} type="button" className="ownership-dropdown-option"
+                      onMouseDown={e => {
+                        e.preventDefault(); setQuery(match); setSelected(match); setOpen(false)
+                      }}
+                    >
+                      {match}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            {!isEdit && (
-              <p className="identity-combo-hint">{t('identities.freeAddressHint')}</p>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="field-h">
-              <label htmlFor="identity-alias">{t('identities.alias')}</label>
-              <div className="identity-combo">
-                <input
-                  id="identity-alias" type="text" autoComplete="off"
-                  placeholder={t('identities.searchAliases')} autoFocus={!isEdit} disabled={isEdit}
-                  value={query}
-                  onChange={e => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
-                  onFocus={() => setOpen(true)}
-                  onBlur={() => setOpen(false)}
-                  onKeyDown={e => { if (e.key === 'Escape') onClose() }}
-                />
-                {open && matches.length > 0 && (
-                  <div className="ownership-dropdown">
-                    {matches.map(match => (
-                      <button
-                        key={match} type="button" className="ownership-dropdown-option"
-                        onMouseDown={e => {
-                          e.preventDefault(); setQuery(match); setSelected(match); setOpen(false)
-                        }}
-                      >
-                        {match}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* A failed alias fetch must read as a network blip, not "you have no aliases". */}
-            {!isEdit && (isLoading || isError) && (
-              <p className="identity-combo-hint">
-                {t(isLoading ? 'identities.aliasesLoading' : 'identities.aliasesLoadFailed')}
-              </p>
-            )}
-          </>
-        )}
+          </div>
+          {/* A failed alias fetch must read as a network blip, not "you have no aliases". */}
+          {!isEdit && (isLoading || isError) && (
+            <p className="identity-combo-hint">
+              {t(isLoading ? 'identities.aliasesLoading' : 'identities.aliasesLoadFailed')}
+            </p>
+          )}
+        </>
+      )}
 
-        <div className="field-h">
-          <label htmlFor="identity-name">{t('identities.displayName')}</label>
-          <input
-            id="identity-name" type="text" value={name} maxLength={MAX_DISPLAY_NAME_LENGTH}
-            autoFocus={isEdit}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') submit() }}
-          />
-        </div>
-
-        <div className="identity-modal-actions">
-          <button type="button" className="btn btn-primary" style={{ width: 'auto' }}
-            disabled={!canSubmit} onClick={submit}>
-            {t(isEdit ? 'actions.save' : 'actions.add', { ns: 'common' })}
-          </button>
-        </div>
+      <div className="field-h">
+        <label htmlFor="identity-name">{t('identities.displayName')}</label>
+        <input
+          id="identity-name" type="text" value={name} maxLength={MAX_DISPLAY_NAME_LENGTH} ref={nameRef}
+          onChange={e => setName(e.target.value)}
+        />
       </div>
-    </ModalOverlay>
+
+      <div className="identity-modal-actions">
+        <button type="submit" className="btn btn-primary" style={{ width: 'auto' }} disabled={!canSubmit}>
+          {t(isEdit ? 'actions.save' : 'actions.add', { ns: 'common' })}
+        </button>
+      </div>
+    </Modal>
   )
 }

@@ -911,8 +911,8 @@ export default function CalendarLayout() {
             onClose={() => setPendingEvent(null)} />
         )}
 
-        {/* `inEditor` and not `discarding` alone: `backToGrid` is only the in-app way out, and the
-            browser's Back leaves the route without passing through it. */}
+        {/* `discarding` cannot be true here once `!inEditor` — the render-phase reset above already
+            dropped it this same render — but `inEditor &&` costs nothing and outlives that fact. */}
         {inEditor && discarding && (
           <DeleteConfirmModal title={t('editor.discardTitle')} message={t('editor.discardBody')}
             confirmLabel={t('editor.discard')}

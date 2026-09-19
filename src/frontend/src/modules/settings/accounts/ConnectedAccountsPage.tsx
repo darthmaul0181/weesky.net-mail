@@ -4,7 +4,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
 import LoadingBlock from '../../../components/LoadingBlock'
-import ModalOverlay from '../../../components/ModalOverlay'
+import Modal from '../../../components/Modal'
 import Toasts from '../../../components/Toasts.jsx'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useToasts } from '../../../hooks/useToasts.js'
@@ -37,7 +37,7 @@ function subtitleOf(account: ConnectedAccount): string {
   return parts.join(' · ')
 }
 
-/** One field, the admin dialog shape: the ✕ is the only way out. */
+/** One field, the admin dialog shape. */
 function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
   email: string
   pending: boolean
@@ -47,6 +47,7 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
 }) {
   const { t } = useTranslation('settings')
   const [password, setPassword] = useState('')
+  const passwordRef = useRef<HTMLInputElement>(null)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -54,29 +55,22 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title"><KeyIcon /> {t('accounts.reenterPassword')}</span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={onClose}>✕</button>
-        </div>
-        <form onSubmit={submit}>
-          {error && <div className="alert alert-error" role="alert">{error}</div>}
-          <p className="settings-note">{t('accounts.reenterHint', { email })}</p>
-          <div className="field-h">
-            <label htmlFor="reenter-password">{t('accounts.password')}</label>
-            <input id="reenter-password" type="password" autoComplete="new-password" autoFocus
-              value={password} onChange={e => setPassword(e.target.value)} />
-          </div>
-          <div className="identity-modal-actions">
-            <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}
-              disabled={pending || password === ''}>
-              {pending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
-            </button>
-          </div>
-        </form>
+    <Modal icon={<KeyIcon />} title={t('accounts.reenterPassword')} onClose={onClose}
+      onSubmit={submit} initialFocusRef={passwordRef}>
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <p className="settings-note">{t('accounts.reenterHint', { email })}</p>
+      <div className="field-h">
+        <label htmlFor="reenter-password">{t('accounts.password')}</label>
+        <input id="reenter-password" type="password" autoComplete="new-password" ref={passwordRef}
+          value={password} onChange={e => setPassword(e.target.value)} />
       </div>
-    </ModalOverlay>
+      <div className="identity-modal-actions">
+        <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}
+          disabled={pending || password === ''}>
+          {pending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
+        </button>
+      </div>
+    </Modal>
   )
 }
 

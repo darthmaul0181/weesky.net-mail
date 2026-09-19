@@ -131,7 +131,7 @@ describe('Extended rules slider', () => {
     const toggle = await screen.findByTitle('Extended rules')
     fireEvent.click(toggle.querySelector('input[type="checkbox"]'))
 
-    fireEvent.click(await screen.findByText('Cancel'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
 
     await waitFor(() =>
       expect(screen.queryByText('Turn off extended rules?')).not.toBeInTheDocument())
