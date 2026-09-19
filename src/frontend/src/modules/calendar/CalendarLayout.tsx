@@ -262,10 +262,8 @@ export default function CalendarLayout() {
   const [editorDirty, setEditorDirty] = useState(false)
   const editorScreenRef = useRef<HTMLDivElement>(null)
   const editorTitleRef = useRef<HTMLInputElement>(null)
-  // Where the phone screen hands focus back when what opened it is gone — the floating +, which it
-  // withholds. Not that button: React attaches its ref in the layout phase, after the layer's own
-  // cleanup has read this one, so it would still be null. The region the screen covered is what is
-  // there, and `tabIndex={-1}` on the column is what lets it take focus.
+  // Where the editor hands focus back when what opened it is gone. Not the floating +, nor the
+  // bubble's Edit: React attaches a ref in the layout phase, after the cleanup that reads this one.
   const mainRef = useRef<HTMLDivElement>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
@@ -890,7 +888,7 @@ export default function CalendarLayout() {
           )
           : (
             <Modal header={false} labelledBy={EDITOR_TITLE_ID} className="calendar-editor"
-              initialFocusRef={editorTitleRef} busy={savingEvent}
+              initialFocusRef={editorTitleRef} returnFocusRef={mainRef} busy={savingEvent}
               onClose={() => closeEditor(editorDirty)}>
               {editorBody}
             </Modal>
@@ -914,7 +912,9 @@ export default function CalendarLayout() {
             onClose={() => setPendingEvent(null)} />
         )}
 
-        {discarding && (
+        {/* `inEditor` and not `discarding` alone: `backToGrid` is only the in-app way out, and the
+            browser's Back leaves the route without passing through it. */}
+        {inEditor && discarding && (
           <DeleteConfirmModal title={t('editor.discardTitle')} message={t('editor.discardBody')}
             confirmLabel={t('editor.discard')}
             onConfirm={() => { setDiscarding(false); backToGrid() }}

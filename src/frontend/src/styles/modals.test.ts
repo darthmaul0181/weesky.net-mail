@@ -63,10 +63,8 @@ describe('modal roots', () => {
     expect(inlineWidths()).toEqual([])
   })
 
-  // No surface writes the class out any more: the two that did — ScopeModal and the desktop
-  // calendar editor — reach the backdrop through <Modal>. This guards the class and not the shape,
-  // so a caller rendering <ModalOverlay> itself still passes; what stops that is <Modal> being its
-  // only importer, which the module graph rather than a text scan is the place to read.
+  // The class, not the shape: a caller rendering <ModalOverlay> itself still passes here, and what
+  // stops that is <Modal> being its only importer — a module-graph fact, not a text one.
   it('leave the modal-overlay class to ModalOverlay alone', () => {
     const shell = ['../components/ModalOverlay.tsx']
     const writers = Object.entries(sources)

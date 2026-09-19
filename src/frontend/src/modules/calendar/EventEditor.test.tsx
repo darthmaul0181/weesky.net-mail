@@ -383,6 +383,18 @@ describe('EventEditor', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 
+  // The three ways out have to agree: the dialog's backdrop and Escape are already inert while the
+  // write is on the wire, and a ✕ that still asked about discarding would ask about kept work.
+  it('withholds the ✕ while the save is in flight', async () => {
+    const { onClose } = draw({ saving: true })
+    const close = screen.getByRole('button', { name: 'Close' })
+
+    expect(close).toBeDisabled()
+    await userEvent.click(close)
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('reports a clean form as clean and a touched one as dirty', async () => {
     const { onClose } = draw()
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))

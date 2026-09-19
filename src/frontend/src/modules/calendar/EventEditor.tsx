@@ -164,7 +164,9 @@ export default function EventEditor({
     </button>
   )
   const close = (
-    <button type="button" className="modal-close" aria-label={t('editor.close')}
+    // Disabled with the write, like Save: the discard question over a save already on the wire
+    // asks about work that is being kept.
+    <button type="button" className="modal-close" aria-label={t('editor.close')} disabled={saving}
       onClick={() => onClose(dirty)}>✕</button>
   )
 

@@ -1,5 +1,5 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -109,9 +109,13 @@ const routes = [
   { path: '/calendar/:id/edit', element: <CalendarLayout /> },
 ]
 
-function mount(path = '/calendar') {
+/** `previous` puts an entry under `path`, so a test can press the browser's own Back. */
+function mount(path = '/calendar', previous?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
+  const router = createMemoryRouter(routes, {
+    initialEntries: previous ? [previous, path] : [path],
+    initialIndex: previous ? 1 : 0,
+  })
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return { router, client }
 }
@@ -791,6 +795,24 @@ describe('CalendarLayout', () => {
     expect(router.state.location.pathname).toBe('/calendar/e1/edit')
   })
 
+  // The question is the editor's, and `backToGrid` is only the in-app way out: the browser's Back
+  // leaves the route without passing through it, and left ungated the question stood over the grid.
+  it('takes the discard question away with the editor on a browser Back', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const { router } = mount(
+      '/calendar/e1/edit?view=week&date=2026-09-16', '/calendar?view=week&date=2026-09-16')
+
+    await userEvent.type(await screen.findByLabelText('Title'), '!')
+    fireEscape()
+    expect(await screen.findByText('Discard changes?')).toBeInTheDocument()
+
+    await act(async () => { await router.navigate(-1) })
+
+    expect(router.state.location.pathname).toBe('/calendar')
+    expect(screen.queryByText('Discard changes?')).toBeNull()
+  })
+
   // A save in flight owns the editor. Without that, Escape opened the discard question over a
   // write already on the wire, and the save's own `backToGrid` then left it standing over the grid,
   // asking whether to discard what had just been saved.
@@ -1038,6 +1060,22 @@ describe('CalendarLayout', () => {
     await screen.findByText('Delete a recurring event')
     expect(screen.getByText(/repeats/)).toHaveTextContent('Repeats')
     expect(document.body.textContent).not.toMatch(/FREQ=/)
+  })
+
+  // The Edit that opened the editor left with the bubble it sat in, so there is no opener to go
+  // back to: focus lands on the region the dialog covered rather than on <body>.
+  it('hands focus back to the grid column when the bubble that opened it is gone', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    renderAt('/calendar?view=week&date=2026-09-16')
+    await userEvent.click(await screen.findByRole('button', { name: /Dentist/ }))
+    const bubble = await screen.findByRole('dialog', { name: 'Dentist' })
+    await userEvent.click(within(bubble).getByRole('button', { name: 'Edit' }))
+    await screen.findByLabelText('Title')
+
+    fireEscape()
+
+    await waitFor(() => expect(document.querySelector('.calendar-main')).toHaveFocus())
   })
 
   // The bubble launched the confirm and is the screen behind it: one Escape answers the confirm,
