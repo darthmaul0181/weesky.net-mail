@@ -69,6 +69,18 @@ describe('CalendarDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(3)
   })
 
+  // A write in flight owns the dialog: dismissing it would leave the user with no idea whether
+  // the calendar was created.
+  it('withholds every way out while a write is in flight', () => {
+    const { onClose } = open({ initialName: 'Work', saving: true })
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+    fireEscape()
+    pressBackdrop()
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('opens on the field its door named', () => {
     open({ initialName: 'Work', focus: 'colour' })
     expect(screen.getByLabelText('Hex code')).toHaveFocus()

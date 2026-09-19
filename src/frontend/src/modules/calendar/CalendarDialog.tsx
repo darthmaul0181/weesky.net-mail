@@ -38,7 +38,7 @@ export default function CalendarDialog({
   const submittable = trimmedName !== '' && isHexColor(trimmedColor) && !saving
 
   return (
-    <Modal title={title} onClose={onClose}
+    <Modal title={title} onClose={onClose} busy={saving}
       initialFocusRef={focus === 'colour' ? hexRef : nameRef}>
       {/* Replayed here: a disabled submit does not stop Enter in every browser, and neither an
           empty name nor a half-typed colour must reach the API. */}

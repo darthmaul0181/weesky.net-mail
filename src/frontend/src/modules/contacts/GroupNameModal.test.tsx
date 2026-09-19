@@ -102,10 +102,16 @@ describe('GroupNameModal', () => {
   })
 
   // Une requête en vol ne se relance pas d'un second clic. Le bouton porte alors un spinner,
-  // donc plus de nom accessible : il se retrouve par son type.
-  it('withholds the submit while a write is in flight', () => {
-    renderModal({ initialName: 'Friends', saving: true })
+  // donc plus de nom accessible : il se retrouve par son type. Et les trois sorties sont inertes
+  // avec lui : renvoyer l'utilisateur sans lui dire si le groupe a été créé est le vrai défaut.
+  it('withholds the submit and every way out while a write is in flight', () => {
+    const { onClose } = renderModal({ initialName: 'Friends', saving: true })
 
     expect(document.querySelector('button[type="submit"]')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+    fireEscape()
+    pressBackdrop()
+
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

@@ -92,6 +92,22 @@ describe('ImportDialog', () => {
       .toHaveAttribute('aria-modal', 'true')
   })
 
+  // A dialog opened to choose a file opens on the box that chooses one, like its two siblings.
+  it('opens on the file box', () => {
+    open()
+    expect(screen.getByLabelText('File')).toHaveFocus()
+  })
+
+  it('withholds every way out while the import is in flight', () => {
+    const { onClose } = open({ saving: true })
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+    fireEscape()
+    pressBackdrop()
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
     const { onClose } = open()
 

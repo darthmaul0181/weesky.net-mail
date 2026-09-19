@@ -243,6 +243,9 @@ export default function CalendarLayout() {
   const updateEvent = useUpdateEvent()
   const removeEvent = useDeleteEvent()
   const moveEvent = useMoveOccurrence(window, tz)
+  // One flag for the three surfaces a write in flight makes inert: the form's own Save, the
+  // dialog's backdrop and Escape, and the phone screen's Escape.
+  const savingEvent = createEvent.isPending || updateEvent.isPending
 
   const [query, setQuery] = useState('')
   const [asked, setAsked] = useState('')
@@ -259,6 +262,11 @@ export default function CalendarLayout() {
   const [editorDirty, setEditorDirty] = useState(false)
   const editorScreenRef = useRef<HTMLDivElement>(null)
   const editorTitleRef = useRef<HTMLInputElement>(null)
+  // Where the phone screen hands focus back when what opened it is gone — the floating +, which it
+  // withholds. Not that button: React attaches its ref in the layout phase, after the layer's own
+  // cleanup has read this one, so it would still be null. The region the screen covered is what is
+  // there, and `tabIndex={-1}` on the column is what lets it take focus.
+  const mainRef = useRef<HTMLDivElement>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const [reloads, setReloads] = useState(0)
@@ -618,7 +626,12 @@ export default function CalendarLayout() {
     }
   }
 
-  const backToGrid = () => navigate(`/calendar${searchWith()}`, { replace: true })
+  const backToGrid = () => {
+    // The question belongs to the editor: left standing it would ask, over the grid, whether to
+    // discard what has just been saved.
+    setDiscarding(false)
+    navigate(`/calendar${searchWith()}`, { replace: true })
+  }
   /** The editor's one way out, whichever of the four was taken — the ✕, Escape, a press on the
       backdrop, or the phone screen's own Escape. */
   const closeEditor = (dirty: boolean) => (dirty ? setDiscarding(true) : backToGrid())
@@ -628,8 +641,11 @@ export default function CalendarLayout() {
   useLayer({
     active: inEditor && phone,
     ref: editorScreenRef,
-    onEscape: () => closeEditor(editorDirty),
+    // No handler while the write is in flight: the layer still swallows the key, so nothing under
+    // it reacts either — `Modal`'s `busy` on the desktop side, in the one shape a layer has.
+    onEscape: savingEvent ? undefined : () => closeEditor(editorDirty),
     initialFocusRef: editorTitleRef,
+    returnFocusRef: mainRef,
   })
   const summaryOf = (form: EventFormState) => {
     const rule = ruleOf(form.repeat)
@@ -767,7 +783,7 @@ export default function CalendarLayout() {
   // `/calendar/new` — would otherwise be a room whose only door is the browser's Back button.
   const editorBody = editorReady && seed ? (
     <EventEditor key={seed.key} detail={detail} occurrence={occurrence} initial={seed.form}
-      calendars={calendars} saving={createEvent.isPending || updateEvent.isPending}
+      calendars={calendars} saving={savingEvent}
       error={saveError} onReload={conflict ? () => void reloadEvent() : null} fullScreen={phone}
       titleRef={editorTitleRef} onSave={saveEvent} onDelete={deleteEdited}
       onClose={closeEditor} onDirtyChange={setEditorDirty} />
@@ -823,7 +839,7 @@ export default function CalendarLayout() {
           ? <ContextDrawer open={drawer.open} onClose={drawer.close}>{sidebar}</ContextDrawer>
           : sidebar}
 
-        <div className="calendar-main">
+        <div className="calendar-main" ref={mainRef} tabIndex={-1}>
           <CalendarToolbar view={view} title={formatRangeTitle(
             window.firstVisible, window.lastVisible, view, lang, region)}
             weekNumber={view === 'day' || view === 'week' ? weekNumberOf(anchor, rules) : null}
@@ -866,12 +882,16 @@ export default function CalendarLayout() {
             editor's own, so the dialog is named by it rather than by one `Modal` would draw. */}
         {inEditor && (phone
           ? (
+            /* Not a `Modal`, but it covers the screen and traps Tab, so it says so: a reader left
+               free to browse the grid behind it would be reading what no key can reach. */
             <div className="calendar-editor-screen" data-testid="calendar-editor"
+              role="dialog" aria-modal="true" aria-labelledby={EDITOR_TITLE_ID} tabIndex={-1}
               ref={editorScreenRef}>{editorBody}</div>
           )
           : (
             <Modal header={false} labelledBy={EDITOR_TITLE_ID} className="calendar-editor"
-              initialFocusRef={editorTitleRef} onClose={() => closeEditor(editorDirty)}>
+              initialFocusRef={editorTitleRef} busy={savingEvent}
+              onClose={() => closeEditor(editorDirty)}>
               {editorBody}
             </Modal>
           ))}

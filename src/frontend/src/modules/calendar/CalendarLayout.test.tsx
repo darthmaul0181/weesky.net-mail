@@ -791,6 +791,31 @@ describe('CalendarLayout', () => {
     expect(router.state.location.pathname).toBe('/calendar/e1/edit')
   })
 
+  // A save in flight owns the editor. Without that, Escape opened the discard question over a
+  // write already on the wire, and the save's own `backToGrid` then left it standing over the grid,
+  // asking whether to discard what had just been saved.
+  it('is inert while the save is in flight, and leaves no question behind it', async () => {
+    let land = () => {}
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    api.updateEvent.mockImplementation(() => new Promise(resolve => { land = () => resolve(null) }))
+    const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+
+    await userEvent.type(await screen.findByLabelText('Title'), '!')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.updateEvent).toHaveBeenCalled())
+
+    fireEscape()
+    pressBackdrop()
+    await settle()
+    expect(screen.queryByText('Discard changes?')).toBeNull()
+    expect(router.state.location.pathname).toBe('/calendar/e1/edit')
+
+    land()
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+    expect(screen.queryByText('Discard changes?')).toBeNull()
+  })
+
   // Owner decision 2: the scope question's own ways out all mean "no scope", and the editor under
   // it stays exactly as it was.
   it('gives Escape to the scope question alone, over the editor', async () => {
@@ -1307,6 +1332,32 @@ describe('CalendarLayout — the phone tier', () => {
     renderAt('/calendar/new?view=day&date=2026-09-16')
     await screen.findByTestId('calendar-editor')
     expect(document.querySelector('.floating-action')).toBeNull()
+  })
+
+  // It is not a `Modal`, but it covers the screen and traps Tab, so it has to say so: a reader
+  // left free to browse the grid behind it would be reading what no key can reach.
+  it('names the full-screen editor as the modal surface it is', async () => {
+    mockViewport('phone')
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    renderAt('/calendar/e1/edit?view=day&date=2026-09-16')
+
+    const editor = await screen.findByRole('dialog', { name: 'Edit event' })
+    expect(editor).toHaveClass('calendar-editor-screen')
+    expect(editor).toHaveAttribute('aria-modal', 'true')
+  })
+
+  // The floating + that opened it is withheld while it stands and comes back in the very commit
+  // that closes it — too late for a ref — so focus goes back to the region it covered instead of
+  // dropping to <body>.
+  it('hands focus back to the grid column when what opened it is gone', async () => {
+    mockViewport('phone')
+    renderAt('/calendar/new?view=day&date=2026-09-16')
+    await screen.findByLabelText('Title')
+
+    fireEscape()
+
+    await waitFor(() => expect(document.querySelector('.calendar-main')).toHaveFocus())
   })
 
   // The screen is not a dialog, but while it stands it owns Escape and Tab exactly as one does.

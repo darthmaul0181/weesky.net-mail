@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CALENDAR_COLORS, isHexColor } from './calendarColors'
 import type { Calendar } from './calendarTypes'
@@ -37,6 +37,7 @@ export default function ImportDialog({
   const [id, setId] = useState(targetId)
   const [name, setName] = useState('')
   const [color, setColor] = useState(CALENDAR_COLORS[0])
+  const fileRef = useRef<HTMLInputElement>(null)
 
   async function pick(event: ChangeEvent<HTMLInputElement>) {
     const chosen = event.target.files?.[0] ?? null
@@ -59,7 +60,7 @@ export default function ImportDialog({
     && (mode === 'existing' ? id !== '' : trimmedName !== '' && isHexColor(color))
 
   return (
-    <Modal title={t('import.title')} onClose={onClose}>
+    <Modal title={t('import.title')} onClose={onClose} busy={saving} initialFocusRef={fileRef}>
       <form onSubmit={event => {
         event.preventDefault()
         if (!submittable || !file) return
@@ -70,7 +71,7 @@ export default function ImportDialog({
         <div className="field-h">
           <label htmlFor="calendar-import-file">{t('import.file')}</label>
           <input id="calendar-import-file" type="file" accept=".ics,text/calendar"
-            onChange={pick} />
+            ref={fileRef} onChange={pick} />
         </div>
 
         <div className="field-h">

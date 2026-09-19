@@ -24,7 +24,7 @@ export default function GroupNameModal({ title, initialName, saving, onSubmit, o
   const submittable = trimmed !== '' && trimmed !== initialName.trim() && !saving
 
   return (
-    <Modal title={title} onClose={onClose} initialFocusRef={nameRef}>
+    <Modal title={title} onClose={onClose} busy={saving} initialFocusRef={nameRef}>
       {/* The guard is replayed here: a disabled submit does not stop Enter in every browser,
           and an empty or unchanged name must not reach the API. */}
       <form onSubmit={event => {
