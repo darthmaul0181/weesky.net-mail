@@ -68,7 +68,7 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
   return (
     <Modal icon={isEdit ? <PencilIcon /> : <PersonPlusIcon />}
       title={t(isEdit ? 'accounts.editTitle' : 'accounts.addTitle')}
-      onClose={onClose} onSubmit={handleSubmit}>
+      onClose={onClose} onSubmit={handleSubmit} busy={loading}>
       {isEdit && user.lastLogins?.length > 0 && (
         <div className="last-login-info">
           <span className="last-login-label">{t('accounts.lastConnections')}</span>

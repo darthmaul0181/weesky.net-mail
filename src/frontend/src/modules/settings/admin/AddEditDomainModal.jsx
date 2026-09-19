@@ -39,7 +39,7 @@ export function AddEditDomainModal({ domain, onSave, onClose }) {
   return (
     <Modal icon={isEdit ? <PencilIcon /> : <GlobeIcon />}
       title={t(isEdit ? 'domains.editTitle' : 'domains.addTitle')}
-      onClose={onClose} onSubmit={handleSubmit}>
+      onClose={onClose} onSubmit={handleSubmit} busy={loading}>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       <div className="field">
         <label htmlFor={`${uid}-domain-id`}>{t('domains.id')}</label>

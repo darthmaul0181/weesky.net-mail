@@ -121,7 +121,7 @@ describe('DeliveryRepliesSection', () => {
       expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument()
 
       // The refetch lands while the dialog is open, replacing the Generate button that
-      // useDialogFocusTrap captured as the element to restore focus to.
+      // useLayer captured as the element to restore focus to.
       await act(async () => resolveRefetch({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' }))
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Generate a key' })).not.toBeInTheDocument())
 

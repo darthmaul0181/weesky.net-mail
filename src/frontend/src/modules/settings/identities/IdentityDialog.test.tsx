@@ -73,6 +73,24 @@ describe('IdentityDialog', () => {
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
   })
 
+  it('Enter submits the form once the fields are valid', () => {
+    const { onSubmit, container } = renderAdd()
+    fireEvent.change(screen.getByLabelText('Alias'), { target: { value: 'mich' } })
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'michel@weesky.be' }))
+
+    fireEvent.submit(container.querySelector('form')!)
+
+    expect(onSubmit).toHaveBeenCalledWith('michel@weesky.be', 'Mick Dubois')
+  })
+
+  it('Enter does nothing while the primary action is disabled', () => {
+    const { onSubmit, container } = renderAdd()
+
+    fireEvent.submit(container.querySelector('form')!)
+
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it('says the aliases could not be loaded rather than counting none', () => {
     vi.mocked(useAliases).mockReturnValue({ data: undefined, isLoading: false, isError: true } as never)
     renderAdd()
@@ -90,6 +108,19 @@ describe('IdentityDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
 
     fireEvent.keyDown(screen.getByLabelText('Alias'), { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  // No list on screen to claim the key: nothing must swallow this one, or a filter with no
+  // matches — the steady state, since `available` already excludes every taken alias — traps
+  // the user behind a first, silent Escape.
+  it('one Escape closes the dialog when no alias matches the filter', () => {
+    const { onClose } = renderAdd()
+    fireEvent.change(screen.getByLabelText('Alias'), { target: { value: 'nobody-has-this' } })
+    expect(screen.queryByRole('button', { name: /@weesky\.be$/ })).toBeNull()
+
+    fireEvent.keyDown(screen.getByLabelText('Alias'), { key: 'Escape' })
+
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 

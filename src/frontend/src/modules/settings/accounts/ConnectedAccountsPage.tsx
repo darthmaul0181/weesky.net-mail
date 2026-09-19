@@ -56,7 +56,7 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
 
   return (
     <Modal icon={<KeyIcon />} title={t('accounts.reenterPassword')} onClose={onClose}
-      onSubmit={submit} initialFocusRef={passwordRef}>
+      onSubmit={submit} initialFocusRef={passwordRef} busy={pending}>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       <p className="settings-note">{t('accounts.reenterHint', { email })}</p>
       <div className="field-h">

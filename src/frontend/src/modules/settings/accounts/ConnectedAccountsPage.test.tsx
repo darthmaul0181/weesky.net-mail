@@ -206,6 +206,24 @@ describe('ConnectedAccountsPage', () => {
     await waitFor(() => expect(mocks.getConnectedAccounts).toHaveBeenCalledTimes(2))
   })
 
+  it('blocks Escape while the password write is in flight', async () => {
+    renderPage()
+    await screen.findByText('Work')
+    let resolveSave: (value: unknown) => void = () => {}
+    mocks.updateConnectedAccountPassword.mockReturnValue(new Promise(resolve => { resolveSave = resolve }))
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Re-enter the password for shared@weesky.net' }))
+    await userEvent.type(screen.getByLabelText('Password'), 'brand-new')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+
+    resolveSave({})
+    await waitFor(() => expect(screen.queryByLabelText('Password')).not.toBeInTheDocument())
+  })
+
   // Server prose never reaches the dialog; the local fallback does — see apiErrorMessage.
   it('keeps the password dialog open on a refusal, with the reason', async () => {
     renderPage()

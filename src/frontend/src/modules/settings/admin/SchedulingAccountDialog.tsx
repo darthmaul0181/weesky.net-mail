@@ -47,8 +47,8 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   const [error, setError] = useState<string | null>(null)
 
   const pending = saveAccount.isPending
-  // Only a save in flight blocks the dialog's ways out — a connection test answers in place and
-  // never risks losing what was typed, so it must not also freeze the ✕ and Escape.
+  // Both mutations, where `busy` below is `pending` alone: the refocus effect has to fire once
+  // either one settles, not just the one that gates the dialog's ways out.
   const anyBusy = pending || testAccount.isPending
 
   // A stored None stays listed where the server now refuses it, so the admin can see it and move away.
@@ -61,7 +61,7 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   useEffect(() => {
     if (anyBusy || document.activeElement !== document.body) return
     const action = actionRef.current
-    ;(action && !action.matches(':disabled') ? action : hostFieldRef.current)?.focus()
+    ;(action?.isConnected && !action.matches(':disabled') ? action : hostFieldRef.current)?.focus()
   }, [anyBusy])
 
   const hostValid = isValidHost(host)
@@ -127,6 +127,8 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
   }
 
   return (
+    // Only a save in flight blocks the dialog's ways out — a connection test answers in place and
+    // never risks losing what was typed, so it must not also freeze the ✕ and Escape.
     <Modal icon={<PencilIcon />} title={t('scheduling.dialogTitle')} onClose={onClose} busy={pending}
       initialFocusRef={hostFieldRef} returnFocusRef={returnFocusRef} onSubmit={handleSubmit}>
       {error && <div className="alert alert-error" role="alert">{error}</div>}

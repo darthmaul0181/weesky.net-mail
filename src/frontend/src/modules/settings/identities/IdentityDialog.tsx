@@ -85,9 +85,12 @@ export default function IdentityDialog({
                 onChange={e => { setQuery(e.target.value); setSelected(null); setOpen(true) }}
                 onFocus={() => setOpen(true)}
                 onBlur={() => setOpen(false)}
-                // The list is this field's own business: the first Escape closes it, and only a
-                // second, unclaimed one reaches the layer stack to close the dialog.
-                onKeyDown={e => { if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false) } }}
+                // The list is this field's own business, but only while it is actually on screen
+                // (`open && matches.length > 0`, the same guard the dropdown itself renders under)
+                // — otherwise there is nothing to claim the key, and it must reach the dialog.
+                onKeyDown={e => {
+                  if (e.key === 'Escape' && open && matches.length > 0) { e.preventDefault(); setOpen(false) }
+                }}
               />
               {open && matches.length > 0 && (
                 <div className="ownership-dropdown">

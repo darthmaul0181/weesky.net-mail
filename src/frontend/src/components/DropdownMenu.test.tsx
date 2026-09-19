@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DropdownMenu, { type MenuItem, type MenuEntry } from './DropdownMenu'
-import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap'
+import { useLayer } from '../hooks/useLayer'
 
 function items(overrides?: Partial<{ onSelect: () => void; disabled: boolean; title: string }>[]): MenuItem[] {
   return [
@@ -222,7 +222,7 @@ describe('DropdownMenu', () => {
     function Harness() {
       const [dialog, setDialog] = useState(false)
       const panel = useRef<HTMLDivElement>(null)
-      useDialogFocusTrap(panel, { active: dialog })
+      useLayer({ active: dialog, ref: panel })
       return (
         <>
           <DropdownMenu ariaLabel="Menu" trigger="⋮" items={[{ label: 'Rename', onSelect: () => setDialog(true) }]} />

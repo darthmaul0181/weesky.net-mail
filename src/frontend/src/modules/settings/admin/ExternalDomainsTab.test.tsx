@@ -186,6 +186,24 @@ describe('ExternalDomainsTab — create', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
     await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
+
+  it('blocks Escape while the create request is in flight', async () => {
+    let resolveCreate: (value: ExternalDomain) => void = () => {}
+    mocks.adminCreateExternalDomain.mockReturnValue(new Promise(resolve => { resolveCreate = resolve }))
+    renderTab()
+    await screen.findByText('Gmail')
+    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
+    await userEvent.type(screen.getByLabelText('Display name'), 'Yahoo')
+    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
+    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByLabelText('Display name')).toBeInTheDocument()
+
+    resolveCreate({ ...GMAIL, id: '3' })
+    await waitFor(() => expect(screen.queryByLabelText('Display name')).not.toBeInTheDocument())
+  })
 })
 
 describe('ExternalDomainsTab — edit', () => {

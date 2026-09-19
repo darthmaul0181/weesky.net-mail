@@ -121,7 +121,7 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
   return (
     <Modal icon={isEdit ? <PencilIcon /> : <GlobeIcon />}
       title={t(isEdit ? 'external.editTitle' : 'external.addTitle')}
-      onClose={onClose} onSubmit={handleSubmit} initialFocusRef={nameRef}>
+      onClose={onClose} onSubmit={handleSubmit} initialFocusRef={nameRef} busy={pending}>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       <div className="field-h">

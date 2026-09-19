@@ -111,6 +111,26 @@ describe('AddEditUserModal — create mode', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
     await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
+
+  // Abandoning the POST via Escape would skip onSave() and leave the created user invisible
+  // until a reload.
+  it('blocks Escape while the create request is in flight', async () => {
+    let resolveCreate
+    api.adminCreateUser.mockReturnValue(new Promise(resolve => { resolveCreate = resolve }))
+    const onClose = vi.fn()
+    const { container } = renderCreate({ onClose })
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'alice')
+    await userEvent.type(container.querySelector('input[type="password"]'), 'secret')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveCreate({})
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create account' })).not.toBeDisabled())
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ── AddEditUserModal — edit mode ──────────────────────────────
@@ -243,6 +263,25 @@ describe('AddEditDomainModal — create mode', () => {
       )
     )
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+  })
+
+  it('blocks Escape while the create request is in flight', async () => {
+    let resolveCreate
+    api.adminCreateDomain.mockReturnValue(new Promise(resolve => { resolveCreate = resolve }))
+    const onClose = vi.fn()
+    renderCreate({ onClose })
+    const [idInput, nameInput] = screen.getAllByRole('textbox')
+    await userEvent.type(idInput, 'TST')
+    await userEvent.type(nameInput, 'test.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveCreate({})
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled())
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
 

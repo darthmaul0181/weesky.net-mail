@@ -109,8 +109,8 @@ export default function DeliveryRepliesSection({ addToast }: Props) {
             // leave a stale DOM node's class/content behind rather than unmount+remount across
             // this Fragment/single-element ternary — the same reasoning SchedulingAccountSection's
             // own renderCard() keys its three branches for, one level up (its whole card, not just
-            // this row). Caught here because it silently broke useDialogFocusTrap's "is the opener
-            // still connected" check: the reused node stayed connected under new content.
+            // this row). Caught here because it silently broke useLayer's "is the opener still
+            // connected" check (§`hooks/useLayer.ts`): the reused node stayed connected under new content.
             <Fragment key="configured-actions">
               <button type="button" className="admin-icon-btn" title={t('deliveryReplies.regenerate')}
                 aria-label={t('deliveryReplies.regenerate')} onClick={() => setConfirming('regenerate')}>
