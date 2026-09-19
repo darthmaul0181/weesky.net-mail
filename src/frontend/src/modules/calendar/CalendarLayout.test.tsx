@@ -7,7 +7,7 @@ import CalendarLayout from './CalendarLayout'
 import { calendarKeys } from './queries'
 import type { Calendar } from './calendarTypes'
 import {
-  firePointer, installPointerEvents, mockViewport, resetViewport, settle,
+  fireEscape, firePointer, installPointerEvents, mockViewport, pressBackdrop, resetViewport, settle,
 } from '../../test-utils'
 
 afterEach(resetViewport)
@@ -735,15 +735,82 @@ describe('CalendarLayout', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
   })
 
-  it('mounts the editor container on its own routes', async () => {
+  // From 640px up the editor is a dialog like every other one: named, aria-modal, and three ways
+  // out — each of them through the dirty guard the ✕ already went through.
+  it('mounts the editor as a named dialog on its own routes', async () => {
     renderAt('/calendar/new?view=week&date=2026-09-14')
-    expect(await screen.findByTestId('calendar-editor')).toBeInTheDocument()
+    const editor = await screen.findByRole('dialog', { name: 'New event' })
+    expect(editor).toHaveClass('modal', 'calendar-editor')
+    expect(editor).toHaveAttribute('aria-modal', 'true')
   })
 
-  it('draws no editor container on the grid route', async () => {
+  it('draws no editor dialog on the grid route', async () => {
     renderAt('/calendar?view=week&date=2026-09-14')
     await screen.findByRole('button', { name: 'Today' })
-    expect(screen.queryByTestId('calendar-editor')).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'New event' })).toBeNull()
+  })
+
+  it('closes a clean form on Escape', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+    await screen.findByLabelText('Title')
+
+    fireEscape()
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+  })
+
+  it('closes a clean form on a press on the backdrop', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+    await screen.findByLabelText('Title')
+
+    pressBackdrop()
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+  })
+
+  // The backdrop and Escape go through the very guard the ✕ goes through: what was typed is
+  // never dropped on a stray key or on a click that missed the dialog.
+  it('asks before dropping what was typed, on Escape as on the ✕', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+    await userEvent.type(await screen.findByLabelText('Title'), '!')
+
+    fireEscape()
+    expect(await screen.findByText('Discard changes?')).toBeInTheDocument()
+
+    // The question owns the key while it stands: one Escape answers it and the editor is still
+    // there, carrying what was typed.
+    fireEscape()
+    await waitFor(() => expect(screen.queryByText('Discard changes?')).toBeNull())
+    expect(screen.getByLabelText('Title')).toHaveValue('Dentist!')
+    expect(router.state.location.pathname).toBe('/calendar/e1/edit')
+  })
+
+  // Owner decision 2: the scope question's own ways out all mean "no scope", and the editor under
+  // it stays exactly as it was.
+  it('gives Escape to the scope question alone, over the editor', async () => {
+    api.getOccurrences.mockResolvedValue({
+      occurrences: [floating('e1', 'Dentist', '2026-09-16T09:00:00')],
+    })
+    api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
+    const router = renderAt(
+      '/calendar/e1/edit?view=week&date=2026-09-16&instance=2026-09-16T09:00:00')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await screen.findByText('Save a recurring event')
+
+    fireEscape()
+
+    await waitFor(() => expect(screen.queryByText('Save a recurring event')).toBeNull())
+    expect(screen.getByLabelText('Title')).toHaveValue('Dentist')
+    expect(router.state.location.pathname).toBe('/calendar/e1/edit')
+    await settle()
+    expect(api.updateEvent).not.toHaveBeenCalled()
   })
 
   it('hides a calendar from its own box', async () => {
@@ -890,7 +957,7 @@ describe('CalendarLayout', () => {
     api.getCalendars.mockRejectedValue(new ApiError('nope', 500))
     const router = renderAt('/calendar/new?view=week&date=2026-09-16')
 
-    const editor = await screen.findByTestId('calendar-editor')
+    const editor = await screen.findByRole('dialog', { name: 'New event' })
     await userEvent.click(within(editor).getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
@@ -946,6 +1013,24 @@ describe('CalendarLayout', () => {
     await screen.findByText('Delete a recurring event')
     expect(screen.getByText(/repeats/)).toHaveTextContent('Repeats')
     expect(document.body.textContent).not.toMatch(/FREQ=/)
+  })
+
+  // The bubble launched the confirm and is the screen behind it: one Escape answers the confirm,
+  // and the bubble is still there to try again from.
+  it('closes a confirm opened from the bubble, leaving the bubble open', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
+    renderAt('/calendar?view=week&date=2026-09-16')
+    await userEvent.click(await screen.findByRole('button', { name: /Stand-up/ }))
+    const bubble = await screen.findByRole('dialog', { name: 'Stand-up' })
+    await userEvent.click(within(bubble).getByRole('button', { name: 'Delete' }))
+    await screen.findByText(/Delete .Stand-up/)
+
+    fireEscape()
+
+    await waitFor(() => expect(screen.queryByText(/Delete .Stand-up/)).toBeNull())
+    expect(screen.getByRole('dialog', { name: 'Stand-up' })).toBeInTheDocument()
+    await settle()
+    expect(api.deleteEvent).not.toHaveBeenCalled()
   })
 
   it('gives the grid back when the search is cleared', async () => {
@@ -1222,6 +1307,35 @@ describe('CalendarLayout — the phone tier', () => {
     renderAt('/calendar/new?view=day&date=2026-09-16')
     await screen.findByTestId('calendar-editor')
     expect(document.querySelector('.floating-action')).toBeNull()
+  })
+
+  // The screen is not a dialog, but while it stands it owns Escape and Tab exactly as one does.
+  it('closes the full-screen editor on Escape, and keeps Tab inside it', async () => {
+    mockViewport('phone')
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const router = renderAt('/calendar/e1/edit?view=day&date=2026-09-16')
+    await screen.findByLabelText('Title')
+
+    screen.getByRole('button', { name: 'Open navigation' }).focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveFocus()
+
+    fireEscape()
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar'))
+  })
+
+  it('asks before dropping what was typed on a phone Escape', async () => {
+    mockViewport('phone')
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.getEvent.mockResolvedValue(detail())
+    const router = renderAt('/calendar/e1/edit?view=day&date=2026-09-16')
+    await userEvent.type(await screen.findByLabelText('Title'), '!')
+
+    fireEscape()
+
+    expect(await screen.findByText('Discard changes?')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/calendar/e1/edit')
   })
 
   it('opens the calendars in a drawer from the hamburger', async () => {

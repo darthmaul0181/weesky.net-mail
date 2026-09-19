@@ -7,8 +7,10 @@ import { api } from '../../api.js'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import FloatingAction from '../../components/FloatingAction'
 import LoadingBlock from '../../components/LoadingBlock'
+import Modal from '../../components/Modal'
 import Toasts from '../../components/Toasts.jsx'
 import { useAccountId } from '../../hooks/useAccountId'
+import { useLayer } from '../../hooks/useLayer'
 import { useToasts } from '../../hooks/useToasts.js'
 import { useViewport } from '../../hooks/useViewport'
 import PlusIcon from '../../icons/PlusIcon'
@@ -25,7 +27,7 @@ import { dateLocaleOf, formatRangeTitle, hourCycleOf, weekNumberOf, weekRulesOf 
 import type {
   Calendar, CalendarImportReport, EditScope, EventDetail, Occurrence,
 } from './calendarTypes'
-import EventEditor from './EventEditor'
+import EventEditor, { EDITOR_TITLE_ID } from './EventEditor'
 import EventPreview from './EventPreview'
 import {
   allowedScopes, formOf, isRecurring, movedBody, movedOccurrence, newEventForm, ruleOf,
@@ -252,6 +254,11 @@ export default function CalendarLayout() {
   const [scopeAsk, setScopeAsk] = useState<ScopeAsk | null>(null)
   const [pendingEvent, setPendingEvent] = useState<PendingEvent | null>(null)
   const [discarding, setDiscarding] = useState(false)
+  // Lifted out of the form: the ways out are the surface's, and the question behind each of them
+  // is the same one the ✕ asks.
+  const [editorDirty, setEditorDirty] = useState(false)
+  const editorScreenRef = useRef<HTMLDivElement>(null)
+  const editorTitleRef = useRef<HTMLInputElement>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const [reloads, setReloads] = useState(0)
@@ -612,6 +619,18 @@ export default function CalendarLayout() {
   }
 
   const backToGrid = () => navigate(`/calendar${searchWith()}`, { replace: true })
+  /** The editor's one way out, whichever of the four was taken — the ✕, Escape, a press on the
+      backdrop, or the phone screen's own Escape. */
+  const closeEditor = (dirty: boolean) => (dirty ? setDiscarding(true) : backToGrid())
+
+  // The phone editor is the screen rather than a dialog, so it draws no `Modal` — but while it
+  // stands it owns Escape and Tab exactly as one does, which is what a layer is.
+  useLayer({
+    active: inEditor && phone,
+    ref: editorScreenRef,
+    onEscape: () => closeEditor(editorDirty),
+    initialFocusRef: editorTitleRef,
+  })
   const summaryOf = (form: EventFormState) => {
     const rule = ruleOf(form.repeat)
     return rule ? recurrenceSummary(rule, t, lang, region) : null
@@ -750,12 +769,14 @@ export default function CalendarLayout() {
     <EventEditor key={seed.key} detail={detail} occurrence={occurrence} initial={seed.form}
       calendars={calendars} saving={createEvent.isPending || updateEvent.isPending}
       error={saveError} onReload={conflict ? () => void reloadEvent() : null} fullScreen={phone}
-      onSave={saveEvent} onDelete={deleteEdited}
-      onClose={dirty => (dirty ? setDiscarding(true) : backToGrid())} />
+      titleRef={editorTitleRef} onSave={saveEvent} onDelete={deleteEdited}
+      onClose={closeEditor} onDirtyChange={setEditorDirty} />
   ) : (
     <>
       <div className={phone ? 'calendar-editor-head' : 'modal-header'}>
-        <span className="modal-title">{t(routeId ? 'editor.editTitle' : 'editor.newTitle')}</span>
+        <span className="modal-title" id={EDITOR_TITLE_ID}>
+          {t(routeId ? 'editor.editTitle' : 'editor.newTitle')}
+        </span>
         <button type="button" className="modal-close" aria-label={t('editor.close')}
           onClick={backToGrid}>✕</button>
       </div>
@@ -841,15 +862,18 @@ export default function CalendarLayout() {
             onDelete={() => deletePreviewed(preview.occurrence)} />
         )}
 
-        {/* A dialogue over the grid from 640px up, the whole screen below it. */}
+        {/* A dialogue over the grid from 640px up, the whole screen below it. The header is the
+            editor's own, so the dialog is named by it rather than by one `Modal` would draw. */}
         {inEditor && (phone
           ? (
-            <div className="calendar-editor-screen" data-testid="calendar-editor">{editorBody}</div>
+            <div className="calendar-editor-screen" data-testid="calendar-editor"
+              ref={editorScreenRef}>{editorBody}</div>
           )
           : (
-            <div className="modal-overlay" data-testid="calendar-editor">
-              <div className="modal calendar-editor">{editorBody}</div>
-            </div>
+            <Modal header={false} labelledBy={EDITOR_TITLE_ID} className="calendar-editor"
+              initialFocusRef={editorTitleRef} onClose={() => closeEditor(editorDirty)}>
+              {editorBody}
+            </Modal>
           ))}
 
         {scopeAsk && (

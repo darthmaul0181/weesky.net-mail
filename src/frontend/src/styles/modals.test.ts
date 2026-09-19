@@ -49,8 +49,8 @@ describe('modal roots', () => {
     expect(Object.keys(sources).length).toBeGreaterThan(50)
   })
 
-  // The <Modal> half of the guard has no caller until Task 5, so its mechanism is proved here
-  // rather than by the repo-wide scan below, which would pass vacuously in the meantime.
+  // The repo-wide scan below says nothing while no caller carries a width, so the extractor's own
+  // mechanism — a width anywhere in a multi-line tag, and nowhere else — is proved here.
   it('sees a width anywhere in a <Modal> tag, and only in one', () => {
     expect(modalTagWidths('<Modal\n  title="x"\n  style={{ width: 400 }}\n>')).toEqual([1])
     expect(modalTagWidths('<ModalOverlay style={{ width: 400 }}>')).toEqual([])
@@ -63,9 +63,9 @@ describe('modal roots', () => {
     expect(inlineWidths()).toEqual([])
   })
 
-  // Enabled in Task 5 by dropping the `.todo`, once the last caller draws its backdrop through
-  // <Modal>: until then ScopeModal and the calendar editor write the class out.
-  it.todo('draw the backdrop from the Modal shell alone', () => {
+  // No surface writes the backdrop out any more: the two that did — ScopeModal and the desktop
+  // calendar editor — draw it through <Modal> like everything else.
+  it('draw the backdrop from the Modal shell alone', () => {
     const shell = ['../components/Modal.tsx', '../components/ModalOverlay.tsx']
     const writers = Object.entries(sources)
       .filter(([path, src]) => !path.includes('.test.') && src.includes('modal-overlay'))
