@@ -1468,4 +1468,25 @@ describe('CalendarLayout — the phone tier', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open navigation' }))
     expect(document.querySelector('.context-drawer')).toHaveClass('is-open')
   })
+
+  // A row of the drawer opens a dialog over it: the dialog is the topmost layer, so Tab cycles
+  // inside it and Escape answers it alone — closing the column under the question being asked
+  // would take the row that raised it with it.
+  it('keeps the drawer standing under a dialog opened from one of its rows', async () => {
+    mockViewport('phone')
+    renderAt('/calendar?view=day&date=2026-09-16')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Work' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Calendar settings' })
+
+    screen.getByRole('button', { name: 'Save' }).focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    fireEscape()
+
+    await waitFor(() => expect(screen.queryByLabelText('Name')).not.toBeInTheDocument())
+    expect(document.querySelector('.context-drawer')).toHaveClass('is-open')
+  })
 })

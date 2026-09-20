@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import BellIcon from '../../icons/BellIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
@@ -19,7 +19,8 @@ import { myAnswerOf } from './myAnswer'
 import { useEvent } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
-import { hasOpenLayer } from '../../lib/layerStack'
+import { returnFocus, useDismiss } from '../../hooks/useDismiss'
+import { focusablesIn } from '../../lib/layerStack'
 
 export interface EventPreviewProps {
   occurrence: Occurrence
@@ -62,26 +63,18 @@ export default function EventPreview({
   const { t } = useTranslation('calendar')
   const { tz, lang, region, cycle, calendarById } = useCalendar()
   const { ref, left, top } = usePopoverPosition(rect)
+  const bubble = useRef<HTMLDivElement | null>(null)
+  // The chip the bubble hangs off: where the focus goes back when it closes from the inside.
+  const anchorRef = useRef(anchor)
+  useEffect(() => { anchorRef.current = anchor })
 
-  useEffect(() => {
-    // A dialog the bubble launched owns Escape; the bubble stays put under it.
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onClose()
-    }
-    const outside = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (!anchor.contains(target) && !(target as Element).closest?.('.event-preview')) onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', outside)
-    // Capture, so any scroller carries it — the week body, the month stage, the upcoming list.
-    document.addEventListener('scroll', onClose, true)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', outside)
-      document.removeEventListener('scroll', onClose, true)
-    }
-  }, [anchor, onClose])
+  // Non-modal: no trap, and Tab walks on into the grid. A dialog the bubble launched sits above
+  // it on the stack, so neither that Escape nor a press inside it reaches here.
+  useDismiss({ open: true, rootRef: bubble, onDismiss: onClose, refocusRef: anchorRef, closeOnScroll: true })
+
+  // Opened by a click, so nothing has moved the focus onto it: a keyboard reaches its two
+  // actions only if the opening does.
+  useLayoutEffect(() => { if (bubble.current) focusablesIn(bubble.current)[0]?.focus() }, [])
 
   // Always fetched, one request per opening (`ContactCard`'s `useContact` pattern): the bubble
   // carries neither a repeating event's rule nor its participants, and the detail holds both.
@@ -123,13 +116,14 @@ export default function EventPreview({
   const myAnswer = myAnswerOf(occurrence.myPartStat, t)
 
   return (
-    <div className="event-preview" role="dialog" aria-label={title} ref={ref}
+    <div className="event-preview" role="dialog" aria-label={title}
+      ref={node => { bubble.current = node; ref(node) }}
       style={{ left, top, '--cal': color } as CSSProperties}>
       <div className="event-preview-head">
         <span className="event-preview-dot" aria-hidden="true" />
         <span className="event-preview-title">{title}</span>
         <button type="button" className="modal-close" aria-label={t('preview.close')}
-          onClick={onClose}>✕</button>
+          onClick={() => { returnFocus(bubble.current, anchorRef.current); onClose() }}>✕</button>
       </div>
 
       <p className="event-preview-when">{line}</p>

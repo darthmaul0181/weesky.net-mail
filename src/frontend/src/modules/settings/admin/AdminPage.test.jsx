@@ -1007,6 +1007,27 @@ describe('VirtualDomainsTab', () => {
     await waitFor(() => expect(api.adminRemoveVirtualDomainOwner).toHaveBeenCalledWith('EXT', 1))
   })
 
+  // Two surfaces, two Escapes: the list the search opened is the nearer one, and cancelling the
+  // whole edit on the key that dismisses it throws away the query with it.
+  it('closes the user list on Escape and cancels the edit only on the next one', async () => {
+    render(<VirtualDomainsTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[1])
+    const input = screen.getByPlaceholderText('Search user…')
+    await userEvent.type(input, 'alice')
+    await screen.findByRole('button', { name: /alice@weesky\.be/ })
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.queryByRole('button', { name: /alice@weesky\.be/ })).not.toBeInTheDocument()
+    expect(input).toBeInTheDocument()
+    expect(input).toHaveValue('alice')
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(input).not.toBeInTheDocument()
+  })
+
   it('cancels edit on Escape key', async () => {
     render(<VirtualDomainsTab addToast={vi.fn()} />)
     await screen.findByText('extra.com')

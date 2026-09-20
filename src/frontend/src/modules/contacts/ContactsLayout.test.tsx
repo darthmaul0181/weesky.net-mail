@@ -922,6 +922,28 @@ describe('contact groups', () => {
     await waitFor(() => expect(api.renameContactGroup).toHaveBeenCalledWith('g1', 'Best friends'))
   })
 
+  // A row of the drawer opens a dialog over it: the dialog is the topmost layer, so Tab cycles
+  // inside it and Escape answers it alone, leaving the column that raised it standing.
+  it('keeps the drawer standing under a dialog opened from a group row', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await bookLoaded()
+
+    await userEvent.click(await screen.findByRole('button', { name: /open navigation/i }))
+    await openGroupMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Rename group' })
+
+    screen.getByRole('button', { name: 'Save' }).focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    fireEscape()
+
+    await waitFor(() => expect(screen.queryByLabelText('Name')).not.toBeInTheDocument())
+    expect(container.querySelector('.context-drawer.is-open')).toBeTruthy()
+  })
+
   // La suppression d'un groupe n'est pas celle de ses contacts, et le dialogue doit le dire.
   it('confirms a group deletion saying the contacts stay', async () => {
     api.deleteContactGroup.mockResolvedValue(undefined)

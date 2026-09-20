@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
@@ -223,6 +223,44 @@ describe('EventPreview', () => {
 
     expect(onDialogClose).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // Same nesting, the other half of it: a press inside that dialog is "outside" the bubble by
+  // containment alone, and used to shut the bubble the confirm had been opened from.
+  it('stays open on a press inside a dialog over it', async () => {
+    const onClose = vi.fn()
+    draw(DENTIST, anchorAt(200, 300), { onClose })
+    render(<DeleteConfirmModal entityLabel="Dentist" onConfirm={vi.fn()} onClose={vi.fn()} />)
+
+    const confirm = within(document.querySelector('.modal') as HTMLElement)
+    fireEvent.mouseDown(confirm.getByRole('button', { name: 'Delete' }))
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // The bubble is not a dialog anyone is trapped in, but it is opened by a click and holds two
+  // actions: a keyboard reaches them only if the opening puts the focus in it.
+  it('takes the focus onto its first control and gives it back to the chip', async () => {
+    const onClose = vi.fn()
+    const anchor = anchorAt(200, 300)
+    anchor.focus()
+    draw(DENTIST, anchor, { onClose })
+
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(onClose).toHaveBeenCalled()
+    expect(anchor).toHaveFocus()
+  })
+
+  it('gives the focus back to the chip when the ✕ closes it', async () => {
+    const anchor = anchorAt(200, 300)
+    draw(DENTIST, anchor, { onClose: vi.fn() })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(anchor).toHaveFocus()
   })
 
   it('closes on a click outside itself', async () => {

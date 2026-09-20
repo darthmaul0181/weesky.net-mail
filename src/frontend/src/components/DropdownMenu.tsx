@@ -1,4 +1,5 @@
-import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { returnFocus, useDismiss } from '../hooks/useDismiss'
 
 interface MenuItemBase {
   label: string
@@ -52,11 +53,6 @@ interface Props {
   align?: 'right' | 'left'
 }
 
-/** Closing unmounts the menu, so focus held inside it would fall to <body>: it goes back to the trigger. */
-function refocusTrigger(menu: HTMLElement | null, trigger: HTMLElement | null) {
-  if (menu?.contains(document.activeElement)) trigger?.focus()
-}
-
 /** Click-toggled dropdown on the IdentityMenu pattern: outside mousedown and Escape close it. */
 export default function DropdownMenu(
   { ariaLabel, trigger, items, className, direction = 'down', align = 'right' }: Props) {
@@ -100,25 +96,7 @@ export default function DropdownMenu(
       : undefined)
   }, [open, direction, align])
 
-  useEffect(() => {
-    if (!open) return
-    function onMouseDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    // Marked as spent, so a window listener behind this one (the reader's back) leaves it alone.
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      refocusTrigger(menuRef.current, triggerRef.current)
-      setOpen(false)
-    }
-    document.addEventListener('mousedown', onMouseDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useDismiss({ open, rootRef, onDismiss: () => setOpen(false), refocusRef: triggerRef })
 
   // A fixed menu does not travel with a scrolled trigger the way an absolutely-positioned one
   // does, so any scroll or resize while it is open just closes it rather than leaving it
@@ -134,17 +112,8 @@ export default function DropdownMenu(
     }
   }, [open, placement])
 
-  // React's root listener runs before the document one: an Escape pressed inside the menu is
-  // stopped here, or an ancestor's onKeyDown (the list clearing its selection) would spend it too.
-  function onRootKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
-    if (!open || e.key !== 'Escape') return
-    e.preventDefault()
-    e.stopPropagation()
-    closeAndRefocus()
-  }
-
   function closeAndRefocus() {
-    refocusTrigger(menuRef.current, triggerRef.current)
+    returnFocus(rootRef.current, triggerRef.current)
     setOpen(false)
   }
 
@@ -152,7 +121,6 @@ export default function DropdownMenu(
     <div
       className={`dropdown-root${placement === 'up' ? ' is-up' : ''}${align === 'left' ? ' is-left' : ''}`}
       ref={rootRef}
-      onKeyDown={onRootKeyDown}
     >
       <button type="button" className={className} aria-label={ariaLabel} aria-expanded={open}
         ref={triggerRef} onClick={() => setOpen(o => !o)}>

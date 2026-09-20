@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, type ActiveAccount } from '../contexts/AuthContext'
+import { useDismiss } from '../hooks/useDismiss'
 import { confirmLeave } from '../lib/leaveGuard'
 import ChevronRightIcon from '../icons/ChevronRightIcon'
 import PersonPlusIcon from '../icons/PersonPlusIcon.jsx'
@@ -29,33 +30,12 @@ export default function IdentityMenu() {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    if (!open) return
-    function onMouseDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onMouseDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  // DropdownMenu's rule: React's root listener runs before the document one, so an Escape pressed
-  // inside the menu is spent here — the context drawer this block sits in below 1024px answers
-  // Escape through its layer and would collapse the whole column on the same key.
-  function onRootKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
-    if (!open || e.key !== 'Escape') return
-    e.preventDefault()
-    e.stopPropagation()
-    setOpen(false)
-  }
+  // An open menu is the topmost layer, so the context drawer this block sits in below 1024px
+  // keeps its own Escape and the column stands whatever holds the focus.
+  useDismiss({ open, rootRef, onDismiss: () => setOpen(false), refocusRef: toggleRef })
 
   if (!identity) return null
 
@@ -90,7 +70,7 @@ export default function IdentityMenu() {
     : activeAccount.isPrimary ? 'identity-pill' : 'identity-pill is-connected'
 
   return (
-    <div className="identity-root" ref={rootRef} onKeyDown={onRootKeyDown}>
+    <div className="identity-root" ref={rootRef}>
       <span className={pillClass} aria-hidden="true">
         {bandLabel ? initialsOf(bandLabel) : ''}
       </span>
@@ -101,6 +81,7 @@ export default function IdentityMenu() {
       <button
         type="button"
         className="identity-toggle"
+        ref={toggleRef}
         aria-label={t('identity.menu')}
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}

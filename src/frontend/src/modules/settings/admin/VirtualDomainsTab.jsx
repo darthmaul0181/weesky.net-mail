@@ -5,6 +5,7 @@ import { api } from '../../../api.js'
 import TrashIcon from '../../../icons/TrashIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import { useDismiss } from '../../../hooks/useDismiss'
 
 export function VirtualDomainsTab({ addToast }) {
   const { t } = useTranslation('admin')
@@ -13,6 +14,7 @@ export function VirtualDomainsTab({ addToast }) {
   const [loading, setLoading] = useState(true)
   const [editingDomainId, setEditingDomainId] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [listDismissed, setListDismissed] = useState(false)
   const [saving, setSaving] = useState(false)
   const editRef = useRef(null)
 
@@ -32,17 +34,13 @@ export function VirtualDomainsTab({ addToast }) {
 
   useEffect(() => { load() }, [load])
 
-  useEffect(() => {
-    if (!editingDomainId) return
-    function handleClick(e) {
-      if (!editRef.current?.contains(e.target)) {
-        setEditingDomainId(null)
-        setSearchQuery('')
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [editingDomainId])
+  const cancelEdit = useCallback(() => {
+    setEditingDomainId(null)
+    setSearchQuery('')
+    setListDismissed(false)
+  }, [])
+
+  useDismiss({ open: editingDomainId !== null, rootRef: editRef, onDismiss: cancelEdit })
 
   async function handleSelect(domainId, userId) {
     setSaving(true)
@@ -86,6 +84,8 @@ export function VirtualDomainsTab({ addToast }) {
       })
     : []
 
+  const listOpen = filteredUsers.length > 0 && !listDismissed
+
   if (loading) return <div style={{ textAlign: 'center', padding: '32px' }}><span className="spinner" /></div>
 
   return (
@@ -127,14 +127,19 @@ export function VirtualDomainsTab({ addToast }) {
                     type="text"
                     placeholder={t('virtual.searchUser')}
                     value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
+                    onChange={e => { setSearchQuery(e.target.value); setListDismissed(false) }}
                     autoFocus
                     style={{ width: '100%', padding: '5px 8px', fontSize: '13px' }}
                     onKeyDown={e => {
-                      if (e.key === 'Escape') { setEditingDomainId(null); setSearchQuery('') }
+                      if (e.key !== 'Escape') return
+                      // Marked as spent so the layer below leaves it alone: one Escape answers
+                      // the list when it is showing, and the edit itself once it is not.
+                      e.preventDefault()
+                      if (listOpen) setListDismissed(true)
+                      else cancelEdit()
                     }}
                   />
-                  {filteredUsers.length > 0 && (
+                  {listOpen && (
                     <div className="ownership-dropdown">
                       {filteredUsers.slice(0, 10).map(u => (
                         <button

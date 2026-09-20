@@ -1,4 +1,4 @@
-import { useInsertionEffect, useLayoutEffect, useRef, type RefObject } from 'react'
+import { useCallback, useInsertionEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import { focusablesIn, isTopLayer, pushLayer, type LayerHandle } from '../lib/layerStack'
 
 interface Options {
@@ -15,7 +15,8 @@ interface Options {
 
 /**
  * Puts one surface on the layer stack while it is active: Escape and Tab reach it only while it
- * is the topmost one, and focus moves in on activation and back out on close.
+ * is the topmost one, and focus moves in on activation and back out on close. It answers whether
+ * this layer is that topmost one — what a surface acting on a pointer of its own asks first.
  */
 export function useLayer({
   active, ref, onEscape, initialFocusRef, returnFocusRef, autoFocus = true, restoreFocus = true,
@@ -69,4 +70,6 @@ export function useLayer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
+
+  return useCallback(() => !!handle.current && isTopLayer(handle.current), [])
 }

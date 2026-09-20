@@ -124,11 +124,21 @@ describe('IdentityMenu', () => {
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
   })
 
+  it('hands focus back to the toggle when Escape closes it from a row', async () => {
+    renderMenu()
+    await openMenu()
+    screen.getByText('Sign out').closest('button')!.focus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
+    expect(toggle()).toHaveFocus()
+  })
+
   // Below 1024px the account block sits inside the context drawer, which answers Escape through
   // its layer. One key must close the menu and leave the navigation column standing.
-  it('closes alone on Escape inside the context drawer', async () => {
-    const onDrawerClose = vi.fn()
-    render(
+  function renderInDrawer(onDrawerClose: () => void) {
+    return render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <MemoryRouter>
           <AuthProvider>
@@ -137,11 +147,30 @@ describe('IdentityMenu', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
+  }
+
+  it('closes alone on Escape inside the context drawer', async () => {
+    const onDrawerClose = vi.fn()
+    renderInDrawer(onDrawerClose)
     await openMenu()
     onDrawerClose.mockClear() // the drawer's route effect calls it once at mount
     toggle().focus()
 
     fireEvent.keyDown(toggle(), { key: 'Escape' })
+
+    expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
+    expect(onDrawerClose).not.toHaveBeenCalled()
+  })
+
+  // A menu opened by the mouse leaves the focus wherever it was, which used to be the case the
+  // drawer and the menu both answered: the topmost layer is the menu whatever holds the focus.
+  it('closes alone on Escape inside the drawer with the focus outside the menu', async () => {
+    const onDrawerClose = vi.fn()
+    renderInDrawer(onDrawerClose)
+    await openMenu()
+    onDrawerClose.mockClear()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
 
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
     expect(onDrawerClose).not.toHaveBeenCalled()
