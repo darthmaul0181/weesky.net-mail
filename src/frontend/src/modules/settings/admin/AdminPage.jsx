@@ -11,10 +11,10 @@ import ExternalDomainsTab from './ExternalDomainsTab'
 import ApplicationTab from './ApplicationTab'
 
 /** Each tab is its own literal `t()` call: a key held in a table and read by variable is
-    invisible to `src/locales/keys.test.ts`, which is what let `help.accounts` go missing. */
+    invisible to `src/locales/keys.test.ts`. Accounts carries no help on purpose: the tab needs
+    none, and the other four say how their object relates to the rest. */
 function helpTextOf(tab, t) {
   switch (tab) {
-    case 'accounts': return t('help.accounts')
     case 'domains': return t('help.domains')
     case 'virtualdomains': return t('help.virtualdomains')
     case 'externaldomains': return t('help.externaldomains')

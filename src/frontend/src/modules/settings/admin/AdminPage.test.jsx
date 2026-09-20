@@ -927,16 +927,16 @@ describe('AdminPage', () => {
     expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
   })
 
-  // The Accounts tab used to build its help key from `help.${activeTab}`, a template literal
-  // the missing-key guard cannot see; the key was absent and the "?" bubble showed nothing.
-  it('shows real help text on the Accounts tab, not an empty bubble', async () => {
+  // Accounts offers no help, and that is the decision rather than the missing key it looked like:
+  // the tab explains itself, and a "?" with nothing behind it is worse than none.
+  it('offers no help on the Accounts tab', async () => {
     renderAdminPage()
-    await waitFor(() =>
-      expect(screen.getByRole('tooltip')).toHaveTextContent('Create, edit and delete user mailboxes')
-    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active'))
+
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
-  it('shows the matching help text on every other tab', async () => {
+  it('shows the matching help text on every tab that has some', async () => {
     renderAdminPage()
 
     await userEvent.click(screen.getByRole('button', { name: 'Domains' }))

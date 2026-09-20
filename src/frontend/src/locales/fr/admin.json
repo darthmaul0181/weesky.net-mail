@@ -10,7 +10,6 @@
     "application": "Application"
   },
   "help": {
-    "accounts": "Créez, modifiez et supprimez les boîtes utilisateur : nom d’utilisateur, domaine, mot de passe, quota et droits d’administrateur. Chaque compte appartient à exactement un des domaines listés dans l’onglet Domaines.",
     "domains": "Un domaine est un domaine de messagerie hébergé directement sur ce serveur (p. ex. example.com). Chaque compte utilisateur appartient à un seul domaine. Ajouter un domaine permet de créer des boîtes de la forme utilisateur@example.com.",
     "virtualdomains": "Un domaine d’alias virtuel est un domaine sans boîte propre. Les messages envoyés à une adresse de ce domaine sont redirigés vers de vraies boîtes par des règles d’alias. Chaque domaine d’alias virtuel peut avoir un ou plusieurs propriétaires — des comptes autorisés à y créer et gérer des alias.",
     "externaldomains": "Définit les fournisseurs de messagerie externes depuis lesquels les utilisateurs peuvent connecter un compte.",
