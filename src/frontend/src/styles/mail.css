@@ -930,7 +930,13 @@
 .detail-muted { color: var(--text-muted); }
 .reader-security { display: inline-flex; align-items: center; gap: 5px; }
 
-.address-label { color: inherit; font: inherit; }
+/* A recipient with a tooltip is now a real <button> (jsx-a11y/no-noninteractive-tabindex, lot 2b
+   task 3); border/padding/background undo the UA button chrome, and `display: inline` keeps it
+   flowing like the plain text it replaces instead of the UA's inline-block. The sender variant
+   below already carried this reset before this lot and keeps its own display. */
+.address-label { color: inherit; font: inherit; border: 0; padding: 0; background: none; }
+
+.address-label:not(.is-sender) { display: inline; }
 
 .address-label.is-sender {
   border: 0;
@@ -946,12 +952,17 @@
 .address-label.is-sender:hover { color: var(--action-primary); }
 
 /* A line shield inheriting the verdict colour — the icon carries its own size, so the badge is
-   just a colour-setting container. --success reads green, --danger red, in both modes. */
+   just a colour-setting container. --success reads green, --danger red, in both modes. Now a
+   <button> (lot 2b task 3): border/padding/background undo the UA button chrome; display was
+   already inline-flex here, so the button box matches the span it replaces unchanged. */
 .auth-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
+  border: 0;
+  padding: 0;
+  background: none;
 }
 
 .auth-badge.is-pass { color: var(--success); }
@@ -961,11 +972,19 @@
    trailing space — the same trap .reader-recipients fell into. */
 .reader-spam { display: block; }
 
+/* Now a <button> (lot 2b task 3): border/padding/background undo the UA button chrome, and
+   color/font keep .spam-gauge-value inheriting from the surrounding text as it did as a span.
+   display was already inline-flex here, so the box matches the span it replaces unchanged. */
 .spam-gauge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   vertical-align: middle;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
 }
 
 .spam-gauge-track {

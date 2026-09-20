@@ -293,7 +293,7 @@ describe('MessageReader', () => {
 
       render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
 
-      expect(await screen.findByRole('img', { name: /passed spf and dkim/i })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: /passed spf and dkim/i })).toBeInTheDocument()
     })
 
     it('shows the headers behind its claim', async () => {
@@ -312,7 +312,7 @@ describe('MessageReader', () => {
 
       render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
 
-      expect(await screen.findByRole('img', { name: /failed spf or dkim/i })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: /failed spf or dkim/i })).toBeInTheDocument()
     })
 
     // Nothing at all rather than a reassuring or an alarming badge: the checks did not run.

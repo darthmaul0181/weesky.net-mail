@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useId, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import Tooltip from '../../../components/Tooltip'
 import type { MailSpamScore } from '../api/mailTypes'
@@ -6,13 +6,14 @@ import { spamRatio } from './spamRatio'
 
 /** The bar alone. The details grid labels its rows with a <dt>, so it takes this one. */
 export function SpamBar({ spamScore }: { spamScore: MailSpamScore | null | undefined }) {
+  const { t } = useTranslation('mail')
+  const bubbleId = useId()
   const ratio = spamRatio(spamScore)
   if (ratio === null || !spamScore) return null
 
   return (
-    <Tooltip content={spamScore.raw} placement="bottom-left">
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the house way this span makes Tooltip's hover bubble keyboard-reachable; deferred to lot 2b to become a real button */}
-      <span className="spam-gauge" tabIndex={0}>
+    <Tooltip content={spamScore.raw} placement="bottom-left" bubbleId={bubbleId}>
+      <button type="button" className="spam-gauge" aria-label={t('reader.spamScore')} aria-describedby={bubbleId}>
         <span
           className="spam-gauge-track"
           style={{ '--gauge-ratio': String(ratio) } as CSSProperties}
@@ -22,7 +23,7 @@ export function SpamBar({ spamScore }: { spamScore: MailSpamScore | null | undef
         <span className="spam-gauge-value">
           {spamScore.score.toFixed(1)} / {spamScore.threshold.toFixed(1)}
         </span>
-      </span>
+      </button>
     </Tooltip>
   )
 }

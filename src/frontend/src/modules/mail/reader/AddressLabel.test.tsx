@@ -33,10 +33,16 @@ describe('AddressLabel', () => {
 
   // Recipients are plain text, so without this they would be unreachable by keyboard and
   // their tooltip — the only place the address is written — invisible to anyone not using a mouse.
-  it('makes a recipient carrying a tooltip focusable', () => {
+  // The precedent is HelpTooltip: a real button, describing itself with the bubble it opens.
+  it('turns a recipient carrying a tooltip into a real button, describing itself with the bubble it opens', () => {
     render(<AddressLabel name="Bob" address="bob@x.be" />)
 
-    expect(screen.getByText('Bob')).toHaveAttribute('tabindex', '0')
+    const trigger = screen.getByRole('button', { name: 'Bob' })
+    const bubble = screen.getByRole('tooltip')
+
+    expect(trigger).toHaveAttribute('type', 'button')
+    expect(trigger).toHaveAttribute('aria-describedby', bubble.id)
+    expect(bubble.id).toBeTruthy()
   })
 
   it('leaves a recipient with nothing to reveal out of the tab order', () => {

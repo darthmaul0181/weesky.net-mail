@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import Tooltip from '../../../components/Tooltip'
 import type { MailAuthentication } from '../api/mailTypes'
@@ -7,6 +8,7 @@ import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 
 export default function AuthBadge({ authentication }: { authentication: MailAuthentication | null }) {
   const { t } = useTranslation('mail')
+  const bubbleId = useId()
   const verdict = authVerdict(authentication)
   if (!verdict || !authentication) return null
 
@@ -17,11 +19,10 @@ export default function AuthBadge({ authentication }: { authentication: MailAuth
   const label = t(verdict === 'pass' ? 'reader.auth.passed' : 'reader.auth.failed')
 
   return (
-    <Tooltip content={detail} placement="bottom-left">
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the house way this span makes Tooltip's hover bubble keyboard-reachable; deferred to lot 2b to become a real button */}
-      <span className={`auth-badge is-${verdict}`} tabIndex={0} role="img" aria-label={label}>
+    <Tooltip content={detail} placement="bottom-left" bubbleId={bubbleId}>
+      <button type="button" className={`auth-badge is-${verdict}`} aria-label={label} aria-describedby={bubbleId}>
         {verdict === 'pass' ? <ShieldCheckIcon size={20} /> : <ShieldAlertIcon size={20} />}
-      </span>
+      </button>
     </Tooltip>
   )
 }

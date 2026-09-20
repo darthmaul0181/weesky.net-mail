@@ -27,6 +27,18 @@ describe('SpamGauge', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('X-Spamd-Result: default: False')
   })
 
+  // The precedent is HelpTooltip: a real button, describing itself with the bubble it opens.
+  it('is a real button, named for the gauge and describing itself with the raw header', () => {
+    render(<SpamGauge spamScore={spam} />)
+
+    const trigger = screen.getByRole('button', { name: 'Spam score:' })
+    const bubble = screen.getByRole('tooltip')
+
+    expect(trigger).toHaveAttribute('type', 'button')
+    expect(trigger).toHaveAttribute('aria-describedby', bubble.id)
+    expect(bubble.id).toBeTruthy()
+  })
+
   it('renders nothing without a score', () => {
     const { container } = render(<SpamGauge spamScore={null} />)
 
