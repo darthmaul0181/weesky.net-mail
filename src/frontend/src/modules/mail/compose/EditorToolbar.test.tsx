@@ -96,29 +96,38 @@ describe('EditorToolbar', () => {
     expect(trigger).toHaveFocus()
   })
 
-  // Safari focuses no button on click, so `document.activeElement` at open time can be the
-  // editor rather than the trigger — `fireEvent.click` (unlike userEvent.click) does not move
-  // focus in jsdom either, which is what lets this test stand in for that case. Closing is done
-  // from a swatch that *is* focused (as a real click or a keyboard activation would leave it),
-  // which is what lets `returnFocus`'s "was focus inside the surface" guard run at all — and is
-  // exactly the setup that used to send focus to `elsewhere` instead of to the trigger.
-  it('refocuses the button that opened a popover, even when something else held focus when it opened', () => {
-    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-    const elsewhere = document.createElement('button')
-    document.body.appendChild(elsewhere)
-    elsewhere.focus()
-    expect(document.activeElement).toBe(elsewhere)
-
-    const trigger = screen.getByRole('button', { name: 'Text colour' })
-    fireEvent.click(trigger)
-    expect(document.activeElement).toBe(elsewhere) // sanity: opening did not focus the trigger
-
-    const swatch = screen.getByRole('button', { name: '#d0021b' })
+  // `fireEvent.click` (unlike userEvent.click) does not move focus in jsdom, which stands in for
+  // Safari not focusing a button on click — `document.activeElement` stays on `elsewhere` while
+  // the popover opens, and the close must still land on the button that opened it.
+  function closeBySwatch(colour: string) {
+    const swatch = screen.getByRole('button', { name: colour })
     swatch.focus()
     fireEvent.click(swatch)
+  }
 
-    expect(trigger).toHaveFocus()
-    elsewhere.remove()
+  it.each([
+    { trigger: 'Text colour', close: () => closeBySwatch('#d0021b') },
+    { trigger: 'Highlight colour', close: () => closeBySwatch('#f8e71c') },
+    { trigger: 'Link', close: () => {
+      fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://weesky.net' } })
+      const applyBtn = screen.getByRole('button', { name: 'Apply' })
+      applyBtn.focus()
+      fireEvent.click(applyBtn)
+    } },
+  ])('refocuses its own trigger, not whatever held focus when it opened ($trigger)', ({ trigger, close }) => {
+    const { container } = render(
+      <EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+    const elsewhere = document.createElement('button')
+    container.appendChild(elsewhere)
+    elsewhere.focus()
+
+    const triggerBtn = screen.getByRole('button', { name: trigger })
+    fireEvent.click(triggerBtn)
+    expect(document.activeElement).toBe(elsewhere) // sanity: opening did not focus the trigger
+
+    close()
+
+    expect(triggerBtn).toHaveFocus()
   })
 
   it('refocuses the highlight trigger, not the last text-colour trigger, when both popovers were used', () => {

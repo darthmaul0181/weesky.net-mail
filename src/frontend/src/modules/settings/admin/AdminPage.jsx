@@ -27,6 +27,7 @@ export default function AdminPage() {
   const { t } = useTranslation('admin')
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [activeTab, setActiveTab] = useState('accounts')
+  const helpText = helpTextOf(activeTab, t)
 
   return (
     <>
@@ -55,9 +56,11 @@ export default function AdminPage() {
             {activeTab === 'application' && <ApplicationTab addToast={addToast} />}
           </div>
         </div>
-        <div className="admin-modal-help">
-          <HelpTooltip text={helpTextOf(activeTab, t)} />
-        </div>
+        {helpText && (
+          <div className="admin-modal-help">
+            <HelpTooltip text={helpText} />
+          </div>
+        )}
       </div>
 
       <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
