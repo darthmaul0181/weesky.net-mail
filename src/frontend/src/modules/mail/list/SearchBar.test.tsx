@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useRef } from 'react'
 import SearchBar from './SearchBar'
+import { useDismiss } from '../../../hooks/useDismiss'
 
 function setup() {
   const onSearch = vi.fn(); const onOpenAdvanced = vi.fn(); const onClose = vi.fn()
@@ -26,6 +28,22 @@ describe('SearchBar', () => {
     const { onClose, input } = setup()
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()
+  })
+
+  // Safari focuses no button on a click, so the caret can still be here while the reader's kebab
+  // is open: that Escape belongs to the menu, and closing the bar under it leaves the menu open.
+  it('leaves Escape to an open layer', () => {
+    function Menu() {
+      const root = useRef<HTMLDivElement>(null)
+      useDismiss({ open: true, rootRef: root, onDismiss: () => {} })
+      return <div ref={root}><button type="button">Entry</button></div>
+    }
+    const { onClose, input } = setup()
+    render(<Menu />)
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('opens the advanced search with the current text', () => {

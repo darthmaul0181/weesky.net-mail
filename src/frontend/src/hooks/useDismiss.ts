@@ -15,10 +15,12 @@ interface Options {
   closeOnScroll?: boolean
 }
 
-/** Closing unmounts the surface, so focus held inside it would fall to <body>: it goes back. */
+/** Closing unmounts the surface, so focus held inside it would fall to <body>: it goes back. A
+    target that has left the document is no target — `focus()` on it is a silent no-op — so focus
+    stays put and whatever fallback the caller has runs instead. */
 export function returnFocus(
   root: HTMLElement | null, to: HTMLElement | null | undefined, options?: FocusOptions) {
-  if (root?.contains(document.activeElement)) to?.focus(options)
+  if (to?.isConnected && root?.contains(document.activeElement)) to.focus(options)
 }
 
 /**
@@ -34,7 +36,7 @@ export function useDismiss({
   const latest = useRef({ onDismiss, refocusRef })
   useLayoutEffect(() => { latest.current = { onDismiss, refocusRef } })
 
-  const isTop = useLayer({
+  const layer = useLayer({
     active: open,
     onEscape: () => {
       returnFocus(rootRef.current, refocusRef?.current)
@@ -45,17 +47,19 @@ export function useDismiss({
   useEffect(() => {
     if (!open) return undefined
     // A press that lands on a surface above this one is that surface's business: the confirm a
-    // menu row opened is "outside" by containment alone, and closing under it is the bug.
+    // menu row opened is "outside" by containment alone, and closing under it is the bug. The
+    // question is a trap above, not the top place: a menu over a popover suspends neither, so one
+    // press on the page closes both.
     function outside(event: MouseEvent) {
       const target = event.target as Node
-      if (!isTop()) return
+      if (layer.coveredByTrap()) return
       if (rootRef.current?.contains(target) || anchorRef?.current?.contains(target)) return
       latest.current.onDismiss()
     }
     // The surface leaves with the scroll, so the focus it holds has to go somewhere first — and
     // `preventScroll`, or refocusing what was just scrolled away from fights the gesture.
     function scrolled() {
-      if (!isTop()) return
+      if (!layer.isTop()) return
       returnFocus(rootRef.current, latest.current.refocusRef?.current, { preventScroll: true })
       latest.current.onDismiss()
     }
@@ -66,5 +70,5 @@ export function useDismiss({
       document.removeEventListener('mousedown', outside)
       if (closeOnScroll) document.removeEventListener('scroll', scrolled, true)
     }
-  }, [open, closeOnScroll, isTop, rootRef, anchorRef])
+  }, [open, closeOnScroll, layer, rootRef, anchorRef])
 }

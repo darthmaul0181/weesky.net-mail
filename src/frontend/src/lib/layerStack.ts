@@ -94,3 +94,14 @@ export function hasOpenLayer() {
 export function isTopLayer(handle: LayerHandle) {
   return topEntry()?.handle === handle
 }
+
+/** Whether a trapped layer stands over this one — what a trapless surface asks before acting on a
+    pointer: a menu or a popover above it suspends nothing, a dialog does. */
+export function coveredByTrap(handle: LayerHandle) {
+  const at = stack.findIndex(entry => entry.handle === handle)
+  if (at === -1) return false
+  for (let above = at + 1; above < stack.length; above += 1) {
+    if (stack[above].layer.trap) return true
+  }
+  return false
+}

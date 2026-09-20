@@ -1,5 +1,16 @@
-import { useCallback, useInsertionEffect, useLayoutEffect, useRef, type RefObject } from 'react'
-import { focusablesIn, isTopLayer, pushLayer, type LayerHandle } from '../lib/layerStack'
+import {
+  useEffect, useInsertionEffect, useLayoutEffect, useMemo, useRef, type RefObject,
+} from 'react'
+import {
+  coveredByTrap, focusablesIn, isTopLayer, pushLayer, type LayerHandle,
+} from '../lib/layerStack'
+
+/** Somewhere a keyboard can work from: still in the document, not <body> — whose `focus()` is a
+    silent no-op — and not a control disabled since it was focused. */
+function reachable(node: Element | null): node is HTMLElement {
+  const element = node as (HTMLElement & { disabled?: boolean }) | null
+  return !!element && element !== document.body && element.isConnected && !element.disabled
+}
 
 interface Options {
   active: boolean
@@ -15,14 +26,17 @@ interface Options {
 
 /**
  * Puts one surface on the layer stack while it is active: Escape and Tab reach it only while it
- * is the topmost one, and focus moves in on activation and back out on close. It answers whether
- * this layer is that topmost one — what a surface acting on a pointer of its own asks first.
+ * is the topmost one, and focus moves in on activation and back out on close. It answers the two
+ * questions a surface acting on a pointer of its own asks: whether it is that topmost layer, and
+ * whether anything trapped stands over it.
  */
 export function useLayer({
   active, ref, onEscape, initialFocusRef, returnFocusRef, autoFocus = true, restoreFocus = true,
 }: Options) {
   const handle = useRef<LayerHandle | null>(null)
   const opener = useRef<HTMLElement | null>(null)
+  // Where the cleanup below handed focus, for the passive cleanup that checks it landed.
+  const handedTo = useRef<HTMLElement | null>(null)
   const latest = useRef({ onEscape, initialFocusRef, returnFocusRef })
 
   // React commits a child's `autoFocus` in the layout phase, before any layout effect, so no
@@ -61,15 +75,29 @@ export function useLayer({
       handle.current?.remove()
       handle.current = null
       if (!container || !restoreFocus || !wasTop) return
-      // Judged at close, not at open: an opener that was plainly connected may have gone since.
-      // <body> is excluded because body.focus() is a silent no-op — the "focus drops to nowhere"
-      // this exists to prevent.
+      // Judged at close, not at open: an opener that was plainly there may have gone since, or
+      // have been disabled by the very write this layer asked about.
       const previous = opener.current
-      const usable = previous?.isConnected && previous !== document.body
-      ;(usable ? previous : latest.current.returnFocusRef?.current)?.focus()
+      const back = latest.current.returnFocusRef?.current ?? null
+      ;(reachable(previous) ? previous : back)?.focus()
+      handedTo.current = back
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
 
-  return useCallback(() => !!handle.current && isTopLayer(handle.current), [])
+  // The one case the cleanup above cannot see: an opener removed or disabled *later in the same
+  // commit* — the subtree holding it is mutated after this layer's layout cleanup — strands the
+  // focus it was just given. A passive cleanup runs once the DOM has settled, which shows it.
+  useEffect(() => () => {
+    const back = handedTo.current
+    handedTo.current = null
+    if (back?.isConnected && !reachable(document.activeElement)) back.focus()
+  }, [active])
+
+  // One stable object: its readers ask from inside effects that must not be re-installed on a
+  // render, and both answers are read at the moment the event arrives rather than at render time.
+  return useMemo(() => ({
+    isTop: () => !!handle.current && isTopLayer(handle.current),
+    coveredByTrap: () => !!handle.current && coveredByTrap(handle.current),
+  }), [])
 }

@@ -108,6 +108,25 @@ describe('useDismiss', () => {
     expect(onDismiss).not.toHaveBeenCalled()
   })
 
+  // The regression this fixes: the composer's colour popover with the Font menu open over it —
+  // two trapless layers — needed a second press on the page, the lower one having asked whether
+  // it was topmost rather than whether anything above it holds a trap.
+  it('closes with the trapless surface above it on one press outside', () => {
+    const onDismiss = vi.fn()
+    const onMenu = vi.fn()
+    function Menu() {
+      const root = useRef<HTMLDivElement>(null)
+      useDismiss({ open: true, rootRef: root, onDismiss: onMenu })
+      return <div ref={root}><button type="button">Entry</button></div>
+    }
+    render(<><Surface onDismiss={onDismiss} /><Menu /></>)
+
+    fireEvent.mouseDown(document.body)
+
+    expect(onMenu).toHaveBeenCalledTimes(1)
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
   it('answers again once the surface above it is gone', () => {
     const onDismiss = vi.fn()
     function Both({ dialog }: { dialog: boolean }) {
