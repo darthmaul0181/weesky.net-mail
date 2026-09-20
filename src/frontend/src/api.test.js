@@ -824,12 +824,17 @@ describe('mail endpoints', () => {
 
   it('posts search criteria with paging', async () => {
     mockFetch(200, { json: { total: 0, page: 0, pageSize: 50, results: [] } })
-    const { api } = await import('./api.js')
+    const { api, API_BASE } = await import('./api.js')
+
+    // Guards the comparisons below against a silently undefined API_BASE (e.g. test.env not
+    // reaching import.meta.env), which would otherwise make every `${API_BASE}/...` assertion
+    // here pass vacuously against 'undefined/...'.
+    expect(API_BASE).toMatch(/^https:\/\//)
 
     await api.searchMessages({ folderPath: 'INBOX', allFolders: false, quick: 'hello' }, 0, 50)
 
     const [url, options] = globalThis.fetch.mock.calls[0]
-    expect(url).toBe('https://api.mail.weesky.net/api/Mail/Messages/Search')
+    expect(url).toBe(`${API_BASE}/api/Mail/Messages/Search`)
     expect(options.method).toBe('POST')
     expect(JSON.parse(options.body)).toEqual({
       folderPath: 'INBOX', allFolders: false, quick: 'hello', page: 0, pageSize: 50,

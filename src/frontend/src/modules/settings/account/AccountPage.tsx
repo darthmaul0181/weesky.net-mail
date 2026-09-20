@@ -17,7 +17,8 @@ interface Quota {
 function CheckIcon(): JSX.Element {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false">
       <polyline points="20 6 9 17 4 12" />
     </svg>
   )
@@ -26,7 +27,8 @@ function CheckIcon(): JSX.Element {
 function XIcon(): JSX.Element {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
@@ -38,7 +40,7 @@ export default function AccountPage() {
   const { t } = useTranslation('settings')
   const canEditProfile = capabilities?.profileEditing !== false
   const canChangePassword = capabilities?.passwordChange !== false
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [quota, setQuota] = useState<Quota | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
@@ -90,6 +92,7 @@ export default function AccountPage() {
               onKeyDown={e => { if (e.key === 'Enter') saveName() }}
               maxLength={255}
               disabled={saving}
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- an inline rename field, not a dialog Modal: opening it autofocuses the box the way SearchBar's does
               autoFocus
             />
             <button
@@ -154,7 +157,7 @@ export default function AccountPage() {
         </section>
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

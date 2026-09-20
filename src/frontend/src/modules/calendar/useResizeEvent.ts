@@ -8,6 +8,10 @@ import { trackPointer } from './pointerGesture'
 export interface ResizeState {
   key: string
   durationMinutes: number
+  /** The duration the drag started from, in the same zone `durationMinutes` is counted in
+      (the occurrence's own, `durationMinutesOf`'s default) — what a preview in the grid's own
+      zone must subtract before adding its own duration back, so the two zones never mix. */
+  baseMinutes: number
 }
 
 export interface ResizeEventOptions {
@@ -35,7 +39,7 @@ export function useResizeEvent({ enabled, onResize }: ResizeEventOptions) {
     stop.current = trackPointer(event, {
       move: (_dx, dy) => {
         duration = Math.max(SNAP_MINUTES, base + snapMinutes(dy))
-        setResize({ key, durationMinutes: duration })
+        setResize({ key, durationMinutes: duration, baseMinutes: base })
       },
       drop: moved => {
         setResize(null)

@@ -48,7 +48,7 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
   return (
     <form className="change-password-form" onSubmit={handleSubmit}>
       <p className="setting-hint">{t('account.passwordResetsSync')}</p>
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
       <div className="field">
         <label htmlFor="account-old-password">{t('account.currentPassword')}</label>
         <input

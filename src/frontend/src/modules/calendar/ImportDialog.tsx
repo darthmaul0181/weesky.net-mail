@@ -1,9 +1,10 @@
-import { useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CALENDAR_COLORS, isHexColor } from './calendarColors'
 import type { Calendar } from './calendarTypes'
 import ColorSwatches from './ColorSwatches'
 import { calendarHeaderOf } from './icsHeader'
+import Modal from '../../components/Modal'
 
 export type ImportChoice =
   | { mode: 'existing'; id: string; file: File }
@@ -36,6 +37,7 @@ export default function ImportDialog({
   const [id, setId] = useState(targetId)
   const [name, setName] = useState('')
   const [color, setColor] = useState(CALENDAR_COLORS[0])
+  const fileRef = useRef<HTMLInputElement>(null)
 
   async function pick(event: ChangeEvent<HTMLInputElement>) {
     const chosen = event.target.files?.[0] ?? null
@@ -58,82 +60,74 @@ export default function ImportDialog({
     && (mode === 'existing' ? id !== '' : trimmedName !== '' && isHexColor(color))
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={event => event.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{t('import.title')}</span>
-          <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
-            onClick={onClose}>✕</button>
+    <Modal title={t('import.title')} onClose={onClose} busy={saving} initialFocusRef={fileRef}>
+      <form onSubmit={event => {
+        event.preventDefault()
+        if (!submittable || !file) return
+        onImport(mode === 'existing'
+          ? { mode: 'existing', id, file }
+          : { mode: 'new', file, displayName: trimmedName, color: color.trim() })
+      }}>
+        <div className="field-h">
+          <label htmlFor="calendar-import-file">{t('import.file')}</label>
+          <input id="calendar-import-file" type="file" accept=".ics,text/calendar"
+            ref={fileRef} onChange={pick} />
         </div>
 
-        <form onSubmit={event => {
-          event.preventDefault()
-          if (!submittable || !file) return
-          onImport(mode === 'existing'
-            ? { mode: 'existing', id, file }
-            : { mode: 'new', file, displayName: trimmedName, color: color.trim() })
-        }}>
-          <div className="field-h">
-            <label htmlFor="calendar-import-file">{t('import.file')}</label>
-            <input id="calendar-import-file" type="file" accept=".ics,text/calendar"
-              onChange={pick} />
+        <div className="field-h">
+          {/* The row's own label, styled by `.field-h > label:first-child` — the group carries
+              its accessible name itself, so this one associates with nothing. */}
+          <label>{t('import.into')}</label>
+          <div className="import-modes" role="radiogroup" aria-label={t('import.into')}>
+            <label>
+              <input type="radio" name="calendar-import-mode" checked={mode === 'existing'}
+                onChange={() => setMode('existing')} />
+              {t('import.existing')}
+            </label>
+            <label>
+              <input type="radio" name="calendar-import-mode" checked={mode === 'new'}
+                onChange={() => setMode('new')} />
+              {t('import.new')}
+            </label>
           </div>
+        </div>
 
+        {mode === 'existing' ? (
           <div className="field-h">
-            {/* The row's own label, styled by `.field-h > label:first-child` — the group carries
-                its accessible name itself, so this one associates with nothing. */}
-            <label>{t('import.into')}</label>
-            <div className="import-modes" role="radiogroup" aria-label={t('import.into')}>
-              <label>
-                <input type="radio" name="calendar-import-mode" checked={mode === 'existing'}
-                  onChange={() => setMode('existing')} />
-                {t('import.existing')}
-              </label>
-              <label>
-                <input type="radio" name="calendar-import-mode" checked={mode === 'new'}
-                  onChange={() => setMode('new')} />
-                {t('import.new')}
-              </label>
-            </div>
+            <label htmlFor="calendar-import-into">{t('import.existing')}</label>
+            <select id="calendar-import-into" value={id}
+              onChange={event => setId(event.target.value)}>
+              {calendars.map(one => (
+                <option key={one.id} value={one.id}>{one.displayName}</option>
+              ))}
+            </select>
           </div>
-
-          {mode === 'existing' ? (
+        ) : (
+          <>
             <div className="field-h">
-              <label htmlFor="calendar-import-into">{t('import.existing')}</label>
-              <select id="calendar-import-into" value={id}
-                onChange={event => setId(event.target.value)}>
-                {calendars.map(one => (
-                  <option key={one.id} value={one.id}>{one.displayName}</option>
-                ))}
-              </select>
+              <label htmlFor="calendar-import-name">{t('import.name')}</label>
+              <input id="calendar-import-name" type="text" maxLength={255} value={name}
+                onChange={event => setName(event.target.value)} />
             </div>
-          ) : (
-            <>
-              <div className="field-h">
-                <label htmlFor="calendar-import-name">{t('import.name')}</label>
-                <input id="calendar-import-name" type="text" maxLength={255} value={name}
-                  onChange={event => setName(event.target.value)} />
+            <div className="field-h is-swatches">
+              <label htmlFor="calendar-import-hex">{t('import.colour')}</label>
+              <div className="calendar-colour-field">
+                <ColorSwatches value={color} onPick={setColor} />
+                <input id="calendar-import-hex" type="text" maxLength={7} value={color}
+                  className={isHexColor(color) ? undefined : 'is-error'}
+                  aria-label={t('dialogs.hex')}
+                  onChange={event => setColor(event.target.value)} />
               </div>
-              <div className="field-h is-swatches">
-                <label htmlFor="calendar-import-hex">{t('import.colour')}</label>
-                <div className="calendar-colour-field">
-                  <ColorSwatches value={color} onPick={setColor} />
-                  <input id="calendar-import-hex" type="text" maxLength={7} value={color}
-                    className={isHexColor(color) ? undefined : 'is-error'}
-                    aria-label={t('dialogs.hex')}
-                    onChange={event => setColor(event.target.value)} />
-                </div>
-              </div>
-            </>
-          )}
+            </div>
+          </>
+        )}
 
-          <div className="modal-actions">
-            <button type="submit" className="btn btn-primary" disabled={!submittable}>
-              {saving ? <span className="spinner" /> : t('import.submit')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="modal-actions">
+          <button type="submit" className="btn btn-primary" disabled={!submittable}>
+            {saving ? <span className="spinner" /> : t('import.submit')}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }

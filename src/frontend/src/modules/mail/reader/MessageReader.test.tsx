@@ -1,12 +1,15 @@
 ﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import userEvent from '@testing-library/user-event'
 import { mockViewport, resetViewport, settle } from '../../../test-utils'
-import type { MailFolderNode } from '../api/mailTypes'
+import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
 import type { Contact } from '../../contacts/contactTypes'
+import { mailKeys } from '../queries'
 import MessageReader from './MessageReader'
+import Modal from '../../../components/Modal'
 import { formatReaderDateShort } from './formatReaderDate'
 
 const mocks = vi.hoisted(() => ({
@@ -184,6 +187,7 @@ function renderWithCachedSummary(
       </MemoryRouter>
     </QueryClientProvider>,
   )
+  return client
 }
 
 // Seeds the inputs of the revocation gate synchronously, the way makeClient seeds the folders.
@@ -450,6 +454,38 @@ describe('MessageReader', () => {
       .not.toContain('data-blocked-src'))
     expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
       .toContain('src="https://t.example/p.gif"')
+  })
+
+  // An effect resets after commit: a cached next message would paint once with this consent.
+  it('never reveals the next cached message with the previous one\'s consent', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+    const client = makeClient()
+    client.setQueryData(['mail', 'primary', 'message', 'INBOX', 3], {
+      ...blocked, uid: 3, subject: 'Autre', htmlBody: '<img data-blocked-src="https://t.example/b.gif">',
+    })
+    const tree = (uid: number) => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter><MessageReader folderPath="INBOX" uid={uid} /></MemoryRouter>
+      </QueryClientProvider>
+    )
+    const { container, rerender } = render(tree(2))
+    fireEvent.click(await screen.findByRole('button', { name: /show images/i }))
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .not.toContain('data-blocked-src'))
+
+    const iframe = container.querySelector('iframe')!
+    const commits: string[] = []
+    const observer = new MutationObserver(records => commits.push(...records.map(r => r.oldValue ?? '')))
+    observer.observe(iframe, { attributeFilter: ['srcdoc'], attributeOldValue: true })
+    rerender(tree(3))
+    await screen.findByText('Autre')
+    await settle()
+    observer.disconnect()
+    commits.push(iframe.getAttribute('srcdoc')!)
+
+    const ofB = commits.filter(srcdoc => srcdoc.includes('b.gif'))
+    expect(ofB.length).toBeGreaterThan(0)
+    for (const srcdoc of ofB) expect(srcdoc).toContain('data-blocked-src')
   })
 
   // A withheld background travels a different road from a withheld <img src>: consent hands it
@@ -1265,6 +1301,21 @@ describe('MessageReader', () => {
       expect(screen.getByRole('menuitem', { name: 'Unstar' })).toBeInTheDocument()
     })
 
+    // The list row's star patches the list caches, which the reader does not own.
+    it('follows a star set from the list row', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const client = renderWithCachedSummary({ seen: true, flagged: false })
+      await screen.findByText('Re: facture')
+      await settle()
+
+      act(() => client.setQueriesData<MailFolderPage>(
+        { queryKey: mailKeys.messagesIn('primary', 'INBOX') },
+        page => page && { ...page, messages: page.messages.map(m => ({ ...m, flagged: true })) }))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      expect(await screen.findByRole('menuitem', { name: 'Unstar' })).toBeInTheDocument()
+    })
+
     it('stars the message on demand, with the full mutation payload', async () => {
       mocks.getMailMessage.mockResolvedValue(detail)
       renderWithCachedSummary({ seen: true, flagged: false })
@@ -1421,6 +1472,43 @@ describe('MessageReader', () => {
       expect(onBack).toHaveBeenCalled()
     })
 
+    it('closes the open kebab on Escape and backs out only on the next one', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(<MessageReader folderPath="INBOX" uid={2} onBack={onBack} />, { wrapper })
+      await screen.findByText('Re: facture')
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      expect(onBack).not.toHaveBeenCalled()
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(onBack).toHaveBeenCalledTimes(1)
+    })
+
+    // A surface the reader has no flag for — the list's own dialogs sit beside it in the same
+    // screen. The stack knows about every one of them; a list of the reader's three never can.
+    // Dispatched on window, so the stack's document listener never marks the event handled
+    // either: the reader has to ask the stack rather than read defaultPrevented.
+    it('does not back out while a dialog it knows nothing about owns Escape', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(
+        <>
+          <MessageReader folderPath="INBOX" uid={2} onBack={onBack} />
+          <Modal title="Advanced search" onClose={vi.fn()}><p>body</p></Modal>
+        </>,
+        { wrapper })
+      await screen.findByText('Re: facture')
+
+      fireEvent.keyDown(window, { key: 'Escape' })
+
+      expect(onBack).not.toHaveBeenCalled()
+    })
+
     // An Escape dispatched below both listeners reaches the picker's document handler and then
     // the reader's window handler. The picker closing is fine; backing the message out under it
     // is the double-fire this gate exists to stop.
@@ -1550,13 +1638,39 @@ describe('MessageReader', () => {
       expect(onDeparted).toHaveBeenCalledWith(2)
     })
 
+    // The expunged message takes the reader's own Delete button with it — the folder may hold no
+    // next one — so there is no opener left and focus would land on <body>.
+    it('hands focus to the list region when the expunge closes the reader', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      function Host() {
+        const region = useRef<HTMLDivElement>(null)
+        const [open, setOpen] = useState(true)
+        return (
+          <>
+            <div data-testid="region" tabIndex={-1} ref={region} />
+            {open && (
+              <MessageReader folderPath="Corbeille" uid={2} folderRole="trash"
+                regionRef={region} onDeparted={() => setOpen(false)} />
+            )}
+          </>
+        )
+      }
+      render(<Host />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+      await userEvent.click(modal().getByRole('button', { name: 'Delete' }))
+
+      expect(screen.getByTestId('region')).toHaveFocus()
+    })
+
     it('expunges nothing when the confirmation is dismissed', async () => {
       mocks.getMailMessage.mockResolvedValue(detail)
       renderReader({ folderPath: 'Corbeille', folderRole: 'trash' })
       await screen.findByText('Re: facture')
 
       fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
-      fireEvent.click(modal().getByRole('button', { name: '✕' }))
+      fireEvent.click(modal().getByRole('button', { name: 'Close' }))
 
       await settle()
       expect(mocks.deleteMessages).not.toHaveBeenCalled()

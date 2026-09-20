@@ -1,5 +1,14 @@
-import { act } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import type { Viewport } from './hooks/useViewport'
+
+/** A dismissing press on a dialog's backdrop: it counts only when both halves land on it, so the
+    three events are one gesture. `index` picks a backdrop when dialogs are stacked, outermost 0. */
+export function pressBackdrop(index = 0) {
+  const backdrop = screen.getAllByRole('presentation')[index]
+  fireEvent.mouseDown(backdrop)
+  fireEvent.mouseUp(backdrop)
+  fireEvent.click(backdrop)
+}
 
 /**
  * A macrotask boundary, which drains every pending microtask. TanStack v5 notifies its observers

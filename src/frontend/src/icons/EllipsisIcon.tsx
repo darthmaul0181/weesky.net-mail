@@ -4,7 +4,7 @@
 export default function EllipsisIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor"
-      strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+      strokeWidth="3" strokeLinecap="round" aria-hidden="true" focusable="false">
       <path d="M3.5 8h.01M8 8h.01M12.5 8h.01" />
     </svg>
   )

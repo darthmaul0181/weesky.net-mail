@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import license from 'rollup-plugin-license'
 import { versionStamp } from './src/lib/versionStamp.js'
@@ -152,33 +152,46 @@ const emitNotices = {
   },
 }
 
-export default defineConfig(() => ({
-  plugins: [react()],
-  // Build-only plugins, so they belong to the output rather than to Vite's own list.
-  build: { rollupOptions: { plugins: [collectNotices, emitNotices] } },
-  define: {
-    __APP_VERSION__: JSON.stringify(versionStamp(PRODUCT_VERSION, RELEASE)),
-    __APP_COMMIT__: JSON.stringify(shortCommit()),
-    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
-  },
-  server: {
-    port: 5173,
-    allowedHosts: ['.mail.weesky.net'],
-  },
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    // Palette parity and the responsive contract test parse stylesheets for their actual text;
-    // Vitest mocks a CSS import to '' otherwise, which passes every check vacuously. Keep this
-    // broad enough to cover every sheet either test globs — the responsive contract's `./*.css`
-    // spans the whole styles directory, so a narrower list silently blinds it to whichever file
-    // falls outside the pattern.
-    css: { include: [/src\/.*\.css/] },
-    setupFiles: ['./src/test-setup.js'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'cobertura'],
-      reportsDirectory: './coverage',
+export default defineConfig(({ command, mode }) => {
+  // No built-in default: a forgotten .env.production would ship a build posting credentials to
+  // someone else's API. The gate and Vite both read envDir (this folder, whatever the cwd), and a
+  // blank value is trimmed so it does not count as set.
+  const envDir = fileURLToPath(new URL('.', import.meta.url))
+  if (command === 'build' && !loadEnv(mode, envDir, 'VITE_').VITE_API_BASE?.trim()) {
+    throw new Error(`VITE_API_BASE is not set. Write it to .env.${mode} before building (install/README.md, step 1.2).`)
+  }
+
+  return {
+    envDir,
+    plugins: [react()],
+    // Build-only plugins, so they belong to the output rather than to Vite's own list.
+    build: { rollupOptions: { plugins: [collectNotices, emitNotices] } },
+    define: {
+      __APP_VERSION__: JSON.stringify(versionStamp(PRODUCT_VERSION, RELEASE)),
+      __APP_COMMIT__: JSON.stringify(shortCommit()),
+      __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
     },
-  },
-}))
+    server: {
+      port: 5173,
+      allowedHosts: ['.mail.weesky.net'],
+    },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      // Palette parity and the responsive contract test parse stylesheets for their actual text;
+      // Vitest mocks a CSS import to '' otherwise, which passes every check vacuously. Keep this
+      // broad enough to cover every sheet either test globs — the responsive contract's `./*.css`
+      // spans the whole styles directory, so a narrower list silently blinds it to whichever file
+      // falls outside the pattern.
+      css: { include: [/src\/.*\.css/] },
+      setupFiles: ['./src/test-setup.js'],
+      // Reserved .test host; tests assert against the exported API_BASE, never this literal.
+      env: { VITE_API_BASE: 'https://api.example.test' },
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'cobertura'],
+        reportsDirectory: './coverage',
+      },
+    },
+  }
+})

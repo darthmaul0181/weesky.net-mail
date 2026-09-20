@@ -11,6 +11,7 @@ export function SpamBar({ spamScore }: { spamScore: MailSpamScore | null | undef
 
   return (
     <Tooltip content={spamScore.raw} placement="bottom-left">
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the house way this span makes Tooltip's hover bubble keyboard-reachable; deferred to lot 2b to become a real button */}
       <span className="spam-gauge" tabIndex={0}>
         <span
           className="spam-gauge-track"

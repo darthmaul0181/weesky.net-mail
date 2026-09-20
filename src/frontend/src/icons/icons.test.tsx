@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 import MailIcon from './MailIcon'
@@ -159,5 +160,24 @@ describe('icons', () => {
     const { container } = render(<StarIcon filled />)
 
     expect(container.querySelector('svg')).toHaveAttribute('fill', 'currentColor')
+  })
+})
+
+// Every icon file, not the curated sample above — a new icon that forgets the two attributes
+// must fail here even before anything imports it into a button.
+const modules = import.meta.glob(['./*.{tsx,jsx}', '!./icons.test.tsx'], { eager: true }) as
+  Record<string, { default: ComponentType<Record<string, never>> }>
+const allIcons = Object.entries(modules).map(([path, mod]) => ({
+  name: path.replace('./', ''),
+  Icon: mod.default,
+}))
+
+describe('every icon is hidden from assistive tech and out of the tab order', () => {
+  it.each(allIcons)('$name renders an svg carrying aria-hidden and focusable=false', ({ Icon }) => {
+    const { container } = render(<Icon />)
+    const svg = container.querySelector('svg')
+
+    expect(svg).toHaveAttribute('aria-hidden', 'true')
+    expect(svg).toHaveAttribute('focusable', 'false')
   })
 })

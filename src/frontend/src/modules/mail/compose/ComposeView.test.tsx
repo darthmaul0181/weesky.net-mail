@@ -7,7 +7,7 @@ import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
 import type { ComposeSeed } from './composeSeed'
 import type { EditorHandle } from './SquireEditor'
-import { settle } from '../../../test-utils'
+import { fireEscape, settle } from '../../../test-utils'
 import { confirmLeave } from '../../../lib/leaveGuard'
 
 const mocks = vi.hoisted(() => ({
@@ -85,18 +85,21 @@ vi.mock('./SquireEditor', async () => {
     would query the DOM against that spinner. */
 let prefs: Record<string, string> = {}
 
-function renderCompose(from = 'INBOX', seed?: ComposeSeed, search = '') {
+function renderCompose(
+  from: string | undefined = 'INBOX', seed?: ComposeSeed, search = '',
+  { cold = false, backTo }: { cold?: boolean; backTo?: string } = {}) {
   const onNotify = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  client.setQueryData(['preferences'], prefs)
+  if (!cold) client.setQueryData(['preferences'], prefs)
   const router = createMemoryRouter(
     [
       { path: '/mail', element: <span data-testid="mail-view">mail</span> },
       { path: '/mail/compose', element: <ComposeView onNotify={onNotify} /> },
+      { path: '/contacts/:id', element: <span data-testid="contact-view">contact</span> },
     ],
-    { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed } }], initialIndex: 1 },
+    { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed, backTo } }], initialIndex: 1 },
   )
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return { onNotify, router }
@@ -950,6 +953,28 @@ describe('drafts in the composer', () => {
     expect(router.state.location.pathname).toBe('/mail/compose')
   })
 
+  // No ✕: both of its answers are on its buttons, so Escape means the harmless one. With no ✕
+  // to be the dialog's first focusable, that first control is Keep editing.
+  it('the leave dialog is a named alertdialog with no ✕, and Escape keeps editing', async () => {
+    const kept = renderCompose('INBOX', withParts)
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
+    const trigger = screen.getByRole('button', { name: 'Close' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    const modal = await discardModal()
+    expect(screen.getByRole('alertdialog', { name: 'Save this draft?' })).toBe(modal)
+    expect(within(modal).queryByRole('button', { name: 'Close' })).toBeNull()
+    expect(within(modal).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
+
+    fireEscape()
+
+    await waitFor(() => expect(screen.queryByText('Save this draft?')).toBeNull())
+    expect(kept.router.state.location.pathname).toBe('/mail/compose')
+    expect(mocks.deleteAttachment).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+  })
+
   it('the leave dialog offers Save draft / Discard / Keep editing', async () => {
     const kept = renderCompose('INBOX', withParts)
 
@@ -1339,6 +1364,25 @@ describe('what a plain-text switch costs', () => {
     expect(textArea().value).toBe('bold')
   })
 
+  it('is a named alertdialog with no ✕, and Escape cancels the switch', () => {
+    editorState.html = '<div><b>bold</b></div>'
+    renderCompose()
+    const trigger = plainToggle()
+    trigger.focus()
+    fireEvent.click(trigger)
+    const modal = screen.getByRole('alertdialog', { name: 'Switch to plain text?' })
+    expect(within(modal).queryByRole('button', { name: 'Close' })).toBeNull()
+    // No ✕, so the first control is the first focusable the layer finds.
+    expect(within(modal).getByRole('button', { name: 'Keep formatting' })).toHaveFocus()
+
+    fireEscape()
+
+    expect(screen.queryByText('Switch to plain text?')).toBeNull()
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
+    expect(screen.getByTestId('compose-editor')).toBeInTheDocument()
+    expect(plainToggle()).toHaveFocus()
+  })
+
   it('keeps the editor when the switch is declined', () => {
     editorState.html = '<div><b>bold</b></div>'
     renderCompose()
@@ -1623,6 +1667,64 @@ describe('the default composing editor', () => {
 
     await waitFor(() => expect(screen.getByDisplayValue('Half written')).toBeInTheDocument())
     expect(screen.queryByRole('textbox', { name: 'Message body' })).toBeNull()
+  })
+
+  // Cold: nothing in the cache yet, as when a mailto: link opens the app or the page is reloaded.
+  it.each([
+    ['a new message', '', 0],
+    ['a mailto link', '?mailto=' + encodeURIComponent('mailto:a@b.c'), 1],
+  ])('opens %s in the text editor when the preferences arrive after mount', async (_, search, seededTokens) => {
+    prefs = { 'mail.composeFormat': 'text' }
+    mocks.getPreferences.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve(prefs), 0)))
+    renderCompose('INBOX', undefined, search, { cold: true })
+
+    await screen.findByTestId('compose-view')
+    expect(screen.queryAllByText('a@b.c')).toHaveLength(seededTokens)
+    expect(screen.queryByTestId('compose-editor')).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Message body' })).toBeInstanceOf(HTMLTextAreaElement)
+  })
+})
+
+describe('a composer whose preferences cannot be loaded', () => {
+  it('says so and offers a retry that mounts the form once they answer', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    renderCompose('INBOX', undefined, '', { cold: true })
+
+    const retry = await screen.findByRole('button', { name: 'Retry' })
+    expect(screen.getByText('Could not load the settings.')).toBeInTheDocument()
+    expect(screen.queryByTestId('compose-view')).toBeNull()
+
+    fireEvent.click(retry)
+    expect(await screen.findByTestId('compose-view')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('offers a way out of the composer route', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    const { router } = renderCompose('INBOX', undefined, '', { cold: true })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByTestId('mail-view')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail')
+  })
+
+  it('closes back to the folder it was opened from, as the form does', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    const { router } = renderCompose('Archive/2026', undefined, '', { cold: true })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByTestId('mail-view')).toBeInTheDocument()
+    expect(router.state.location.search).toBe('?folder=Archive%2F2026')
+  })
+
+  it('closes back to the contact card that opened it', async () => {
+    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
+    const { router } = renderCompose(undefined, undefined, '', { cold: true, backTo: '/contacts/c-1' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByTestId('contact-view')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/contacts/c-1')
   })
 })
 

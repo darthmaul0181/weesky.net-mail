@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import ImportDialog from './ImportDialog'
 import type { Calendar } from './calendarTypes'
+import { fireEscape, pressBackdrop } from '../../test-utils'
 
 function calendar(id: string, displayName: string, isDefault = false): Calendar {
   return {
@@ -85,9 +86,38 @@ describe('ImportDialog', () => {
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Belgian holidays'))
   })
 
-  it('closes on the ✕', async () => {
+  it('is a dialog named by its own title', () => {
+    open()
+    expect(screen.getByRole('dialog', { name: 'Import a calendar' }))
+      .toHaveAttribute('aria-modal', 'true')
+  })
+
+  // A dialog opened to choose a file opens on the box that chooses one, like its two siblings.
+  it('opens on the file box', () => {
+    open()
+    expect(screen.getByLabelText('File')).toHaveFocus()
+  })
+
+  it('withholds every way out while the import is in flight', () => {
+    const { onClose } = open({ saving: true })
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+    fireEscape()
+    pressBackdrop()
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
     const { onClose } = open()
+
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onClose).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    fireEscape()
+    expect(onClose).toHaveBeenCalledTimes(2)
+
+    pressBackdrop()
+    expect(onClose).toHaveBeenCalledTimes(3)
   })
 })

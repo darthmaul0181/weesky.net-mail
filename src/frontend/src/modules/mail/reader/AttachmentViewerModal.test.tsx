@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import AttachmentViewerModal from './AttachmentViewerModal'
+import Modal from '../../../components/Modal'
+import { fireEscape } from '../../../test-utils'
 import { requestBlob } from '../../../api.js'
 
 vi.mock('../../../api.js', () => ({ requestBlob: vi.fn() }))
@@ -96,22 +98,82 @@ describe('AttachmentViewerModal', () => {
     expect(screen.getByLabelText('Next image')).toBeDisabled()
   })
 
+  it('is a modal dialog named by the file it shows', async () => {
+    renderModal()
+    await screen.findByRole('img', { name: 'photo.png' })
+
+    const dialog = screen.getByRole('dialog', { name: 'photo.png' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveClass('attachment-viewer')
+  })
+
+  it('closes on Escape', async () => {
+    const { onClose } = renderModal()
+    await screen.findByRole('img', { name: 'photo.png' })
+
+    fireEscape()
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('takes the focus on open and hands it back to the opener on close', async () => {
+    function Host({ open }: { open: boolean }) {
+      return (
+        <div>
+          <button type="button">View</button>
+          {open && (
+            <AttachmentViewerModal images={[IMAGES[0]]} initialIndex={0}
+              onDownload={vi.fn()} onClose={vi.fn()} />
+          )}
+        </div>
+      )
+    }
+    const { rerender } = render(<Host open={false} />)
+    const trigger = screen.getByRole('button', { name: 'View' })
+    trigger.focus()
+
+    rerender(<Host open />)
+    await screen.findByRole('img', { name: 'photo.png' })
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+
+    rerender(<Host open={false} />)
+    expect(trigger).toHaveFocus()
+  })
+
+  // The arrows are the viewer's own keys, so they are bound to its box rather than to the
+  // document: a keypress reaches them only while the viewer is the surface in hand.
   it('navigates with the keyboard arrows and never wraps', async () => {
     renderModal({ images: IMAGES, initialIndex: 1 })
     await screen.findByRole('img', { name: 'diagram.png' })
+    const dialog = screen.getByRole('dialog')
 
-    fireEvent.keyDown(document, { key: 'ArrowLeft' })
+    fireEvent.keyDown(dialog, { key: 'ArrowLeft' })
     await screen.findByRole('img', { name: 'photo.png' })
     expect(screen.getByText('1 / 3')).toBeInTheDocument()
 
     // At the first image, another ArrowLeft stays put — no wrap, no refetch.
     const fetches = vi.mocked(requestBlob).mock.calls.length
-    fireEvent.keyDown(document, { key: 'ArrowLeft' })
+    fireEvent.keyDown(dialog, { key: 'ArrowLeft' })
     expect(screen.getByText('1 / 3')).toBeInTheDocument()
     expect(vi.mocked(requestBlob).mock.calls.length).toBe(fetches)
 
-    fireEvent.keyDown(document, { key: 'ArrowRight' })
+    fireEvent.keyDown(dialog, { key: 'ArrowRight' })
     await screen.findByRole('img', { name: 'diagram.png' })
+    expect(screen.getByText('2 / 3')).toBeInTheDocument()
+  })
+
+  it('leaves the arrows alone while another dialog stands over it', async () => {
+    render(
+      <div>
+        <AttachmentViewerModal images={IMAGES} initialIndex={1}
+          onDownload={vi.fn()} onClose={vi.fn()} />
+        <Modal title="Delete this message?" onClose={vi.fn()}><p>body</p></Modal>
+      </div>,
+    )
+    await screen.findByRole('img', { name: 'diagram.png' })
+
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Delete this message?' }), { key: 'ArrowRight' })
+
     expect(screen.getByText('2 / 3')).toBeInTheDocument()
   })
 })

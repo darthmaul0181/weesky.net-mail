@@ -4,7 +4,7 @@
     0.6: below that the trailing rays vanished on both surfaces and the icon read as missing. */
 export default function LoaderIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false">
       <g strokeLinecap="round">
         <path d="M10 2v4.4" />
         <path d="M15.66 4.34l-3.11 3.11" opacity="0.95" />

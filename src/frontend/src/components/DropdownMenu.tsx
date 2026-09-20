@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { returnFocus, useDismiss } from '../hooks/useDismiss'
 
 interface MenuItemBase {
   label: string
@@ -95,28 +96,18 @@ export default function DropdownMenu(
       : undefined)
   }, [open, direction, align])
 
-  useEffect(() => {
-    if (!open) return
-    function onMouseDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onMouseDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useDismiss({ open, rootRef, onDismiss: () => setOpen(false), refocusRef: triggerRef })
 
   // A fixed menu does not travel with a scrolled trigger the way an absolutely-positioned one
   // does, so any scroll or resize while it is open just closes it rather than leaving it
   // stranded. Capture:true so a scroll inside an ancestor band (the attachment row) counts too.
   useEffect(() => {
     if (!open || placement !== 'up') return
-    function onScrollOrResize() { setOpen(false) }
+    // `preventScroll`: the trigger has just been scrolled away from, and focusing it would undo it.
+    function onScrollOrResize() {
+      returnFocus(rootRef.current, triggerRef.current, { preventScroll: true })
+      setOpen(false)
+    }
     window.addEventListener('scroll', onScrollOrResize, true)
     window.addEventListener('resize', onScrollOrResize, true)
     return () => {
@@ -124,6 +115,11 @@ export default function DropdownMenu(
       window.removeEventListener('resize', onScrollOrResize, true)
     }
   }, [open, placement])
+
+  function closeAndRefocus() {
+    returnFocus(rootRef.current, triggerRef.current)
+    setOpen(false)
+  }
 
   return (
     <div
@@ -141,15 +137,15 @@ export default function DropdownMenu(
               <hr key={index} className="dropdown-rule" />
             ) : entry.href !== undefined ? (
               <a key={entry.label} role="menuitem" className="dropdown-item" href={entry.href}
-                target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}
-                onAuxClick={() => setOpen(false)}>
+                target="_blank" rel="noopener noreferrer" onClick={closeAndRefocus}
+                onAuxClick={closeAndRefocus}>
                 {entry.icon}
                 {entry.node ?? entry.label}
               </a>
             ) : (
               <button key={entry.label} type="button" role="menuitem" className="dropdown-item"
                 disabled={entry.disabled} title={entry.title}
-                onClick={() => { setOpen(false); entry.onSelect() }}>
+                onClick={() => { closeAndRefocus(); entry.onSelect() }}>
                 {entry.icon}
                 {entry.node ?? entry.label}
               </button>

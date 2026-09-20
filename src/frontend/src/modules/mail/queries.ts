@@ -531,7 +531,7 @@ export function useSetFlags(onError?: (message: string) => void) {
 }
 
 /** The two list caches of one folder: pages and stream blocks, as prefixes. */
-const listKeysOf = (accountId: string, folderPath: string) =>
+export const listKeysOf = (accountId: string, folderPath: string) =>
   [mailKeys.messagesIn(accountId, folderPath), mailKeys.messageStreamIn(accountId, folderPath)]
 
 async function cancelListQueries(

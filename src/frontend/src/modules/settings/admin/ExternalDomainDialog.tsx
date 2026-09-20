@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import Modal from '../../../components/Modal'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import GlobeIcon from '../../../icons/GlobeIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -36,6 +37,7 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
   const isEdit = !!domain
   const createDomain = useCreateExternalDomain()
   const updateDomain = useUpdateExternalDomain()
+  const nameRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState(domain?.name ?? '')
   const [imapHost, setImapHost] = useState(domain?.imapHost ?? '')
@@ -117,144 +119,135 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">
-            {isEdit ? <PencilIcon /> : <GlobeIcon />} {t(isEdit ? 'external.editTitle' : 'external.addTitle')}
-          </span>
-          <button type="button" className="modal-close" aria-label={t('actions.close', { ns: 'common' })}
-            onClick={onClose}>✕</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          {error && <div className="alert alert-error" role="alert">{error}</div>}
+    <Modal icon={isEdit ? <PencilIcon /> : <GlobeIcon />}
+      title={t(isEdit ? 'external.editTitle' : 'external.addTitle')}
+      onClose={onClose} onSubmit={handleSubmit} initialFocusRef={nameRef} busy={pending}>
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
 
-          <div className="field-h">
-            <label htmlFor="ext-domain-name">{t('external.displayName')}</label>
-            <input id="ext-domain-name" type="text" value={name} maxLength={100}
-              className={name && !nameValid ? 'is-error' : undefined}
-              onChange={e => setName(e.target.value)} autoFocus />
-          </div>
-
-          <div className="field-h">
-            <label htmlFor="ext-domain-imap-host">{t('external.imapHost')}</label>
-            <input id="ext-domain-imap-host" type="text" value={imapHost}
-              className={imapHost && !imapHostValid ? 'is-error' : undefined}
-              onChange={e => setImapHost(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="ext-domain-imap-port">{t('external.imapPort')}</label>
-            <input id="ext-domain-imap-port" type="number" min={1} max={65535} value={imapPort}
-              className={imapPort && !imapPortValid ? 'is-error' : undefined}
-              onChange={e => setImapPort(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="ext-domain-imap-security">{t('external.imapSecurity')}</label>
-            <select id="ext-domain-imap-security" value={imapSecurity}
-              onChange={e => setImapSecurity(e.target.value)}>
-              {SECURITY_OPTIONS.map(o =>
-                <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
-            </select>
-          </div>
-
-          <div className="field-h">
-            <label htmlFor="ext-domain-smtp-host">{t('external.smtpHost')}</label>
-            <input id="ext-domain-smtp-host" type="text" value={smtpHost}
-              className={smtpHost && !smtpHostValid ? 'is-error' : undefined}
-              onChange={e => setSmtpHost(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="ext-domain-smtp-port">{t('external.smtpPort')}</label>
-            <input id="ext-domain-smtp-port" type="number" min={1} max={65535} value={smtpPort}
-              className={smtpPort && !smtpPortValid ? 'is-error' : undefined}
-              onChange={e => setSmtpPort(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="ext-domain-smtp-security">{t('external.smtpSecurity')}</label>
-            <select id="ext-domain-smtp-security" value={smtpSecurity}
-              onChange={e => setSmtpSecurity(e.target.value)}>
-              {SECURITY_OPTIONS.map(o =>
-                <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
-            </select>
-          </div>
-
-          <div className="field-h">
-            <label htmlFor="ext-domain-auth-mode">{t('external.authentication')}</label>
-            <select id="ext-domain-auth-mode" value={authMode}
-              onChange={e => setAuthMode(e.target.value as 'Password' | 'OAuth2')}>
-              <option value="Password">{t('external.authPassword')}</option>
-              <option value="OAuth2">OAuth 2.0</option>
-            </select>
-          </div>
-
-          {isOAuth && (
-            <>
-              <div className="field-h">
-                <label htmlFor="ext-domain-oauth-auth-url">{t('external.authorizationUrl')}</label>
-                <input id="ext-domain-oauth-auth-url" type="text" value={oauthAuthorizationUrl}
-                  className={oauthAuthorizationUrl && !authUrlValid ? 'is-error' : undefined}
-                  onChange={e => setOauthAuthorizationUrl(e.target.value)} />
-              </div>
-              <div className="field-h">
-                <label htmlFor="ext-domain-oauth-token-url">{t('external.tokenUrl')}</label>
-                <input id="ext-domain-oauth-token-url" type="text" value={oauthTokenUrl}
-                  className={oauthTokenUrl && !tokenUrlValid ? 'is-error' : undefined}
-                  onChange={e => setOauthTokenUrl(e.target.value)} />
-              </div>
-              <div className="field-h">
-                <label htmlFor="ext-domain-oauth-scopes">{t('external.scopes')}</label>
-                <input id="ext-domain-oauth-scopes" type="text" value={oauthScopes}
-                  className={oauthScopes && !scopesValid ? 'is-error' : undefined}
-                  onChange={e => setOauthScopes(e.target.value)} />
-              </div>
-              <div className="field-h">
-                <label htmlFor="ext-domain-oauth-client-id">{t('external.clientId')}</label>
-                <input id="ext-domain-oauth-client-id" type="text" value={oauthClientId}
-                  className={oauthClientId && !clientIdValid ? 'is-error' : undefined}
-                  onChange={e => setOauthClientId(e.target.value)} />
-              </div>
-              <div className="field-h">
-                <label htmlFor="ext-domain-oauth-secret">{t('external.clientSecret')}</label>
-                <input id="ext-domain-oauth-secret" type="password" autoComplete="new-password"
-                  value={oauthClientSecret} placeholder={secretStored ? t('external.secretUnchanged') : undefined}
-                  onChange={e => setOauthClientSecret(e.target.value)} />
-              </div>
-              <p className="settings-note">
-                {t(secretStored ? 'external.secretStoredNote' : 'external.secretNewNote')}
-              </p>
-            </>
-          )}
-
-          <p className="admin-list-title" style={{ marginTop: '16px', marginBottom: '8px' }}>
-            {t('external.sieveHeading')}
-          </p>
-          <div className="field-h">
-            <label htmlFor="ext-domain-sieve-host">{t('external.sieveHost')}</label>
-            <input id="ext-domain-sieve-host" type="text" value={sieveHost}
-              className={sieveHost && !sieveHostValid ? 'is-error' : undefined}
-              onChange={e => setSieveHost(e.target.value)} />
-          </div>
-          <div className="field-h">
-            <label htmlFor="ext-domain-sieve-port">{t('external.sievePort')}</label>
-            <input id="ext-domain-sieve-port" type="number" min={1} max={65535} value={sievePort}
-              className={sievePort && !sievePortValid ? 'is-error' : undefined}
-              onChange={e => setSievePort(e.target.value)} />
-          </div>
-          {sieveMismatch && (
-            <div className="alert alert-error" role="alert">
-              {t('external.sieveMismatch')}
-            </div>
-          )}
-          <p className="settings-note">{t('external.sieveNote')}</p>
-
-          <button className="btn btn-primary" type="submit" disabled={pending || !canSubmit}
-            style={{ marginTop: '8px' }}>
-            {pending
-              ? <span className="spinner" />
-              : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('external.create'))}
-          </button>
-        </form>
+      <div className="field-h">
+        <label htmlFor="ext-domain-name">{t('external.displayName')}</label>
+        <input id="ext-domain-name" type="text" value={name} maxLength={100} ref={nameRef}
+          className={name && !nameValid ? 'is-error' : undefined}
+          onChange={e => setName(e.target.value)} />
       </div>
-    </div>
+
+      <div className="field-h">
+        <label htmlFor="ext-domain-imap-host">{t('external.imapHost')}</label>
+        <input id="ext-domain-imap-host" type="text" value={imapHost}
+          className={imapHost && !imapHostValid ? 'is-error' : undefined}
+          onChange={e => setImapHost(e.target.value)} />
+      </div>
+      <div className="field-h">
+        <label htmlFor="ext-domain-imap-port">{t('external.imapPort')}</label>
+        <input id="ext-domain-imap-port" type="number" min={1} max={65535} value={imapPort}
+          className={imapPort && !imapPortValid ? 'is-error' : undefined}
+          onChange={e => setImapPort(e.target.value)} />
+      </div>
+      <div className="field-h">
+        <label htmlFor="ext-domain-imap-security">{t('external.imapSecurity')}</label>
+        <select id="ext-domain-imap-security" value={imapSecurity}
+          onChange={e => setImapSecurity(e.target.value)}>
+          {SECURITY_OPTIONS.map(o =>
+            <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
+        </select>
+      </div>
+
+      <div className="field-h">
+        <label htmlFor="ext-domain-smtp-host">{t('external.smtpHost')}</label>
+        <input id="ext-domain-smtp-host" type="text" value={smtpHost}
+          className={smtpHost && !smtpHostValid ? 'is-error' : undefined}
+          onChange={e => setSmtpHost(e.target.value)} />
+      </div>
+      <div className="field-h">
+        <label htmlFor="ext-domain-smtp-port">{t('external.smtpPort')}</label>
+        <input id="ext-domain-smtp-port" type="number" min={1} max={65535} value={smtpPort}
+          className={smtpPort && !smtpPortValid ? 'is-error' : undefined}
+          onChange={e => setSmtpPort(e.target.value)} />
+      </div>
+      <div className="field-h">
+        <label htmlFor="ext-domain-smtp-security">{t('external.smtpSecurity')}</label>
+        <select id="ext-domain-smtp-security" value={smtpSecurity}
+          onChange={e => setSmtpSecurity(e.target.value)}>
+          {SECURITY_OPTIONS.map(o =>
+            <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
+        </select>
+      </div>
+
+      <div className="field-h">
+        <label htmlFor="ext-domain-auth-mode">{t('external.authentication')}</label>
+        <select id="ext-domain-auth-mode" value={authMode}
+          onChange={e => setAuthMode(e.target.value as 'Password' | 'OAuth2')}>
+          <option value="Password">{t('external.authPassword')}</option>
+          <option value="OAuth2">OAuth 2.0</option>
+        </select>
+      </div>
+
+      {isOAuth && (
+        <>
+          <div className="field-h">
+            <label htmlFor="ext-domain-oauth-auth-url">{t('external.authorizationUrl')}</label>
+            <input id="ext-domain-oauth-auth-url" type="text" value={oauthAuthorizationUrl}
+              className={oauthAuthorizationUrl && !authUrlValid ? 'is-error' : undefined}
+              onChange={e => setOauthAuthorizationUrl(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="ext-domain-oauth-token-url">{t('external.tokenUrl')}</label>
+            <input id="ext-domain-oauth-token-url" type="text" value={oauthTokenUrl}
+              className={oauthTokenUrl && !tokenUrlValid ? 'is-error' : undefined}
+              onChange={e => setOauthTokenUrl(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="ext-domain-oauth-scopes">{t('external.scopes')}</label>
+            <input id="ext-domain-oauth-scopes" type="text" value={oauthScopes}
+              className={oauthScopes && !scopesValid ? 'is-error' : undefined}
+              onChange={e => setOauthScopes(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="ext-domain-oauth-client-id">{t('external.clientId')}</label>
+            <input id="ext-domain-oauth-client-id" type="text" value={oauthClientId}
+              className={oauthClientId && !clientIdValid ? 'is-error' : undefined}
+              onChange={e => setOauthClientId(e.target.value)} />
+          </div>
+          <div className="field-h">
+            <label htmlFor="ext-domain-oauth-secret">{t('external.clientSecret')}</label>
+            <input id="ext-domain-oauth-secret" type="password" autoComplete="new-password"
+              value={oauthClientSecret} placeholder={secretStored ? t('external.secretUnchanged') : undefined}
+              onChange={e => setOauthClientSecret(e.target.value)} />
+          </div>
+          <p className="settings-note">
+            {t(secretStored ? 'external.secretStoredNote' : 'external.secretNewNote')}
+          </p>
+        </>
+      )}
+
+      <p className="admin-list-title" style={{ marginTop: '16px', marginBottom: '8px' }}>
+        {t('external.sieveHeading')}
+      </p>
+      <div className="field-h">
+        <label htmlFor="ext-domain-sieve-host">{t('external.sieveHost')}</label>
+        <input id="ext-domain-sieve-host" type="text" value={sieveHost}
+          className={sieveHost && !sieveHostValid ? 'is-error' : undefined}
+          onChange={e => setSieveHost(e.target.value)} />
+      </div>
+      <div className="field-h">
+        <label htmlFor="ext-domain-sieve-port">{t('external.sievePort')}</label>
+        <input id="ext-domain-sieve-port" type="number" min={1} max={65535} value={sievePort}
+          className={sievePort && !sievePortValid ? 'is-error' : undefined}
+          onChange={e => setSievePort(e.target.value)} />
+      </div>
+      {sieveMismatch && (
+        <div className="alert alert-error" role="alert">
+          {t('external.sieveMismatch')}
+        </div>
+      )}
+      <p className="settings-note">{t('external.sieveNote')}</p>
+
+      <button className="btn btn-primary" type="submit" disabled={pending || !canSubmit}
+        style={{ marginTop: '8px' }}>
+        {pending
+          ? <span className="spinner" />
+          : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('external.create'))}
+      </button>
+    </Modal>
   )
 }

@@ -14,6 +14,7 @@ export default function AddressLabel({ name, address, sender = false }: Props) {
 
   const trigger = sender
     ? <button type="button" className={className}>{label}</button>
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the house way this span makes Tooltip's hover bubble keyboard-reachable; deferred to lot 2b to become a real button
     : <span className={className} tabIndex={detail ? 0 : undefined}>{label}</span>
 
   if (!detail) return trigger

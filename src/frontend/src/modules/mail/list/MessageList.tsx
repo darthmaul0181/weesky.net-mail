@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode } from 'react'
+import type {
+  CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode, RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
@@ -15,6 +17,7 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import { hasOpenLayer } from '../../../lib/layerStack'
 import { rolePathsOf } from '../folders/folderNodes'
 import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSearchMessages, useSetFlags } from '../queries'
 import MoveMessagesModal from '../MoveMessagesModal'
@@ -102,6 +105,8 @@ interface Props {
   onSearchChange: (criteria: SearchCriteria | null) => void
   /** A cross-folder hit opens in the folder it names, not the one on screen. */
   onOpenResult?: (uid: number, folderPath: string) => void
+  /** The column itself, where focus goes when a confirmed delete takes its own button with it. */
+  regionRef?: RefObject<HTMLElement | null>
 }
 
 /**
@@ -111,7 +116,7 @@ interface Props {
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
     inDrawer = false, onNotify, onRows, onDeparted, rowExit, search = null, onSearchChange,
-    onOpenResult }: Props) {
+    onOpenResult, regionRef }: Props) {
   const { t } = useTranslation('mail')
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
@@ -183,10 +188,10 @@ export default function MessageList(
     ? t('list.alreadyEmpty')
     : (!purges && !roles.trash ? t('actions.noTrashFolder') : undefined)
 
-  // The hook keeps no row list; the effective selection is what it holds intersected with what
-  // is on screen, so a departed row stops counting on its own. resetKey clears on folder change
-  // and paged-page change, never while streaming more blocks into the same folder.
+  // Clears the selection, expanded threads and scroll on a folder, page or search change (the
+  // criteria too: two searches both sit on `search:0`), never while streaming into one folder.
   const resetKey = `${folderPath}::${searching ? `search:${searchPage}` : (paging ? paging.page : 'stream')}`
+    + `::${JSON.stringify(search ?? null)}`
   const selection = useSelection(resetKey)
   const loadedUids = memberUids(groups)
 
@@ -252,8 +257,11 @@ export default function MessageList(
     setPicker(null)
   }
 
+  // The dialogs render inside this root, so their Escape bubbles here: it belongs to whatever
+  // layer is open, not to the selection. Asking the stack rather than listing the dialogs keeps
+  // the sixth one from being forgotten here.
   function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Escape' && count > 0) {
+    if (event.key === 'Escape' && count > 0 && !hasOpenLayer()) {
       event.stopPropagation()
       selection.clear()
     }
@@ -367,8 +375,9 @@ export default function MessageList(
   }
 
   // The page index resets on its own; the DOM scroll position does not, and would drop the
-  // reader into the middle of a folder whose blocks are not loaded.
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0 }, [folderPath])
+  // reader into the middle of a folder whose blocks are not loaded, or leave a fresh search
+  // scrolled to wherever the previous list or search left it.
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0 }, [resetKey])
 
   // The rows in view, for whoever has to pick the next selection when one of them leaves.
   // Cross-folder results carry no navigable uid for this folder, so the reader is handed none.
@@ -686,6 +695,7 @@ export default function MessageList(
     // hold the split as percentages, so the two can never drift.
     <div
       className="message-list-root"
+      role="presentation"
       style={{ '--row-exit': `${ROW_EXIT_MS}ms` } as CSSProperties}
       onKeyDown={onListKeyDown}
     >
@@ -788,6 +798,7 @@ export default function MessageList(
           onConfirm={expungeBulk}
           onClose={() => setConfirmingBulk(false)}
           loading={deleteMessages.isPending}
+          returnFocusRef={regionRef}
         />
       )}
 

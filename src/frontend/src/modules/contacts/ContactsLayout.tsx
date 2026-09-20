@@ -5,6 +5,7 @@ import { ApiError } from '../../api.js'
 import { newMessageSeed } from '../mail/compose/composeSeed'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import FloatingAction from '../../components/FloatingAction'
+import Modal from '../../components/Modal'
 import Toasts from '../../components/Toasts.jsx'
 import { useToasts } from '../../hooks/useToasts.js'
 import { useViewport } from '../../hooks/useViewport'
@@ -74,7 +75,7 @@ export default function ContactsLayout() {
       paramsForScope(scope, selectedId ? { id: selectedId } : {})).toString()
     return query ? `/contacts?${query}` : '/contacts'
   }
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
   const {
     data: detail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail,
@@ -428,10 +429,8 @@ export default function ContactsLayout() {
           )}
           {!(phone && !selectedId) && (
             <div className="contacts-card" data-testid="contact-card">
-              {/* Withheld while the confirm is open so its Escape does not back out from under
-                  the dialog — the ← is behind the overlay by then and comes back with it. */}
               <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
-                onBack={phone && !pendingDelete ? backToList : undefined}
+                onBack={phone ? backToList : undefined}
                 bottomActions={phone}
                 onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)}
                 onWrite={writeTo}
@@ -442,21 +441,18 @@ export default function ContactsLayout() {
         </div>
       )}
 
+      {/* An alertdialog: it interrupts the save to say the card moved under it, and offers the one
+          way forward. */}
       {conflict && (
-        <div className="modal-overlay" onClick={() => setConflict(false)}>
-          <div className="modal" onClick={event => event.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">{t('layout.conflictTitle')}</span>
-              <button className="modal-close" onClick={() => setConflict(false)}>✕</button>
-            </div>
-            <p>{t('layout.conflictBody')}</p>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-primary" onClick={reloadEdited}>
-                {t('layout.conflictReload')}
-              </button>
-            </div>
+        <Modal role="alertdialog" title={t('layout.conflictTitle')}
+          onClose={() => setConflict(false)}>
+          <p>{t('layout.conflictBody')}</p>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-primary" onClick={reloadEdited}>
+              {t('layout.conflictReload')}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {pendingDelete && (
@@ -491,7 +487,7 @@ export default function ContactsLayout() {
         </FloatingAction>
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

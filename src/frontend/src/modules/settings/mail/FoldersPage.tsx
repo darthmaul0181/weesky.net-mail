@@ -18,7 +18,7 @@ import SystemFoldersModal from './SystemFoldersModal'
 export default function FoldersPage() {
   const { t } = useTranslation('settings')
   const { data: folders, isLoading, isError } = useFolders()
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [creating, setCreating] = useState(false)
   const [assigningRoles, setAssigningRoles] = useState(false)
 
@@ -57,7 +57,7 @@ export default function FoldersPage() {
         <SystemFoldersModal onClose={() => setAssigningRoles(false)} onNotify={addToast} />
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

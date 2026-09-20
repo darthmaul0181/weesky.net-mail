@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import CalendarImportReportModal from './CalendarImportReportModal'
 import type { CalendarImportReport } from './calendarTypes'
+import { fireEscape, pressBackdrop } from '../../test-utils'
 
 const REPORT: CalendarImportReport = {
   created: 12, replaced: 3, ignoredTodos: 2, ignoredJournals: 1, failed: 4, totalErrors: 6,
@@ -46,9 +47,22 @@ describe('CalendarImportReportModal', () => {
     expect(screen.getByText('…and 4 further errors')).toBeInTheDocument()
   })
 
-  it('closes on the ✕', async () => {
+  it('is a dialog named by its own title', () => {
+    open()
+    expect(screen.getByRole('dialog', { name: 'Import report' }))
+      .toHaveAttribute('aria-modal', 'true')
+  })
+
+  it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
     const { onClose } = open()
+
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onClose).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    fireEscape()
+    expect(onClose).toHaveBeenCalledTimes(2)
+
+    pressBackdrop()
+    expect(onClose).toHaveBeenCalledTimes(3)
   })
 })

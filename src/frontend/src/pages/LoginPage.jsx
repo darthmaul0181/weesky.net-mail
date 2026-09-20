@@ -17,8 +17,10 @@ export default function LoginPage({ onLogin }) {
       await api.login(email, password)
       markLoggedIn()
       onLogin()
-    } catch {
-      setError(t('login.invalidCredentials'))
+    } catch (err) {
+      if (err?.status === 429) setError(t('login.tooManyAttempts'))
+      else if (err?.status === 401 || err?.status === 400) setError(t('login.invalidCredentials'))
+      else setError(t('login.unavailable'))
     } finally {
       setLoading(false)
     }
@@ -27,10 +29,15 @@ export default function LoginPage({ onLogin }) {
   return (
     <div className="page-center">
       <div className="card">
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="alert alert-error" role="alert">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="field">
+            <label className="visually-hidden" htmlFor="email">{t('login.email')}</label>
             <input
               id="email"
               type="email"
@@ -43,6 +50,7 @@ export default function LoginPage({ onLogin }) {
           </div>
 
           <div className="field">
+            <label className="visually-hidden" htmlFor="password">{t('login.password')}</label>
             <input
               id="password"
               type="password"

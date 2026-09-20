@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { returnFocus, useDismiss } from '../../../hooks/useDismiss'
 import { useViewport } from '../../../hooks/useViewport'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import EllipsisIcon from '../../../icons/EllipsisIcon'
@@ -104,14 +105,25 @@ export default function EditorToolbar(
   const container = useRef<HTMLDivElement>(null)
   const picker = useRef<HTMLInputElement>(null)
   const attachPicker = useRef<HTMLInputElement>(null)
+  const popoverTrigger = useRef<HTMLButtonElement | null>(null)
 
-  useEffect(() => {
-    if (!openPopover) return
-    function onDown(event: MouseEvent) {
-      if (!container.current?.contains(event.target as Node)) setOpenPopover(null)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+  useDismiss({
+    open: openPopover !== null,
+    rootRef: container,
+    onDismiss: () => setOpenPopover(null),
+    refocusRef: popoverTrigger,
+  })
+
+  /** A choice applied hands the focus back the way Escape does; a press outside leaves it be. */
+  function closePopover() {
+    returnFocus(container.current, popoverTrigger.current)
+    setOpenPopover(null)
+  }
+
+  // Whatever held the focus when a popover appeared is what opened it — `useLayer`'s own way of
+  // finding an opener, and the three popovers share one state, so no trigger can name itself.
+  useLayoutEffect(() => {
+    if (openPopover) popoverTrigger.current = document.activeElement as HTMLButtonElement
   }, [openPopover])
 
   function swatchGrid(apply: (colour: string) => void) {
@@ -119,7 +131,7 @@ export default function EditorToolbar(
       <div className="compose-swatches">
         {SWATCHES.map(colour => (
           <button key={colour} type="button" aria-label={colour} style={{ background: colour }}
-            onClick={() => { apply(colour); setOpenPopover(null) }} />
+            onClick={() => { apply(colour); closePopover() }} />
         ))}
       </div>
     )
@@ -244,7 +256,7 @@ export default function EditorToolbar(
               <label htmlFor="compose-link-url">{t('toolbar.linkUrl')}</label>
               <input id="compose-link-url" type="url" value={url} onChange={e => setUrl(e.target.value)} />
               <button type="button" className="btn btn-primary" disabled={!url}
-                onClick={() => { editor?.makeLink(url); setUrl(''); setOpenPopover(null) }}>
+                onClick={() => { editor?.makeLink(url); setUrl(''); closePopover() }}>
                 {t('toolbar.apply')}
               </button>
             </div>

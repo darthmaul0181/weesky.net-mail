@@ -1,4 +1,6 @@
-import { useEffect, type CSSProperties } from 'react'
+import {
+  useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import BellIcon from '../../icons/BellIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
@@ -19,6 +21,9 @@ import { myAnswerOf } from './myAnswer'
 import { useEvent } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
+import { returnFocus, useDismiss } from '../../hooks/useDismiss'
+import { reachable } from '../../hooks/useLayer'
+import { focusablesIn } from '../../lib/layerStack'
 
 export interface EventPreviewProps {
   occurrence: Occurrence
@@ -29,6 +34,9 @@ export interface EventPreviewProps {
   /** Read when the chip was clicked, not when the bubble mounts: a search result clears the
       results it was clicked in, so the chip has left the screen by then. */
   rect: DOMRect
+  /** Where focus goes when the chip is gone — detached with the results it was clicked in, or
+      deleted with the event itself. `CalendarLayout` hands its `.calendar-main`. */
+  returnFocusRef?: RefObject<HTMLElement | null>
   onClose(): void
   onEdit(): void
   onDelete(): void
@@ -56,28 +64,44 @@ function daysOf(o: Occurrence, tz: string): [PlainDate, PlainDate] | null {
  * the editor's business, so the bell here says only that one is set.
  */
 export default function EventPreview({
-  occurrence, calendar, anchor, rect, onClose, onEdit, onDelete,
+  occurrence, calendar, anchor, rect, returnFocusRef, onClose, onEdit, onDelete,
 }: EventPreviewProps) {
   const { t } = useTranslation('calendar')
   const { tz, lang, region, cycle, calendarById } = useCalendar()
   const { ref, left, top } = usePopoverPosition(rect)
+  const bubble = useRef<HTMLDivElement | null>(null)
+  // The chip the bubble hangs off: where the focus goes back when it closes from the inside.
+  const anchorRef = useRef(anchor)
+  useEffect(() => { anchorRef.current = anchor })
+  // Memoised: a fresh ref callback is detached and re-attached on every commit, which would drive
+  // the position hook's node null and back twice per render.
+  const holdBubble = useCallback((node: HTMLDivElement | null) => {
+    bubble.current = node
+    ref(node)
+  }, [ref])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-    const outside = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (!anchor.contains(target) && !(target as Element).closest?.('.event-preview')) onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', outside)
-    // Capture, so any scroller carries it — the week body, the month stage, the upcoming list.
-    document.addEventListener('scroll', onClose, true)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', outside)
-      document.removeEventListener('scroll', onClose, true)
-    }
-  }, [anchor, onClose])
+  // Non-modal: no trap, and Tab walks on into the grid. A dialog the bubble launched sits above
+  // it on the stack, so neither that Escape nor a press inside it reaches here.
+  useDismiss({
+    open: true,
+    rootRef: bubble,
+    onDismiss: onClose,
+    anchorRef,
+    refocusRef: anchorRef,
+    closeOnScroll: true,
+  })
+
+  // Opened by a click, so nothing has moved the focus onto it: a keyboard reaches its two
+  // actions only if the opening does.
+  useLayoutEffect(() => { if (bubble.current) focusablesIn(bubble.current)[0]?.focus() }, [])
+
+  // Where every closing route meets, whichever of them moved the focus first. A layout cleanup,
+  // because a passive one runs after the bubble's nodes have left the document and could no longer
+  // tell whether it was holding the focus at all.
+  useLayoutEffect(() => () => {
+    const chip = anchorRef.current
+    returnFocus(bubble.current, reachable(chip) ? chip : returnFocusRef?.current)
+  }, [returnFocusRef])
 
   // Always fetched, one request per opening (`ContactCard`'s `useContact` pattern): the bubble
   // carries neither a repeating event's rule nor its participants, and the detail holds both.
@@ -119,13 +143,13 @@ export default function EventPreview({
   const myAnswer = myAnswerOf(occurrence.myPartStat, t)
 
   return (
-    <div className="event-preview" role="dialog" aria-label={title} ref={ref}
+    <div className="event-preview" role="dialog" aria-label={title} ref={holdBubble}
       style={{ left, top, '--cal': color } as CSSProperties}>
       <div className="event-preview-head">
         <span className="event-preview-dot" aria-hidden="true" />
         <span className="event-preview-title">{title}</span>
         <button type="button" className="modal-close" aria-label={t('preview.close')}
-          onClick={onClose}>✕</button>
+          onClick={() => { returnFocus(bubble.current, anchorRef.current); onClose() }}>✕</button>
       </div>
 
       <p className="event-preview-when">{line}</p>

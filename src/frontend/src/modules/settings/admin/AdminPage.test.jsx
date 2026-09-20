@@ -111,6 +111,26 @@ describe('AddEditUserModal — create mode', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
     await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
+
+  // Abandoning the POST via Escape would skip onSave() and leave the created user invisible
+  // until a reload.
+  it('blocks Escape while the create request is in flight', async () => {
+    let resolveCreate
+    api.adminCreateUser.mockReturnValue(new Promise(resolve => { resolveCreate = resolve }))
+    const onClose = vi.fn()
+    const { container } = renderCreate({ onClose })
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'alice')
+    await userEvent.type(container.querySelector('input[type="password"]'), 'secret')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveCreate({})
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create account' })).not.toBeDisabled())
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ── AddEditUserModal — edit mode ──────────────────────────────
@@ -243,6 +263,25 @@ describe('AddEditDomainModal — create mode', () => {
       )
     )
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+  })
+
+  it('blocks Escape while the create request is in flight', async () => {
+    let resolveCreate
+    api.adminCreateDomain.mockReturnValue(new Promise(resolve => { resolveCreate = resolve }))
+    const onClose = vi.fn()
+    renderCreate({ onClose })
+    const [idInput, nameInput] = screen.getAllByRole('textbox')
+    await userEvent.type(idInput, 'TST')
+    await userEvent.type(nameInput, 'test.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveCreate({})
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled())
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -391,7 +430,7 @@ describe('AccountsTab', () => {
     render(<AccountsTab addToast={vi.fn()} />)
     await screen.findByText('alice@weesky.be')
     await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(api.adminDeleteUser).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })
@@ -401,7 +440,7 @@ describe('AccountsTab', () => {
     await screen.findByText('alice@weesky.be')
     await userEvent.click(screen.getByRole('button', { name: /Add/ }))
     expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('button', { name: 'Create account' })).not.toBeInTheDocument()
   })
 
@@ -410,7 +449,7 @@ describe('AccountsTab', () => {
     await screen.findByText('alice@weesky.be')
     await userEvent.click(screen.getByTitle('Edit'))
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
@@ -583,7 +622,7 @@ describe('DomainsTab', () => {
     render(<DomainsTab addToast={vi.fn()} />)
     await screen.findByText('WSY')
     await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(api.adminDeleteDomain).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })
@@ -593,7 +632,7 @@ describe('DomainsTab', () => {
     await screen.findByText('WSY')
     await userEvent.click(screen.getByRole('button', { name: /Add/ }))
     expect(screen.getByRole('button', { name: 'Create domain' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('button', { name: 'Create domain' })).not.toBeInTheDocument()
   })
 
@@ -602,7 +641,7 @@ describe('DomainsTab', () => {
     await screen.findByText('WSY')
     await userEvent.click(screen.getByTitle('Edit'))
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '✕' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
@@ -733,6 +772,95 @@ describe('AddEditDomainModal — error handling', () => {
     render(<AddEditDomainModal domain={{ id: 'WSY', name: 'weesky.be' }} onSave={vi.fn()} onClose={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
+  })
+})
+
+// ── AddEditUserModal — accessible field names ─────────────────
+
+describe('AddEditUserModal — accessible field names', () => {
+  it('every field is reachable through its label', () => {
+    render(
+      <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+    )
+    expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    expect(screen.getByLabelText('Domain')).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+    expect(screen.getByLabelText('Full name')).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Quota (MB)' })).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Quota (MB)' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Active' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Administrator' })).toBeInTheDocument()
+  })
+
+  it('every field is reachable through its label in edit mode, and the username stays disabled', () => {
+    const EDIT_USER = { id: 1, userName: 'alice', domainId: 'WSY', domainName: 'weesky.be', fullName: 'Alice Smith', quotaMb: 1024, active: true, admin: false }
+    render(
+      <AddEditUserModal user={EDIT_USER} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+    )
+    const username = screen.getByLabelText('Username')
+    expect(username).toBeInTheDocument()
+    expect(username).toBeDisabled()
+  })
+
+  it('the ✕ close button has an accessible name', () => {
+    render(
+      <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+    )
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+  })
+
+  it('the error banner announces itself as an alert', async () => {
+    api.adminCreateUser.mockRejectedValue(new Error('Duplicate user'))
+    render(
+      <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+    )
+    await userEvent.type(screen.getByLabelText('Username'), 'alice')
+    await userEvent.type(screen.getByLabelText('Password'), 'pw')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('An error occurred')
+  })
+
+  it('two instances mounted at once do not collide on id', () => {
+    render(
+      <>
+        <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+        <AddEditUserModal user={null} domains={MOCK_DOMAINS} onSave={vi.fn()} onClose={vi.fn()} />
+      </>
+    )
+    expect(screen.getAllByLabelText('Username')).toHaveLength(2)
+  })
+})
+
+// ── AddEditDomainModal — accessible field names ────────────────
+
+describe('AddEditDomainModal — accessible field names', () => {
+  it('every field is reachable through its label', () => {
+    render(<AddEditDomainModal domain={null} onSave={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByLabelText('ID (3 chars max)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Domain name')).toBeInTheDocument()
+  })
+
+  it('every field is reachable through its label in edit mode, and the id stays disabled', () => {
+    render(
+      <AddEditDomainModal domain={{ id: 'WSY', name: 'weesky.be' }} onSave={vi.fn()} onClose={vi.fn()} />
+    )
+    const idInput = screen.getByLabelText('ID (3 chars max)')
+    expect(idInput).toBeInTheDocument()
+    expect(idInput).toBeDisabled()
+  })
+
+  it('the ✕ close button has an accessible name', () => {
+    render(<AddEditDomainModal domain={null} onSave={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+  })
+
+  it('the error banner announces itself as an alert', async () => {
+    api.adminCreateDomain.mockRejectedValue(new Error('Invalid ID'))
+    render(<AddEditDomainModal domain={null} onSave={vi.fn()} onClose={vi.fn()} />)
+    await userEvent.type(screen.getByLabelText('ID (3 chars max)'), 'TST')
+    await userEvent.type(screen.getByLabelText('Domain name'), 'test.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('An error occurred')
   })
 })
 
@@ -877,6 +1005,27 @@ describe('VirtualDomainsTab', () => {
     await userEvent.click(screen.getAllByTitle('Edit owner')[0])
     fireEvent.mouseDown(screen.getByTitle('Remove owner'))
     await waitFor(() => expect(api.adminRemoveVirtualDomainOwner).toHaveBeenCalledWith('EXT', 1))
+  })
+
+  // Two surfaces, two Escapes: the list the search opened is the nearer one, and cancelling the
+  // whole edit on the key that dismisses it throws away the query with it.
+  it('closes the user list on Escape and cancels the edit only on the next one', async () => {
+    render(<VirtualDomainsTab addToast={vi.fn()} />)
+    await screen.findByText('extra.com')
+    await userEvent.click(screen.getAllByTitle('Edit owner')[1])
+    const input = screen.getByPlaceholderText('Search user…')
+    await userEvent.type(input, 'alice')
+    await screen.findByRole('button', { name: /alice@weesky\.be/ })
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.queryByRole('button', { name: /alice@weesky\.be/ })).not.toBeInTheDocument()
+    expect(input).toBeInTheDocument()
+    expect(input).toHaveValue('alice')
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(input).not.toBeInTheDocument()
   })
 
   it('cancels edit on Escape key', async () => {

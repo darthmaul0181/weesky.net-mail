@@ -5,14 +5,42 @@ const sources = import.meta.glob('../**/*.{jsx,tsx}', {
   query: '?raw', import: 'default', eager: true,
 }) as Record<string, string>
 
+/** The line each `<Modal …>` opening tag carrying a width starts on. A caller's tag spans
+    several lines, so the line-by-line scan below cannot see a style prop sitting on one of
+    its own. The tag ends at the first `>` that is neither inside a quoted attribute value
+    (`title="a > b"`) nor inside braces — which is also what skips the one closing an element
+    passed as a prop (`icon={<X />}`). */
+function modalTagWidths(src: string): number[] {
+  const found: number[] = []
+  for (let start = src.indexOf('<Modal'); start !== -1; start = src.indexOf('<Modal', start + 1)) {
+    if (!/[\s/>]/.test(src.slice(start + 6, start + 7))) continue // <ModalOverlay is another tag
+    let depth = 0
+    let quote = ''
+    for (let i = start; i < src.length; i++) {
+      if (quote) { if (src[i] === quote) quote = '' }
+      else if (src[i] === '"' || src[i] === "'") quote = src[i]
+      else if (src[i] === '{') depth++
+      else if (src[i] === '}') depth--
+      else if (src[i] === '>' && depth === 0) {
+        if (/[Ww]idth:/.test(src.slice(start, i + 1))) found.push(src.slice(0, start).split('\n').length)
+        break
+      }
+    }
+  }
+  return found
+}
+
 /** A dialog's width is the contract's business (styles/modal.css), never a component's. */
 function inlineWidths(): string[] {
   return Object.entries(sources)
     .filter(([path]) => !path.includes('.test.'))
-    .flatMap(([path, src]) => src.split('\n')
-      .map((line, i) => ({ path, at: i + 1, line }))
-      .filter(({ line }) => /className="modal[\s"]/.test(line) && /[Ww]idth:/.test(line))
-      .map(({ path, at }) => `${path}:${at}`))
+    .flatMap(([path, src]) => [
+      ...src.split('\n')
+        .map((line, i) => ({ at: i + 1, line }))
+        .filter(({ line }) => /className="modal[\s"]/.test(line) && /[Ww]idth:/.test(line))
+        .map(({ at }) => `${path}:${at}`),
+      ...modalTagWidths(src).map(at => `${path}:${at}`),
+    ])
 }
 
 describe('modal roots', () => {
@@ -21,8 +49,28 @@ describe('modal roots', () => {
     expect(Object.keys(sources).length).toBeGreaterThan(50)
   })
 
+  // The repo-wide scan below says nothing while no caller carries a width, so the extractor's own
+  // mechanism — a width anywhere in a multi-line tag, and nowhere else — is proved here.
+  it('sees a width anywhere in a <Modal> tag, and only in one', () => {
+    expect(modalTagWidths('<Modal\n  title="x"\n  style={{ width: 400 }}\n>')).toEqual([1])
+    expect(modalTagWidths('<ModalOverlay style={{ width: 400 }}>')).toEqual([])
+    expect(modalTagWidths('<Modal title="x">\n<p style={{ width: 400 }} />')).toEqual([])
+    expect(modalTagWidths('<Modal title="a > b" style={{ width: 400 }}>')).toEqual([1])
+    expect(modalTagWidths('<Modal icon={<X />} title="x">\n<p style={{ width: 4 }} />')).toEqual([])
+  })
+
   it('carry no inline width', () => {
     expect(inlineWidths()).toEqual([])
+  })
+
+  // The class, not the shape: a caller rendering <ModalOverlay> itself still passes here, and what
+  // stops that is <Modal> being its only importer — a module-graph fact, not a text one.
+  it('leave the modal-overlay class to ModalOverlay alone', () => {
+    const shell = ['../components/ModalOverlay.tsx']
+    const writers = Object.entries(sources)
+      .filter(([path, src]) => !path.includes('.test.') && src.includes('modal-overlay'))
+      .map(([path]) => path)
+    expect(writers.filter(path => !shell.includes(path))).toEqual([])
   })
 })
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
@@ -648,6 +649,72 @@ describe('reading pane arrangements', () => {
 
     await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
     expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX')
+  })
+})
+
+// The confirm hands focus back through the layout's own regions, and in `none` neither of them is
+// always on screen: the list is `display: none` while a message is open, and the reader column
+// leaves with the last message.
+describe('focus after the reader expunges a message', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const trash = [
+    { uid: 7, subject: 'first', fromName: 'A', fromAddress: 'a@b.c', date: '2026-07-18T09:00:00Z',
+      seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '' },
+    { uid: 8, subject: 'second', fromName: 'B', fromAddress: 'b@b.c', date: '2026-07-18T10:00:00Z',
+      seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '' },
+  ]
+
+  function openTrash(rows: typeof trash, pane: string) {
+    mocks.getMailMessage.mockResolvedValue({
+      uid: 7, folderPath: 'Corbeille', uidValidity: 1, subject: 'open', fromName: '',
+      fromAddress: 'a@b.c', to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '',
+      textBody: 'x', blockedImageCount: 0, attachments: [],
+    })
+    mocks.deleteMessages.mockResolvedValue({})
+    return renderAt('/mail?folder=Corbeille&uid=7', folders, pane, rows)
+  }
+
+  /** The reader's own Delete, not a row's — every row in the trash carries that name too. Clicked
+      rather than fired, so the buttons really hold the focus a browser gives them. */
+  async function expunge(container: HTMLElement) {
+    const reader = within(container.querySelector('.mail-reader') as HTMLElement)
+    await userEvent.click(reader.getByRole('button', { name: 'Delete permanently' }))
+    const confirm = within(document.querySelector('.modal') as HTMLElement)
+    await userEvent.click(confirm.getByRole('button', { name: 'Delete' }))
+  }
+
+  it('hands it to the reader column when the expunge has a successor to open', async () => {
+    const { container } = openTrash(trash, 'none')
+    await screen.findByText('open')
+
+    await expunge(container)
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=8'))
+    expect(container.querySelector('.mail-reader')).toHaveFocus()
+  })
+
+  // The same delete with nothing left to open: the reader column goes and the list comes back.
+  it('hands it to the list column when the reader closes with the last message', async () => {
+    const { container } = openTrash([trash[0]], 'none')
+    await screen.findByText('open')
+
+    await expunge(container)
+
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+    expect(container.querySelector('.mail-list')).toHaveFocus()
+  })
+
+  // The split arrangements keep the list on screen throughout, and it is the real column that has
+  // to carry the ref — the component tests hand their own region in.
+  it('hands it to the list column beside the reader in the split arrangement', async () => {
+    const { container } = openTrash([trash[0]], 'right')
+    await screen.findByText('open')
+
+    await expunge(container)
+
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+    expect(container.querySelector('.mail-list')).toHaveFocus()
   })
 })
 

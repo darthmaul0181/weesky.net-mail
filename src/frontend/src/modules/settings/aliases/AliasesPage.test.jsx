@@ -296,7 +296,7 @@ describe('AliasesPage', () => {
     await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
     await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
     await screen.findByText('Failed to create alias.')
-    const closeBtn = await screen.findByRole('button', { name: '✕' })
+    const closeBtn = await screen.findByRole('button', { name: 'Close' })
     await userEvent.click(closeBtn)
     await waitFor(() => expect(screen.queryByText('Failed to create alias.')).not.toBeInTheDocument())
   })

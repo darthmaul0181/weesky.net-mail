@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import ContactList from './ContactList'
@@ -199,6 +199,35 @@ describe('ContactList', () => {
     fireEvent.keyDown(screen.getByTestId('contact-tile-b'), { key: ' ' })
 
     expect(props.onSelect).toHaveBeenCalledWith('b')
+  })
+
+  // Same guard as MessageList's onRowKey: an inner control fires Enter/Space itself, and
+  // without the target check the tile behind it would also open.
+  it('does not open the tile when Enter is pressed on the star inside it', () => {
+    const props = setup()
+    const tile = screen.getByTestId('contact-tile-b')
+
+    fireEvent.keyDown(within(tile).getByRole('button', { name: /favourite/i }), { key: 'Enter' })
+
+    expect(props.onSelect).not.toHaveBeenCalled()
+  })
+
+  it('does not open the tile when Space is pressed on the edit button inside it', () => {
+    const props = setup()
+    const tile = screen.getByTestId('contact-tile-b')
+
+    fireEvent.keyDown(within(tile).getByRole('button', { name: /edit/i }), { key: ' ' })
+
+    expect(props.onSelect).not.toHaveBeenCalled()
+  })
+
+  it('does not open the tile when Enter is pressed on the checkbox inside it', () => {
+    const props = setup()
+    const tile = screen.getByTestId('contact-tile-b')
+
+    fireEvent.keyDown(within(tile).getByRole('checkbox'), { key: 'Enter' })
+
+    expect(props.onSelect).not.toHaveBeenCalled()
   })
 
   it('checks a contact and counts it in the band', async () => {

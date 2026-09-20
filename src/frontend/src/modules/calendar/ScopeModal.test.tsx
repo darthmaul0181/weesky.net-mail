@@ -4,6 +4,7 @@ import i18next from 'i18next'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditScope } from './calendarTypes'
 import ScopeModal, { scopeSentence } from './ScopeModal'
+import { fireEscape, pressBackdrop } from '../../test-utils'
 
 /** The very function the layout calls, so the test reads what a user reads rather than a
     hand-written twin that cannot go stale with it. */
@@ -19,6 +20,14 @@ function draw(allowed: EditScope[], onPick = vi.fn(), onClose = vi.fn()) {
 const ALL: EditScope[] = ['This', 'ThisAndFollowing', 'All']
 
 describe('ScopeModal', () => {
+  // An alertdialog rather than a dialog: it interrupts to ask one question instead of offering a
+  // surface, exactly as the delete confirm does.
+  it('is an alertdialog named by its own title', () => {
+    draw(ALL)
+    expect(screen.getByRole('alertdialog', { name: 'Save a recurring event' }))
+      .toHaveAttribute('aria-modal', 'true')
+  })
+
   it('asks the question and offers the three scopes', () => {
     draw(ALL)
     expect(screen.getByText('Save a recurring event')).toBeInTheDocument()
@@ -61,9 +70,19 @@ describe('ScopeModal', () => {
       .toBe('This event repeats. What should the change apply to?')
   })
 
-  it('closes on the ✕ alone', async () => {
-    const { onClose } = draw(ALL)
+  // Owner decision 2: the three ways out are uniform here too, and all three mean "no scope" —
+  // never a scope picked by default, which would write something nobody asked for.
+  it('answers no scope on the ✕, on Escape and on a press on the backdrop', async () => {
+    const { onClose, onPick } = draw(ALL)
+
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onClose).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    fireEscape()
+    expect(onClose).toHaveBeenCalledTimes(2)
+
+    pressBackdrop()
+    expect(onClose).toHaveBeenCalledTimes(3)
+    expect(onPick).not.toHaveBeenCalled()
   })
 })

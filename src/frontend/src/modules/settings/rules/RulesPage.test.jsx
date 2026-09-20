@@ -131,7 +131,7 @@ describe('Extended rules slider', () => {
     const toggle = await screen.findByTitle('Extended rules')
     fireEvent.click(toggle.querySelector('input[type="checkbox"]'))
 
-    fireEvent.click(await screen.findByText('Cancel'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
 
     await waitFor(() =>
       expect(screen.queryByText('Turn off extended rules?')).not.toBeInTheDocument())
@@ -160,6 +160,58 @@ describe('RuleEditorModal folder picker', () => {
     await waitFor(() => expect(document.querySelector('#rule-editor-folders')).toBeInTheDocument())
     const offered = [...document.querySelectorAll('#rule-editor-folders option')].map(o => o.value)
     expect(offered).toEqual(['Archive', 'Archive/2026'])
+  })
+})
+
+describe('RuleEditorModal help button', () => {
+  // A tab stop called "?" is read as "question mark, button": it carries the same name the shared
+  // HelpTooltip's own trigger was given.
+  it('names itself Help rather than ?', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
+
+    expect(screen.getByRole('button', { name: 'Help' })).toHaveTextContent('?')
+  })
+})
+
+describe('RuleEditorModal validation error', () => {
+  // The submit button gates on the same three checks, so it is disabled rather than clickable
+  // with an empty name; the form is submitted directly to reach handleSubmit's own guard.
+  it('announces the validation error assertively', () => {
+    const { container } = render(
+      <RuleEditorModal rule={fileIntoRule('a', '')} onSave={() => {}} onClose={() => {}} />)
+
+    fireEvent.submit(container.querySelector('form'))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Name is required')
+  })
+
+  // PlusIcon is the same ad hoc-svg-in-this-file shape as RuleCard's icons.
+  it('hides its PlusIcon from assistive tech', () => {
+    const { container } = render(
+      <RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
+    const svgs = container.querySelectorAll('svg')
+
+    expect(svgs.length).toBeGreaterThan(0)
+    svgs.forEach(svg => {
+      expect(svg).toHaveAttribute('aria-hidden', 'true')
+      expect(svg).toHaveAttribute('focusable', 'false')
+    })
+  })
+})
+
+describe('RuleEditorModal close buttons', () => {
+  it('names the editor ✕ and the help ✕, each closing its own dialog', async () => {
+    const onClose = vi.fn()
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={onClose} />)
+    await userEvent.click(screen.getByTitle('Help'))
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2)
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Close' })[1])
+    expect(screen.queryByText('Rule editor — help')).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
   })
 })
 
@@ -772,6 +824,19 @@ describe('RuleCard', () => {
     expect(screen.getByText('My Rule')).toBeInTheDocument()
   })
 
+  // The grip, the two reorder arrows and the collapse chevron are ad hoc inline svgs, local to
+  // this file — icons.test.tsx's glob over src/icons/ structurally cannot see them.
+  it('hides its ad hoc icons (grip, reorder arrows, chevron) from assistive tech', () => {
+    const { container } = render(<RuleCard {...makeCardProps()} />)
+    const svgs = container.querySelectorAll('svg')
+
+    expect(svgs.length).toBeGreaterThan(0)
+    svgs.forEach(svg => {
+      expect(svg).toHaveAttribute('aria-hidden', 'true')
+      expect(svg).toHaveAttribute('focusable', 'false')
+    })
+  })
+
   it('starts collapsed with inline action pill and no body', () => {
     render(<RuleCard {...makeCardProps()} />)
     expect(document.querySelector('.rule-card-inline-actions')).toBeInTheDocument()
@@ -820,6 +885,20 @@ describe('RuleCard', () => {
     render(<RuleCard {...makeCardProps({ onDelete })} />)
     fireEvent.click(screen.getByTitle('Delete'))
     expect(onDelete).toHaveBeenCalled()
+  })
+
+  // "Disable, checkbox, checked" is the state read twice and the rule never named: the switch is
+  // named by what it toggles, and `checked` is what says which way it stands.
+  it('names the enable switch by its rule, not by the action', () => {
+    render(<RuleCard {...makeCardProps()} />)
+    expect(screen.getByRole('checkbox', { name: 'My Rule' })).toBeChecked()
+  })
+
+  // The editor asks for a name, but the list is parsed from a Sieve script another client wrote:
+  // the same fallback the convert dialog already spells out keeps the control named.
+  it('names the switch of a rule the script left unnamed', () => {
+    render(<RuleCard {...makeCardProps({ rule: fileIntoRule('r1', '') })} />)
+    expect(screen.getByRole('checkbox', { name: '(unnamed rule)' })).toBeInTheDocument()
   })
 
   it('calls onToggleEnabled with false when enabled rule checkbox is clicked', () => {
@@ -1241,5 +1320,13 @@ describe('ConvertConfirmModal', () => {
 
     await userEvent.click(screen.getByText('Delete & switch'))
     expect(onConfirm).toHaveBeenCalled()
+  })
+
+  it('closes on its named ✕', async () => {
+    const onClose = vi.fn()
+    render(<ConvertConfirmModal incompatible={[]} onConfirm={() => {}} onClose={onClose} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
   })
 })

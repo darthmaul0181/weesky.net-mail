@@ -7,6 +7,7 @@ import RequirePrimary from './layouts/RequirePrimary'
 import RequireSieve from './layouts/RequireSieve'
 import AppShell from './layouts/AppShell'
 import LoginRoute from './pages/LoginRoute'
+import RouteError from './pages/RouteError'
 import SettingsLayout from './modules/settings/SettingsLayout'
 import AccountPage from './modules/settings/account/AccountPage'
 import ConnectedAccountsPage from './modules/settings/accounts/ConnectedAccountsPage'
@@ -26,67 +27,74 @@ const SyncPage = lazy(() => import('./modules/settings/sync/SyncPage'))
 const AboutPage = lazy(() => import('./modules/settings/about/AboutPage'))
 
 export const routes: RouteObject[] = [
-  { path: '/login', element: <LoginRoute /> },
   {
-    element: <RequireAuth />,
+    // A pathless wrapper: its only job is the errorElement, so a route that throws — or a stale
+    // lazy-chunk import — is caught wherever it happens, /login included.
+    errorElement: <RouteError />,
     children: [
-      // A sibling of AppShell, not a child: that placement is what leaves the rail and the
-      // folder column out, and with them useFolders' poll, in a tab that only shows a text file.
-      { path: 'mail/source', element: <Suspense fallback={null}><MessageSourceView /></Suspense> },
+      { path: '/login', element: <LoginRoute /> },
       {
-        element: <AppShell />,
+        element: <RequireAuth />,
         children: [
-          { index: true, element: <Navigate to="/mail" replace /> },
-          { path: 'mail', element: <Suspense fallback={null}><MailLayout /></Suspense> },
-          // The composer lives inside the mail module: same layout, list and reader replaced.
-          { path: 'mail/compose', element: <Suspense fallback={null}><MailLayout /></Suspense> },
-          { path: 'calendar', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
-          // The event editor lives inside the calendar module: same layout, a surface over
-          // the grid. An event id is a GUID, so it travels safely in a route segment.
-          { path: 'calendar/new', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
-          { path: 'calendar/:id/edit', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
-          { path: 'contacts', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
-          // The editor lives inside the contacts module: same layout, the two content columns
-          // replaced. A contact id is a GUID, so it travels safely in a route segment.
-          { path: 'contacts/new', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
-          { path: 'contacts/:id/edit', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
+          // A sibling of AppShell, not a child: that placement is what leaves the rail and the
+          // folder column out, and with them useFolders' poll, in a tab that only shows a text file.
+          { path: 'mail/source', element: <Suspense fallback={null}><MessageSourceView /></Suspense> },
           {
-            path: 'settings',
-            element: <SettingsLayout />,
+            element: <AppShell />,
             children: [
-              { index: true, element: <Navigate to="/settings/account" replace /> },
+              { index: true, element: <Navigate to="/mail" replace /> },
+              { path: 'mail', element: <Suspense fallback={null}><MailLayout /></Suspense> },
+              // The composer lives inside the mail module: same layout, list and reader replaced.
+              { path: 'mail/compose', element: <Suspense fallback={null}><MailLayout /></Suspense> },
+              { path: 'calendar', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
+              // The event editor lives inside the calendar module: same layout, a surface over
+              // the grid. An event id is a GUID, so it travels safely in a route segment.
+              { path: 'calendar/new', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
+              { path: 'calendar/:id/edit', element: <Suspense fallback={null}><CalendarLayout /></Suspense> },
+              { path: 'contacts', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
+              // The editor lives inside the contacts module: same layout, the two content columns
+              // replaced. A contact id is a GUID, so it travels safely in a route segment.
+              { path: 'contacts/new', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
+              { path: 'contacts/:id/edit', element: <Suspense fallback={null}><ContactsLayout /></Suspense> },
               {
-                element: <RequirePrimary />,
+                path: 'settings',
+                element: <SettingsLayout />,
                 children: [
-                  { path: 'account', element: <AccountPage /> },
-                  { path: 'sync', element: <Suspense fallback={null}><SyncPage /></Suspense> },
+                  { index: true, element: <Navigate to="/settings/account" replace /> },
                   {
-                    element: <RequireAliases />,
+                    element: <RequirePrimary />,
                     children: [
-                      { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
+                      { path: 'account', element: <AccountPage /> },
+                      { path: 'sync', element: <Suspense fallback={null}><SyncPage /></Suspense> },
+                      {
+                        element: <RequireAliases />,
+                        children: [
+                          { path: 'aliases', element: <Suspense fallback={null}><AliasesPage /></Suspense> },
+                        ],
+                      },
                     ],
+                  },
+                  { path: 'general', element: <GeneralPage /> },
+                  { path: 'accounts', element: <ConnectedAccountsPage /> },
+                  { path: 'appearance', element: <AppearancePage /> },
+                  { path: 'folders', element: <FoldersPage /> },
+                  // The folders page grew out of the old system-folders one; keep its URL working.
+                  { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
+                  { path: 'identities', element: <Suspense fallback={null}><IdentitiesPage /></Suspense> },
+                  { path: 'about', element: <Suspense fallback={null}><AboutPage /></Suspense> },
+                  {
+                    element: <RequireSieve />,
+                    children: [{ path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> }],
+                  },
+                  {
+                    element: <RequireAdmin />,
+                    children: [{ path: 'admin', element: <Suspense fallback={null}><AdminPage /></Suspense> }],
                   },
                 ],
               },
-              { path: 'general', element: <GeneralPage /> },
-              { path: 'accounts', element: <ConnectedAccountsPage /> },
-              { path: 'appearance', element: <AppearancePage /> },
-              { path: 'folders', element: <FoldersPage /> },
-              // The folders page grew out of the old system-folders one; keep its URL working.
-              { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
-              { path: 'identities', element: <Suspense fallback={null}><IdentitiesPage /></Suspense> },
-              { path: 'about', element: <Suspense fallback={null}><AboutPage /></Suspense> },
-              {
-                element: <RequireSieve />,
-                children: [{ path: 'rules', element: <Suspense fallback={null}><RulesPage /></Suspense> }],
-              },
-              {
-                element: <RequireAdmin />,
-                children: [{ path: 'admin', element: <Suspense fallback={null}><AdminPage /></Suspense> }],
-              },
+              { path: '*', element: <Navigate to="/mail" replace /> },
             ],
           },
-          { path: '*', element: <Navigate to="/mail" replace /> },
         ],
       },
     ],

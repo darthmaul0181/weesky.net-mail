@@ -12,17 +12,21 @@ export function useToasts() {
   const [toasts, setToasts] = useState([])
   // A dismissal outlives nothing: a timer left running past the unmount fires into a page that is
   // gone, and in a test into a torn-down jsdom, where React reaches for a window that no longer is.
+  // Each entry also carries what a pause needs to resume correctly: the time left when it was
+  // armed and when that arming started — an error toast, which never arms one, has no entry here.
   const timers = useRef(new Map())
 
   const clearTimer = useCallback((id) => {
-    const timer = timers.current.get(id)
-    if (timer === undefined) return
-    clearTimeout(timer)
+    const entry = timers.current.get(id)
+    if (entry === undefined) return
+    if (entry.timeoutId !== null) clearTimeout(entry.timeoutId)
     timers.current.delete(id)
   }, [])
 
   useEffect(() => () => {
-    for (const timer of timers.current.values()) clearTimeout(timer)
+    for (const entry of timers.current.values()) {
+      if (entry.timeoutId !== null) clearTimeout(entry.timeoutId)
+    }
     timers.current.clear()
   }, [])
 
@@ -31,16 +35,36 @@ export function useToasts() {
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [clearTimer])
 
+  const arm = useCallback((id, delay) => {
+    const timeoutId = setTimeout(() => {
+      timers.current.delete(id)
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, delay)
+    timers.current.set(id, { timeoutId, remaining: delay, startedAt: Date.now() })
+  }, [])
+
   const addToast = useCallback((message, type = 'success', action) => {
     const id = ++nextToastId
     setToasts(prev => [...prev, { id, message, type, action }])
     if (type === 'error') return
-    const delay = action ? DISMISS_WITH_ACTION_MS : DISMISS_MS
-    timers.current.set(id, setTimeout(() => {
-      timers.current.delete(id)
-      setToasts(prev => prev.filter(t => t.id !== id))
-    }, delay))
+    arm(id, action ? DISMISS_WITH_ACTION_MS : DISMISS_MS)
+  }, [arm])
+
+  // WCAG 2.2.1's "no timing" escape hatch. An id with no entry here — an error toast, which
+  // never arms one, or one already removed — has nothing to pause; this is then a no-op.
+  const pauseToast = useCallback((id) => {
+    const entry = timers.current.get(id)
+    if (entry === undefined || entry.timeoutId === null) return
+    clearTimeout(entry.timeoutId)
+    const elapsed = Date.now() - entry.startedAt
+    timers.current.set(id, { timeoutId: null, remaining: Math.max(0, entry.remaining - elapsed), startedAt: null })
   }, [])
 
-  return { toasts, addToast, removeToast }
+  const resumeToast = useCallback((id) => {
+    const entry = timers.current.get(id)
+    if (entry === undefined || entry.timeoutId !== null) return
+    arm(id, entry.remaining)
+  }, [arm])
+
+  return { toasts, addToast, removeToast, pauseToast, resumeToast }
 }

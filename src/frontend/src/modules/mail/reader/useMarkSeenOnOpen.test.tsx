@@ -5,7 +5,7 @@ import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
 import { mailKeys, useSetFlags } from '../queries'
 import { settle } from '../../../test-utils'
-import { findCachedSummary, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
+import { findCachedSummary, useCachedSummaryFlags, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
 const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn() }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
@@ -364,5 +364,44 @@ describe('findCachedSummary', () => {
 
     expect(findCachedSummary(client, 'primary', 'INBOX', 999)).toBeUndefined()
     expect(findCachedSummary(client, 'primary', 'Archive', 1)).toBeUndefined()
+  })
+})
+
+describe('useCachedSummaryFlags', () => {
+  beforeEach(() => {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  })
+
+  function FlagsHost() {
+    const { seen, flagged } = useCachedSummaryFlags('INBOX', 5)
+    return <span>{`${seen} ${flagged}`}</span>
+  }
+
+  it('follows a write to the list caches of the open folder', async () => {
+    seedPage([summary(5)])
+    render(<FlagsHost />, { wrapper })
+    await settle()
+    expect(screen.getByText('false false')).toBeInTheDocument()
+
+    act(() => seedStream([summary(5, { seen: true, flagged: true })]))
+    act(() => client.removeQueries({ queryKey: pagesKey }))
+
+    expect(await screen.findByText('true true')).toBeInTheDocument()
+  })
+
+  // Every cache event app-wide reaches the subscription; only the folder's lists may cost a scan.
+  it('does not rescan the lists on an unrelated cache write', async () => {
+    seedPage([summary(5)])
+    render(<FlagsHost />, { wrapper })
+    await settle()
+    const scan = vi.spyOn(client, 'getQueriesData')
+
+    act(() => {
+      client.setQueryData(['contacts', 'primary'], { contacts: [] })
+      client.setQueryData(mailKeys.messages('primary', 'Archive', 0, 50), pageOf([summary(5)]))
+    })
+    await settle()
+
+    expect(scan).not.toHaveBeenCalled()
   })
 })

@@ -31,6 +31,7 @@ export default function ToggleRow(
           checked={checked}
           disabled={disabled}
           onChange={event => onChange(event.target.checked)}
+          aria-label={label}
         />
         <span className="toggle-track" />
       </label>

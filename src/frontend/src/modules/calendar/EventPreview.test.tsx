@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
+import DeleteConfirmModal from '../../components/DeleteConfirmModal.jsx'
 import EventPreview from './EventPreview'
 import type { EventDetail, Occurrence } from './calendarTypes'
 
@@ -210,11 +212,124 @@ describe('EventPreview', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  // The bubble is what launched the confirm and is the screen behind it: one Escape must answer
+  // the dialog and leave the bubble standing.
+  it('stays open when a dialog over it answers Escape', async () => {
+    const onClose = vi.fn()
+    const onDialogClose = vi.fn()
+    draw(DENTIST, anchorAt(200, 300), { onClose })
+    render(<DeleteConfirmModal entityLabel="Dentist" onConfirm={vi.fn()} onClose={onDialogClose} />)
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(onDialogClose).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // Same nesting, the other half of it: a press inside that dialog is "outside" the bubble by
+  // containment alone, and used to shut the bubble the confirm had been opened from.
+  it('stays open on a press inside a dialog over it', async () => {
+    const onClose = vi.fn()
+    draw(DENTIST, anchorAt(200, 300), { onClose })
+    render(<DeleteConfirmModal entityLabel="Dentist" onConfirm={vi.fn()} onClose={vi.fn()} />)
+
+    const confirm = within(document.querySelector('.modal') as HTMLElement)
+    fireEvent.mouseDown(confirm.getByRole('button', { name: 'Delete' }))
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // The bubble is not a dialog anyone is trapped in, but it is opened by a click and holds two
+  // actions: a keyboard reaches them only if the opening puts the focus in it.
+  it('takes the focus onto its first control and gives it back to the chip', async () => {
+    const onClose = vi.fn()
+    const anchor = anchorAt(200, 300)
+    anchor.focus()
+    draw(DENTIST, anchor, { onClose })
+
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(onClose).toHaveBeenCalled()
+    expect(anchor).toHaveFocus()
+  })
+
+  it('gives the focus back to the chip when the ✕ closes it', async () => {
+    const anchor = anchorAt(200, 300)
+    draw(DENTIST, anchor, { onClose: vi.fn() })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(anchor).toHaveFocus()
+  })
+
+  /** The bubble over a region of its own — `CalendarLayout` hands it `.calendar-main`. `drop`
+      stands for the layout closing it once a delete lands, and is clicked rather than pressed so
+      the focus the bubble holds does not move first. */
+  function drawWithRegion(anchor: HTMLElement) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    function Host() {
+      const region = useRef<HTMLDivElement>(null)
+      const [open, setOpen] = useState(true)
+      return (
+        <QueryClientProvider client={client}>
+          <div data-testid="region" tabIndex={-1} ref={region} />
+          <button type="button" data-testid="drop" onClick={() => setOpen(false)}>drop</button>
+          {open && (
+            <EventPreview occurrence={occurrenceOf(DENTIST)} calendar={calendarOf('a')}
+              anchor={anchor} rect={anchor.getBoundingClientRect()} returnFocusRef={region}
+              onClose={() => setOpen(false)} onEdit={() => {}} onDelete={() => {}} />
+          )}
+        </QueryClientProvider>
+      )
+    }
+    renderInCalendar(<Host />)
+    return { close: () => fireEvent.click(screen.getByTestId('drop')) }
+  }
+
+  // Route one: a search result clears the results as it opens the bubble, so the chip is already
+  // detached when the bubble mounts and handing focus back to it is a silent no-op.
+  it('falls back to the region when the chip it hangs off is already detached', async () => {
+    const anchor = anchorAt(200, 300)
+    anchor.remove()
+    drawWithRegion(anchor)
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.getByTestId('region')).toHaveFocus()
+  })
+
+  // Route two: deleting from the bubble. The confirm hands focus back to the bubble's Delete
+  // button, then the event — and its chip — go, with the focus still inside the bubble.
+  it('falls back to the region when the chip goes with the event', () => {
+    const anchor = anchorAt(200, 300)
+    const { close } = drawWithRegion(anchor)
+    screen.getByRole('button', { name: 'Delete' }).focus()
+    anchor.remove()
+
+    close()
+
+    expect(screen.getByTestId('region')).toHaveFocus()
+  })
+
   it('closes on a click outside itself', async () => {
     const onClose = vi.fn()
     draw(DENTIST, anchorAt(200, 300), { onClose })
     await userEvent.click(document.body)
     expect(onClose).toHaveBeenCalled()
+  })
+
+  // The chip toggles the bubble, so the press that closes it is the chip's own business: closing
+  // here would unmount the `role="dialog"` bubble the chip's click reopens a moment later.
+  it('stays open on a press on the chip it hangs off', () => {
+    const onClose = vi.fn()
+    const anchor = anchorAt(200, 300)
+    draw(DENTIST, anchor, { onClose })
+
+    fireEvent.mouseDown(anchor)
+
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('stays open on a click inside itself', async () => {

@@ -260,11 +260,22 @@ coercion), the toolbar drops its search box and its fourth segment, gestures are
   `phone` rather than the bubble learning about tiers.
 - **The editor takes the screen**, `.calendar-editor-screen` rather than a `.modal-overlay`, with
   a 44px head carrying the title, Save and the ✕ — Save sits outside the `<form>` and reaches it
-  through `form="calendar-event-form"`, which is what lets it be up there at all.
+  through `form="calendar-event-form"`, which is what lets it be up there at all. It is no `Modal`,
+  but it says `role="dialog"`/`aria-modal` and registers a layer, so Escape and Tab are its own
+  while it stands and no reader wanders into the grid behind it.
 - **The floating `+`** is the module's primary action below 1024px, which is why
   `.context-drawer-panel .column-actions` is hidden there like every other module's. It is
   withheld while the editor is open, for the collision `MailLayout` and `ContactsLayout` both
   withhold theirs for: it is anchored 73px up from the edge the tab bar owns.
+
+**The Title box carries `autoFocus` *and* a `titleRef`, and that is not the redundancy
+CLAUDE.md's "pass the ref, never `autoFocus`" rule forbids.** The editor's header and its form
+arrive in **two** commits — `editorReady` waits for the event or the calendar list — so the surface
+(the desktop `Modal`, the phone layer) activates over the loading header, where the ref is still
+null and focus correctly lands on that header's ✕. `autoFocus` is what moves it onto the field on
+the later commit the form lands in, which no layer activation follows; the ref is what wins over
+`autoFocus` in the same-commit case, a detail already in the cache. Remove either and one of the
+two paths opens on the wrong control.
 
 **The gutter is a CSS token, not a number in TypeScript.** `.week-view` declares
 `--cal-gutter: 56px` and the phone block narrows it to 52; `WeekView`'s inline grid template, the

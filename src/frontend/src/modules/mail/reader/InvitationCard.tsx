@@ -319,7 +319,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
         </p>
       )}
       {unsent && !unanswerable && (
-        <p className="invitation-card-error">
+        <p className="invitation-card-error" role="alert">
           {t(unsent.declined ? 'reader.invitation.replyFailed' : 'reader.invitation.addedReplyFailed')}
           <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => answer(unsent.answer)}>
             {t('reader.invitation.resend')}
@@ -332,7 +332,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
         <p className="invitation-card-context">{t('reader.invitation.declinedStays')}</p>
       )}
       {error && (
-        <p className="invitation-card-error">
+        <p className="invitation-card-error" role="alert">
           {error.message}
           {/* The message or its part is gone: refetching it is what redraws the reader around
               whatever is actually there now. */}

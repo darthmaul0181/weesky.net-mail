@@ -114,6 +114,17 @@ describe('SyncPage', () => {
     expect(api.regenerateDavSecret).not.toHaveBeenCalled()
   })
 
+  it('dismisses the regenerate question on its named ✕', async () => {
+    vi.mocked(api.getDavCredentials).mockResolvedValue(ON)
+    render(<SyncPage />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(screen.queryByText(/Turn syncing off on your devices first/)).not.toBeInTheDocument()
+    expect(api.regenerateDavSecret).not.toHaveBeenCalled()
+  })
+
   it('confirming regenerates and shows the new secret', async () => {
     vi.mocked(api.getDavCredentials).mockResolvedValue(ON)
     render(<SyncPage />)

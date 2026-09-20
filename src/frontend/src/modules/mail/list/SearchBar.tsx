@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
+import { hasOpenLayer } from '../../../lib/layerStack'
 
 interface Props {
   folderTitle: string
@@ -17,8 +18,9 @@ export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClo
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter' && text.trim()) onSearch(text.trim())
-    // Escape must not also clear the list selection behind the bar.
-    if (event.key === 'Escape') { event.stopPropagation(); onClose() }
+    // Escape belongs to whatever layer is open — the caret can still be here while a menu stands,
+    // since Safari focuses no button on a click. Otherwise it must not also clear the selection.
+    if (event.key === 'Escape' && !hasOpenLayer()) { event.stopPropagation(); onClose() }
   }
 
   return (
@@ -27,7 +29,9 @@ export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClo
         type="search"
         className="search-input"
         placeholder={t('search.placeholder', { folder: folderTitle })}
+        aria-label={t('search.placeholder', { folder: folderTitle })}
         value={text}
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- documented exception: the quick search bar autofocuses when it opens, not a dialog Modal's own focus management
         autoFocus
         onChange={event => setText(event.target.value)}
         onKeyDown={onKeyDown}

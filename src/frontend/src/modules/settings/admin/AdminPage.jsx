@@ -15,7 +15,7 @@ const TABS_WITH_HELP = ['domains', 'virtualdomains', 'externaldomains', 'applica
 
 export default function AdminPage() {
   const { t } = useTranslation('admin')
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [activeTab, setActiveTab] = useState('accounts')
 
   return (
@@ -52,7 +52,7 @@ export default function AdminPage() {
         )}
       </div>
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </>
   )
 }

@@ -69,6 +69,22 @@ describe('AccountPage', () => {
     await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
   })
 
+  // CheckIcon/XIcon are ad hoc svgs local to this file, in the name-edit row only — the icon
+  // sweep's glob over src/icons/ structurally cannot see them.
+  it('hides the name-edit row\'s Check/X icons from assistive tech', async () => {
+    renderPage()
+    await screen.findByText('mick@weesky.be')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit name' }))
+
+    const svgs = document.querySelectorAll('.panel-fullname-edit svg')
+    expect(svgs.length).toBe(2)
+    svgs.forEach(svg => {
+      expect(svg).toHaveAttribute('aria-hidden', 'true')
+      expect(svg).toHaveAttribute('focusable', 'false')
+    })
+  })
+
   // The quota block used to print a heading of its own right under the section's.
   it('names the storage section once', async () => {
     renderPage()

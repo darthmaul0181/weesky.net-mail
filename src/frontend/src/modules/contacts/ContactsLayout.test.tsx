@@ -7,7 +7,7 @@ import ContactsLayout from './ContactsLayout'
 import type { Contact, ContactDetail } from './contactTypes'
 import type { ContactGroup } from './contactGroupTypes'
 import { CONTACT_DRAG_MIME } from './dragContacts'
-import { mockViewport, resetViewport, settle } from '../../test-utils'
+import { fireEscape, mockViewport, pressBackdrop, resetViewport, settle } from '../../test-utils'
 
 afterEach(resetViewport)
 
@@ -432,6 +432,29 @@ describe('ContactsLayout', () => {
       expect(api.updateContact.mock.calls[0][1]).not.toHaveProperty('cardHash')
     })
 
+    // It interrupts the save to say the card moved under it, so it is named and it takes the
+    // three ways out every other dialog takes.
+    it('names the conflict box and closes it on Escape and on the backdrop', async () => {
+      api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
+      serveCard({ cardHash: 'abc123' })
+      await openEditor()
+
+      await save()
+      await conflictBox()
+      expect(screen.getByRole('alertdialog', { name: 'This contact changed elsewhere' }))
+        .toHaveAttribute('aria-modal', 'true')
+
+      fireEscape()
+      await waitFor(() => expect(
+        screen.queryByRole('alertdialog', { name: 'This contact changed elsewhere' })).toBeNull())
+
+      await save()
+      await conflictBox()
+      pressBackdrop()
+      await waitFor(() => expect(
+        screen.queryByRole('alertdialog', { name: 'This contact changed elsewhere' })).toBeNull())
+    })
+
     it('offers to reload when the write is refused as stale', async () => {
       api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
       serveCard({ cardHash: 'abc123' })
@@ -499,7 +522,7 @@ describe('ContactsLayout', () => {
       await conflictBox()
       await settle()
 
-      await userEvent.click(screen.getByRole('button', { name: '✕' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }))
       await save()
 
       await waitFor(() => expect(api.updateContact).toHaveBeenCalledTimes(2))
@@ -700,15 +723,29 @@ describe('ContactsLayout on a phone', () => {
     expect(screen.queryByText('Bruno')).not.toBeInTheDocument()
   })
 
-  // The confirm owns Escape while it is open: backing out from under it would leave a dialog
-  // acting on a contact the screen no longer shows.
-  it('withholds the card back while the delete confirm is open', async () => {
+  // The confirm owns Escape while it is open: one key closes it and leaves the card where it is,
+  // rather than also backing out and leaving a dialog acting on a contact nothing shows.
+  it('Escape under the delete confirm closes the confirm alone', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts?id=b')
+    await bookLoaded()
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    expect(screen.getByRole('alertdialog', { name: 'Confirm deletion' })).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
+  })
+
+  // Dispatched on window, so the stack's own document listener never runs and cannot mark the
+  // key handled: the card has to ask the stack itself.
+  it('does not back out on an Escape the stack never saw, under the confirm', async () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
     await bookLoaded()
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
 
-    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
 
     expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
@@ -883,6 +920,28 @@ describe('contact groups', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(api.renameContactGroup).toHaveBeenCalledWith('g1', 'Best friends'))
+  })
+
+  // A row of the drawer opens a dialog over it: the dialog is the topmost layer, so Tab cycles
+  // inside it and Escape answers it alone, leaving the column that raised it standing.
+  it('keeps the drawer standing under a dialog opened from a group row', async () => {
+    mockViewport('phone')
+    const { container } = renderAt('/contacts')
+    await bookLoaded()
+
+    await userEvent.click(await screen.findByRole('button', { name: /open navigation/i }))
+    await openGroupMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Rename group' })
+
+    screen.getByRole('button', { name: 'Save' }).focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    fireEscape()
+
+    await waitFor(() => expect(screen.queryByLabelText('Name')).not.toBeInTheDocument())
+    expect(container.querySelector('.context-drawer.is-open')).toBeTruthy()
   })
 
   // La suppression d'un groupe n'est pas celle de ses contacts, et le dialogue doit le dire.

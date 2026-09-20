@@ -97,6 +97,7 @@ export default function ApplicationTab({ addToast }: Props) {
             type="checkbox"
             checked={enabled}
             disabled={setSetting.isPending}
+            aria-label={t('application.installable')}
             onChange={event => save(
               APP_SETTING_KEYS.installable, String(event.target.checked),
               t(event.target.checked

@@ -269,8 +269,9 @@ describe('InvitationCard', () => {
     renderCard()
 
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
-    expect(await screen.findByText('Added to your calendar. The reply could not be sent.'))
-      .toBeInTheDocument()
+    const message = await screen.findByText('Added to your calendar. The reply could not be sent.')
+    expect(message).toBeInTheDocument()
+    expect(message.closest('p')).toHaveAttribute('role', 'alert')
 
     mocks.respondInvitation.mockResolvedValueOnce({
       invitation: answered('ACCEPTED'), replySent: true, trashed: false,
@@ -325,7 +326,9 @@ describe('InvitationCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
 
-    expect(await screen.findByText('The answer could not be recorded.')).toBeInTheDocument()
+    const message = await screen.findByText('The answer could not be recorded.')
+    expect(message).toBeInTheDocument()
+    expect(message.closest('p')).toHaveAttribute('role', 'alert')
     expect(screen.queryByRole('button', { name: 'Reload the message' })).toBeNull()
   })
 

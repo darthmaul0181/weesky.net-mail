@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { api } from '../../../api.js'
+import Modal from '../../../components/Modal'
 import { useAccountId } from '../../../hooks/useAccountId'
 import { useToasts } from '../../../hooks/useToasts.js'
 import { flatten } from '../../mail/folders/folderNodes'
@@ -17,7 +18,7 @@ import FunnelIcon from '../../../icons/FunnelIcon'
 function PlusIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
@@ -27,7 +28,7 @@ function PlusIcon() {
 function ChevronUpIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <polyline points="18 15 12 9 6 15" />
     </svg>
   )
@@ -36,7 +37,7 @@ function ChevronUpIcon() {
 function ChevronDownIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <polyline points="6 9 12 15 18 9" />
     </svg>
   )
@@ -45,7 +46,7 @@ function ChevronDownIcon() {
 function ArrowUpIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <line x1="12" y1="19" x2="12" y2="5" />
       <polyline points="5 12 12 5 19 12" />
     </svg>
@@ -55,7 +56,7 @@ function ArrowUpIcon() {
 function ArrowDownIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <line x1="12" y1="5" x2="12" y2="19" />
       <polyline points="19 12 12 19 5 12" />
     </svg>
@@ -64,7 +65,7 @@ function ArrowDownIcon() {
 
 function GripIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
       <circle cx="8"  cy="6"  r="2" /><circle cx="16" cy="6"  r="2" />
       <circle cx="8"  cy="12" r="2" /><circle cx="16" cy="12" r="2" />
       <circle cx="8"  cy="18" r="2" /><circle cx="16" cy="18" r="2" />
@@ -244,7 +245,10 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
       <div className="rule-card-header">
         <span className="rule-card-drag" title={t('rules.dragToReorder')}><GripIcon /></span>
         <label className="toggle-switch" title={t(rule.enabled ? 'rules.disable' : 'rules.enable')}>
-          <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)} />
+          {/* Named by the rule it switches, never by the action: `checked` already says which way
+              it stands, and "Disable, checkbox, checked" says that twice and the rule never. */}
+          <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)}
+            aria-label={rule.name || t('rules.unnamed')} />
           <span className="toggle-track" />
         </label>
         <span className="rule-card-name">{rule.name}</span>
@@ -468,87 +472,81 @@ function RuleHelpModal({ onClose }) {
   const pair = (a, b) => t('rules.help.termPair', { a, b })
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal rule-help-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{t('rules.help.title')}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="rule-help-body">
+    <Modal title={t('rules.help.title')} onClose={onClose} className="rule-help-modal">
+      <div className="rule-help-body">
 
-          <section className="rule-help-section">
-            <h3 className="rule-help-heading">{t('rules.stepConditions')}</h3>
-            <dl className="rule-help-dl">
-              <dt>{t('rules.help.headerTerms')}</dt>
-              <dd><Trans i18nKey="rules.help.headerDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.fields.Header')}</dt>
-              <dd><Trans i18nKey="rules.help.customHeaderDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.help.sizeTerm')}</dt>
-              <dd><Trans i18nKey="rules.help.sizeDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.fields.Body')} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.bodyDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{pair(t('rules.fields.EnvelopeFrom'), t('rules.fields.EnvelopeTo'))} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.envelopeDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.fields.RecipientDetail')} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.detailDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.help.duplicateTerm')} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.duplicateDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{pair(t('rules.fields.CurrentDate'), t('rules.fields.MessageDate'))} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.dateDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{pair(t('rules.fields.CurrentWeekday'), t('rules.fields.CurrentHour'))} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.whenDesc" ns="settings" components={HELP_TAGS} /></dd>
-            </dl>
-          </section>
+        <section className="rule-help-section">
+          <h3 className="rule-help-heading">{t('rules.stepConditions')}</h3>
+          <dl className="rule-help-dl">
+            <dt>{t('rules.help.headerTerms')}</dt>
+            <dd><Trans i18nKey="rules.help.headerDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.fields.Header')}</dt>
+            <dd><Trans i18nKey="rules.help.customHeaderDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.help.sizeTerm')}</dt>
+            <dd><Trans i18nKey="rules.help.sizeDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.fields.Body')} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.bodyDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{pair(t('rules.fields.EnvelopeFrom'), t('rules.fields.EnvelopeTo'))} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.envelopeDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.fields.RecipientDetail')} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.detailDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.help.duplicateTerm')} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.duplicateDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{pair(t('rules.fields.CurrentDate'), t('rules.fields.MessageDate'))} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.dateDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{pair(t('rules.fields.CurrentWeekday'), t('rules.fields.CurrentHour'))} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.whenDesc" ns="settings" components={HELP_TAGS} /></dd>
+          </dl>
+        </section>
 
-          <section className="rule-help-section">
-            <h3 className="rule-help-heading">{t('rules.help.operators')}</h3>
-            <dl className="rule-help-dl">
-              <dt>{t('rules.operators.Contains')}</dt>
-              <dd><Trans i18nKey="rules.help.containsDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.operators.Equals')}</dt>
-              <dd><Trans i18nKey="rules.help.equalsDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.operators.Matches')}</dt>
-              <dd><Trans i18nKey="rules.help.wildcardDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.operators.Regex')} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.regexDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{pair(t('rules.operators.Larger'), t('rules.operators.Smaller'))}</dt>
-              <dd><Trans i18nKey="rules.help.sizeCompareDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{pair(t('rules.operators.Before'), t('rules.operators.OnOrAfter'))}</dt>
-              <dd><Trans i18nKey="rules.help.dateCompareDesc" ns="settings" components={HELP_TAGS} /></dd>
-            </dl>
-          </section>
+        <section className="rule-help-section">
+          <h3 className="rule-help-heading">{t('rules.help.operators')}</h3>
+          <dl className="rule-help-dl">
+            <dt>{t('rules.operators.Contains')}</dt>
+            <dd><Trans i18nKey="rules.help.containsDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.operators.Equals')}</dt>
+            <dd><Trans i18nKey="rules.help.equalsDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.operators.Matches')}</dt>
+            <dd><Trans i18nKey="rules.help.wildcardDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.operators.Regex')} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.regexDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{pair(t('rules.operators.Larger'), t('rules.operators.Smaller'))}</dt>
+            <dd><Trans i18nKey="rules.help.sizeCompareDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{pair(t('rules.operators.Before'), t('rules.operators.OnOrAfter'))}</dt>
+            <dd><Trans i18nKey="rules.help.dateCompareDesc" ns="settings" components={HELP_TAGS} /></dd>
+          </dl>
+        </section>
 
-          <section className="rule-help-section">
-            <h3 className="rule-help-heading">{t('rules.stepActions')}</h3>
-            <dl className="rule-help-dl">
-              <dt>{t('rules.actionTypes.FileInto')}</dt>
-              <dd><Trans i18nKey="rules.help.fileIntoDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.actionTypes.Redirect')}</dt>
-              <dd><Trans i18nKey="rules.help.redirectDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.actionTypes.Reject')}</dt>
-              <dd><Trans i18nKey="rules.help.rejectDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.actionTypes.Discard')}</dt>
-              <dd><Trans i18nKey="rules.help.discardDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.actionTypes.Keep')} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.keepDesc" ns="settings" components={HELP_TAGS} /></dd>
-            </dl>
-          </section>
+        <section className="rule-help-section">
+          <h3 className="rule-help-heading">{t('rules.stepActions')}</h3>
+          <dl className="rule-help-dl">
+            <dt>{t('rules.actionTypes.FileInto')}</dt>
+            <dd><Trans i18nKey="rules.help.fileIntoDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.actionTypes.Redirect')}</dt>
+            <dd><Trans i18nKey="rules.help.redirectDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.actionTypes.Reject')}</dt>
+            <dd><Trans i18nKey="rules.help.rejectDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.actionTypes.Discard')}</dt>
+            <dd><Trans i18nKey="rules.help.discardDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.actionTypes.Keep')} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.keepDesc" ns="settings" components={HELP_TAGS} /></dd>
+          </dl>
+        </section>
 
-          <section className="rule-help-section">
-            <h3 className="rule-help-heading">{t('rules.stepOptions')}</h3>
-            <dl className="rule-help-dl">
-              <dt>{t('rules.markAsRead')}</dt>
-              <dd><Trans i18nKey="rules.help.markReadDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.markAsFlagged')} <Badge /></dt>
-              <dd><Trans i18nKey="rules.help.markFlaggedDesc" ns="settings" components={HELP_TAGS} /></dd>
-              <dt>{t('rules.stopAfter')}</dt>
-              <dd><Trans i18nKey="rules.help.stopAfterDesc" ns="settings" components={HELP_TAGS} /></dd>
-            </dl>
-          </section>
+        <section className="rule-help-section">
+          <h3 className="rule-help-heading">{t('rules.stepOptions')}</h3>
+          <dl className="rule-help-dl">
+            <dt>{t('rules.markAsRead')}</dt>
+            <dd><Trans i18nKey="rules.help.markReadDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.markAsFlagged')} <Badge /></dt>
+            <dd><Trans i18nKey="rules.help.markFlaggedDesc" ns="settings" components={HELP_TAGS} /></dd>
+            <dt>{t('rules.stopAfter')}</dt>
+            <dd><Trans i18nKey="rules.help.stopAfterDesc" ns="settings" components={HELP_TAGS} /></dd>
+          </dl>
+        </section>
 
-        </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -558,6 +556,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
   const { t } = useTranslation('settings')
   const isNew = !initialRule
   const accountId = useAccountId()
+  const nameRef = useRef(null)
   const [rule, setRule] = useState(() => {
     const base = initialRule ? JSON.parse(JSON.stringify(initialRule)) : makeEmptyRule()
     return { ...base, actions: base.actions.filter(a => a.type !== 'SetFlag') }
@@ -637,159 +636,151 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{t(isNew ? 'rules.newRule' : 'rules.editRule')}</span>
-          <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)}
-            title={t('rules.helpTitle')}>?</button>
-          <button className="modal-close" onClick={onClose}>✕</button>
+    <Modal title={t(isNew ? 'rules.newRule' : 'rules.editRule')} onClose={onClose}
+      onSubmit={handleSubmit} initialFocusRef={nameRef}
+      headerExtra={
+        <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)}
+          aria-label={t('rules.helpTitle')} title={t('rules.helpTitle')}>?</button>
+      }>
+      {helpOpen && <RuleHelpModal onClose={() => setHelpOpen(false)} />}
+      {error && <div className="alert alert-error" role="alert" style={{ marginBottom: '16px' }}>{error}</div>}
+
+      {folders.length > 0 && (
+        <datalist id="rule-editor-folders">
+          {folders.map(f => <option key={f} value={f} />)}
+        </datalist>
+      )}
+
+      <div className="rule-wizard">
+
+        <div className="rule-wizard-step">
+          <div className="rule-wizard-indicator">
+            <div className={circleClass(true, step1Done)}>1</div>
+            <div className="rule-wizard-line" />
+          </div>
+          <div className="rule-wizard-body">
+            <div className="rule-wizard-title">{t('rules.stepName')}</div>
+            <input
+              type="text"
+              className="rule-wizard-input"
+              value={rule.name}
+              onChange={e => setField('name', e.target.value)}
+              ref={nameRef}
+              required
+            />
+          </div>
         </div>
-        {helpOpen && <RuleHelpModal onClose={() => setHelpOpen(false)} />}
-        <form onSubmit={handleSubmit}>
-          {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
 
-          {folders.length > 0 && (
-            <datalist id="rule-editor-folders">
-              {folders.map(f => <option key={f} value={f} />)}
-            </datalist>
-          )}
-
-          <div className="rule-wizard">
-
-            <div className="rule-wizard-step">
-              <div className="rule-wizard-indicator">
-                <div className={circleClass(true, step1Done)}>1</div>
-                <div className="rule-wizard-line" />
-              </div>
-              <div className="rule-wizard-body">
-                <div className="rule-wizard-title">{t('rules.stepName')}</div>
-                <input
-                  type="text"
-                  className="rule-wizard-input"
-                  value={rule.name}
-                  onChange={e => setField('name', e.target.value)}
-                  autoFocus
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="rule-wizard-step">
-              <div className="rule-wizard-indicator">
-                <div className={circleClass(step2Unlocked, step2Done)}>2</div>
-                <div className="rule-wizard-line" />
-              </div>
-              <div className={`rule-wizard-body${step2Unlocked ? '' : ' rule-wizard-body--locked'}`}>
-                <div className="rule-wizard-step-header">
-                  <span className="rule-wizard-title">{t('rules.stepConditions')}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <select
-                      className="rule-wizard-select"
-                      value={rule.matchAll ? 'all' : 'any'}
-                      onChange={e => setField('matchAll', e.target.value === 'all')}
-                    >
-                      <option value="any">{t('rules.anyOf')}</option>
-                      <option value="all">{t('rules.allOf')}</option>
-                    </select>
-                    <button type="button" className="rule-editor-add-btn" onClick={addCondition}>
-                      <PlusIcon /> {t('actions.add', { ns: 'common' })}
-                    </button>
-                  </div>
-                </div>
-                {rule.conditions.map((c, i) => (
-                  <ConditionRow key={i} condition={c}
-                    onChange={cond => updateCondition(i, cond)}
-                    onRemove={() => removeCondition(i)}
-                    extended={extended} />
-                ))}
-                {rule.conditions.length === 0 && (
-                  <p className="rule-editor-empty">{t('rules.noConditions')}</p>
-                )}
-                <p className="rule-wizard-hint">
-                  <Trans i18nKey="rules.matchHint" ns="settings" />
-                </p>
-              </div>
-            </div>
-
-            <div className="rule-wizard-step">
-              <div className="rule-wizard-indicator">
-                <div className={circleClass(step3Unlocked, step3Done)}>3</div>
-                <div className="rule-wizard-line" />
-              </div>
-              <div className={`rule-wizard-body${step3Unlocked ? '' : ' rule-wizard-body--locked'}`}>
-                <div className="rule-wizard-step-header">
-                  <span className="rule-wizard-title">{t('rules.stepActions')}</span>
-                  {(extended || rule.actions.length === 0) && (
-                    <button type="button" className="rule-editor-add-btn" onClick={addAction}>
-                      <PlusIcon /> {t('actions.add', { ns: 'common' })}
-                    </button>
-                  )}
-                </div>
-                {rule.actions.map((a, i) => (
-                  <ActionRow key={i} action={a}
-                    extended={extended}
-                    onChange={action => updateAction(i, action)}
-                    onRemove={() => removeAction(i)}
-                    foldersDatalistId={folders.length > 0 ? 'rule-editor-folders' : undefined} />
-                ))}
-                {rule.actions.length === 0 && (
-                  <p className="rule-editor-empty">{t('rules.noActions')}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rule-wizard-step">
-              <div className="rule-wizard-indicator">
-                <div className={circleClass(step4Unlocked, step4Unlocked)}>4</div>
-              </div>
-              <div className={`rule-wizard-body${step4Unlocked ? '' : ' rule-wizard-body--locked'}`}>
-                <div className="rule-wizard-title">{t('rules.stepOptions')}</div>
-                <div className="rule-wizard-toggle-row">
-                  <label className="toggle-switch">
-                    <input type="checkbox" checked={markAsRead}
-                      onChange={e => setMarkAsRead(e.target.checked)} />
-                    <span className="toggle-track" />
-                  </label>
-                  <span className="rule-wizard-toggle-label">{t('rules.markAsRead')}</span>
-                </div>
-                {extended && (
-                  <div className="rule-wizard-toggle-row">
-                    <label className="toggle-switch">
-                      <input type="checkbox" checked={markAsFlagged}
-                        onChange={e => setMarkAsFlagged(e.target.checked)} />
-                      <span className="toggle-track" />
-                    </label>
-                    <span className="rule-wizard-toggle-label">{t('rules.markAsFlagged')}</span>
-                  </div>
-                )}
-                <div className="rule-wizard-toggle-row">
-                  <label className="toggle-switch">
-                    <input type="checkbox" checked={rule.stopAfter}
-                      onChange={e => setField('stopAfter', e.target.checked)} />
-                    <span className="toggle-track" />
-                  </label>
-                  <span className="rule-wizard-toggle-label">
-                    {t('rules.stopAfter')}
-                    <span className="rule-wizard-hint rule-wizard-hint--inline">{t('rules.stopAfterHint')}</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
+        <div className="rule-wizard-step">
+          <div className="rule-wizard-indicator">
+            <div className={circleClass(step2Unlocked, step2Done)}>2</div>
+            <div className="rule-wizard-line" />
           </div>
-
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '24px' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
-              {t('actions.cancel', { ns: 'common' })}
-            </button>
-            <button type="submit" className="btn btn-primary" style={{ width: 'auto' }} disabled={!canSubmit}>
-              {isNew ? t('rules.createRule') : t('actions.saveChanges', { ns: 'common' })}
-            </button>
+          <div className={`rule-wizard-body${step2Unlocked ? '' : ' rule-wizard-body--locked'}`}>
+            <div className="rule-wizard-step-header">
+              <span className="rule-wizard-title">{t('rules.stepConditions')}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <select
+                  className="rule-wizard-select"
+                  value={rule.matchAll ? 'all' : 'any'}
+                  onChange={e => setField('matchAll', e.target.value === 'all')}
+                >
+                  <option value="any">{t('rules.anyOf')}</option>
+                  <option value="all">{t('rules.allOf')}</option>
+                </select>
+                <button type="button" className="rule-editor-add-btn" onClick={addCondition}>
+                  <PlusIcon /> {t('actions.add', { ns: 'common' })}
+                </button>
+              </div>
+            </div>
+            {rule.conditions.map((c, i) => (
+              <ConditionRow key={i} condition={c}
+                onChange={cond => updateCondition(i, cond)}
+                onRemove={() => removeCondition(i)}
+                extended={extended} />
+            ))}
+            {rule.conditions.length === 0 && (
+              <p className="rule-editor-empty">{t('rules.noConditions')}</p>
+            )}
+            <p className="rule-wizard-hint">
+              <Trans i18nKey="rules.matchHint" ns="settings" />
+            </p>
           </div>
-        </form>
+        </div>
+
+        <div className="rule-wizard-step">
+          <div className="rule-wizard-indicator">
+            <div className={circleClass(step3Unlocked, step3Done)}>3</div>
+            <div className="rule-wizard-line" />
+          </div>
+          <div className={`rule-wizard-body${step3Unlocked ? '' : ' rule-wizard-body--locked'}`}>
+            <div className="rule-wizard-step-header">
+              <span className="rule-wizard-title">{t('rules.stepActions')}</span>
+              {(extended || rule.actions.length === 0) && (
+                <button type="button" className="rule-editor-add-btn" onClick={addAction}>
+                  <PlusIcon /> {t('actions.add', { ns: 'common' })}
+                </button>
+              )}
+            </div>
+            {rule.actions.map((a, i) => (
+              <ActionRow key={i} action={a}
+                extended={extended}
+                onChange={action => updateAction(i, action)}
+                onRemove={() => removeAction(i)}
+                foldersDatalistId={folders.length > 0 ? 'rule-editor-folders' : undefined} />
+            ))}
+            {rule.actions.length === 0 && (
+              <p className="rule-editor-empty">{t('rules.noActions')}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rule-wizard-step">
+          <div className="rule-wizard-indicator">
+            <div className={circleClass(step4Unlocked, step4Unlocked)}>4</div>
+          </div>
+          <div className={`rule-wizard-body${step4Unlocked ? '' : ' rule-wizard-body--locked'}`}>
+            <div className="rule-wizard-title">{t('rules.stepOptions')}</div>
+            <div className="rule-wizard-toggle-row">
+              <label className="toggle-switch">
+                <input type="checkbox" checked={markAsRead}
+                  onChange={e => setMarkAsRead(e.target.checked)} aria-label={t('rules.markAsRead')} />
+                <span className="toggle-track" />
+              </label>
+              <span className="rule-wizard-toggle-label">{t('rules.markAsRead')}</span>
+            </div>
+            {extended && (
+              <div className="rule-wizard-toggle-row">
+                <label className="toggle-switch">
+                  <input type="checkbox" checked={markAsFlagged}
+                    onChange={e => setMarkAsFlagged(e.target.checked)} aria-label={t('rules.markAsFlagged')} />
+                  <span className="toggle-track" />
+                </label>
+                <span className="rule-wizard-toggle-label">{t('rules.markAsFlagged')}</span>
+              </div>
+            )}
+            <div className="rule-wizard-toggle-row">
+              <label className="toggle-switch">
+                <input type="checkbox" checked={rule.stopAfter}
+                  onChange={e => setField('stopAfter', e.target.checked)} aria-label={t('rules.stopAfter')} />
+                <span className="toggle-track" />
+              </label>
+              <span className="rule-wizard-toggle-label">
+                {t('rules.stopAfter')}
+                <span className="rule-wizard-hint rule-wizard-hint--inline">{t('rules.stopAfterHint')}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
       </div>
-    </div>
+
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '24px' }}>
+        <button type="submit" className="btn btn-primary" style={{ width: 'auto' }} disabled={!canSubmit}>
+          {isNew ? t('rules.createRule') : t('actions.saveChanges', { ns: 'common' })}
+        </button>
+      </div>
+    </Modal>
   )
 }
 
@@ -798,35 +789,26 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
 export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading }) {
   const { t } = useTranslation('settings')
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{t('rules.convertTitle')}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <p style={{ margin: '0 0 12px', fontSize: '14px' }}>
-          <Trans i18nKey="rules.convertBody" ns="settings" count={incompatible.length} />
-        </p>
-        <ul className="convert-lost-list">
-          {incompatible.map(r => (
-            <li key={r.id}>
-              <span className="convert-lost-name">{r.name || t('rules.unnamed')}</span>
-              <span className="convert-lost-reason">{r.reason}</span>
-            </li>
-          ))}
-        </ul>
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>
-            {t('actions.cancel', { ns: 'common' })}
-          </button>
-          <button className="btn btn-primary"
-            style={{ width: 'auto', background: 'var(--danger)', borderColor: 'var(--danger)' }}
-            onClick={onConfirm} disabled={loading}>
-            {loading ? <span className="spinner" /> : t('rules.deleteAndSwitch')}
-          </button>
-        </div>
+    <Modal role="alertdialog" title={t('rules.convertTitle')} onClose={onClose} busy={loading}>
+      <p style={{ margin: '0 0 12px', fontSize: '14px' }}>
+        <Trans i18nKey="rules.convertBody" ns="settings" count={incompatible.length} />
+      </p>
+      <ul className="convert-lost-list">
+        {incompatible.map(r => (
+          <li key={r.id}>
+            <span className="convert-lost-name">{r.name || t('rules.unnamed')}</span>
+            <span className="convert-lost-reason">{r.reason}</span>
+          </li>
+        ))}
+      </ul>
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
+        <button className="btn btn-primary"
+          style={{ width: 'auto', background: 'var(--danger)', borderColor: 'var(--danger)' }}
+          onClick={onConfirm} disabled={loading}>
+          {loading ? <span className="spinner" /> : t('rules.deleteAndSwitch')}
+        </button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -834,7 +816,7 @@ export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading 
 
 export default function RulesPage() {
   const { t } = useTranslation('settings')
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   // The script belongs to the active mailbox: the backend swaps the ManageSieve target on it.
   const accountId = useAccountId()
 
@@ -1060,6 +1042,7 @@ export default function RulesPage() {
                         checked={extended}
                         disabled={switching || saving}
                         onChange={e => handleToggleExtended(e.target.checked)}
+                        aria-label={t('rules.extended')}
                       />
                       <span className="toggle-track" />
                     </label>
@@ -1143,7 +1126,7 @@ export default function RulesPage() {
         />
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </>
   )
 }

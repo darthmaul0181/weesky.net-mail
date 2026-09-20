@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
+import { useRef, useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import DropdownMenu, { type MenuItem, type MenuEntry } from './DropdownMenu'
+import { useLayer } from '../hooks/useLayer'
+import { hasOpenLayer } from '../lib/layerStack'
 
 function items(overrides?: Partial<{ onSelect: () => void; disabled: boolean; title: string }>[]): MenuItem[] {
   return [
@@ -46,7 +50,115 @@ describe('DropdownMenu', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('registers document listeners only while open, and cleans them up on close and unmount', () => {
+  it('marks the Escape it spends, so a window listener behind it can tell', () => {
+    const behind = vi.fn((e: KeyboardEvent) => e.defaultPrevented)
+    window.addEventListener('keydown', behind)
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
+    window.removeEventListener('keydown', behind)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(behind).toHaveReturnedWith(true)
+  })
+
+  /* The menu no longer stops the event on its way up — the stack owns Escape, and an ancestor
+     is told to ask it (`hasOpenLayer`) before acting, or to read `defaultPrevented` when it
+     listens behind it. Both ways round, an open menu is the only thing that answers. */
+  it('leaves an Escape pressed inside it to the stack, so no ancestor acts on it', () => {
+    const cleared = vi.fn()
+    const windowKey = vi.fn((e: KeyboardEvent) => e.defaultPrevented)
+    window.addEventListener('keydown', windowKey)
+    render(
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- test harness div standing in for an ancestor's keydown listener, not real UI
+      <div onKeyDown={() => { if (!hasOpenLayer()) cleared() }}>
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </div>)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+
+    fireEvent.keyDown(trigger, { key: 'Escape' })
+
+    window.removeEventListener('keydown', windowKey)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(cleared).not.toHaveBeenCalled()
+    expect(windowKey).toHaveReturnedWith(true)
+  })
+
+  it('hands focus back to the trigger when Escape closes it from an item', () => {
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+    const item = screen.getByRole('menuitem', { name: 'Mark as read' })
+    item.focus()
+
+    fireEvent.keyDown(item, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('hands focus back to the trigger when the document listener closes it', () => {
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+    screen.getByRole('menuitem', { name: 'Star' }).focus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('leaves focus alone when it was not inside the menu', () => {
+    render(
+      <>
+        <input aria-label="Elsewhere" />
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </>)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    const elsewhere = screen.getByLabelText('Elsewhere')
+    elsewhere.focus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(elsewhere).toHaveFocus()
+  })
+
+  it('lets any other key through while it is open', () => {
+    const parentKey = vi.fn()
+    render(
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- test harness div standing in for an ancestor's keydown listener, not real UI
+      <div onKeyDown={parentKey}>
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </div>)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+
+    fireEvent.keyDown(trigger, { key: 'Tab' })
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Star' }), { key: 'Enter' })
+
+    expect(parentKey).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+  })
+
+  it('lets an Escape through once it is closed', () => {
+    const parentKey = vi.fn()
+    render(
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- test harness div standing in for an ancestor's keydown listener, not real UI
+      <div onKeyDown={parentKey}>
+        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
+      </div>)
+
+    fireEvent.keyDown(screen.getByLabelText('Message actions'), { key: 'Escape' })
+
+    expect(parentKey).toHaveBeenCalledTimes(1)
+  })
+
+  /* Escape is the stack's, whose one listener is registered at module load — an instance of this
+     component adds none of its own, ever. The outside press is still its own, and only while open. */
+  it('registers its outside listener only while open, and cleans it up on close and unmount', () => {
     const addSpy = vi.spyOn(document, 'addEventListener')
     const removeSpy = vi.spyOn(document, 'removeEventListener')
     const addedFor = (type: string) => addSpy.mock.calls.filter(([t]) => t === type).map(([, h]) => h)
@@ -55,29 +167,23 @@ describe('DropdownMenu', () => {
     const { unmount } = render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
     const trigger = screen.getByLabelText('Message actions')
 
-    // Closed at mount: neither listener may be registered yet.
     expect(addedFor('mousedown')).toHaveLength(0)
-    expect(addedFor('keydown')).toHaveLength(0)
 
     fireEvent.click(trigger) // open
     expect(addedFor('mousedown')).toHaveLength(1)
-    expect(addedFor('keydown')).toHaveLength(1)
+    expect(addedFor('keydown')).toHaveLength(0)
     const [firstMouseHandler] = addedFor('mousedown')
-    const [firstKeyHandler] = addedFor('keydown')
 
     fireEvent.click(trigger) // close
     expect(removedFor('mousedown')).toEqual([firstMouseHandler])
-    expect(removedFor('keydown')).toEqual([firstKeyHandler])
 
     fireEvent.click(trigger) // open again
     expect(addedFor('mousedown')).toHaveLength(2)
-    expect(addedFor('keydown')).toHaveLength(2)
     const [, secondMouseHandler] = addedFor('mousedown')
-    const [, secondKeyHandler] = addedFor('keydown')
 
     unmount()
     expect(removedFor('mousedown')).toEqual([firstMouseHandler, secondMouseHandler])
-    expect(removedFor('keydown')).toEqual([firstKeyHandler, secondKeyHandler])
+    expect(addedFor('keydown')).toHaveLength(0)
   })
 
   it('an item click closes and fires its action', () => {
@@ -89,6 +195,51 @@ describe('DropdownMenu', () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('hands focus back to the trigger when a keyboard-activated item closes it', async () => {
+    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
+    const trigger = screen.getByLabelText('Message actions')
+    fireEvent.click(trigger)
+    screen.getByRole('menuitem', { name: 'Star' }).focus()
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('hands focus back to the trigger when a link item is activated', () => {
+    render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
+      items={[{ label: 'View source', href: '/mail/source' }]} />)
+    open()
+    const link = screen.getByRole('menuitem', { name: 'View source' })
+    link.focus()
+
+    fireEvent.click(link)
+
+    expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
+  })
+
+  it('lets a dialog opened by an item take the focus into itself', async () => {
+    function Harness() {
+      const [dialog, setDialog] = useState(false)
+      const panel = useRef<HTMLDivElement>(null)
+      useLayer({ active: dialog, ref: panel })
+      return (
+        <>
+          <DropdownMenu ariaLabel="Menu" trigger="⋮" items={[{ label: 'Rename', onSelect: () => setDialog(true) }]} />
+          {dialog && <div ref={panel} role="dialog" aria-modal="true"><input aria-label="Name" /></div>}
+        </>
+      )
+    }
+    render(<Harness />)
+    open()
+    screen.getByRole('menuitem', { name: 'Rename' }).focus()
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(screen.getByLabelText('Name')).toHaveFocus()
   })
 
   it('reflects state through aria-expanded', () => {

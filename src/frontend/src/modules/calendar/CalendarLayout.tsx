@@ -7,8 +7,10 @@ import { api } from '../../api.js'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
 import FloatingAction from '../../components/FloatingAction'
 import LoadingBlock from '../../components/LoadingBlock'
+import Modal from '../../components/Modal'
 import Toasts from '../../components/Toasts.jsx'
 import { useAccountId } from '../../hooks/useAccountId'
+import { useLayer } from '../../hooks/useLayer'
 import { useToasts } from '../../hooks/useToasts.js'
 import { useViewport } from '../../hooks/useViewport'
 import PlusIcon from '../../icons/PlusIcon'
@@ -25,7 +27,7 @@ import { dateLocaleOf, formatRangeTitle, hourCycleOf, weekNumberOf, weekRulesOf 
 import type {
   Calendar, CalendarImportReport, EditScope, EventDetail, Occurrence,
 } from './calendarTypes'
-import EventEditor from './EventEditor'
+import EventEditor, { EDITOR_TITLE_ID } from './EventEditor'
 import EventPreview from './EventPreview'
 import {
   allowedScopes, formOf, isRecurring, movedBody, movedOccurrence, newEventForm, ruleOf,
@@ -111,6 +113,15 @@ function nextHour(): Date {
   return new Date(now.getTime() + HOUR_MS)
 }
 
+/** `null` for anything `Date` cannot parse, rather than an Invalid Date travelling further into
+    the form and throwing the first time something reads it (`toISOString`, `getHours`, …). A
+    hand-edited or stale `start`/`end` query param is the case this exists for. */
+function parseDraftDate(value: string | null): Date | null {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 /** Same day of the month, clamped: 31 January plus a month is the last day of February. */
 function addMonths(day: PlainDate, delta: number): PlainDate {
   const [year, month, date] = day.split('-').map(Number)
@@ -147,6 +158,11 @@ function windowErrorOf(error: unknown, t: TFunction<'calendar'>): string {
   return apiErrorMessage(error, t('errors.load'))
 }
 
+function eventErrorOf(error: unknown, t: TFunction<'calendar'>): string {
+  return (error as { status?: number }).status === 404 ? t('errors.notFound')
+    : apiErrorMessage(error, t('errors.load'))
+}
+
 type Editing =
   | { mode: 'create' }
   | { mode: 'rename' | 'colour'; calendar: Calendar }
@@ -178,7 +194,7 @@ export default function CalendarLayout() {
   const { t, i18n } = useTranslation('calendar')
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const drawer = useContextDrawer()
   const phone = useViewport() === 'phone'
 
@@ -227,6 +243,9 @@ export default function CalendarLayout() {
   const updateEvent = useUpdateEvent()
   const removeEvent = useDeleteEvent()
   const moveEvent = useMoveOccurrence(window, tz)
+  // One flag for the three surfaces a write in flight makes inert: the form's own Save, the
+  // dialog's backdrop and Escape, and the phone screen's Escape.
+  const savingEvent = createEvent.isPending || updateEvent.isPending
 
   const [query, setQuery] = useState('')
   const [asked, setAsked] = useState('')
@@ -238,6 +257,14 @@ export default function CalendarLayout() {
   const [scopeAsk, setScopeAsk] = useState<ScopeAsk | null>(null)
   const [pendingEvent, setPendingEvent] = useState<PendingEvent | null>(null)
   const [discarding, setDiscarding] = useState(false)
+  // Lifted out of the form: the ways out are the surface's, and the question behind each of them
+  // is the same one the ✕ asks.
+  const [editorDirty, setEditorDirty] = useState(false)
+  const editorScreenRef = useRef<HTMLDivElement>(null)
+  const editorTitleRef = useRef<HTMLInputElement>(null)
+  // Where the editor hands focus back when what opened it is gone. Not the floating +, nor the
+  // bubble's Edit: React attaches a ref in the layout phase, after the cleanup that reads this one.
+  const mainRef = useRef<HTMLDivElement>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const [reloads, setReloads] = useState(0)
@@ -293,7 +320,9 @@ export default function CalendarLayout() {
   const refetchWindow = windowQuery.refetch
   const retryWindow = useCallback(() => { void refetchWindow() }, [refetchWindow])
 
-  const windowError = windowQuery.isError ? windowErrorOf(windowQuery.error, t) : null
+  // A refetch that fails keeps the data it had: only a window with nothing to draw is an error.
+  const windowError = windowQuery.isError && windowQuery.data === undefined
+    ? windowErrorOf(windowQuery.error, t) : null
 
   // A calendar the list has not answered for yet is drawn rather than withheld: a box nobody
   // has unticked hiding its own events would read as a load that lost them.
@@ -480,10 +509,12 @@ export default function CalendarLayout() {
 
   // The slot the grid named, or the next hour when the sidebar's button was the door.
   const newDraft = (): EventFormState => {
-    const rawStart = params.get('start')
-    const rawEnd = params.get('end')
-    const start = rawStart ? new Date(rawStart) : nextHour()
-    const end = rawEnd ? new Date(rawEnd) : new Date(start.getTime() + HOUR_MS)
+    const start = parseDraftDate(params.get('start')) ?? nextHour()
+    const parsedEnd = parseDraftDate(params.get('end'))
+    // An end that does not follow start — missing, unparsable, or from a URL whose start fell
+    // back to a different instant — is not a duration worth keeping.
+    const end = parsedEnd && parsedEnd.getTime() > start.getTime()
+      ? parsedEnd : new Date(start.getTime() + HOUR_MS)
     return newEventForm(start, end, params.get('allDay') === '1', defaultCalendarId(), tz)
   }
 
@@ -496,13 +527,19 @@ export default function CalendarLayout() {
   // creation found it under the same `new##0` key and reused it: a click on the grid put its slot
   // in the URL and opened the draft of the last "New event" — the next hour of the clock.
   if (!editorKey && seed) setSeed(null)
+  // The discard question dies with the editor it belongs to, whatever took the route away — the
+  // browser's Back never passes through `backToGrid`. Hidden is not dropped: a flag left standing
+  // greeted the next editor with "Discard changes?" over an empty form.
+  if (!inEditor && discarding) setDiscarding(false)
   // Latched on the seed: `occurrenceFound` is recomputed every render, and any invalidation — one
   // of this module's own mutations, a focus refetch — can bring the window back without the
   // instance being edited, which flipped this false, unmounted the keyed editor and threw away
   // what was being typed. A form already sown never waits for anything again.
   // A detail being read again after it went stale is not sown from: a save's own invalidation is
   // one, and the hash it holds is the version that save replaced (the invitation hook writes again).
-  const detailCurrent = detail != null && !(eventQuery.isStale && eventQuery.isFetching)
+  // Nor is one whose last read failed: a cached copy of an event deleted elsewhere would sow a form.
+  const detailCurrent = detail != null && !eventQuery.isError
+    && !(eventQuery.isStale && eventQuery.fetchStatus !== 'idle')
   const editorReady = seed?.key === editorKey
     || ((routeId ? detailCurrent : calendarsQuery.data !== undefined) && occurrenceFound)
   if (editorKey && editorReady && seed?.key !== editorKey) {
@@ -526,12 +563,13 @@ export default function CalendarLayout() {
   }
 
   // An id the server no longer resolves is an obsolete bookmark, never an invitation to create.
-  const eventError = eventQuery.isError ? eventQuery.error : null
+  // Decided on the seed, not on the cache: before the form is sown a failed read is a target gone,
+  // after it the form keeps the event it already read.
+  const eventError = eventQuery.isError && eventQuery.fetchStatus === 'idle' && seed?.key !== editorKey
+    ? eventQuery.error : null
   useEffect(() => {
     if (!eventError) return
-    const status = (eventError as { status?: number }).status
-    addToast(status === 404 ? t('errors.notFound')
-      : apiErrorMessage(eventError, t('errors.load')), 'error')
+    addToast(eventErrorOf(eventError, t), 'error')
     navigate('/calendar', { replace: true })
   }, [eventError, addToast, navigate, t])
 
@@ -591,6 +629,21 @@ export default function CalendarLayout() {
   }
 
   const backToGrid = () => navigate(`/calendar${searchWith()}`, { replace: true })
+  /** The editor's one way out, whichever of the four was taken — the ✕, Escape, a press on the
+      backdrop, or the phone screen's own Escape. */
+  const closeEditor = (dirty: boolean) => (dirty ? setDiscarding(true) : backToGrid())
+
+  // The phone editor is the screen rather than a dialog, so it draws no `Modal` — but while it
+  // stands it owns Escape and Tab exactly as one does, which is what a layer is.
+  useLayer({
+    active: inEditor && phone,
+    ref: editorScreenRef,
+    // No handler while the write is in flight: the layer still swallows the key, so nothing under
+    // it reacts either — `Modal`'s `busy` on the desktop side, in the one shape a layer has.
+    onEscape: savingEvent ? undefined : () => closeEditor(editorDirty),
+    initialFocusRef: editorTitleRef,
+    returnFocusRef: mainRef,
+  })
   const summaryOf = (form: EventFormState) => {
     const rule = ruleOf(form.repeat)
     return rule ? recurrenceSummary(rule, t, lang, region) : null
@@ -645,10 +698,12 @@ export default function CalendarLayout() {
   }
 
   /** The user's own choice, never a consequence of the refusal: the form stands untouched behind
-      the band until this runs. A refetch that failed has nothing to seed from, so nothing moves. */
+      the band until this runs. A refetch that failed has nothing to seed from, so nothing moves
+      but the band, which says why and keeps the Reload. */
   async function reloadEvent() {
-    const { isError: failed } = await eventQuery.refetch()
-    if (!failed) setReloads(previous => previous + 1)
+    const { isError: failed, error } = await eventQuery.refetch()
+    if (failed) setSaveError(eventErrorOf(error, t))
+    else setReloads(previous => previous + 1)
   }
 
   async function runDelete(id: string, scope: EditScope, instanceId?: string) {
@@ -662,6 +717,10 @@ export default function CalendarLayout() {
         id, scope, instanceId: scope === 'All' ? undefined : instanceId,
       })
       addToast(t('editor.deleted'), 'success')
+      // The chip leaves with the event, but only when the window refetch lands: focus handed back
+      // to it would be sitting on a node about to go, so the column takes it while the bubble is
+      // still the surface being closed.
+      if (preview) mainRef.current?.focus()
       setPreview(null)
       if (inEditor) backToGrid()
     } catch (error) {
@@ -711,7 +770,8 @@ export default function CalendarLayout() {
 
   const sidebar = (
     <CalendarSidebar calendars={calendars} anchor={anchor} today={today} rules={rules}
-      locale={locale} loading={calendarsQuery.isLoading} failed={calendarsQuery.isError}
+      locale={locale} loading={calendarsQuery.isLoading}
+      failed={calendarsQuery.isError && calendarsQuery.data === undefined}
       onPickDay={setAnchor} onNewEvent={openNewEvent}
       onNewCalendar={() => setEditing({ mode: 'create' })}
       onRename={calendar => setEditing({ mode: 'rename', calendar })}
@@ -724,14 +784,16 @@ export default function CalendarLayout() {
   // `/calendar/new` — would otherwise be a room whose only door is the browser's Back button.
   const editorBody = editorReady && seed ? (
     <EventEditor key={seed.key} detail={detail} occurrence={occurrence} initial={seed.form}
-      calendars={calendars} saving={createEvent.isPending || updateEvent.isPending}
+      calendars={calendars} saving={savingEvent}
       error={saveError} onReload={conflict ? () => void reloadEvent() : null} fullScreen={phone}
-      onSave={saveEvent} onDelete={deleteEdited}
-      onClose={dirty => (dirty ? setDiscarding(true) : backToGrid())} />
+      titleRef={editorTitleRef} onSave={saveEvent} onDelete={deleteEdited}
+      onClose={closeEditor} onDirtyChange={setEditorDirty} />
   ) : (
     <>
       <div className={phone ? 'calendar-editor-head' : 'modal-header'}>
-        <span className="modal-title">{t(routeId ? 'editor.editTitle' : 'editor.newTitle')}</span>
+        <span className="modal-title" id={EDITOR_TITLE_ID}>
+          {t(routeId ? 'editor.editTitle' : 'editor.newTitle')}
+        </span>
         <button type="button" className="modal-close" aria-label={t('editor.close')}
           onClick={backToGrid}>✕</button>
       </div>
@@ -739,7 +801,10 @@ export default function CalendarLayout() {
     </>
   )
 
-  const ready = calendarsQuery.data !== undefined && windowQuery.data !== undefined
+  // Wait for the list to answer or be refused: drawn earlier, chips would wear the default colour
+  // and hidden calendars' events would show.
+  const ready = windowQuery.data !== undefined
+    && (calendarsQuery.data !== undefined || calendarsQuery.isError)
   // Every chip of that occurrence lights, wherever it is drawn — both slices of an evening
   // crossing midnight, and the one the open bubble hangs off (décisions 3 and 10).
   const selectedKey = preview ? occurrenceKey(preview.occurrence) : undefined
@@ -775,7 +840,7 @@ export default function CalendarLayout() {
           ? <ContextDrawer open={drawer.open} onClose={drawer.close}>{sidebar}</ContextDrawer>
           : sidebar}
 
-        <div className="calendar-main">
+        <div className="calendar-main" ref={mainRef} tabIndex={-1}>
           <CalendarToolbar view={view} title={formatRangeTitle(
             window.firstVisible, window.lastVisible, view, lang, region)}
             weekNumber={view === 'day' || view === 'week' ? weekNumberOf(anchor, rules) : null}
@@ -809,20 +874,28 @@ export default function CalendarLayout() {
         {preview && (
           <EventPreview occurrence={preview.occurrence}
             calendar={calendarById.get(preview.occurrence.calendarId) ?? null}
-            anchor={preview.anchor} rect={preview.rect} onClose={() => setPreview(null)}
+            anchor={preview.anchor} rect={preview.rect} returnFocusRef={mainRef}
+            onClose={() => setPreview(null)}
             onEdit={() => openFromChip(preview.occurrence)}
             onDelete={() => deletePreviewed(preview.occurrence)} />
         )}
 
-        {/* A dialogue over the grid from 640px up, the whole screen below it. */}
+        {/* A dialogue over the grid from 640px up, the whole screen below it. The header is the
+            editor's own, so the dialog is named by it rather than by one `Modal` would draw. */}
         {inEditor && (phone
           ? (
-            <div className="calendar-editor-screen" data-testid="calendar-editor">{editorBody}</div>
+            /* Not a `Modal`, but it covers the screen and traps Tab, so it says so: a reader left
+               free to browse the grid behind it would be reading what no key can reach. */
+            <div className="calendar-editor-screen" data-testid="calendar-editor"
+              role="dialog" aria-modal="true" aria-labelledby={EDITOR_TITLE_ID} tabIndex={-1}
+              ref={editorScreenRef}>{editorBody}</div>
           )
           : (
-            <div className="modal-overlay" data-testid="calendar-editor">
-              <div className="modal calendar-editor">{editorBody}</div>
-            </div>
+            <Modal header={false} labelledBy={EDITOR_TITLE_ID} className="calendar-editor"
+              initialFocusRef={editorTitleRef} returnFocusRef={mainRef} busy={savingEvent}
+              onClose={() => closeEditor(editorDirty)}>
+              {editorBody}
+            </Modal>
           ))}
 
         {scopeAsk && (
@@ -843,7 +916,9 @@ export default function CalendarLayout() {
             onClose={() => setPendingEvent(null)} />
         )}
 
-        {discarding && (
+        {/* `discarding` cannot be true here once `!inEditor` — the render-phase reset above already
+            dropped it this same render — but `inEditor &&` costs nothing and outlives that fact. */}
+        {inEditor && discarding && (
           <DeleteConfirmModal title={t('editor.discardTitle')} message={t('editor.discardBody')}
             confirmLabel={t('editor.discard')}
             onConfirm={() => { setDiscarding(false); backToGrid() }}
@@ -883,7 +958,7 @@ export default function CalendarLayout() {
           </FloatingAction>
         )}
 
-        <Toasts toasts={toasts} onRemove={removeToast} />
+        <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
       </div>
     </CalendarContext.Provider>
   )

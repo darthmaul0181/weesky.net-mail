@@ -1,21 +1,22 @@
-import { useEffect, useRef } from 'react'
-import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
+import {
+  matchQuery, useQueryClient, type InfiniteData, type QueryClient,
+} from '@tanstack/react-query'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
 import { pageSummaries } from '../list/listPatch'
-import { mailKeys, useAccountId, useSetFlags, type SetFlagsArgs } from '../queries'
+import { listKeysOf, useAccountId, useSetFlags, type SetFlagsArgs } from '../queries'
 
 /** A cached view of one message — the first match, pages then stream blocks. */
 export function findCachedSummary(
   queryClient: QueryClient, accountId: string, folderPath: string, uid: number,
 ): MailMessageSummary | undefined {
+  const [pagesKey, streamKey] = listKeysOf(accountId, folderPath)
   // pageSummaries, not `page.messages`: a grouped page holds its rows in `threads` alone.
-  for (const [, page] of queryClient.getQueriesData<MailFolderPage>(
-    { queryKey: mailKeys.messagesIn(accountId, folderPath) })) {
+  for (const [, page] of queryClient.getQueriesData<MailFolderPage>({ queryKey: pagesKey })) {
     const hit = page && pageSummaries(page).find(message => message.uid === uid)
     if (hit) return hit
   }
-  for (const [, stream] of queryClient.getQueriesData<InfiniteData<MailFolderPage>>(
-    { queryKey: mailKeys.messageStreamIn(accountId, folderPath) })) {
+  for (const [, stream] of queryClient.getQueriesData<InfiniteData<MailFolderPage>>({ queryKey: streamKey })) {
     for (const page of stream?.pages ?? []) {
       const hit = pageSummaries(page).find(message => message.uid === uid)
       if (hit) return hit
@@ -24,9 +25,36 @@ export function findCachedSummary(
   return undefined
 }
 
+/** The cached summary's flags, followed live: a star set from the list row patches the list
+    caches alone. No summary (deep link): read and unstarred, since opening just marked it read. */
+export function useCachedSummaryFlags(
+  folderPath: string | null, uid: number | null,
+): { seen: boolean; flagged: boolean } {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+  // Only data events on this folder's lists: the lookup below scans every cached row, and the
+  // cache reports every observer tick of every module.
+  const subscribe = useCallback((onChange: () => void) => {
+    if (folderPath === null) return () => {}
+    const lists = listKeysOf(accountId, folderPath)
+    return queryClient.getQueryCache().subscribe(event => {
+      if (event.type !== 'added' && event.type !== 'removed' && event.type !== 'updated') return
+      if (lists.some(queryKey => matchQuery({ queryKey }, event.query))) onChange()
+    })
+  }, [queryClient, accountId, folderPath])
+  // A string, not an object: useSyncExternalStore compares snapshots with Object.is.
+  const snapshot = useSyncExternalStore(subscribe, () => {
+    const summary = folderPath !== null && uid !== null
+      ? findCachedSummary(queryClient, accountId, folderPath, uid) : undefined
+    return `${summary?.seen ?? true}|${summary?.flagged ?? false}`
+  })
+  const [seen, flagged] = snapshot.split('|')
+  return { seen: seen === 'true', flagged: flagged === 'true' }
+}
+
 /** Whether either list cache of the folder holds a page yet. */
 function listingLanded(queryClient: QueryClient, accountId: string, folderPath: string): boolean {
-  return [mailKeys.messagesIn(accountId, folderPath), mailKeys.messageStreamIn(accountId, folderPath)]
+  return listKeysOf(accountId, folderPath)
     .some(queryKey => queryClient.getQueriesData({ queryKey }).some(([, data]) => data !== undefined))
 }
 

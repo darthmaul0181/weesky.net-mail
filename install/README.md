@@ -148,7 +148,8 @@ RELEASE_BUILD=true npm run build
 cd ../..
 ```
 
-If the API's address ever changes, build the web interface again.
+If the API's address ever changes, build the web interface again. Without this file the build
+stops with an error naming `VITE_API_BASE` rather than shipping a page pointed nowhere.
 
 ✅ **Check:** both `out/api/scotty.microservice` and `src/frontend/dist/index.html` exist.
 

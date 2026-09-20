@@ -134,16 +134,32 @@ When a rule is ambiguous, copy what those screens do.
 
 ## Modals & dialogs
 
-- **Shell:** `.modal-overlay` (a click on the backdrop closes the dialog) wraps a `.modal` (clicks
-  inside are contained via `stopPropagation`). Width is set per dialog — roughly `380px` for a
-  compact form, up to `600px` for a rich one.
-- **A modal never carries a Cancel or Close button.** The `.modal-close` ✕ in the top-right corner is
-  the only dismissal control — do not add a second one beside the primary action.
+- **Shell:** a dialog is a `<Modal>` (`src/components/Modal.tsx`) and nothing else. It draws the
+  `.modal-overlay` backdrop around a `.modal` carrying `role="dialog"`, `aria-modal="true"` and a
+  name taken from its own title, and it joins the layer stack, so Escape and Tab reach the topmost
+  dialog alone. Nothing inside needs a `stopPropagation`: the backdrop reads where the press
+  landed. **A dialog sizes to its own content** — the contract is `src/styles/modal.css` and there
+  is no width prop; one needing a wider measure declares `--field-w` on the row that justifies it.
+- **There are three ways out, and a dialog carrying a ✕ has all three**: the `.modal-close` ✕ in
+  the top-right corner, Escape, and a click on the backdrop — whose press must start *and* end
+  there, so a selection dragged out of the dialog never dismisses it. **No Cancel or Close button
+  in the body**: do not add a second dismissal beside the primary action. A dialog that must not be
+  dismissed by accident offers none of the three (no `onClose`) and answers Escape with its own
+  question (`onEscape`); one with a write in flight is `busy`, which disables the ✕ and makes the
+  backdrop and Escape do nothing.
+- **A confirm is an `alertdialog`**, not a `dialog` — it interrupts to ask, rather than offering a
+  surface to work on.
+- **Focus enters the dialog as it opens and goes back to the trigger as it closes.** It lands on
+  `initialFocusRef` when the dialog names one and on the dialog's first focusable otherwise —
+  which is the ✕, the header coming before the body. So a dialog meant to open on a field passes
+  `initialFocusRef`, never `autoFocus`: React commits that attribute earlier and the layer's own
+  focus then moves off it.
 - **Icon continuity:** when the control that opens the dialog carries an icon, the **same icon
   precedes the dialog title** (edit → pencil, add account → person-plus, add domain → globe), so the
   trigger and the dialog it produced read as one continuous action.
-- **The body is a `<form>`** so Enter submits. Validation/API errors surface as an `.alert.alert-error`
-  at the top of the form.
+- **The body is a `<form>`** so Enter submits — `onSubmit` on the `<Modal>` makes the `.modal`
+  root itself that form, and the ✕ is a `type="button"` that never submits it. Validation/API
+  errors surface as an `.alert.alert-error` at the top of the form.
 - **Exactly one primary action**, a `.btn.btn-primary`, whose label names the outcome ("Create
   account", "Save changes") rather than saying "OK". It is disabled while the form is invalid or a
   save is pending, and shows a `.spinner` while pending.

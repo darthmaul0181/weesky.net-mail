@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import ChevronDownIcon from '../../icons/ChevronDownIcon'
@@ -35,14 +35,23 @@ export interface EventEditorProps {
       bare retry is refused again rather than overwriting what the other client wrote. */
   onReload: (() => void) | null
   fullScreen: boolean
+  /** The Title box, which the editor opens on. The surface around it — a `Modal` on the desktop,
+      a layer on the phone — is what moves the focus there. */
+  titleRef?: RefObject<HTMLInputElement>
   onSave(form: EventFormState, scope: EditScope | null): void
   onDelete(scope: EditScope | null): void
   /** Carries whether anything was typed: the layout owns the discard question, and only the form
       knows what it holds. */
   onClose(dirty: boolean): void
+  /** Reported upward because the backdrop and Escape are the surface's, and the same question has
+      to be asked whichever way out was taken. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 const FORM_ID = 'calendar-event-form'
+
+/** What names the editor's dialog: the surface is `header={false}`, so its title is in here. */
+export const EDITOR_TITLE_ID = 'calendar-editor-title'
 
 const CLOCK = /^\d{2}:\d{2}$/
 const minutesOf = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
@@ -76,7 +85,8 @@ const same = (a: EventFormState, b: EventFormState) => JSON.stringify(a) === JSO
 /** `occurrence` is not read here — the layout builds `initial` from it and sends its instance id
     with the save — but it stays on the contract: task 6 hands the same pair to the same screen. */
 export default function EventEditor({
-  detail, initial, calendars, saving, error, onReload, fullScreen, onSave, onDelete, onClose,
+  detail, initial, calendars, saving, error, onReload, fullScreen, titleRef, onSave, onDelete,
+  onClose, onDirtyChange,
 }: EventEditorProps) {
   const { t } = useTranslation('calendar')
   const { tz, lang, region } = useCalendar()
@@ -100,6 +110,14 @@ export default function EventEditor({
   // A guest the event came with is kept as the file stores it; only a new address is checked.
   const kept = useMemo(() => new Set(initial.attendees.map(a => canonicalAddress(a.email))), [initial])
   const guestOk = (email: string) => isInvitableAddress(email) || kept.has(canonicalAddress(email))
+
+  const dirty = !same(form, initial)
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+    // False on the way out: the flag would otherwise outlive the form and answer for the loading
+    // header the next opening draws.
+    return () => onDirtyChange?.(false)
+  }, [dirty, onDirtyChange])
 
   // The key rather than `t(key)`: a key reaching t() as a variable is invisible to the typed
   // guard and to src/locales/keys.test.ts alike.
@@ -146,21 +164,23 @@ export default function EventEditor({
     </button>
   )
   const close = (
-    <button type="button" className="modal-close" aria-label={t('editor.close')}
-      onClick={() => onClose(!same(form, initial))}>✕</button>
+    // Disabled with the write, like Save: the discard question over a save already on the wire
+    // asks about work that is being kept.
+    <button type="button" className="modal-close" aria-label={t('editor.close')} disabled={saving}
+      onClick={() => onClose(dirty)}>✕</button>
   )
 
   return (
     <>
       {fullScreen ? (
         <div className="calendar-editor-head">
-          <span className="modal-title">{title}</span>
+          <span className="modal-title" id={EDITOR_TITLE_ID}>{title}</span>
           {save}
           {close}
         </div>
       ) : (
         <div className="modal-header">
-          <span className="modal-title">{title}</span>
+          <span className="modal-title" id={EDITOR_TITLE_ID}>{title}</span>
           {close}
         </div>
       )}
@@ -168,7 +188,12 @@ export default function EventEditor({
       <form id={FORM_ID} className="calendar-editor-form" onSubmit={submit}>
         <div className="field-h">
           <label htmlFor="event-title">{t('editor.title')}</label>
-          <input id="event-title" type="text" value={form.title} autoFocus
+          {/* Both, and neither is redundant: the surface focuses `titleRef` when it opens with the
+              form already in hand, and `autoFocus` is what moves the focus off the loading ✕ on
+              the commit the form lands in — a later one, which no layer activation follows. */}
+          {/* eslint-disable-next-line jsx-a11y/no-autofocus -- documented exception (Task 4): the
+              Title field's second, later-commit focus path, alongside the ref above */}
+          <input id="event-title" type="text" value={form.title} autoFocus ref={titleRef}
             placeholder={t('editor.titlePlaceholder')}
             onChange={event => set({ title: event.target.value })} />
         </div>
@@ -204,7 +229,7 @@ export default function EventEditor({
                 only label semantics carry a click on the switch itself to the control. */}
             <label className="toggle-switch">
               <input id="event-allday" type="checkbox" checked={form.isAllDay}
-                onChange={event => toggleAllDay(event.target.checked)} />
+                onChange={event => toggleAllDay(event.target.checked)} aria-label={t('editor.allDay')} />
               <span className="toggle-track" />
             </label>
             <label htmlFor="event-allday" className="editor-allday-text">{t('editor.allDay')}</label>
@@ -241,7 +266,7 @@ export default function EventEditor({
           ) : (
             <label className="toggle-switch">
               <input id="event-repeat" type="checkbox" checked={repeating}
-                onChange={event => toggleRepeat(event.target.checked)} />
+                onChange={event => toggleRepeat(event.target.checked)} aria-label={t('editor.repeats')} />
               <span className="toggle-track" />
             </label>
           )}

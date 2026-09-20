@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { mockViewport, resetViewport } from '../../../test-utils'
 import EditorToolbar from './EditorToolbar'
 import type { EditorHandle } from './SquireEditor'
@@ -69,6 +70,30 @@ describe('EditorToolbar', () => {
     expect(screen.getByRole('button', { name: '#d0021b' })).toBeInTheDocument()
     fireEvent.mouseDown(document.body)
     expect(screen.queryByRole('button', { name: '#d0021b' })).not.toBeInTheDocument()
+  })
+
+  it('closes a popover on Escape and hands the focus back to its button', async () => {
+    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+    const trigger = screen.getByRole('button', { name: 'Highlight colour' })
+    await userEvent.click(trigger)
+    screen.getByRole('button', { name: '#f8e71c' }).focus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('button', { name: '#f8e71c' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  // The URL box holds the focus, and the popover it lives in is gone the moment it is applied.
+  it('hands the focus back to the Link button once a URL is applied', async () => {
+    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+    const trigger = screen.getByRole('button', { name: 'Link' })
+    await userEvent.click(trigger)
+    fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://weesky.net' } })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(trigger).toHaveFocus()
   })
 
   it('applies font, size and alignment from their menus', () => {
