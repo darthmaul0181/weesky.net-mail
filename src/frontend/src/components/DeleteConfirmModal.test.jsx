@@ -141,11 +141,24 @@ describe('DeleteConfirmModal', () => {
 
     expect(trigger).toHaveFocus()
   })
+
+  // A refused write leaves the dialog standing, so the press that asked for it must not still
+  // count as a confirmation when the user gives up and closes.
+  it('forgets a confirmation the write refused', async () => {
+    render(<Host keepOpen />)
+    const trigger = screen.getByRole('button', { name: 'Delete alice' })
+
+    await userEvent.click(trigger)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(trigger).toHaveFocus()
+  })
 })
 
 /** A row whose delete button survives the confirmed deletion, as one waiting on a list refetch
     does: what focus lands on is a decision, not a question about that button. */
-function Host() {
+function Host({ keepOpen = false }) {
   const region = useRef(null)
   const [open, setOpen] = useState(false)
   return (
@@ -153,7 +166,7 @@ function Host() {
       <div data-testid="region" tabIndex={-1} ref={region} />
       <button type="button" onClick={() => setOpen(true)}>Delete alice</button>
       {open && (
-        <DeleteConfirmModal entityLabel="alice" onConfirm={() => setOpen(false)}
+        <DeleteConfirmModal entityLabel="alice" onConfirm={() => { if (!keepOpen) setOpen(false) }}
           onClose={() => setOpen(false)} returnFocusRef={region} />
       )}
     </div>
