@@ -39,12 +39,6 @@ export default [
     },
     rules: {
       ...jsxA11y.flatConfigs.recommended.rules,
-      // The house toggle-switch idiom wraps a bare checkbox in a label with no text of its own,
-      // for the CSS hit area; the accessible name comes from a separate, htmlFor-linked <label>
-      // beside it (`ToggleRow`, and inlined the same way in a few admin dialogs). `assert: 'either'`
-      // accepts either a nested control with text or an explicit `htmlFor`/`aria-label` association,
-      // which covers both idioms without silencing a genuinely unlabelled input.
-      'jsx-a11y/label-has-associated-control': ['error', { assert: 'either' }],
       // jsx-a11y's static check cannot tell an ARIA `role` attribute from a same-named data prop
       // (EmptyFolderBanner's `role="trash"|"junk"|"archive"` folder role); ignoring non-DOM
       // components clears that false positive without silencing a real DOM `role` misuse.
