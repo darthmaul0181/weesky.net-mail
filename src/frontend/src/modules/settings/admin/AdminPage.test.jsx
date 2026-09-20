@@ -1019,7 +1019,8 @@ describe('VirtualDomainsTab', () => {
     await userEvent.click(screen.getAllByTitle('Edit owner')[1])
     await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
     const option = await screen.findByRole('button', { name: /alice@weesky\.be/ })
-    fireEvent.mouseDown(option)
+    // The press only holds the caret in the box; the click is what picks, so the keyboard can too.
+    fireEvent.click(option)
     await waitFor(() => expect(api.adminAddVirtualDomainOwner).toHaveBeenCalledWith('ORF', 1))
   })
 
@@ -1092,7 +1093,7 @@ describe('VirtualDomainsTab', () => {
     await userEvent.click(screen.getAllByTitle('Edit owner')[1])
     await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
     const option = await screen.findByRole('button', { name: /alice@weesky\.be/ })
-    fireEvent.mouseDown(option)
+    fireEvent.click(option)
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to set owner', 'error'))
   })
 

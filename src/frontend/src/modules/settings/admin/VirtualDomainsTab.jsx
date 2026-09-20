@@ -6,6 +6,7 @@ import TrashIcon from '../../../icons/TrashIcon.jsx'
 import PencilIcon from '../../../icons/PencilIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { useDismiss } from '../../../hooks/useDismiss'
+import { useRovingFocus } from '../../../hooks/useRovingFocus'
 
 export function VirtualDomainsTab({ addToast }) {
   const { t } = useTranslation('admin')
@@ -17,6 +18,8 @@ export function VirtualDomainsTab({ addToast }) {
   const [listDismissed, setListDismissed] = useState(false)
   const [saving, setSaving] = useState(false)
   const editRef = useRef(null)
+  const comboRef = useRef(null)
+  const searchRef = useRef(null)
 
   // useCallback so the effect can depend on it: addToast is memoised, so load keeps one identity.
   const load = useCallback(async () => {
@@ -41,8 +44,14 @@ export function VirtualDomainsTab({ addToast }) {
   }, [])
 
   useDismiss({ open: editingDomainId !== null, rootRef: editRef, onDismiss: cancelEdit })
+  // The box and its matches are one surface for the arrows: ↓ walks out of the field into the list.
+  // The field autofocuses itself, so the walk only ever moves focus that is already inside.
+  const comboKeys = useRovingFocus({ active: editingDomainId !== null, containerRef: comboRef })
 
   async function handleSelect(domainId, userId) {
+    // Read before the write: `saving` disables the rows and the picked one leaves with the list,
+    // either of which drops the focus it holds — the box is where it belongs once it is gone.
+    const fromList = comboRef.current?.contains(document.activeElement)
     setSaving(true)
     try {
       const updated = await api.adminAddVirtualDomainOwner(domainId, userId)
@@ -52,6 +61,7 @@ export function VirtualDomainsTab({ addToast }) {
       addToast(apiErrorMessage(err, t('virtual.setOwnerFailed')), 'error')
     } finally {
       setSaving(false)
+      if (fromList) searchRef.current?.focus()
     }
   }
 
@@ -121,9 +131,10 @@ export function VirtualDomainsTab({ addToast }) {
                     ))}
                   </div>
                 )}
-                <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative' }} ref={comboRef}>
                   <input
                     className="search-input"
+                    ref={searchRef}
                     type="text"
                     placeholder={t('virtual.searchUser')}
                     value={searchQuery}
@@ -132,7 +143,7 @@ export function VirtualDomainsTab({ addToast }) {
                     autoFocus
                     style={{ width: '100%', padding: '5px 8px', fontSize: '13px' }}
                     onKeyDown={e => {
-                      if (e.key !== 'Escape') return
+                      if (e.key !== 'Escape') { comboKeys(e); return }
                       // Marked as spent so the layer below leaves it alone: one Escape answers
                       // the list when it is showing, and the edit itself once it is not.
                       e.preventDefault()
@@ -147,7 +158,11 @@ export function VirtualDomainsTab({ addToast }) {
                           key={u.id}
                           className="ownership-dropdown-option"
                           disabled={saving}
-                          onMouseDown={e => { e.preventDefault(); handleSelect(o.domainId, u.id) }}
+                          onKeyDown={comboKeys}
+                          // The press only keeps the caret in the box; picking is the click, so
+                          // Enter and the space bar on a walked-to match do it too.
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => handleSelect(o.domainId, u.id)}
                         >
                           <span style={{ fontWeight: 600 }}>{u.userName}@{u.domainName}</span>
                           {u.fullName && <span style={{ color: 'var(--text-muted)', fontSize: '12px', marginLeft: '8px' }}>{u.fullName}</span>}

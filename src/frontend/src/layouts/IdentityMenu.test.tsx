@@ -189,6 +189,53 @@ describe('IdentityMenu', () => {
     expect(toggle()).toHaveFocus()
   })
 
+  // The same walk `DropdownMenu` answers: this menu is hand-rolled markup, not one of those.
+  describe('the keyboard walk', () => {
+    const rows = () => screen.getAllByRole('menuitem')
+
+    it('puts the focus on the first row as it opens', async () => {
+      renderMenu()
+      await openMenu()
+
+      expect(rows()[0]).toHaveFocus()
+    })
+
+    it('walks the rows on the vertical arrows, wrapping, and jumps to the ends', async () => {
+      renderMenu()
+      await openMenu()
+      const [first, , signOut] = rows()
+
+      fireEvent.keyDown(first, { key: 'ArrowUp' })
+      expect(signOut).toHaveFocus()
+
+      fireEvent.keyDown(signOut, { key: 'ArrowDown' })
+      expect(first).toHaveFocus()
+
+      fireEvent.keyDown(first, { key: 'End' })
+      expect(signOut).toHaveFocus()
+
+      fireEvent.keyDown(signOut, { key: 'Home' })
+      expect(first).toHaveFocus()
+    })
+
+    // The drawer under it holds the trap, so Tab walks the whole panel while the arrows stay in
+    // the menu: one surface, not two ideas of where focus may go.
+    it('keeps the walk inside the menu where Tab leaves it', async () => {
+      renderInDrawer(vi.fn())
+      await openMenu()
+      const [first, , signOut] = rows()
+      signOut.focus()
+
+      fireEvent.keyDown(signOut, { key: 'ArrowDown' })
+      expect(first).toHaveFocus()
+
+      signOut.focus()
+      fireEvent.keyDown(document, { key: 'Tab' })
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
+      expect(toggle()).toHaveFocus()
+    })
+  })
+
   it('marks the toggle expanded only while the menu is open', async () => {
     renderMenu()
     await screen.findByText('mick@weesky.be')

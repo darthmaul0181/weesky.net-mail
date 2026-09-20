@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { returnFocus, useDismiss } from '../hooks/useDismiss'
+import { useRovingFocus } from '../hooks/useRovingFocus'
 
 interface MenuItemBase {
   label: string
@@ -97,6 +98,7 @@ export default function DropdownMenu(
   }, [open, direction, align])
 
   useDismiss({ open, rootRef, onDismiss: () => setOpen(false), refocusRef: triggerRef })
+  const menuKeys = useRovingFocus({ active: open, containerRef: menuRef })
 
   // A fixed menu does not travel with a scrolled trigger the way an absolutely-positioned one
   // does, so any scroll or resize while it is open just closes it rather than leaving it
@@ -130,8 +132,11 @@ export default function DropdownMenu(
         ref={triggerRef} onClick={() => setOpen(o => !o)}>
         {trigger}
       </button>
+      {/* `tabIndex={-1}`: a menu managing its own focus is not itself in the tab order, and
+          `focusablesIn` skips it, so neither the walk nor the stack's Tab lands on it. */}
       {open && (
-        <div className="dropdown-menu" role="menu" ref={menuRef} style={fixedStyle}>
+        <div className="dropdown-menu" role="menu" ref={menuRef} style={fixedStyle}
+          tabIndex={-1} onKeyDown={menuKeys}>
           {items.map((entry, index) =>
             entry === 'separator' ? (
               <hr key={index} className="dropdown-rule" />

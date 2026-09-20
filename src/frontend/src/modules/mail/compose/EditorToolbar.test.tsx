@@ -42,7 +42,7 @@ describe('EditorToolbar', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    fireEvent.click(screen.getByRole('button', { name: '#d0021b' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '#d0021b' }))
     expect(editor.setTextColour).toHaveBeenCalledWith('#d0021b')
   })
 
@@ -50,7 +50,7 @@ describe('EditorToolbar', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Highlight colour' }))
-    fireEvent.click(screen.getByRole('button', { name: '#f8e71c' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '#f8e71c' }))
     expect(editor.setHighlightColour).toHaveBeenCalledWith('#f8e71c')
     expect(editor.setTextColour).not.toHaveBeenCalled()
   })
@@ -58,7 +58,7 @@ describe('EditorToolbar', () => {
   it('shows the last applied colour under its button', () => {
     render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    fireEvent.click(screen.getByRole('button', { name: '#d0021b' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '#d0021b' }))
     expect(screen.getByRole('button', { name: 'Text colour' })
       .querySelector('.compose-tool-ink')).toHaveStyle({ background: '#d0021b' })
   })
@@ -67,20 +67,20 @@ describe('EditorToolbar', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    expect(screen.getByRole('button', { name: '#d0021b' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: '#d0021b' })).toBeInTheDocument()
     fireEvent.mouseDown(document.body)
-    expect(screen.queryByRole('button', { name: '#d0021b' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '#d0021b' })).not.toBeInTheDocument()
   })
 
   it('closes a popover on Escape and hands the focus back to its button', async () => {
     render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     const trigger = screen.getByRole('button', { name: 'Highlight colour' })
     await userEvent.click(trigger)
-    screen.getByRole('button', { name: '#f8e71c' }).focus()
+    screen.getByRole('menuitem', { name: '#f8e71c' }).focus()
 
     fireEvent.keyDown(document, { key: 'Escape' })
 
-    expect(screen.queryByRole('button', { name: '#f8e71c' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '#f8e71c' })).not.toBeInTheDocument()
     expect(trigger).toHaveFocus()
   })
 
@@ -100,7 +100,7 @@ describe('EditorToolbar', () => {
   // Safari not focusing a button on click — `document.activeElement` stays on `elsewhere` while
   // the popover opens, and the close must still land on the button that opened it.
   function closeBySwatch(colour: string) {
-    const swatch = screen.getByRole('button', { name: colour })
+    const swatch = screen.getByRole('menuitem', { name: colour })
     swatch.focus()
     fireEvent.click(swatch)
   }
@@ -123,7 +123,9 @@ describe('EditorToolbar', () => {
 
     const triggerBtn = screen.getByRole('button', { name: trigger })
     fireEvent.click(triggerBtn)
-    expect(document.activeElement).toBe(elsewhere) // sanity: opening did not focus the trigger
+    // Sanity: opening did not focus the trigger — a colour grid takes the focus onto its first
+    // swatch, the link form leaves it on `elsewhere`, and neither is what the close must find.
+    expect(triggerBtn).not.toHaveFocus()
 
     close()
 
@@ -133,17 +135,53 @@ describe('EditorToolbar', () => {
   it('refocuses the highlight trigger, not the last text-colour trigger, when both popovers were used', () => {
     render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    const firstSwatch = screen.getByRole('button', { name: '#d0021b' })
+    const firstSwatch = screen.getByRole('menuitem', { name: '#d0021b' })
     firstSwatch.focus()
     fireEvent.click(firstSwatch)
 
     const highlightTrigger = screen.getByRole('button', { name: 'Highlight colour' })
     fireEvent.click(highlightTrigger)
-    const secondSwatch = screen.getByRole('button', { name: '#f8e71c' })
+    const secondSwatch = screen.getByRole('menuitem', { name: '#f8e71c' })
     secondSwatch.focus()
     fireEvent.click(secondSwatch)
 
     expect(highlightTrigger).toHaveFocus()
+  })
+
+  /* A swatch grid is eighteen rows that each lay down a colour: a menu, and it answers the arrows
+     like one. Six to a row, so ↓ has to be the row below and not the swatch beside it. */
+  describe('the swatch grid answers the keyboard', () => {
+    const swatch = (colour: string) => screen.getByRole('menuitem', { name: colour })
+
+    it('opens on its first swatch and walks the grid', () => {
+      render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
+
+      expect(swatch('#000000')).toHaveFocus()
+
+      fireEvent.keyDown(swatch('#000000'), { key: 'ArrowRight' })
+      expect(swatch('#444444')).toHaveFocus()
+
+      fireEvent.keyDown(swatch('#444444'), { key: 'ArrowDown' })
+      expect(swatch('#e2674a')).toHaveFocus()
+
+      fireEvent.keyDown(swatch('#e2674a'), { key: 'End' })
+      expect(swatch('#50e3c2')).toHaveFocus()
+
+      fireEvent.keyDown(swatch('#50e3c2'), { key: 'Home' })
+      expect(swatch('#000000')).toHaveFocus()
+    })
+
+    // The URL box is not a menu row: Home and End are its caret's, and Tab reaches Apply.
+    it('leaves the link form to Tab, keeping the focus out of it', () => {
+      render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Link' }))
+
+      const field = screen.getByLabelText('Link URL')
+      expect(field).not.toHaveFocus()
+      expect(fireEvent.keyDown(field, { key: 'Home' })).toBe(true)
+      expect(fireEvent.keyDown(field, { key: 'ArrowDown' })).toBe(true)
+    })
   })
 
   it('applies font, size and alignment from their menus', () => {

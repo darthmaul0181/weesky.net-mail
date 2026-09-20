@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'rea
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { returnFocus, useDismiss } from '../../../hooks/useDismiss'
+import { useRovingFocus } from '../../../hooks/useRovingFocus'
 import { useViewport } from '../../../hooks/useViewport'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import EllipsisIcon from '../../../icons/EllipsisIcon'
@@ -42,6 +43,9 @@ const SWATCHES = [
   '#d0021b', '#e2674a', '#f5a623', '#f8e71c', '#7ed321', '#417505',
   '#4a90d9', '#182238', '#9013fe', '#bd10e0', '#8b572a', '#50e3c2',
 ]
+/** What the keyboard walk needs to know to send ↓ to the row below rather than to the next
+    swatch; it is `.compose-swatches`' own `grid-template-columns` in mail.css, so change both. */
+const SWATCH_COLUMNS = 6
 const FONTS = ['Arial', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Courier New']
 const SIZES: { key: string; value: string }[] = [
   { key: 'small', value: '12px' }, { key: 'normal', value: '14px' },
@@ -71,6 +75,24 @@ function alignLabel(value: Alignment, t: TFunction<'compose'>): string {
 function Popover({ open, children }: { open: boolean; children: ReactNode }) {
   if (!open) return null
   return <div className="compose-popover">{children}</div>
+}
+
+/** Eighteen rows that each lay down a colour and close: a menu, and it answers the keyboard like
+    one. The link popover beside it is a form, where Home and End belong to its URL box. */
+function SwatchPopover({ open, apply }: { open: boolean; apply: (colour: string) => void }) {
+  const gridRef = useRef<HTMLDivElement>(null)
+  const gridKeys = useRovingFocus({ active: open, containerRef: gridRef, columns: SWATCH_COLUMNS })
+  if (!open) return null
+  return (
+    <div className="compose-popover">
+      <div className="compose-swatches" role="menu" ref={gridRef} tabIndex={-1} onKeyDown={gridKeys}>
+        {SWATCHES.map(colour => (
+          <button key={colour} type="button" role="menuitem" aria-label={colour}
+            style={{ background: colour }} onClick={() => apply(colour)} />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 interface Props {
@@ -129,17 +151,6 @@ export default function EditorToolbar(
   function closePopover() {
     returnFocus(container.current, popoverTrigger.current)
     setOpenPopover(null)
-  }
-
-  function swatchGrid(apply: (colour: string) => void) {
-    return (
-      <div className="compose-swatches">
-        {SWATCHES.map(colour => (
-          <button key={colour} type="button" aria-label={colour} style={{ background: colour }}
-            onClick={() => { apply(colour); closePopover() }} />
-        ))}
-      </div>
-    )
   }
 
   const btn = (
@@ -208,16 +219,14 @@ export default function EditorToolbar(
         <span className="compose-popover-anchor">
           {btn(t('toolbar.textColour'), inked(<TextColourIcon size={INK_ICON} />, textColour),
             () => setOpenPopover(p => p === 'text' ? null : 'text'), false, false, textTriggerRef)}
-          <Popover open={openPopover === 'text'}>
-            {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) })}
-          </Popover>
+          <SwatchPopover open={openPopover === 'text'}
+            apply={c => { setTextColour(c); editor?.setTextColour(c); closePopover() }} />
         </span>
         <span className="compose-popover-anchor">
           {btn(t('toolbar.highlightColour'), inked(<HighlighterIcon size={INK_ICON} />, highlight),
             () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'), false, false, highlightTriggerRef)}
-          <Popover open={openPopover === 'highlight'}>
-            {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) })}
-          </Popover>
+          <SwatchPopover open={openPopover === 'highlight'}
+            apply={c => { setHighlight(c); editor?.setHighlightColour(c); closePopover() }} />
         </span>
       </div>
       <div className="compose-tool-group is-extra">
