@@ -1,10 +1,12 @@
-import { act, fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent } from '@testing-library/react'
 import type { Viewport } from './hooks/useViewport'
 
 /** A dismissing press on a dialog's backdrop: it counts only when both halves land on it, so the
-    three events are one gesture. `index` picks a backdrop when dialogs are stacked, outermost 0. */
-export function pressBackdrop(index = 0) {
-  const backdrop = screen.getAllByRole('presentation')[index]
+    three events are one gesture. Queried by class, not role: `ContextDrawer`'s scrim and
+    `MessageList`'s root also carry `role="presentation"`, which `getAllByRole` cannot tell apart
+    from a modal's overlay. */
+export function pressBackdrop() {
+  const backdrop = document.querySelector('.modal-overlay') as HTMLElement
   fireEvent.mouseDown(backdrop)
   fireEvent.mouseUp(backdrop)
   fireEvent.click(backdrop)
@@ -119,7 +121,11 @@ export function pointerDownOn(element: HTMLElement, x = 0, y = 0, target: HTMLEl
 }
 
 /** Escape as a gesture in flight hears it: on `document`, which is where each of them listens.
+    Bubbles and is cancelable, matching the layer stack's own contract — a non-cancelable event
+    would make `preventDefault()` a no-op and hide whether a layer actually swallowed the key.
     Wrapped like the pointer helpers, so the abandonment is on screen before it is asserted. */
 export function fireEscape() {
-  act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+  })
 }
