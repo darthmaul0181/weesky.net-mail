@@ -20,6 +20,9 @@ export interface ModalProps {
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Where focus goes on close when the element that opened the dialog is gone. */
   returnFocusRef?: RefObject<HTMLElement | null>
+  /** Read at close: true and `returnFocusRef` wins over an opener still on screen — what a
+      confirmed destructive action asks for, its opener leaving on a later round trip. */
+  preferReturnRef?: RefObject<boolean>
   className?: string
   overlayClassName?: string
   /** Between the title and the ✕: a viewer's count, a help button. */
@@ -41,7 +44,8 @@ export interface ModalProps {
  */
 export default function Modal({
   title, icon, onClose, onEscape, closeLabel, busy = false, role = 'dialog',
-  initialFocusRef, returnFocusRef, className, overlayClassName, headerExtra, header = true,
+  initialFocusRef, returnFocusRef, preferReturnRef, className, overlayClassName, headerExtra,
+  header = true,
   labelledBy, onSubmit, onKeyDown, children,
 }: ModalProps) {
   const { t } = useTranslation('common')
@@ -59,6 +63,7 @@ export default function Modal({
     onEscape: busy ? undefined : (onEscape ?? onClose),
     initialFocusRef,
     returnFocusRef,
+    preferReturnRef,
   })
 
   const rootProps = {

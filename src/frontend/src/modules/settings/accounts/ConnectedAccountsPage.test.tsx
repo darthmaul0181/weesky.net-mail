@@ -182,6 +182,48 @@ describe('ConnectedAccountsPage', () => {
     await waitFor(() => expect(mocks.deleteConnectedAccount).toHaveBeenCalledWith('a1'))
   })
 
+  // The row's own Disconnect is what opened the confirm and it goes with the row: the page's
+  // heading is what focus falls back to, so the next Tab resumes here and not at the top.
+  it('hands focus to the page heading when the disconnected row goes', async () => {
+    let live = [WORK, SHARED]
+    primeApi(live, [ACME])
+    mocks.getConnectedAccounts.mockImplementation(async () => live)
+    mocks.deleteConnectedAccount.mockImplementation(async () => {
+      live = live.filter(one => one.id !== 'a1')
+      return {}
+    })
+    renderAt('/settings/accounts')
+    await screen.findByText('Work')
+    await userEvent.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByText('Work')).toBeNull())
+    expect(screen.getByRole('heading', { name: 'Connected accounts' })).toHaveFocus()
+  })
+
+  // The same hand-back with a real network between the two round trips: the confirm closes on the
+  // DELETE while the row leaves only when the list refetch lands, a whole macrotask later.
+  it('hands focus to the heading when the list refetch lands after the confirm closed', async () => {
+    let live = [WORK, SHARED]
+    primeApi(live, [ACME])
+    mocks.getConnectedAccounts.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve(live), 30)))
+    mocks.deleteConnectedAccount.mockImplementation(async () => {
+      live = live.filter(one => one.id !== 'a1')
+      return {}
+    })
+    renderAt('/settings/accounts')
+    await screen.findByText('Work')
+    await userEvent.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Work')).toBeNull())
+    expect(screen.getByRole('heading', { name: 'Connected accounts' })).toHaveFocus()
+  })
+
   it('does not disconnect anything until the confirmation is accepted', async () => {
     renderPage()
     await screen.findByText('Work')

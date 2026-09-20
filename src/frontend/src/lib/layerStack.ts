@@ -62,6 +62,15 @@ function onKeyDown(event: KeyboardEvent) {
 // returns at once while the stack is empty. Bubble phase, so a React handler still goes first.
 if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown)
 
+// A dev hot reload re-evaluates this module without unloading the old one, which would bind a
+// second `document` listener and fire Escape/Tab twice. `dispose` runs just before the replacement
+// module's top level does, so the old listener is gone before the new one is added.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    if (typeof document !== 'undefined') document.removeEventListener('keydown', onKeyDown)
+  })
+}
+
 /**
  * Opens a layer on top of the stack: Escape and Tab go to it alone until it is removed or
  * another one is pushed over it.

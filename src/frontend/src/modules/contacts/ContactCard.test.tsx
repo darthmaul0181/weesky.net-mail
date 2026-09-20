@@ -49,7 +49,7 @@ beforeEach(() => {
   URL.revokeObjectURL = vi.fn()
 })
 
-function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}) {
+function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}, extra?: ReactNode) {
   const props = {
     contact: bruno, onEdit: vi.fn(), onDelete: vi.fn(), onToggleFavorite: vi.fn(),
     onWrite: vi.fn(), ...overrides,
@@ -57,7 +57,12 @@ function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return {
     ...props,
-    ...render(<QueryClientProvider client={client}><ContactCard {...props} /></QueryClientProvider>),
+    ...render(
+      <QueryClientProvider client={client}>
+        <ContactCard {...props} />
+        {extra}
+      </QueryClientProvider>,
+    ),
   }
 }
 
@@ -69,14 +74,7 @@ describe('ContactCard', () => {
   describe('the way back', () => {
     function card(extra?: ReactNode) {
       const onBack = vi.fn()
-      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      render(
-        <QueryClientProvider client={client}>
-          <ContactCard contact={bruno} onBack={onBack} onEdit={vi.fn()} onDelete={vi.fn()}
-            onToggleFavorite={vi.fn()} onWrite={vi.fn()} />
-          {extra}
-        </QueryClientProvider>,
-      )
+      setup({ onBack }, extra)
       return onBack
     }
 

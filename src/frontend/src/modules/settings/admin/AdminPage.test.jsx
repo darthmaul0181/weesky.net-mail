@@ -363,6 +363,20 @@ describe('AccountsTab', () => {
     expect(screen.getByText('bob@weesky.be')).toBeInTheDocument()
   })
 
+  // Reloading the list puts the whole tab behind a spinner in the very commit the confirm closes
+  // in, so nothing inside it survives: the page's own region is what takes the focus back.
+  it('hands focus to the tab content when the deleted row goes with the reload', async () => {
+    api.adminDeleteUser.mockResolvedValue(null)
+    const { container } = renderAdminPage()
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Delete'))
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+
+    await waitFor(() => expect(api.adminDeleteUser).toHaveBeenCalledWith(1))
+    expect(container.querySelector('.admin-tab-content')).toHaveFocus()
+  })
+
   it('calls adminDeleteUser when delete is confirmed', async () => {
     api.adminDeleteUser.mockResolvedValue(null)
     render(<AccountsTab addToast={vi.fn()} />)
@@ -912,6 +926,31 @@ describe('AdminPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
     expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
   })
+
+  // Accounts offers no help, and that is the decision rather than the missing key it looked like:
+  // the tab explains itself, and a "?" with nothing behind it is worse than none.
+  it('offers no help on the Accounts tab', async () => {
+    renderAdminPage()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active'))
+
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('shows the matching help text on every tab that has some', async () => {
+    renderAdminPage()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Domains' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('A domain is a mail domain hosted directly')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Virtual domains' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('A virtual alias domain is a domain with no mailboxes')
+
+    await userEvent.click(screen.getByRole('button', { name: 'External domains' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Define the external mail providers')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Offers the webmail for installation')
+  })
 })
 
 // ── VirtualDomainsTab ─────────────────────────────────────────
@@ -980,7 +1019,8 @@ describe('VirtualDomainsTab', () => {
     await userEvent.click(screen.getAllByTitle('Edit owner')[1])
     await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
     const option = await screen.findByRole('button', { name: /alice@weesky\.be/ })
-    fireEvent.mouseDown(option)
+    // The press only holds the caret in the box; the click is what picks, so the keyboard can too.
+    fireEvent.click(option)
     await waitFor(() => expect(api.adminAddVirtualDomainOwner).toHaveBeenCalledWith('ORF', 1))
   })
 
@@ -1003,7 +1043,8 @@ describe('VirtualDomainsTab', () => {
     render(<VirtualDomainsTab addToast={vi.fn()} />)
     await screen.findByText('extra.com')
     await userEvent.click(screen.getAllByTitle('Edit owner')[0])
-    fireEvent.mouseDown(screen.getByTitle('Remove owner'))
+    // The press only holds the caret in the box; the click is what removes, keyboard included.
+    fireEvent.click(screen.getByTitle('Remove owner'))
     await waitFor(() => expect(api.adminRemoveVirtualDomainOwner).toHaveBeenCalledWith('EXT', 1))
   })
 
@@ -1053,7 +1094,7 @@ describe('VirtualDomainsTab', () => {
     await userEvent.click(screen.getAllByTitle('Edit owner')[1])
     await userEvent.type(screen.getByPlaceholderText('Search user…'), 'alice')
     const option = await screen.findByRole('button', { name: /alice@weesky\.be/ })
-    fireEvent.mouseDown(option)
+    fireEvent.click(option)
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to set owner', 'error'))
   })
 

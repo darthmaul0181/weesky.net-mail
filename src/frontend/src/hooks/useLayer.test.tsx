@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { StrictMode, useRef, type ReactNode, type RefObject } from 'react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { StrictMode, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useLayer } from './useLayer'
 import { hasOpenLayer } from '../lib/layerStack'
+import { fireEscape } from '../test-utils'
 
+// Tab is a different job — cycling a trap, not marking a key as spent — so it keeps its own event.
 function press(key: string, init: KeyboardEventInit = {}) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
   document.dispatchEvent(event)
@@ -34,7 +36,7 @@ describe('useLayer', () => {
       </div>,
     )
 
-    press('Escape')
+    fireEscape()
 
     expect(upper).toHaveBeenCalledTimes(1)
     expect(lower).not.toHaveBeenCalled()
@@ -54,7 +56,7 @@ describe('useLayer', () => {
     const { rerender, unmount } = render(<Stack tag="first" />)
 
     rerender(<Stack tag="second" />)
-    press('Escape')
+    fireEscape()
 
     expect(upper).toHaveBeenCalledTimes(1)
     unmount()
@@ -166,7 +168,7 @@ describe('useLayer', () => {
     trigger.focus()
 
     const { unmount } = render(<StrictMode><Dialog name="dialog" onEscape={onEscape} /></StrictMode>)
-    press('Escape')
+    fireEscape()
     expect(onEscape).toHaveBeenCalledTimes(1)
 
     unmount()
@@ -201,6 +203,139 @@ describe('useLayer', () => {
     unmount()
   })
 
+  // The inner dialog restores to an opener inside the subtree being deleted, so the focus it hands
+  // back dies with it. The outer layer records where it would have gone and the passive re-check
+  // spends it — nothing else on screen can.
+  it('hands focus back when a dialog closes with a child dialog of its own standing', () => {
+    function Stack({ open }: { open: boolean }) {
+      return <div><button type="button">page trigger</button>{open && <Outer />}</div>
+    }
+    function Outer() {
+      const box = useRef<HTMLDivElement>(null)
+      const [inner, setInner] = useState(false)
+      useLayer({ active: true, ref: box })
+      return (
+        <div ref={box}>
+          <button type="button" onClick={() => setInner(true)}>open inner</button>
+          {inner && <Dialog name="inner" />}
+        </div>
+      )
+    }
+    const { rerender } = render(<Stack open={false} />)
+    const trigger = screen.getByRole('button', { name: 'page trigger' })
+    trigger.focus()
+    rerender(<Stack open />)
+    const openInner = screen.getByRole('button', { name: 'open inner' })
+    openInner.focus()
+    fireEvent.click(openInner)
+    expect(screen.getByRole('button', { name: 'inner one' })).toHaveFocus()
+
+    rerender(<Stack open={false} />)
+
+    expect(trigger).toHaveFocus()
+  })
+
+  // The record a layer makes while another stands over it is only ever spent once that other has
+  // gone. Here it has not: the dialog above is still up, and its own confirm button is disabled by
+  // the write on the wire — which `reachable()` calls unreachable, the very door this closes.
+  it('leaves focus in a standing dialog when the layer under it closes', () => {
+    function Confirm({ busy }: { busy: boolean }) {
+      const box = useRef<HTMLDivElement>(null)
+      useLayer({ active: true, ref: box })
+      return <div ref={box}><button type="button" disabled={busy}>confirm delete</button></div>
+    }
+    function Stack({ drawer, confirm, busy }:
+      { drawer: boolean; confirm: boolean; busy: boolean }) {
+      return (
+        <div>
+          <button type="button">hamburger</button>
+          {drawer && <Dialog name="drawer" />}
+          {confirm && <Confirm busy={busy} />}
+        </div>
+      )
+    }
+    const { rerender } = render(<Stack drawer={false} confirm={false} busy={false} />)
+    const hamburger = screen.getByRole('button', { name: 'hamburger' })
+    hamburger.focus()
+    rerender(<Stack drawer confirm={false} busy={false} />)
+    rerender(<Stack drawer confirm busy={false} />)
+    expect(screen.getByRole('button', { name: 'confirm delete' })).toHaveFocus()
+
+    // The deletion's own search-param change closes the drawer while the confirm is still up.
+    rerender(<Stack drawer={false} confirm busy />)
+
+    expect(screen.getByRole('button', { name: 'confirm delete' })).toHaveFocus()
+    expect(hamburger).not.toHaveFocus()
+  })
+
+  // The opener's reachability stops being the question once a confirmed action has been taken:
+  // the row holding it may leave on the round trip after this one, and nothing re-checks then.
+  it('prefers the return ref over a reachable opener when the flag says so', () => {
+    // Held outside the tree, as the confirm's own ref is written by its button's handler: a ref
+    // the render writes is the one thing this mechanism must not be.
+    const prefer = { current: false }
+    function Wrapper({ open }: { open: boolean }) {
+      const box = useRef<HTMLDivElement>(null)
+      const heading = useRef<HTMLHeadingElement>(null)
+      return (
+        <div>
+          <h2 tabIndex={-1} ref={heading}>heading</h2>
+          <button type="button">trigger</button>
+          {open && <Panel box={box} heading={heading} prefer={prefer} />}
+        </div>
+      )
+    }
+    function Panel({ box, heading, prefer }: {
+      box: RefObject<HTMLDivElement>
+      heading: RefObject<HTMLHeadingElement>
+      prefer: RefObject<boolean>
+    }) {
+      useLayer({ active: true, ref: box, returnFocusRef: heading, preferReturnRef: prefer })
+      return <div ref={box}><button type="button">inside</button></div>
+    }
+    const { rerender } = render(<Wrapper open={false} />)
+    screen.getByRole('button', { name: 'trigger' }).focus()
+    rerender(<Wrapper open />)
+    prefer.current = true
+
+    rerender(<Wrapper open={false} />)
+
+    expect(screen.getByRole('heading', { name: 'heading' })).toHaveFocus()
+  })
+
+  // The flag chooses between two targets; it never buys a layer the right to move focus at all.
+  // A dialog standing over the one that closes still owns it, preference or no preference.
+  it('does not let that preference pull focus out from under a standing dialog', () => {
+    const prefer = { current: true }
+    function Stack({ drawer }: { drawer: boolean }) {
+      const box = useRef<HTMLDivElement>(null)
+      const region = useRef<HTMLDivElement>(null)
+      return (
+        <div>
+          <div data-testid="region" tabIndex={-1} ref={region} />
+          <button type="button">hamburger</button>
+          {drawer && <Drawer box={box} region={region} prefer={prefer} />}
+          <Dialog name="confirm" />
+        </div>
+      )
+    }
+    function Drawer({ box, region, prefer }: {
+      box: RefObject<HTMLDivElement>
+      region: RefObject<HTMLDivElement>
+      prefer: RefObject<boolean>
+    }) {
+      useLayer({ active: true, ref: box, returnFocusRef: region, preferReturnRef: prefer })
+      return <div ref={box}><button type="button">drawer one</button></div>
+    }
+    const { rerender } = render(<Stack drawer />)
+    expect(screen.getByRole('button', { name: 'confirm one' })).toHaveFocus()
+
+    rerender(<Stack drawer={false} />)
+
+    expect(screen.getByRole('button', { name: 'confirm one' })).toHaveFocus()
+    expect(screen.getByTestId('region')).not.toHaveFocus()
+  })
+
   it('pushes no layer at all while the container ref holds nothing', () => {
     const lower = vi.fn()
     function Detached() {
@@ -210,7 +345,7 @@ describe('useLayer', () => {
     }
     const { unmount } = render(<div><Dialog name="lower" onEscape={lower} /><Detached /></div>)
 
-    press('Escape')
+    fireEscape()
 
     expect(lower).toHaveBeenCalledTimes(1)
     unmount()

@@ -163,7 +163,8 @@ export default function SchedulingAccountSection({ addToast }: Props) {
       )}
       {deleting && account && (
         <DeleteConfirmModal entityLabel={account.login} loading={deleteAccount.isPending}
-          onConfirm={confirmDelete} onClose={() => setDeleting(false)} />
+          onConfirm={confirmDelete} onClose={() => setDeleting(false)}
+          returnFocusRef={headingRef} />
       )}
     </div>
   )

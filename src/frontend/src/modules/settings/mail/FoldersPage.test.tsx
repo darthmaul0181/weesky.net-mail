@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import FoldersPage from './FoldersPage'
@@ -121,6 +122,48 @@ describe('FoldersPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.queryByLabelText('Trash')).not.toBeInTheDocument()
+  })
+
+  // The confirmed delete takes the row's own trash button with it, so the list it left is where
+  // focus goes: without that, the next Tab restarts at the top of the document.
+  it('hands focus to the folder list when the deleted row takes its button', async () => {
+    let live = folders
+    mocks.getMailFolders.mockImplementation(async () => live)
+    mocks.getFolderRoles.mockResolvedValue(roles)
+    mocks.deleteMailFolder.mockImplementation(async () => {
+      live = live.filter(one => one.path !== 'Projects')
+      return {}
+    })
+    const { container } = render(<FoldersPage />, { wrapper })
+    await screen.findByLabelText('Show Projects')
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Projects' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByLabelText('Show Projects')).toBeNull())
+    expect(container.querySelector('.folder-list')).toHaveFocus()
+  })
+
+  // The same hand-back with a real network between the two round trips: the confirm closes on the
+  // DELETE while the row leaves only when the folder refetch lands, a whole macrotask later.
+  it('hands focus to the folder list when the refetch lands after the confirm closed', async () => {
+    let live = folders
+    mocks.getMailFolders.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve(live), 30)))
+    mocks.getFolderRoles.mockResolvedValue(roles)
+    mocks.deleteMailFolder.mockImplementation(async () => {
+      live = live.filter(one => one.path !== 'Projects')
+      return {}
+    })
+    const { container } = render(<FoldersPage />, { wrapper })
+    await screen.findByLabelText('Show Projects')
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Projects' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
+    await waitFor(() => expect(screen.queryByLabelText('Show Projects')).toBeNull())
+    expect(container.querySelector('.folder-list')).toHaveFocus()
   })
 
   it('reports a load failure instead of an empty list', async () => {

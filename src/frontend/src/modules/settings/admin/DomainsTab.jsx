@@ -9,7 +9,7 @@ import GlobeIcon from '../../../icons/GlobeIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import AddEditDomainModal from './AddEditDomainModal.jsx'
 
-export function DomainsTab({ addToast }) {
+export function DomainsTab({ addToast, returnFocusRef }) {
   const { t } = useTranslation('admin')
   const [domains, setDomains] = useState([])
   const [loading, setLoading] = useState(true)
@@ -93,7 +93,8 @@ export function DomainsTab({ addToast }) {
             <Trans i18nKey="domains.deleteWithAliases" ns="admin" count={domainToDelete.aliasCount}
               components={{ name: <strong>{domainToDelete.name}</strong>, aliases: <strong /> }} />
           ) : undefined}
-          onConfirm={handleDelete} onClose={() => setDomainToDelete(null)} loading={deleting} />
+          onConfirm={handleDelete} onClose={() => setDomainToDelete(null)} loading={deleting}
+          returnFocusRef={returnFocusRef} />
       )}
     </div>
   )

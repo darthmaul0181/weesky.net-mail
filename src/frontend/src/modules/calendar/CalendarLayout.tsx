@@ -913,7 +913,7 @@ export default function CalendarLayout() {
               setPendingEvent(null)
               void runDelete(id, 'All')
             }}
-            onClose={() => setPendingEvent(null)} />
+            onClose={() => setPendingEvent(null)} returnFocusRef={mainRef} />
         )}
 
         {/* `discarding` cannot be true here once `!inEditor` — the render-phase reset above already
@@ -922,7 +922,7 @@ export default function CalendarLayout() {
           <DeleteConfirmModal title={t('editor.discardTitle')} message={t('editor.discardBody')}
             confirmLabel={t('editor.discard')}
             onConfirm={() => { setDiscarding(false); backToGrid() }}
-            onClose={() => setDiscarding(false)} />
+            onClose={() => setDiscarding(false)} returnFocusRef={mainRef} />
         )}
 
         {editing && (
@@ -947,7 +947,8 @@ export default function CalendarLayout() {
           <DeleteConfirmModal
             message={t('dialogs.deleteCalendarMessage', { name: pendingDelete.displayName })}
             loading={deleteCalendar.isPending}
-            onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />
+            onConfirm={confirmDelete} onClose={() => setPendingDelete(null)}
+            returnFocusRef={mainRef} />
         )}
 
         {/* Anchored 73px up from the edge the tab bar owns, and the editor owns the whole screen

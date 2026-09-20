@@ -10,7 +10,7 @@ import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import AddEditUserModal from './AddEditUserModal.jsx'
 
-export function AccountsTab({ addToast }) {
+export function AccountsTab({ addToast, returnFocusRef }) {
   const { t } = useTranslation('admin')
   const [users, setUsers] = useState([])
   const [domains, setDomains] = useState([])
@@ -120,7 +120,8 @@ export function AccountsTab({ addToast }) {
       )}
       {userToDelete && (
         <DeleteConfirmModal entityLabel={`${userToDelete.userName}@${userToDelete.domainName}`}
-          onConfirm={handleDelete} onClose={() => setUserToDelete(null)} loading={deleting} />
+          onConfirm={handleDelete} onClose={() => setUserToDelete(null)} loading={deleting}
+          returnFocusRef={returnFocusRef} />
       )}
     </div>
   )

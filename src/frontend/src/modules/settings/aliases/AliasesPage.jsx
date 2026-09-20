@@ -46,6 +46,8 @@ export default function AliasesPage() {
 
   const scrollRef = useRef(null)
   const groupRefs = useRef({})
+  // A confirmed delete takes the tile's own button with it, so focus goes back to the page's name.
+  const headingRef = useRef(null)
   const [activeLetter, setActiveLetter] = useState('')
 
   useEffect(() => {
@@ -151,7 +153,9 @@ export default function AliasesPage() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><AtSignIcon size={17} />{t('nav.aliases')}</h1>
+        <h1 className="settings-page-title" ref={headingRef} tabIndex={-1}>
+          <AtSignIcon size={17} />{t('nav.aliases')}
+        </h1>
       </div>
 
       <div className="domain-toolbar">
@@ -301,6 +305,7 @@ export default function AliasesPage() {
           }}
           onClose={() => setPendingDelete(null)}
           loading={deletingKey === `${pendingDelete.name}@${pendingDelete.domain}`}
+          returnFocusRef={headingRef}
         />
       )}
 

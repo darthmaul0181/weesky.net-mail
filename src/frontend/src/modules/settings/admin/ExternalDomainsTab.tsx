@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
@@ -12,6 +12,8 @@ import { useDeleteExternalDomain, useExternalDomains, type ExternalDomain } from
 
 interface Props {
   addToast: (message: string, kind?: string) => void
+  /** The tab content, where focus goes when a confirmed delete takes the row's own button. */
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 /**
@@ -19,7 +21,7 @@ interface Props {
  * only source of external endpoints in the product. The mockups show name-only tiles: every
  * configuration detail lives in the dialog, not on the tile.
  */
-export default function ExternalDomainsTab({ addToast }: Props) {
+export default function ExternalDomainsTab({ addToast, returnFocusRef }: Props) {
   const { t } = useTranslation('admin')
   const { data: domains, isLoading, isError } = useExternalDomains()
   const deleteDomain = useDeleteExternalDomain()
@@ -96,7 +98,8 @@ export default function ExternalDomainsTab({ addToast }: Props) {
       )}
       {deleting && (
         <DeleteConfirmModal entityLabel={deleting.name} loading={deleteDomain.isPending}
-          onConfirm={confirmDelete} onClose={() => setDeleting(null)} />
+          onConfirm={confirmDelete} onClose={() => setDeleting(null)}
+          returnFocusRef={returnFocusRef} />
       )}
     </div>
   )

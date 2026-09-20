@@ -27,6 +27,20 @@ describe('SpamGauge', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('X-Spamd-Result: default: False')
   })
 
+  // The precedent is HelpTooltip: a real button, describing itself with the bubble it opens.
+  // Fix round 1: named with the score itself, not just "Spam score:" — a plain aria-label
+  // would have hidden the visible "7.0 / 16.0" behind an unlabelled description.
+  it('is a real button, named with the score itself and describing itself with the raw header', () => {
+    render(<SpamGauge spamScore={spam} />)
+
+    const trigger = screen.getByRole('button', { name: 'Spam score: 7.0 out of 16.0' })
+    const bubble = screen.getByRole('tooltip')
+
+    expect(trigger).toHaveAttribute('type', 'button')
+    expect(trigger).toHaveAttribute('aria-describedby', bubble.id)
+    expect(bubble.id).toBeTruthy()
+  })
+
   it('renders nothing without a score', () => {
     const { container } = render(<SpamGauge spamScore={null} />)
 

@@ -1257,6 +1257,26 @@ describe('RulesPage — reordering', () => {
 
 // ── RulesPage — delete all script ────────────────────────────
 
+// ── RulesPage — delete one rule ───────────────────────────────
+
+describe('RulesPage — delete one rule', () => {
+  // The confirm closes in the click's own commit while the card leaves only once the save returns,
+  // so the card's trash button is still reachable at the close and gone a macrotask later.
+  it('hands focus to the page heading when the card leaves after the save returns', async () => {
+    api.getRules.mockResolvedValue(ruleSet('weesky', [fileIntoRule('a', 'r1')]))
+    api.saveRules.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(null), 30)))
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText('r1')
+    await userEvent.click(screen.getAllByTitle('Delete')[0])
+
+    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('r1')).toBeNull())
+    expect(screen.getByRole('heading', { name: /Rules/ })).toHaveFocus()
+  })
+})
+
 describe('RulesPage — delete all script', () => {
   function advancedRuleSet() {
     return { kind: 'Advanced', providerId: 'weesky', scriptName: 'custom', rules: [] }
@@ -1282,6 +1302,20 @@ describe('RulesPage — delete all script', () => {
     await waitFor(() => expect(api.deleteRules).toHaveBeenCalledWith({ accountId: 'primary' }))
     await screen.findByText('Script deleted')
     expect(document.querySelector('.rules-toolbar')).toBeInTheDocument()
+  })
+
+  // Confirming replaces the whole Advanced notice — the Delete script button included — with the
+  // ordinary rules toolbar, so the opener is gone and the page's name takes the focus.
+  it('hands focus to the page heading when the notice goes with the script', async () => {
+    api.getRules.mockResolvedValue(advancedRuleSet())
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText(/cannot be parsed/)
+    await userEvent.click(screen.getByText('Delete script'))
+
+    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+
+    await waitFor(() => expect(screen.queryByText('Delete script')).toBeNull())
+    expect(screen.getByRole('heading', { name: /Rules/ })).toHaveFocus()
   })
 
   it('delete error shows error toast', async () => {

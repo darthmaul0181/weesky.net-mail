@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useToasts } from '../../../hooks/useToasts.js'
 import Toasts from '../../../components/Toasts.jsx'
@@ -10,13 +10,27 @@ import VirtualDomainsTab from './VirtualDomainsTab.jsx'
 import ExternalDomainsTab from './ExternalDomainsTab'
 import ApplicationTab from './ApplicationTab'
 
-// The Accounts tab explains itself; the other four earn a help bubble.
-const TABS_WITH_HELP = ['domains', 'virtualdomains', 'externaldomains', 'application']
+/** Each tab is its own literal `t()` call: a key held in a table and read by variable is
+    invisible to `src/locales/keys.test.ts`. Accounts carries no help on purpose: the tab needs
+    none, and the other four say how their object relates to the rest. */
+function helpTextOf(tab, t) {
+  switch (tab) {
+    case 'domains': return t('help.domains')
+    case 'virtualdomains': return t('help.virtualdomains')
+    case 'externaldomains': return t('help.externaldomains')
+    case 'application': return t('help.application')
+    default: return null
+  }
+}
 
 export default function AdminPage() {
   const { t } = useTranslation('admin')
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [activeTab, setActiveTab] = useState('accounts')
+  const helpText = helpTextOf(activeTab, t)
+  // Where a confirmed delete hands focus when it takes its own row with it. The page's own region
+  // and not each tab's: a tab reloads its list behind a spinner, so nothing inside one survives.
+  const tabRegion = useRef(null)
 
   return (
     <>
@@ -37,17 +51,19 @@ export default function AdminPage() {
             <button className={`admin-tab${activeTab === 'application' ? ' is-active' : ''}`}
               onClick={() => setActiveTab('application')}>{t('tabs.application')}</button>
           </nav>
-          <div className="admin-tab-content">
-            {activeTab === 'accounts' && <AccountsTab addToast={addToast} />}
-            {activeTab === 'domains' && <DomainsTab addToast={addToast} />}
+          <div className="admin-tab-content" ref={tabRegion} tabIndex={-1}>
+            {activeTab === 'accounts' && <AccountsTab addToast={addToast} returnFocusRef={tabRegion} />}
+            {activeTab === 'domains' && <DomainsTab addToast={addToast} returnFocusRef={tabRegion} />}
             {activeTab === 'virtualdomains' && <VirtualDomainsTab addToast={addToast} />}
-            {activeTab === 'externaldomains' && <ExternalDomainsTab addToast={addToast} />}
+            {activeTab === 'externaldomains' && (
+              <ExternalDomainsTab addToast={addToast} returnFocusRef={tabRegion} />
+            )}
             {activeTab === 'application' && <ApplicationTab addToast={addToast} />}
           </div>
         </div>
-        {TABS_WITH_HELP.includes(activeTab) && (
+        {helpText && (
           <div className="admin-modal-help">
-            <HelpTooltip text={t(`help.${activeTab}`)} />
+            <HelpTooltip text={helpText} />
           </div>
         )}
       </div>

@@ -31,12 +31,30 @@ describe('AddressLabel', () => {
     expect(screen.getByRole('button', { name: 'Claude Team' })).toBeInTheDocument()
   })
 
+  // Fix round 1: the same Tooltip now gives its bubble a real id for the recipient case — the
+  // sender button beside it, wrapped by that same Tooltip, was left pointing at nothing.
+  it('describes the sender with its own bubble too, once it has one', () => {
+    render(<AddressLabel sender name="Claude Team" address="no-reply@email.claude.com" />)
+
+    const trigger = screen.getByRole('button', { name: 'Claude Team' })
+    const bubble = screen.getByRole('tooltip')
+
+    expect(trigger).toHaveAttribute('aria-describedby', bubble.id)
+    expect(bubble.id).toBeTruthy()
+  })
+
   // Recipients are plain text, so without this they would be unreachable by keyboard and
   // their tooltip — the only place the address is written — invisible to anyone not using a mouse.
-  it('makes a recipient carrying a tooltip focusable', () => {
+  // The precedent is HelpTooltip: a real button, describing itself with the bubble it opens.
+  it('turns a recipient carrying a tooltip into a real button, describing itself with the bubble it opens', () => {
     render(<AddressLabel name="Bob" address="bob@x.be" />)
 
-    expect(screen.getByText('Bob')).toHaveAttribute('tabindex', '0')
+    const trigger = screen.getByRole('button', { name: 'Bob' })
+    const bubble = screen.getByRole('tooltip')
+
+    expect(trigger).toHaveAttribute('type', 'button')
+    expect(trigger).toHaveAttribute('aria-describedby', bubble.id)
+    expect(bubble.id).toBeTruthy()
   })
 
   it('leaves a recipient with nothing to reveal out of the tab order', () => {

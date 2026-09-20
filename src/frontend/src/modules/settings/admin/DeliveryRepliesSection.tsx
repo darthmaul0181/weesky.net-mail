@@ -145,11 +145,13 @@ export default function DeliveryRepliesSection({ addToast }: Props) {
       {confirming === 'regenerate' && (
         <DeleteConfirmModal title={t('deliveryReplies.regenerateTitle')} confirmLabel={t('deliveryReplies.regenerate')}
           message={t('deliveryReplies.regenerateMessage')} loading={generate.isPending}
-          onConfirm={() => void runGenerate()} onClose={() => setConfirming(null)} />
+          onConfirm={() => void runGenerate()} onClose={() => setConfirming(null)}
+          returnFocusRef={headingRef} />
       )}
       {confirming === 'delete' && (
         <DeleteConfirmModal entityLabel={t('deliveryReplies.keyLabel')} message={t('deliveryReplies.deleteMessage')}
-          loading={remove.isPending} onConfirm={() => void confirmDelete()} onClose={() => setConfirming(null)} />
+          loading={remove.isPending} onConfirm={() => void confirmDelete()}
+          onClose={() => setConfirming(null)} returnFocusRef={headingRef} />
       )}
     </div>
   )

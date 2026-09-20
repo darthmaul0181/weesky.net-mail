@@ -979,6 +979,9 @@ export default function RulesPage() {
   }
 
   const dragIndexRef = useRef(null)
+  // A confirmed delete takes the card's own button — or the whole Advanced notice — with it, so
+  // focus goes back to the page's name.
+  const headingRef = useRef(null)
   const [dropIndex, setDropIndex] = useState(null)
 
   function handleDrop(index) {
@@ -1005,7 +1008,7 @@ export default function RulesPage() {
     <>
       <div className="settings-page">
         <div className="settings-page-header">
-          <h1 className="settings-page-title">
+          <h1 className="settings-page-title" ref={headingRef} tabIndex={-1}>
             <FunnelIcon size={17} />
             {t('nav.rules')}
             {providerLabel && <span className="provider-badge">{providerLabel}</span>}
@@ -1114,6 +1117,7 @@ export default function RulesPage() {
           onConfirm={handleDeleteRule}
           onClose={() => setRuleToDelete(null)}
           loading={deleting}
+          returnFocusRef={headingRef}
         />
       )}
 
@@ -1123,6 +1127,7 @@ export default function RulesPage() {
           onConfirm={handleDeleteAll}
           onClose={() => setConfirmDeleteAll(false)}
           loading={deleting}
+          returnFocusRef={headingRef}
         />
       )}
 

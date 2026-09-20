@@ -297,6 +297,107 @@ describe('DropdownMenu', () => {
     expect(screen.getByRole('menu')).toBeInTheDocument()
   })
 
+  describe('the keyboard walk', () => {
+    const rows: MenuEntry[] = [
+      { label: 'Mark as read', onSelect: vi.fn() },
+      'separator',
+      { label: 'Archive', onSelect: vi.fn() },
+      { label: 'Move', onSelect: vi.fn(), disabled: true },
+      { label: 'View source', href: '/mail/source' },
+    ]
+    const row = (name: string) => screen.getByRole('menuitem', { name })
+
+    // A reader landing on the first row is told which menu it is in by nothing else.
+    it('names the menu after its trigger', () => {
+      render(<DropdownMenu ariaLabel="Message actions" trigger="⋮" items={rows} />)
+
+      fireEvent.click(screen.getByLabelText('Message actions'))
+
+      expect(screen.getByRole('menu', { name: 'Message actions' })).toBeInTheDocument()
+    })
+
+    it('puts the focus on the first item as it opens', () => {
+      render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
+
+      open()
+
+      expect(row('Mark as read')).toHaveFocus()
+    })
+
+    it('walks the items on the vertical arrows, wrapping at both ends', () => {
+      render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
+      open()
+
+      fireEvent.keyDown(row('Mark as read'), { key: 'ArrowDown' })
+      expect(row('Archive')).toHaveFocus()
+
+      // Past the separator and the disabled row, which are no more in the walk than in Tab's.
+      fireEvent.keyDown(row('Archive'), { key: 'ArrowDown' })
+      expect(row('View source')).toHaveFocus()
+
+      fireEvent.keyDown(row('View source'), { key: 'ArrowDown' })
+      expect(row('Mark as read')).toHaveFocus()
+
+      fireEvent.keyDown(row('Mark as read'), { key: 'ArrowUp' })
+      expect(row('View source')).toHaveFocus()
+    })
+
+    it('jumps to the ends on Home and End', () => {
+      render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
+      open()
+
+      fireEvent.keyDown(row('Mark as read'), { key: 'End' })
+      expect(row('View source')).toHaveFocus()
+
+      fireEvent.keyDown(row('View source'), { key: 'Home' })
+      expect(row('Mark as read')).toHaveFocus()
+    })
+
+    /* The mail list's own row keys and the layer stack both read `defaultPrevented` before acting,
+       and a row menu is one keydown away from the rows underneath it. */
+    it('marks the keys the walk spends', () => {
+      const behind = vi.fn((e: KeyboardEvent) => e.defaultPrevented)
+      window.addEventListener('keydown', behind)
+      render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
+      open()
+
+      fireEvent.keyDown(row('Mark as read'), { key: 'ArrowDown' })
+      fireEvent.keyDown(row('Archive'), { key: 'End' })
+
+      window.removeEventListener('keydown', behind)
+      expect(behind).toHaveBeenCalledTimes(2)
+      expect(behind).toHaveNthReturnedWith(1, true)
+      expect(behind).toHaveNthReturnedWith(2, true)
+    })
+
+    /* A menu is a trapless layer over the dialog it was opened in: the arrows are the menu's and
+       Tab is still the dialog's trap, so the two must not hold two ideas of where focus may go. */
+    it('leaves Tab to the dialog it stands in while the arrows stay in the menu', () => {
+      function Harness() {
+        const panel = useRef<HTMLDivElement>(null)
+        useLayer({ active: true, ref: panel })
+        return (
+          <div ref={panel} role="dialog" aria-modal="true">
+            <input aria-label="Name" />
+            <DropdownMenu ariaLabel="Menu" trigger="⋮" items={items()} />
+          </div>
+        )
+      }
+      render(<Harness />)
+      expect(screen.getByLabelText('Name')).toHaveFocus()
+
+      open()
+      expect(row('Mark as read')).toHaveFocus()
+
+      fireEvent.keyDown(row('Mark as read'), { key: 'ArrowDown' })
+      expect(row('Star')).toHaveFocus()
+
+      // Off the menu's last row, Tab comes back to the top of the dialog, never to the page.
+      fireEvent.keyDown(row('Star'), { key: 'Tab' })
+      expect(screen.getByLabelText('Name')).toHaveFocus()
+    })
+  })
+
   describe('direction="up"', () => {
     // Inside a scroll container (the reader's attachment band), an absolutely-positioned
     // upward menu lands past the band's own block-start edge — the one edge a scroll

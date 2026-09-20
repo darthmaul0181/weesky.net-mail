@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, type ActiveAccount } from '../contexts/AuthContext'
 import { useDismiss } from '../hooks/useDismiss'
+import { useRovingFocus } from '../hooks/useRovingFocus'
 import { confirmLeave } from '../lib/leaveGuard'
 import ChevronRightIcon from '../icons/ChevronRightIcon'
 import PersonPlusIcon from '../icons/PersonPlusIcon.jsx'
@@ -29,13 +30,17 @@ export default function IdentityMenu() {
   const { identity, accounts, activeAccount, switchAccount, logout } = useAuth()
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  // Named by the chevron that opens it, the way `DropdownMenu`'s menu is.
+  const toggleId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
   const navigate = useNavigate()
 
   // An open menu is the topmost layer, so the context drawer this block sits in below 1024px
   // keeps its own Escape and the column stands whatever holds the focus.
   useDismiss({ open, rootRef, onDismiss: () => setOpen(false), refocusRef: toggleRef })
+  const menuKeys = useRovingFocus({ active: open, containerRef: menuRef })
 
   if (!identity) return null
 
@@ -81,6 +86,7 @@ export default function IdentityMenu() {
       <button
         type="button"
         className="identity-toggle"
+        id={toggleId}
         ref={toggleRef}
         aria-label={t('identity.menu')}
         aria-expanded={open}
@@ -90,7 +96,8 @@ export default function IdentityMenu() {
       </button>
 
       {open && (
-        <div className="identity-menu" role="menu">
+        <div className="identity-menu" role="menu" aria-labelledby={toggleId} ref={menuRef}
+          tabIndex={-1} onKeyDown={menuKeys}>
           {accounts.map(acc => {
             const label = labelOf(acc)
             const isActive = acc.id === activeAccount?.id

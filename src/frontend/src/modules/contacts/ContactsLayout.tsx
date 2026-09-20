@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api.js'
@@ -112,6 +112,11 @@ export default function ContactsLayout() {
 
   const phone = useViewport() === 'phone'
   const drawer = useContextDrawer()
+  // The two columns a confirmed delete hands focus back to when it takes its own button with it —
+  // the way `CalendarLayout` holds one for `.calendar-main`. A contact's own delete is the list's,
+  // a group's belongs to the band the row was in.
+  const listRegion = useRef<HTMLDivElement>(null)
+  const scopesRegion = useRef<HTMLDivElement>(null)
   const [listWidth, setListWidth] = usePaneSize('contacts.split.right', 380, 240)
   const [pendingDelete, setPendingDelete] = useState<Contact | null>(null)
   const [groupModal, setGroupModal] =
@@ -357,7 +362,7 @@ export default function ContactsLayout() {
   )
 
   const scopeColumn = (
-    <div className="contacts-scopes-column">
+    <div className="contacts-scopes-column" ref={scopesRegion} tabIndex={-1}>
       <div className="column-actions">
         <button type="button" className="btn btn-primary column-actions-main"
           onClick={() => navigate('/contacts/new')}>
@@ -408,7 +413,8 @@ export default function ContactsLayout() {
               ContactList's own state and the scroll offset is the DOM's, and opening a contact
               and coming back would throw both away. */}
           <div className={`contacts-list${phone && selectedId ? ' is-hidden' : ''}`}
-            style={phone ? undefined : { width: listWidth }} data-testid="contact-list">
+            style={phone ? undefined : { width: listWidth }} data-testid="contact-list"
+            ref={listRegion} tabIndex={-1}>
             {/* A group scope waits for its group too: filtered on nothing, the list would say the
                 book is empty for as long as that query is in flight. */}
             {(isLoading || groupPending) && <p className="contacts-empty">{t('layout.loading')}</p>}
@@ -420,7 +426,7 @@ export default function ContactsLayout() {
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
                 onDeleteMany={deleteSelection}
                 onRemoveFromGroup={openGroup ? removeFromOpenGroup : undefined}
-                onEdit={id => navigate(`/contacts/${id}/edit`)} />
+                onEdit={id => navigate(`/contacts/${id}/edit`)} regionRef={listRegion} />
             )}
           </div>
           {!phone && (
@@ -458,7 +464,8 @@ export default function ContactsLayout() {
       {pendingDelete && (
         <DeleteConfirmModal entityLabel={displayNameOf(pendingDelete)}
           loading={deleteContact.isPending}
-          onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />
+          onConfirm={confirmDelete} onClose={() => setPendingDelete(null)}
+          returnFocusRef={listRegion} />
       )}
 
       {groupModal && (
@@ -474,7 +481,8 @@ export default function ContactsLayout() {
       {pendingGroupDelete && (
         <DeleteConfirmModal message={t('groups.deleteBody', { name: pendingGroupDelete.name })}
           loading={deleteGroup.isPending}
-          onConfirm={confirmGroupDelete} onClose={() => setPendingGroupDelete(null)} />
+          onConfirm={confirmGroupDelete} onClose={() => setPendingGroupDelete(null)}
+          returnFocusRef={scopesRegion} />
       )}
 
       {/* Never over the editor: that surface already is the create form, and the button would

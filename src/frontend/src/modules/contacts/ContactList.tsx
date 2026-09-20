@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import {
+  useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import SelectionBand from '../../components/SelectionBand'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
@@ -36,6 +38,8 @@ interface Props {
   onRemoveFromGroup?: (ids: string[]) => void
   /** What the parent drags. Reported in screen order, never in click order. */
   onSelectionChange?: (ids: string[]) => void
+  /** The list column, where focus goes when a confirmed delete disables the band's own button. */
+  regionRef?: RefObject<HTMLElement | null>
 }
 
 /**
@@ -48,6 +52,7 @@ interface Props {
 export default function ContactList({
   contacts, selectedId, scope, leading, actions,
   onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, onRemoveFromGroup, onSelectionChange,
+  regionRef,
 }: Props) {
   const { t } = useTranslation('contacts')
   const [query, setQuery] = useState('')
@@ -234,7 +239,8 @@ export default function ContactList({
         <DeleteConfirmModal
           message={t('list.deleteSelectedConfirm', { count })}
           onClose={() => setConfirming(false)}
-          onConfirm={() => { onDeleteMany(selectedIds); selection.clear(); setConfirming(false) }} />
+          onConfirm={() => { onDeleteMany(selectedIds); selection.clear(); setConfirming(false) }}
+          returnFocusRef={regionRef} />
       )}
     </>
   )

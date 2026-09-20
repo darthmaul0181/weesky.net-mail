@@ -26,6 +26,8 @@ export default function FolderManager({ folders, onNotify }: Props) {
   const [renameValue, setRenameValue] = useState('')
   const [pendingDelete, setPendingDelete] = useState<MailFolderNode | null>(null)
   const renameRef = useRef<HTMLInputElement>(null)
+  // A confirmed delete takes the row's own button with it, so the list it left is where focus goes.
+  const listRegion = useRef<HTMLUListElement>(null)
 
   const renameFolder = useRenameFolder()
   const deleteFolder = useDeleteFolder()
@@ -44,7 +46,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
 
   return (
     <>
-      <ul className="admin-list folder-list">
+      <ul className="admin-list folder-list" ref={listRegion} tabIndex={-1}>
         {flatten(sortFolders(folders)).map(({ node, depth }) => {
           const isSystem = isSystemFolder(node)
 
@@ -167,6 +169,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
         <DeleteConfirmModal
           entityLabel={pendingDelete.name}
           loading={deleteFolder.isPending}
+          returnFocusRef={listRegion}
           onClose={() => setPendingDelete(null)}
           onConfirm={async () => {
             const ok = await run(

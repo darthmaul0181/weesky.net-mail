@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import Tooltip from '../../../components/Tooltip'
 import type { MailAddressInfo } from '../api/mailTypes'
 
@@ -11,15 +12,17 @@ export default function AddressLabel({ name, address, sender = false }: Props) {
   const label = name || address
   const detail = label === address ? null : `"${name}" <${address}>`
   const className = sender ? 'address-label is-sender' : 'address-label'
+  const bubbleId = useId()
 
-  const trigger = sender
-    ? <button type="button" className={className}>{label}</button>
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the house way this span makes Tooltip's hover bubble keyboard-reachable; deferred to lot 2b to become a real button
-    : <span className={className} tabIndex={detail ? 0 : undefined}>{label}</span>
+  // The sender is always a button (its bubble reachable-by-keyboard precedent predates this
+  // task); a recipient only becomes one when it has a bubble to describe.
+  const trigger = sender || detail
+    ? <button type="button" className={className} aria-describedby={detail ? bubbleId : undefined}>{label}</button>
+    : <span className={className}>{label}</span>
 
   if (!detail) return trigger
 
-  return <Tooltip content={detail} placement="bottom-left">{trigger}</Tooltip>
+  return <Tooltip content={detail} placement="bottom-left" bubbleId={bubbleId}>{trigger}</Tooltip>
 }
 
 export function AddressList({ addresses }: { addresses: MailAddressInfo[] }) {

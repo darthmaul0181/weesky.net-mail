@@ -3,12 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { useRef, type ReactNode } from 'react'
 import { useDismiss, returnFocus } from './useDismiss'
 import { useLayer } from './useLayer'
-
-function press(key: string, target: EventTarget = document) {
-  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
-  target.dispatchEvent(event)
-  return event
-}
+import { fireEscape } from '../test-utils'
 
 /** A menu-shaped surface: a trigger inside the root, an item to hold the focus. */
 function Surface({ open = true, onDismiss, closeOnScroll }: {
@@ -68,7 +63,7 @@ describe('useDismiss', () => {
     const onDismiss = vi.fn()
     render(<Surface onDismiss={onDismiss} />)
 
-    press('Escape')
+    fireEscape()
 
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
@@ -76,7 +71,7 @@ describe('useDismiss', () => {
   it('marks the Escape it spends, so a listener behind it can tell', () => {
     render(<Surface onDismiss={vi.fn()} />)
 
-    expect(press('Escape').defaultPrevented).toBe(true)
+    expect(fireEscape().defaultPrevented).toBe(true)
   })
 
   it('registers nothing while closed', () => {
@@ -84,7 +79,7 @@ describe('useDismiss', () => {
     render(<Surface open={false} onDismiss={onDismiss} />)
 
     fireEvent.mouseDown(document.body)
-    expect(press('Escape').defaultPrevented).toBe(false)
+    expect(fireEscape().defaultPrevented).toBe(false)
 
     expect(onDismiss).not.toHaveBeenCalled()
   })
@@ -100,7 +95,7 @@ describe('useDismiss', () => {
         <Dialog onEscape={onDialogEscape} />
       </>)
 
-    press('Escape')
+    fireEscape()
     fireEvent.mouseDown(screen.getByRole('button', { name: 'Confirm' }))
     fireEvent.mouseDown(document.body)
 
@@ -135,7 +130,7 @@ describe('useDismiss', () => {
     const { rerender } = render(<Both dialog />)
 
     rerender(<Both dialog={false} />)
-    press('Escape')
+    fireEscape()
 
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
@@ -144,7 +139,7 @@ describe('useDismiss', () => {
     render(<Surface onDismiss={vi.fn()} />)
     screen.getByRole('button', { name: 'Item' }).focus()
 
-    press('Escape')
+    fireEscape()
 
     expect(screen.getByRole('button', { name: 'Trigger' })).toHaveFocus()
   })
@@ -158,7 +153,7 @@ describe('useDismiss', () => {
     const elsewhere = screen.getByLabelText('Elsewhere')
     elsewhere.focus()
 
-    press('Escape')
+    fireEscape()
 
     expect(elsewhere).toHaveFocus()
   })

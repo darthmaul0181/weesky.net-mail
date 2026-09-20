@@ -1,5 +1,8 @@
-import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState,
+} from 'react'
 import { returnFocus, useDismiss } from '../hooks/useDismiss'
+import { useRovingFocus } from '../hooks/useRovingFocus'
 
 interface MenuItemBase {
   label: string
@@ -57,6 +60,9 @@ interface Props {
 export default function DropdownMenu(
   { ariaLabel, trigger, items, className, direction = 'down', align = 'right' }: Props) {
   const [open, setOpen] = useState(false)
+  // The menu is named by its trigger, which the ARIA menu pattern asks for and which is the only
+  // thing that tells a reader landing on the first row which menu it is in.
+  const triggerId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -97,6 +103,7 @@ export default function DropdownMenu(
   }, [open, direction, align])
 
   useDismiss({ open, rootRef, onDismiss: () => setOpen(false), refocusRef: triggerRef })
+  const menuKeys = useRovingFocus({ active: open, containerRef: menuRef })
 
   // A fixed menu does not travel with a scrolled trigger the way an absolutely-positioned one
   // does, so any scroll or resize while it is open just closes it rather than leaving it
@@ -127,11 +134,15 @@ export default function DropdownMenu(
       ref={rootRef}
     >
       <button type="button" className={className} aria-label={ariaLabel} aria-expanded={open}
-        ref={triggerRef} onClick={() => setOpen(o => !o)}>
+        id={triggerId} ref={triggerRef} onClick={() => setOpen(o => !o)}>
         {trigger}
       </button>
+      {/* `tabIndex={-1}`: the lint rule wants an element carrying an interactive role to be
+          focusable, and -1 keeps it out of the Tab walk a dialog around it would otherwise find it
+          in. The menu's own walk never sees it — `focusablesIn` queries descendants. */}
       {open && (
-        <div className="dropdown-menu" role="menu" ref={menuRef} style={fixedStyle}>
+        <div className="dropdown-menu" role="menu" aria-labelledby={triggerId} ref={menuRef}
+          style={fixedStyle} tabIndex={-1} onKeyDown={menuKeys}>
           {items.map((entry, index) =>
             entry === 'separator' ? (
               <hr key={index} className="dropdown-rule" />

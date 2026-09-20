@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import DeleteConfirmModal from './DeleteConfirmModal.jsx'
 import { fireEscape, pressBackdrop } from '../test-utils'
@@ -118,4 +118,57 @@ describe('DeleteConfirmModal', () => {
 
     expect(screen.getByTestId('region')).toHaveFocus()
   })
+
+  // The opener's reachability is not the question after a confirmed action: a list refetch may
+  // remove it a commit later, and nothing re-checks then.
+  it('prefers the return ref over an opener the confirmed action left standing', async () => {
+    render(<Host />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete alice' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(screen.getByTestId('region')).toHaveFocus()
+  })
+
+  // The other half of the same decision: nothing was deleted, so the button that asked is still
+  // the place the user is working from.
+  it('hands focus back to the opener when the dialog is cancelled', async () => {
+    render(<Host />)
+    const trigger = screen.getByRole('button', { name: 'Delete alice' })
+
+    await userEvent.click(trigger)
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(trigger).toHaveFocus()
+  })
+
+  // A refused write leaves the dialog standing, so the press that asked for it must not still
+  // count as a confirmation when the user gives up and closes.
+  it('forgets a confirmation the write refused', async () => {
+    render(<Host keepOpen />)
+    const trigger = screen.getByRole('button', { name: 'Delete alice' })
+
+    await userEvent.click(trigger)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(trigger).toHaveFocus()
+  })
 })
+
+/** A row whose delete button survives the confirmed deletion, as one waiting on a list refetch
+    does: what focus lands on is a decision, not a question about that button. */
+function Host({ keepOpen = false }) {
+  const region = useRef(null)
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <div data-testid="region" tabIndex={-1} ref={region} />
+      <button type="button" onClick={() => setOpen(true)}>Delete alice</button>
+      {open && (
+        <DeleteConfirmModal entityLabel="alice" onConfirm={() => { if (!keepOpen) setOpen(false) }}
+          onClose={() => setOpen(false)} returnFocusRef={region} />
+      )}
+    </div>
+  )
+}

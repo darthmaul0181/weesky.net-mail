@@ -78,6 +78,48 @@ describe('DeliveryRepliesSection', () => {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The key was deleted.'))
   })
 
+  // The confirm's own opener is the card's trash button, and the card becomes the empty branch
+  // with the key: the section heading is what focus falls back to.
+  it('hands focus to the section heading once the deleted key takes the trash button', async () => {
+    let configured = true
+    vi.mocked(api.adminGetDeliveryReplyKey).mockImplementation(async () =>
+      (configured
+        ? { configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' }
+        : { configured: false, enabled: false }))
+    vi.mocked(api.adminDeleteDeliveryReplyKey).mockImplementation(async () => { configured = false })
+    mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
+    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
+  })
+
+  // The one case the card's own `cardRef` guard cannot reach, and therefore the one that reads the
+  // confirm's `returnFocusRef`: the key goes while the confirm is open — focus is inside the
+  // dialog, not inside the card, so the guard does nothing — and the ✕ then closes over an opener
+  // that is no longer there. Nothing is replaced by the close itself.
+  it('hands focus to the section heading when the ✕ closes over a vanished trash button', async () => {
+    let resolveRefetch: (value: { configured: boolean, enabled: boolean }) => void = () => {}
+    vi.mocked(api.adminGetDeliveryReplyKey)
+      .mockResolvedValueOnce({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
+      .mockReturnValue(new Promise(resolve => { resolveRefetch = resolve }))
+    const { client } = mountExposingClient()
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    // Another admin deleted it: the refetch lands while the confirm stands.
+    void client.invalidateQueries()
+    await act(async () => resolveRefetch({ configured: false, enabled: false }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
+  })
+
   describe('the switch look', () => {
     it('carries is-locked without a key', async () => {
       vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: false, enabled: false })
@@ -131,11 +173,10 @@ describe('DeliveryRepliesSection', () => {
       expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
     })
 
-    // The confirm is a layer of its own now, so it hands the focus back to the Regenerate button
-    // it was opened from — still on screen, the key having stayed configured — and the key
-    // dialog, mounting in that same commit, captures it and returns there in turn. It used to
-    // land on the heading, the confirm leaving focus on <body> for the dialog to find.
-    it('returns to the button the regenerate was asked from', async () => {
+    // A confirmed action hands focus to the section's name by decision, not to an opener whose
+    // survival it cannot know — here the Regenerate button does survive, and the heading takes the
+    // focus anyway; the key dialog mounting in that same commit captures it and returns there.
+    it('returns to the section heading after the regenerate is confirmed', async () => {
       vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
       vi.mocked(api.adminGenerateDeliveryReplyKey).mockResolvedValue({ key: 'new-key' })
       mount()
@@ -147,7 +188,7 @@ describe('DeliveryRepliesSection', () => {
       await userEvent.keyboard('{Escape}')
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-      expect(screen.getByRole('button', { name: 'Regenerate' })).toHaveFocus()
+      expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
     })
   })
 
