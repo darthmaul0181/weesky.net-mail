@@ -163,6 +163,16 @@ describe('RuleEditorModal folder picker', () => {
   })
 })
 
+describe('RuleEditorModal help button', () => {
+  // A tab stop called "?" is read as "question mark, button": it carries the same name the shared
+  // HelpTooltip's own trigger was given.
+  it('names itself Help rather than ?', () => {
+    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
+
+    expect(screen.getByRole('button', { name: 'Help' })).toHaveTextContent('?')
+  })
+})
+
 describe('RuleEditorModal validation error', () => {
   // The submit button gates on the same three checks, so it is disabled rather than clickable
   // with an empty name; the form is submitted directly to reach handleSubmit's own guard.
@@ -875,6 +885,13 @@ describe('RuleCard', () => {
     render(<RuleCard {...makeCardProps({ onDelete })} />)
     fireEvent.click(screen.getByTitle('Delete'))
     expect(onDelete).toHaveBeenCalled()
+  })
+
+  // "Disable, checkbox, checked" is the state read twice and the rule never named: the switch is
+  // named by what it toggles, and `checked` is what says which way it stands.
+  it('names the enable switch by its rule, not by the action', () => {
+    render(<RuleCard {...makeCardProps()} />)
+    expect(screen.getByRole('checkbox', { name: 'My Rule' })).toBeChecked()
   })
 
   it('calls onToggleEnabled with false when enabled rule checkbox is clicked', () => {

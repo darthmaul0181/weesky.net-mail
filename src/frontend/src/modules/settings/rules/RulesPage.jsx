@@ -245,8 +245,10 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
       <div className="rule-card-header">
         <span className="rule-card-drag" title={t('rules.dragToReorder')}><GripIcon /></span>
         <label className="toggle-switch" title={t(rule.enabled ? 'rules.disable' : 'rules.enable')}>
+          {/* Named by the rule it switches, never by the action: `checked` already says which way
+              it stands, and "Disable, checkbox, checked" says that twice and the rule never. */}
           <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)}
-            aria-label={t(rule.enabled ? 'rules.disable' : 'rules.enable')} />
+            aria-label={rule.name} />
           <span className="toggle-track" />
         </label>
         <span className="rule-card-name">{rule.name}</span>
@@ -638,7 +640,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
       onSubmit={handleSubmit} initialFocusRef={nameRef}
       headerExtra={
         <button type="button" className="rule-help-btn" onClick={() => setHelpOpen(true)}
-          title={t('rules.helpTitle')}>?</button>
+          aria-label={t('rules.helpTitle')} title={t('rules.helpTitle')}>?</button>
       }>
       {helpOpen && <RuleHelpModal onClose={() => setHelpOpen(false)} />}
       {error && <div className="alert alert-error" role="alert" style={{ marginBottom: '16px' }}>{error}</div>}
