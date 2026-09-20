@@ -894,6 +894,13 @@ describe('RuleCard', () => {
     expect(screen.getByRole('checkbox', { name: 'My Rule' })).toBeChecked()
   })
 
+  // The editor asks for a name, but the list is parsed from a Sieve script another client wrote:
+  // the same fallback the convert dialog already spells out keeps the control named.
+  it('names the switch of a rule the script left unnamed', () => {
+    render(<RuleCard {...makeCardProps({ rule: fileIntoRule('r1', '') })} />)
+    expect(screen.getByRole('checkbox', { name: '(unnamed rule)' })).toBeInTheDocument()
+  })
+
   it('calls onToggleEnabled with false when enabled rule checkbox is clicked', () => {
     const onToggleEnabled = vi.fn()
     render(<RuleCard {...makeCardProps({ onToggleEnabled })} />)

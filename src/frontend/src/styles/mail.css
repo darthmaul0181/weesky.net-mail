@@ -97,9 +97,9 @@
 
 .is-none .mail-list { flex: 1; min-width: 0; }
 
-/* `tabIndex={-1}`, so it is never tabbed to: it takes focus only when a confirmed delete hands it
-   back, and a ring around the whole column would read as a rendering fault. */
-.mail-list:focus { outline: none; }
+/* `tabIndex={-1}`, so neither is ever tabbed to: they take focus only when a confirmed delete hands
+   it back, and a ring around a whole column would read as a rendering fault. */
+.mail-list:focus, .mail-reader:focus { outline: none; }
 
 /* display:none would lose to .mail-list's own flex display without the class on the same
    element; !important is not needed once it is. */

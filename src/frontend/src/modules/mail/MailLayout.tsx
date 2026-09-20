@@ -1,4 +1,5 @@
-﻿import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+﻿import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
@@ -251,30 +252,40 @@ export default function MailLayout() {
   // 360px screen for the sender alone. A phone always takes the stacked one.
   const wideRows = viewport !== 'phone' && pane !== 'right'
 
-  // The column a confirmed delete hands focus back to when it takes its own button with it — the
-  // way `CalendarLayout` holds one for `.calendar-main`. Only one branch below ever mounts.
+  // The columns a confirmed delete hands focus back to when it takes its own button with it — the
+  // way `CalendarLayout` holds one for `.calendar-main`. Only one arrangement below ever mounts.
   const listRegion = useRef<HTMLDivElement>(null)
+  const readerRegion = useRef<HTMLDivElement>(null)
+  // In `none` neither column is always there: the list is `display: none` while a message is open,
+  // and the reader leaves with the last one. Resolved when focus is handed back, not at render.
+  const noSplitRegion = useMemo(
+    () => ({ get current() { return readerRegion.current ?? listRegion.current } }), [])
 
-  const list = (selected: number | null) => (
-    <MessageList
-      folderPath={folder}
-      folderName={folderName}
-      folderRole={folderNode?.specialUse ?? null}
-      selectedUid={selected}
-      onSelect={selectMessage}
-      wide={wideRows}
-      leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
-      onRefresh={refresh}
-      inDrawer={drawer.inDrawer}
-      onNotify={addToast}
-      onRows={keepRows}
-      onDeparted={departed}
-      rowExit={rowExit}
-      search={search}
-      onSearchChange={changeSearch}
-      onOpenResult={openResult}
-      regionRef={listRegion}
-    />
+  // One place for the column: its region ref and `tabIndex` would otherwise be written in three
+  // branches and forgotten in one.
+  const listColumn = (selected: number | null, style?: CSSProperties, hidden = false) => (
+    <div className={`mail-list${hidden ? ' is-hidden' : ''}`} ref={listRegion} tabIndex={-1}
+      style={style}>
+      <MessageList
+        folderPath={folder}
+        folderName={folderName}
+        folderRole={folderNode?.specialUse ?? null}
+        selectedUid={selected}
+        onSelect={selectMessage}
+        wide={wideRows}
+        leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
+        onRefresh={refresh}
+        inDrawer={drawer.inDrawer}
+        onNotify={addToast}
+        onRows={keepRows}
+        onDeparted={departed}
+        rowExit={rowExit}
+        search={search}
+        onSearchChange={changeSearch}
+        onOpenResult={openResult}
+        regionRef={listRegion}
+      />
+    </div>
   )
 
   // The reader follows the open cross-folder result, if any, back to the URL folder otherwise.
@@ -350,9 +361,7 @@ export default function MailLayout() {
         <>
           {pane === 'right' && (
             <div className="mail-row">
-              <div className="mail-list" ref={listRegion} tabIndex={-1} style={{ width: listWidth }}>
-                {list(uid)}
-              </div>
+              {listColumn(uid, { width: listWidth })}
               {preferences && (
                 <PaneSplitter
                   orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
@@ -369,9 +378,7 @@ export default function MailLayout() {
 
           {pane === 'bottom' && (
             <div className="mail-stack">
-              <div className="mail-list" ref={listRegion} tabIndex={-1} style={{ height: listHeight }}>
-                {list(uid)}
-              </div>
+              {listColumn(uid, { height: listHeight })}
               <PaneSplitter
                 orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
                 onResize={setListHeight}
@@ -388,13 +395,11 @@ export default function MailLayout() {
             <>
               {/* Hidden, never unmounted: the scroll position and the streamed blocks live in this
                   subtree. No selected row either — there is no message "open beside". */}
-              <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`} ref={listRegion} tabIndex={-1}>
-                {list(null)}
-              </div>
+              {listColumn(null, undefined, uid !== null)}
               {uid !== null && (
-                <div className="mail-reader">
+                <div className="mail-reader" ref={readerRegion} tabIndex={-1}>
                   <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                    bottomActions={viewport === 'phone'} regionRef={listRegion}
+                    bottomActions={viewport === 'phone'} regionRef={noSplitRegion}
                     onBack={closeMessage} onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
                 </div>
               )}

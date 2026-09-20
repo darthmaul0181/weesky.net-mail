@@ -22,6 +22,7 @@ import { useEvent } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
 import { returnFocus, useDismiss } from '../../hooks/useDismiss'
+import { reachable } from '../../hooks/useLayer'
 import { focusablesIn } from '../../lib/layerStack'
 
 export interface EventPreviewProps {
@@ -99,7 +100,7 @@ export default function EventPreview({
   // tell whether it was holding the focus at all.
   useLayoutEffect(() => () => {
     const chip = anchorRef.current
-    returnFocus(bubble.current, chip?.isConnected ? chip : returnFocusRef?.current)
+    returnFocus(bubble.current, reachable(chip) ? chip : returnFocusRef?.current)
   }, [returnFocusRef])
 
   // Always fetched, one request per opening (`ContactCard`'s `useContact` pattern): the bubble

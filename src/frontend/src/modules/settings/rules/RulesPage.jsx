@@ -248,7 +248,7 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
           {/* Named by the rule it switches, never by the action: `checked` already says which way
               it stands, and "Disable, checkbox, checked" says that twice and the rule never. */}
           <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)}
-            aria-label={rule.name} />
+            aria-label={rule.name || t('rules.unnamed')} />
           <span className="toggle-track" />
         </label>
         <span className="rule-card-name">{rule.name}</span>

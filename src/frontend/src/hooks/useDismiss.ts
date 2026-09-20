@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
-import { useLayer } from './useLayer'
+import { reachable, useLayer } from './useLayer'
 
 interface Options {
   open: boolean
@@ -16,11 +16,11 @@ interface Options {
 }
 
 /** Closing unmounts the surface, so focus held inside it would fall to <body>: it goes back. A
-    target that has left the document is no target — `focus()` on it is a silent no-op — so focus
-    stays put and whatever fallback the caller has runs instead. */
+    target nothing can focus is no target, so focus stays put and whatever fallback the caller has
+    runs instead. */
 export function returnFocus(
   root: HTMLElement | null, to: HTMLElement | null | undefined, options?: FocusOptions) {
-  if (to?.isConnected && root?.contains(document.activeElement)) to.focus(options)
+  if (reachable(to) && root?.contains(document.activeElement)) to.focus(options)
 }
 
 /**

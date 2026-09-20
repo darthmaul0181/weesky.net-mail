@@ -6,8 +6,9 @@ import {
 } from '../lib/layerStack'
 
 /** Somewhere a keyboard can work from: still in the document, not <body> — whose `focus()` is a
-    silent no-op — and not a control disabled since it was focused. */
-function reachable(node: Element | null): node is HTMLElement {
+    silent no-op — and not a control disabled since it was focused. The one question every focus
+    hand-back asks, `returnFocus` included, so the answer cannot drift into two. */
+export function reachable(node: Element | null | undefined): node is HTMLElement {
   const element = node as (HTMLElement & { disabled?: boolean }) | null
   return !!element && element !== document.body && element.isConnected && !element.disabled
 }
