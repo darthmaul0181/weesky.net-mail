@@ -12,7 +12,7 @@ interface Options {
  * multi-line one, where they move between its own lines. A single-line `<input>` keeps ↓/↑, which
  * is how a combobox's field reaches its list.
  */
-function textBox(target: EventTarget | null): 'single' | 'multiline' | null {
+export function textBox(target: EventTarget | null): 'single' | 'multiline' | null {
   const node = target as HTMLElement | null
   if (node?.tagName === 'INPUT') return 'single'
   if (node?.tagName === 'TEXTAREA') return 'multiline'
