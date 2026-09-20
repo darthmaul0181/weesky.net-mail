@@ -39,4 +39,10 @@ describe('SearchBar', () => {
     const { input } = setup()
     expect(input).toHaveFocus()
   })
+
+  // The placeholder alone is not a reliable accessible name — gone once typed, unreliable in AT.
+  it('names the field for assistive tech', () => {
+    setup()
+    expect(screen.getByRole('searchbox', { name: 'Search in Inbox' })).toBeInTheDocument()
+  })
 })

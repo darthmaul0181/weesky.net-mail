@@ -640,7 +640,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
           title={t('rules.helpTitle')}>?</button>
       }>
       {helpOpen && <RuleHelpModal onClose={() => setHelpOpen(false)} />}
-      {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
+      {error && <div className="alert alert-error" role="alert" style={{ marginBottom: '16px' }}>{error}</div>}
 
       {folders.length > 0 && (
         <datalist id="rule-editor-folders">
@@ -813,7 +813,7 @@ export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading 
 
 export default function RulesPage() {
   const { t } = useTranslation('settings')
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   // The script belongs to the active mailbox: the backend swaps the ManageSieve target on it.
   const accountId = useAccountId()
 
@@ -1122,7 +1122,7 @@ export default function RulesPage() {
         />
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </>
   )
 }

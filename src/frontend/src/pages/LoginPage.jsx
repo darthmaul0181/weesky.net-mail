@@ -37,6 +37,7 @@ export default function LoginPage({ onLogin }) {
 
         <form onSubmit={handleSubmit}>
           <div className="field">
+            <label className="visually-hidden" htmlFor="email">{t('login.email')}</label>
             <input
               id="email"
               type="email"
@@ -49,6 +50,7 @@ export default function LoginPage({ onLogin }) {
           </div>
 
           <div className="field">
+            <label className="visually-hidden" htmlFor="password">{t('login.password')}</label>
             <input
               id="password"
               type="password"

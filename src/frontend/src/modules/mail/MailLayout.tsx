@@ -64,7 +64,7 @@ export default function MailLayout() {
   const settling = accountsLoading && accountId !== PRIMARY_ACCOUNT_ID
   const { data: folders, isLoading, isError, error } = useFolders(!settling)
   const { refresh, fetching: refreshFetching } = useMailRefresh()
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const moveMessages = useMoveMessages(addToast)
   // Owned here rather than in the list: the drop on a folder and the reader's own actions remove
   // rows too, and three sets would let one surface animate a row another has already dropped.
@@ -400,7 +400,7 @@ export default function MailLayout() {
         </FloatingAction>
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

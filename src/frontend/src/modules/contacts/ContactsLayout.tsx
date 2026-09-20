@@ -75,7 +75,7 @@ export default function ContactsLayout() {
       paramsForScope(scope, selectedId ? { id: selectedId } : {})).toString()
     return query ? `/contacts?${query}` : '/contacts'
   }
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
   const {
     data: detail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail,
@@ -487,7 +487,7 @@ export default function ContactsLayout() {
         </FloatingAction>
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

@@ -4,7 +4,7 @@ import PaneSplitter from './PaneSplitter'
 
 function renderSplitter(overrides: Partial<Parameters<typeof PaneSplitter>[0]> = {}) {
   const onResize = vi.fn()
-  render(
+  const { rerender } = render(
     <div>
       <PaneSplitter
         orientation="vertical" size={380} defaultSize={380} min={240} reserve={320}
@@ -12,7 +12,15 @@ function renderSplitter(overrides: Partial<Parameters<typeof PaneSplitter>[0]> =
       />
     </div>,
   )
-  return { onResize, separator: screen.getByRole('separator') }
+  const rerenderWith = (next: Partial<Parameters<typeof PaneSplitter>[0]>) => rerender(
+    <div>
+      <PaneSplitter
+        orientation="vertical" size={380} defaultSize={380} min={240} reserve={320}
+        onResize={onResize} {...overrides} {...next}
+      />
+    </div>,
+  )
+  return { onResize, separator: screen.getByRole('separator'), rerenderWith }
 }
 
 describe('PaneSplitter', () => {
@@ -121,5 +129,30 @@ describe('PaneSplitter', () => {
     fireEvent.doubleClick(separator)
 
     expect(onResize).toHaveBeenCalledWith(380)
+  })
+
+  it('reports its current position and minimum to assistive tech', () => {
+    const { separator } = renderSplitter({ size: 420, min: 240 })
+
+    expect(separator).toHaveAttribute('aria-valuenow', '420')
+    expect(separator).toHaveAttribute('aria-valuemin', '240')
+  })
+
+  it('omits aria-valuemax when the ceiling is unknown — no layout yet', () => {
+    const { separator } = renderSplitter()
+
+    expect(separator).not.toHaveAttribute('aria-valuemax')
+  })
+
+  // ceilingOf is recomputed on every render, so a resize the parent hands back down (a new
+  // `size`) picks up whatever the parent's own span is by then — no separate effect to go stale.
+  it('reports the ceiling once the parent has a real span, and keeps it current as size changes', () => {
+    const { separator, rerenderWith } = renderSplitter({ size: 380 })
+    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 800 })
+
+    rerenderWith({ size: 400 })
+
+    expect(separator).toHaveAttribute('aria-valuemax', '480') // 800 − reserve(320)
+    expect(separator).toHaveAttribute('aria-valuenow', '400')
   })
 })

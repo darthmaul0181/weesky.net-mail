@@ -30,6 +30,14 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
+  // The visible design carries no <label> — the placeholder is what sights it — but an
+  // accessible name cannot rely on the placeholder alone (gone once typed, unreliable in AT).
+  it('names the fields for assistive tech, visually hidden', () => {
+    render(<LoginPage onLogin={vi.fn()} />)
+    expect(screen.getByLabelText('Email address')).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+  })
+
   it('calls onLogin after successful login', async () => {
     api.login.mockResolvedValue({})
     const onLogin = vi.fn()

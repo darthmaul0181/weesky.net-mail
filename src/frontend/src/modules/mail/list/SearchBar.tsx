@@ -27,6 +27,7 @@ export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClo
         type="search"
         className="search-input"
         placeholder={t('search.placeholder', { folder: folderTitle })}
+        aria-label={t('search.placeholder', { folder: folderTitle })}
         value={text}
         autoFocus
         onChange={event => setText(event.target.value)}

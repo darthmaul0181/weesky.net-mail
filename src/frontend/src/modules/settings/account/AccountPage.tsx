@@ -38,7 +38,7 @@ export default function AccountPage() {
   const { t } = useTranslation('settings')
   const canEditProfile = capabilities?.profileEditing !== false
   const canChangePassword = capabilities?.passwordChange !== false
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [quota, setQuota] = useState<Quota | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
@@ -154,7 +154,7 @@ export default function AccountPage() {
         </section>
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

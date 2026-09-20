@@ -92,7 +92,7 @@ export default function GeneralPage() {
   const { t } = useTranslation('settings')
   const { data: preferences, isLoading, isError } = usePreferences()
   const setPreference = useSetPreference()
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
 
   const chosenActions = preferences ? rowActionsOf(preferences) : []
 
@@ -378,7 +378,7 @@ export default function GeneralPage() {
         </>
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

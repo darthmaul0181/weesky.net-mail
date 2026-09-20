@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useToasts } from './useToasts'
 
@@ -66,5 +66,41 @@ describe('useToasts', () => {
     act(() => screen.getByRole('button').click())
 
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('pauses the dismiss timer and resumes it with the remaining time (WCAG 2.2.1)', () => {
+    const { result } = renderHook(() => useToasts())
+
+    act(() => result.current.addToast('saved'))
+    act(() => vi.advanceTimersByTime(2000))
+    act(() => result.current.pauseToast(result.current.toasts[0].id))
+    act(() => vi.advanceTimersByTime(5000)) // well past the original 3s budget
+    expect(result.current.toasts).toHaveLength(1) // still here — paused
+
+    act(() => result.current.resumeToast(result.current.toasts[0].id))
+    act(() => vi.advanceTimersByTime(999))
+    expect(result.current.toasts).toHaveLength(1) // 1s of the original 3s left, not yet
+    act(() => vi.advanceTimersByTime(1))
+    expect(result.current.toasts).toHaveLength(0)
+  })
+
+  it('pausing an id with no timer (an error toast, or an unknown id) is a no-op', () => {
+    const { result } = renderHook(() => useToasts())
+
+    act(() => result.current.addToast('failed', 'error'))
+    const id = result.current.toasts[0].id
+
+    expect(() => act(() => result.current.pauseToast(id))).not.toThrow()
+    expect(() => act(() => result.current.resumeToast(id))).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('resuming a toast that was never paused is a no-op, not a second timer', () => {
+    const { result } = renderHook(() => useToasts())
+
+    act(() => result.current.addToast('saved'))
+    act(() => result.current.resumeToast(result.current.toasts[0].id))
+
+    expect(vi.getTimerCount()).toBe(1)
   })
 })

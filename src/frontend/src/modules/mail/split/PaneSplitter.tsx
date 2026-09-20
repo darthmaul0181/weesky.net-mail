@@ -1,4 +1,4 @@
-import type { KeyboardEvent, PointerEvent } from 'react'
+import { useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface PaneSplitterProps {
@@ -22,6 +22,9 @@ export default function PaneSplitter(
 ) {
   const { t } = useTranslation('mail')
   const vertical = orientation === 'vertical'
+  // A callback ref rather than a plain one: mount sets state, which re-renders with the node in
+  // hand — the only way to read the parent's real span, which does not exist before that commit.
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
 
   // Shared by the drag and the arrow keys, so neither can crush the other pane past what the
   // parent actually has to give.
@@ -64,11 +67,20 @@ export default function PaneSplitter(
     onResize(Math.min(ceilingOf(event.currentTarget), Math.max(min, grown)))
   }
 
+  // Recomputed on every render, so a size the parent hands back down keeps it current with no
+  // separate effect to go stale; jsdom's and an unmounted parent's 0 span both mean no ceiling.
+  const ceiling = node ? ceilingOf(node) : undefined
+  const max = ceiling !== undefined && Number.isFinite(ceiling) ? ceiling : undefined
+
   return (
     <div
+      ref={setNode}
       role="separator"
       aria-orientation={orientation}
       aria-label={t('splitter.label')}
+      aria-valuenow={size}
+      aria-valuemin={min}
+      aria-valuemax={max}
       tabIndex={0}
       className={`pane-splitter is-${orientation}`}
       onPointerDown={startDrag}

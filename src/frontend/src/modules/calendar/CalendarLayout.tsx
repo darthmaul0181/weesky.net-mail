@@ -194,7 +194,7 @@ export default function CalendarLayout() {
   const { t, i18n } = useTranslation('calendar')
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const drawer = useContextDrawer()
   const phone = useViewport() === 'phone'
 
@@ -953,7 +953,7 @@ export default function CalendarLayout() {
           </FloatingAction>
         )}
 
-        <Toasts toasts={toasts} onRemove={removeToast} />
+        <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
       </div>
     </CalendarContext.Provider>
   )

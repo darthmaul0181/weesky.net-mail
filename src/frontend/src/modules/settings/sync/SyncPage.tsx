@@ -57,7 +57,7 @@ export default function SyncPage() {
   // Held here and nowhere else, so it dies with the page: it exists in clear in exactly one
   // response, and there is no second way to obtain it.
   const [secret, setSecret] = useState<string | null>(null)
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
 
   useEffect(() => {
     // 404 is the deployment saying it publishes no address at all — a permanent condition, which
@@ -167,7 +167,7 @@ export default function SyncPage() {
         </Modal>
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

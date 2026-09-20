@@ -44,7 +44,7 @@ function IdentitiesPanel() {
   const { data: identities, isLoading, isError } = useIdentities()
   const { data: aliases, isLoading: aliasesLoading, isError: aliasesError } = useAliases(ownMailbox)
   const replace = useReplaceIdentities()
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<SendingIdentity | null>(null)
   const [edited, setEdited] = useState<SendingIdentity[] | null>(null)
@@ -206,7 +206,7 @@ function IdentitiesPanel() {
         />
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

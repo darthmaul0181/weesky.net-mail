@@ -1,19 +1,24 @@
-export function Toasts({ toasts, onRemove }) {
+import { useTranslation } from 'react-i18next'
+
+export function Toasts({ toasts, onRemove, onPause, onResume }) {
+  const { t } = useTranslation('common')
   if (!toasts.length) return null
   return (
-    <div className="toast-container">
-      {toasts.map(t => (
-        <div key={t.id} className={`toast toast-${t.type}`}>
-          <span>{t.message}</span>
-          {t.action && (
+    <div className="toast-container" role="status" aria-live="polite" aria-atomic="false">
+      {toasts.map(toast => (
+        <div key={toast.id} className={`toast toast-${toast.type}`} role={toast.type === 'error' ? 'alert' : undefined}
+          onMouseEnter={() => onPause?.(toast.id)} onMouseLeave={() => onResume?.(toast.id)}
+          onFocus={() => onPause?.(toast.id)} onBlur={() => onResume?.(toast.id)}>
+          <span>{toast.message}</span>
+          {toast.action && (
             <button
               type="button"
               className="toast-action"
-              onClick={() => { t.action.onClick(); onRemove(t.id) }}
-            >{t.action.label}</button>
+              onClick={() => { toast.action.onClick(); onRemove(toast.id) }}
+            >{toast.action.label}</button>
           )}
-          {t.type === 'error' && (
-            <button className="toast-close" onClick={() => onRemove(t.id)}>✕</button>
+          {toast.type === 'error' && (
+            <button className="toast-close" aria-label={t('actions.close')} onClick={() => onRemove(toast.id)}>✕</button>
           )}
         </div>
       ))}

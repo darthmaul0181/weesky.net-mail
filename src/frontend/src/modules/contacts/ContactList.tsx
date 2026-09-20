@@ -176,6 +176,9 @@ export default function ContactList({
                 onDragStart={event => onTileDragStart(event, contact.id)}
                 onDragEnd={() => setDraggingIds(null)}
                 onKeyDown={event => {
+                  // Same guard as MessageList's onRowKey: an inner button/checkbox fires
+                  // Enter/Space itself, and without this the tile behind it would also open.
+                  if (event.target !== event.currentTarget) return
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
                     onSelect(contact.id)

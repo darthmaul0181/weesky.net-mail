@@ -163,6 +163,19 @@ describe('RuleEditorModal folder picker', () => {
   })
 })
 
+describe('RuleEditorModal validation error', () => {
+  // The submit button gates on the same three checks, so it is disabled rather than clickable
+  // with an empty name; the form is submitted directly to reach handleSubmit's own guard.
+  it('announces the validation error assertively', () => {
+    const { container } = render(
+      <RuleEditorModal rule={fileIntoRule('a', '')} onSave={() => {}} onClose={() => {}} />)
+
+    fireEvent.submit(container.querySelector('form'))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Name is required')
+  })
+})
+
 describe('RuleEditorModal close buttons', () => {
   it('names the editor ✕ and the help ✕, each closing its own dialog', async () => {
     const onClose = vi.fn()

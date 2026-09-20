@@ -86,7 +86,7 @@ export default function ConnectedAccountsPage() {
   const disconnect = useDeleteConnectedAccount()
   const startConnect = useStartOAuthConnect()
   const complete = useCompleteOAuthConnect()
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [params, setParams] = useSearchParams()
   const [connecting, setConnecting] = useState(false)
   const [reentering, setReentering] = useState<ConnectedAccount | null>(null)
@@ -259,7 +259,7 @@ export default function ConnectedAccountsPage() {
         />
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }

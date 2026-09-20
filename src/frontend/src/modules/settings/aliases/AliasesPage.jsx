@@ -13,7 +13,7 @@ import AtSignIcon from '../../../icons/AtSignIcon'
 
 export default function AliasesPage() {
   const { t } = useTranslation('settings')
-  const { toasts, addToast, removeToast } = useToasts()
+  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const queryClient = useQueryClient()
   const accountId = useAccountId()
 
@@ -208,7 +208,7 @@ export default function AliasesPage() {
         </label>
       </div>
 
-      {listError && <div className="alert alert-error">{listError}</div>}
+      {listError && <div className="alert alert-error" role="alert">{listError}</div>}
 
       {loadingList ? (
         <div className="loading-center">
@@ -304,7 +304,7 @@ export default function AliasesPage() {
         />
       )}
 
-      <Toasts toasts={toasts} onRemove={removeToast} />
+      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
     </div>
   )
 }
