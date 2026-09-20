@@ -363,6 +363,20 @@ describe('AccountsTab', () => {
     expect(screen.getByText('bob@weesky.be')).toBeInTheDocument()
   })
 
+  // Reloading the list puts the whole tab behind a spinner in the very commit the confirm closes
+  // in, so nothing inside it survives: the page's own region is what takes the focus back.
+  it('hands focus to the tab content when the deleted row goes with the reload', async () => {
+    api.adminDeleteUser.mockResolvedValue(null)
+    const { container } = renderAdminPage()
+    await screen.findByText('alice@weesky.be')
+    await userEvent.click(screen.getByTitle('Delete'))
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' }).at(-1))
+
+    await waitFor(() => expect(api.adminDeleteUser).toHaveBeenCalledWith(1))
+    expect(container.querySelector('.admin-tab-content')).toHaveFocus()
+  })
+
   it('calls adminDeleteUser when delete is confirmed', async () => {
     api.adminDeleteUser.mockResolvedValue(null)
     render(<AccountsTab addToast={vi.fn()} />)

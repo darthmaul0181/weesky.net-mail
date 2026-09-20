@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useToasts } from '../../../hooks/useToasts.js'
 import Toasts from '../../../components/Toasts.jsx'
@@ -28,6 +28,9 @@ export default function AdminPage() {
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const [activeTab, setActiveTab] = useState('accounts')
   const helpText = helpTextOf(activeTab, t)
+  // Where a confirmed delete hands focus when it takes its own row with it. The page's own region
+  // and not each tab's: a tab reloads its list behind a spinner, so nothing inside one survives.
+  const tabRegion = useRef(null)
 
   return (
     <>
@@ -48,11 +51,13 @@ export default function AdminPage() {
             <button className={`admin-tab${activeTab === 'application' ? ' is-active' : ''}`}
               onClick={() => setActiveTab('application')}>{t('tabs.application')}</button>
           </nav>
-          <div className="admin-tab-content">
-            {activeTab === 'accounts' && <AccountsTab addToast={addToast} />}
-            {activeTab === 'domains' && <DomainsTab addToast={addToast} />}
+          <div className="admin-tab-content" ref={tabRegion} tabIndex={-1}>
+            {activeTab === 'accounts' && <AccountsTab addToast={addToast} returnFocusRef={tabRegion} />}
+            {activeTab === 'domains' && <DomainsTab addToast={addToast} returnFocusRef={tabRegion} />}
             {activeTab === 'virtualdomains' && <VirtualDomainsTab addToast={addToast} />}
-            {activeTab === 'externaldomains' && <ExternalDomainsTab addToast={addToast} />}
+            {activeTab === 'externaldomains' && (
+              <ExternalDomainsTab addToast={addToast} returnFocusRef={tabRegion} />
+            )}
             {activeTab === 'application' && <ApplicationTab addToast={addToast} />}
           </div>
         </div>

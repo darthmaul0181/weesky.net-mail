@@ -94,6 +94,8 @@ export default function ConnectedAccountsPage() {
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [reconnecting, setReconnecting] = useState<string | null>(null)
   const resumed = useRef(false)
+  // A disconnect takes the row's own button with it, so focus goes back to what the page is called.
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   // The provider's redirect lands here with the handshake handle. Strip it before completing:
   // a refresh must not replay a consumed state, nor a shared URL re-raise a stale error.
@@ -155,7 +157,9 @@ export default function ConnectedAccountsPage() {
   return (
     <div className="settings-page">
       <div className="settings-page-header">
-        <h1 className="settings-page-title"><PersonPlusIcon size={17} />{t('nav.accounts')}</h1>
+        <h1 className="settings-page-title" ref={headingRef} tabIndex={-1}>
+          <PersonPlusIcon size={17} />{t('nav.accounts')}
+        </h1>
       </div>
       <p className="settings-note">{t('accounts.intro')}</p>
       {/* The return from the provider is a plain page load: without this the list simply sits
@@ -256,6 +260,7 @@ export default function ConnectedAccountsPage() {
           </>}
           onConfirm={confirmDisconnect}
           onClose={() => setDeleting(null)}
+          returnFocusRef={headingRef}
         />
       )}
 

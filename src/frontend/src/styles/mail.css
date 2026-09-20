@@ -311,6 +311,8 @@
 
 /* margin-left:auto holds the actions right, now that the name no longer fills the tile. */
 .folder-list .admin-list-item-actions { margin-left: auto; }
+/* `tabIndex={-1}`: the list takes focus only when a confirmed delete hands it back. */
+.folder-list:focus { outline: none; }
 
 .folders-page-hint {
   color: var(--text-muted);
@@ -1435,6 +1437,14 @@
 
 .empty-folder-banner-link:hover {
   color: var(--danger);
+}
+
+/* The purge is on the wire and the banner leaves with the folder's last message: an underlined
+   link that still answers the pointer would be offering an action that is already running. */
+.empty-folder-banner-link:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  text-decoration: none;
 }
 
 /* ── Search results banner ───────────────────────────────── */

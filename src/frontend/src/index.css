@@ -1102,6 +1102,9 @@ body {
   overflow-y: auto;
   padding: 20px 24px;
 }
+/* `tabIndex={-1}`: focus reaches it only when a confirmed delete hands it back, and a ring around
+   the whole tab would read as a rendering fault — .mail-list's rule, for the same reason. */
+.admin-tab-content:focus { outline: none; }
 
 /* ── Admin lists ─────────────────────────────────────────── */
 
@@ -2358,6 +2361,8 @@ body {
 /* Hidden rather than unmounted where the card takes the screen — see ContactsLayout, and
    .mail-list.is-hidden, which exists for the identical reason. */
 .contacts-list.is-hidden { display: none; }
+/* Both are `tabIndex={-1}` region targets, never tab stops — .mail-list's rule. */
+.contacts-list:focus, .contacts-scopes-column:focus { outline: none; }
 .contacts-card { flex: 1; min-width: 0; }
 .contacts-editor { flex: 1; min-width: 0; }
 .contacts-empty { margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }

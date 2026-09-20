@@ -446,6 +446,12 @@ export default function MessageList(
       when,
     })
 
+    // On its way out: the row is drawn for the length of its exit while the caches have already
+    // dropped it, so its controls are dead. Disabled rather than merely inert, because that is what
+    // `reachable()` asks — the confirm that opened on this very button hands focus to the region
+    // instead of to a control the animation is about to take away.
+    const leaving = rowUids.some(uid => departing.has(uid))
+
     // Cross-folder results neutralize row selection and actions: the row lives in another
     // folder, so a checkbox, star or cluster acting on this one would act on the wrong mailbox.
     const allChecked = rowUids.every(uid => selection.has(uid))
@@ -470,6 +476,7 @@ export default function MessageList(
         type="button"
         className={`row-btn row-star${flagged ? ' is-on' : ''}`}
         aria-label={t(flagged ? 'list.unstar' : 'list.star')}
+        disabled={leaving}
         onClick={event => { event.stopPropagation(); toggle(rowUids, 'flagged', !flagged) }}
       >
         <StarIcon filled={flagged} size={18} />
@@ -487,6 +494,7 @@ export default function MessageList(
           className="row-btn"
           aria-label={seenLabel}
           title={seenLabel}
+          disabled={leaving}
           onClick={event => { event.stopPropagation(); toggle(rowUids, 'seen', unread) }}
         >
           {unread ? <MailOpenIcon size={18} /> : <MailIcon size={18} />}
@@ -498,7 +506,7 @@ export default function MessageList(
           type="button"
           className="row-btn"
           aria-label={t('toolbar.archive')}
-          disabled={archiveOff}
+          disabled={leaving || archiveOff}
           title={archiveOff ? archiveReason : t('toolbar.archive')}
           onClick={event => { event.stopPropagation(); moveTo(roles.archive, rowUids) }}
         >
@@ -511,7 +519,7 @@ export default function MessageList(
           type="button"
           className="row-btn"
           aria-label={t('toolbar.junk')}
-          disabled={junkOff}
+          disabled={leaving || junkOff}
           title={junkOff ? junkReason : t('toolbar.junk')}
           onClick={event => { event.stopPropagation(); moveTo(roles.junk, rowUids) }}
         >
@@ -524,7 +532,7 @@ export default function MessageList(
           type="button"
           className="row-btn is-danger"
           aria-label={deleteLabel}
-          disabled={trashOff}
+          disabled={leaving || trashOff}
           title={trashOff ? t('actions.noTrashFolder') : deleteLabel}
           onClick={event => {
             event.stopPropagation()
@@ -571,7 +579,7 @@ export default function MessageList(
     return (
       <div
         key={message.uid}
-        className={`message-row-slot${rowUids.some(uid => departing.has(uid)) ? ' is-leaving' : ''}`}
+        className={`message-row-slot${leaving ? ' is-leaving' : ''}`}
       >
       <Row
         role="button"
@@ -749,7 +757,10 @@ export default function MessageList(
       )}
 
       {/* The empty-folder offer belongs to the folder itself, not to a search laid over it. */}
-      {!searching && <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty} />}
+      {!searching && (
+        <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty}
+          busy={emptyFolder.isPending} />
+      )}
 
       <div className="mail-list-scroll" ref={scrollRef}>
         {/* Not aria-live: the region would carry its text before it ever changes, so most stacks
@@ -778,6 +789,7 @@ export default function MessageList(
           onConfirm={expunge}
           onClose={() => setExpunging(null)}
           loading={deleteMessages.isPending}
+          returnFocusRef={regionRef}
         />
       )}
 
@@ -817,6 +829,7 @@ export default function MessageList(
           onConfirm={confirmEmpty}
           onClose={() => setConfirmingEmpty(false)}
           loading={emptyFolder.isPending}
+          returnFocusRef={regionRef}
         />
       )}
 

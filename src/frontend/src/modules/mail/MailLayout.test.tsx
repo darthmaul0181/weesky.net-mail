@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   useListRefresh: vi.fn(),
   openDraft: vi.fn(),
   getIdentities: vi.fn(),
+  emptyFolder: vi.fn(),
 }))
 
 // Actual first: ApiError is a real class the layout tests with `instanceof`, so a stub of it
@@ -705,6 +706,22 @@ describe('focus after the reader expunges a message', () => {
     expect(container.querySelector('.mail-list')).toHaveFocus()
   })
 
+  // The phone tier draws the reader's actions as `.actionbar` across the foot of the screen, so the
+  // opener is a different element on a branch where the list column is `display: none`: the reader
+  // column standing across the expunge is what the hand-back has to find. Its being hidden is CSS,
+  // which jsdom does not compute — that half is the manual recette's.
+  it('hands it to the reader column from the phone action bar', async () => {
+    mockViewport('phone')
+    const { container } = openTrash(trash, 'none')
+    await screen.findByText('open')
+    expect(container.querySelector('.actionbar')).not.toBeNull()
+
+    await expunge(container)
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=8'))
+    expect(container.querySelector('.mail-reader')).toHaveFocus()
+  })
+
   // The split arrangements keep the list on screen throughout, and it is the real column that has
   // to carry the ref — the component tests hand their own region in.
   it('hands it to the list column beside the reader in the split arrangement', async () => {
@@ -714,6 +731,71 @@ describe('focus after the reader expunges a message', () => {
     await expunge(container)
 
     await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+    expect(container.querySelector('.mail-list')).toHaveFocus()
+  })
+})
+
+// The list's own two confirms take their opener with them as well: the row's cluster leaves with
+// the row, and the banner leaves with the last message in the folder.
+describe('focus after the list expunges', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const row = (uid: number, subject: string) => ({
+    uid, subject, fromName: 'A', fromAddress: 'a@b.c', date: '2026-07-18T09:00:00Z',
+    seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
+  })
+
+  /** One folder behind the listing and the writes, so a row really leaves and stays gone — a
+      fixed mock would hand it back on the invalidation's refetch. */
+  function serveTrash(rows: ReturnType<typeof row>[]) {
+    let live = rows
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': 'right' })
+    mocks.getIdentities.mockResolvedValue({ identities: [] })
+    mocks.getMailMessages.mockImplementation(async () => ({
+      folderPath: 'Corbeille', uidValidity: 1, total: live.length, page: 0, pageSize: 30,
+      messages: live,
+    }))
+    mocks.deleteMessages.mockImplementation(async (_folder: string, uids: number[]) => {
+      live = live.filter(one => !uids.includes(one.uid))
+      return {}
+    })
+    mocks.emptyFolder.mockImplementation(async () => { live = []; return {} })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(<MailLayout />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={['/mail?folder=Corbeille']}>{children}</MemoryRouter>
+        </QueryClientProvider>
+      ),
+    })
+  }
+
+  it('hands focus to the list column when the row leaves with its own delete', async () => {
+    const { container } = serveTrash([row(7, 'first'), row(8, 'second')])
+    const first = await screen.findByText('first')
+    const cluster = within(first.closest('.message-row') as HTMLElement)
+
+    await userEvent.click(cluster.getByRole('button', { name: 'Delete permanently' }))
+    const confirm = within(document.querySelector('.modal') as HTMLElement)
+    await userEvent.click(confirm.getByRole('button', { name: 'Delete' }))
+
+    // The row is drawn for the length of its exit, so the button the confirm was opened from is
+    // still on screen — disabled, which is what sends the hand-back to the column instead.
+    expect(container.querySelector('.message-row-slot.is-leaving')).not.toBeNull()
+    expect(container.querySelector('.mail-list')).toHaveFocus()
+  })
+
+  it('hands focus to the list column when emptying the folder takes the banner', async () => {
+    const { container } = serveTrash([row(7, 'first')])
+    await screen.findByText('first')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Empty trash now' }))
+    const confirm = within(document.querySelector('.modal') as HTMLElement)
+    await userEvent.click(confirm.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Empty trash now' })).toBeNull())
     expect(container.querySelector('.mail-list')).toHaveFocus()
   })
 })

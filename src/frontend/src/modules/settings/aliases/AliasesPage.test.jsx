@@ -117,6 +117,20 @@ describe('AliasesPage', () => {
     await waitFor(() => expect(screen.queryByText('alias1')).not.toBeInTheDocument())
   })
 
+  // The tile's own delete goes with the tile in the very commit the confirm closes in, so focus
+  // falls back to what the page is called rather than to <body>.
+  it('hands focus to the page heading when the deleted tile takes its button', async () => {
+    api.deleteAlias.mockResolvedValue(null)
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getAllByTitle('Delete')[0])
+
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+
+    await waitFor(() => expect(screen.queryByText('alias1')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Aliases' })).toHaveFocus()
+  })
+
   it('shows a success toast when an alias is created', async () => {
     api.createAlias.mockResolvedValue(null)
     api.getAliases

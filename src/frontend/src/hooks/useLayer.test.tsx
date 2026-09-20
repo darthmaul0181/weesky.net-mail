@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { StrictMode, useRef, type ReactNode, type RefObject } from 'react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { StrictMode, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useLayer } from './useLayer'
 import { hasOpenLayer } from '../lib/layerStack'
 import { fireEscape } from '../test-utils'
@@ -201,6 +201,38 @@ describe('useLayer', () => {
     expect(screen.getByRole('button', { name: 'upper one' })).toHaveFocus()
     stolen.mockRestore()
     unmount()
+  })
+
+  // The inner dialog restores to an opener inside the subtree being deleted, so the focus it hands
+  // back dies with it. The outer layer records where it would have gone and the passive re-check
+  // spends it — nothing else on screen can.
+  it('hands focus back when a dialog closes with a child dialog of its own standing', () => {
+    function Stack({ open }: { open: boolean }) {
+      return <div><button type="button">page trigger</button>{open && <Outer />}</div>
+    }
+    function Outer() {
+      const box = useRef<HTMLDivElement>(null)
+      const [inner, setInner] = useState(false)
+      useLayer({ active: true, ref: box })
+      return (
+        <div ref={box}>
+          <button type="button" onClick={() => setInner(true)}>open inner</button>
+          {inner && <Dialog name="inner" />}
+        </div>
+      )
+    }
+    const { rerender } = render(<Stack open={false} />)
+    const trigger = screen.getByRole('button', { name: 'page trigger' })
+    trigger.focus()
+    rerender(<Stack open />)
+    const openInner = screen.getByRole('button', { name: 'open inner' })
+    openInner.focus()
+    fireEvent.click(openInner)
+    expect(screen.getByRole('button', { name: 'inner one' })).toHaveFocus()
+
+    rerender(<Stack open={false} />)
+
+    expect(trigger).toHaveFocus()
   })
 
   it('pushes no layer at all while the container ref holds nothing', () => {

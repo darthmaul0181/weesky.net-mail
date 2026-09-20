@@ -78,6 +78,25 @@ describe('DeliveryRepliesSection', () => {
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The key was deleted.'))
   })
 
+  // The confirm's own opener is the card's trash button, and the card becomes the empty branch
+  // with the key: the section heading is what focus falls back to.
+  it('hands focus to the section heading once the deleted key takes the trash button', async () => {
+    let configured = true
+    vi.mocked(api.adminGetDeliveryReplyKey).mockImplementation(async () =>
+      (configured
+        ? { configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' }
+        : { configured: false, enabled: false }))
+    vi.mocked(api.adminDeleteDeliveryReplyKey).mockImplementation(async () => { configured = false })
+    mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
+    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
+  })
+
   describe('the switch look', () => {
     it('carries is-locked without a key', async () => {
       vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: false, enabled: false })

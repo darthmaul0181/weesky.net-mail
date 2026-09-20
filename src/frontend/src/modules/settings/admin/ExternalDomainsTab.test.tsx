@@ -430,6 +430,32 @@ describe('ExternalDomainsTab — delete', () => {
     await waitFor(() => expect(mocks.adminDeleteExternalDomain).toHaveBeenCalledWith(GMAIL.id))
   })
 
+  // The row's own trash button is what opened the confirm and it goes with the row, so the region
+  // AdminPage hands down is where focus lands. Named here rather than in AdminPage's file because
+  // this tab is mounted on its own — the region is the prop, exactly as the page passes it.
+  it('hands focus to the region when the deleted row takes its own button', async () => {
+    const region = document.createElement('div')
+    region.tabIndex = -1
+    document.body.append(region)
+    try {
+      let live = [GMAIL, OUTLOOK]
+      mocks.adminGetExternalDomains.mockImplementation(async () => live)
+      mocks.adminDeleteExternalDomain.mockImplementation(async () => {
+        live = live.filter(one => one.id !== GMAIL.id)
+      })
+      render(<ExternalDomainsTab addToast={addToast} returnFocusRef={{ current: region }} />,
+        { wrapper })
+      await screen.findByText('Gmail')
+      await userEvent.click(screen.getAllByTitle('Delete')[0])
+
+      const buttons = screen.getAllByRole('button', { name: 'Delete' })
+      await userEvent.click(buttons[buttons.length - 1])
+
+      await waitFor(() => expect(screen.queryByText('Gmail')).toBeNull())
+      expect(region).toHaveFocus()
+    } finally { region.remove() }
+  })
+
   it('closing the confirm modal does not delete', async () => {
     renderTab()
     await screen.findByText('Gmail')

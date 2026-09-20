@@ -1284,6 +1284,20 @@ describe('RulesPage — delete all script', () => {
     expect(document.querySelector('.rules-toolbar')).toBeInTheDocument()
   })
 
+  // Confirming replaces the whole Advanced notice — the Delete script button included — with the
+  // ordinary rules toolbar, so the opener is gone and the page's name takes the focus.
+  it('hands focus to the page heading when the notice goes with the script', async () => {
+    api.getRules.mockResolvedValue(advancedRuleSet())
+    render(<RulesPage onClose={() => {}} />)
+    await screen.findByText(/cannot be parsed/)
+    await userEvent.click(screen.getByText('Delete script'))
+
+    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+
+    await waitFor(() => expect(screen.queryByText('Delete script')).toBeNull())
+    expect(screen.getByRole('heading', { name: /Rules/ })).toHaveFocus()
+  })
+
   it('delete error shows error toast', async () => {
     api.getRules.mockResolvedValue(advancedRuleSet())
     api.deleteRules.mockRejectedValue(new Error('IMAP connection lost'))

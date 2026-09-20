@@ -21,8 +21,6 @@ interface Options {
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Where focus goes on close when the element that opened the layer is gone. */
   returnFocusRef?: RefObject<HTMLElement | null>
-  autoFocus?: boolean
-  restoreFocus?: boolean
 }
 
 /**
@@ -31,12 +29,10 @@ interface Options {
  * questions a surface acting on a pointer of its own asks: whether it is that topmost layer, and
  * whether anything trapped stands over it.
  */
-export function useLayer({
-  active, ref, onEscape, initialFocusRef, returnFocusRef, autoFocus = true, restoreFocus = true,
-}: Options) {
+export function useLayer({ active, ref, onEscape, initialFocusRef, returnFocusRef }: Options) {
   const handle = useRef<LayerHandle | null>(null)
   const opener = useRef<HTMLElement | null>(null)
-  // Where the cleanup below handed focus, for the passive cleanup that checks it landed.
+  // Where the cleanup below meant focus to go, for the passive cleanup that checks it landed.
   const handedTo = useRef<HTMLElement | null>(null)
   const latest = useRef({ onEscape, initialFocusRef, returnFocusRef })
 
@@ -66,7 +62,7 @@ export function useLayer({
     // swallow Escape and mask the trap under it. The old focus-trap hook no-opped the same way.
     if (ref && !container) return undefined
     handle.current = pushLayer({ onEscape: latest.current.onEscape, trap: container })
-    if (container && autoFocus) {
+    if (container) {
       (latest.current.initialFocusRef?.current ?? focusablesIn(container)[0] ?? container).focus()
     }
     return () => {
@@ -75,24 +71,27 @@ export function useLayer({
       const wasTop = !!handle.current && isTopLayer(handle.current)
       handle.current?.remove()
       handle.current = null
-      if (!container || !restoreFocus || !wasTop) return
+      if (!container) return
       // Judged at close, not at open: an opener that was plainly there may have gone since, or
       // have been disabled by the very write this layer asked about.
       const previous = opener.current
       const back = latest.current.returnFocusRef?.current ?? null
-      ;(reachable(previous) ? previous : back)?.focus()
-      handedTo.current = back
+      if (wasTop) (reachable(previous) ? previous : back)?.focus()
+      // The return ref first: it is the target that survives an opener removed later in the same
+      // commit. Recorded even under a layer above, which may be closing in this very commit —
+      // having restored to an opener of its own inside the subtree now going.
+      handedTo.current = back ?? previous
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
 
-  // The one case the cleanup above cannot see: an opener removed or disabled *later in the same
-  // commit* — the subtree holding it is mutated after this layer's layout cleanup — strands the
-  // focus it was just given. A passive cleanup runs once the DOM has settled, which shows it.
+  // What the cleanup above cannot see: focus stranded *later in the same commit* — an opener
+  // removed or disabled after this layer's layout cleanup, or a layer above handing focus to one
+  // inside the subtree going with it. A passive cleanup runs once the DOM has settled.
   useEffect(() => () => {
     const back = handedTo.current
     handedTo.current = null
-    if (back?.isConnected && !reachable(document.activeElement)) back.focus()
+    if (reachable(back) && !reachable(document.activeElement)) back.focus()
   }, [active])
 
   // One stable object: its readers ask from inside effects that must not be re-installed on a

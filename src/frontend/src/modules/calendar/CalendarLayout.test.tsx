@@ -951,6 +951,25 @@ describe('CalendarLayout', () => {
     await waitFor(() => expect(api.deleteCalendar).toHaveBeenCalledWith('b'))
   })
 
+  // The row's own menu is what opened the confirm, and the row leaves with the calendar: the
+  // module's one region takes the focus, as it does for the bubble's delete and for the editor.
+  it('hands focus to the grid column when the calendar row goes with its delete', async () => {
+    let rows = CALENDARS
+    api.getCalendars.mockImplementation(async () => ({ calendars: rows }))
+    api.deleteCalendar.mockImplementation(async () => {
+      rows = rows.filter(one => one.id !== 'b')
+      return null
+    })
+    renderAt()
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Work' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Actions for Work' })).toBeNull())
+    expect(document.querySelector('.calendar-main')).toHaveFocus()
+  })
+
   // The chevrons, Today and the mini-month all move the anchor; a list reading the clock
   // instead left all three dead on one of the four views.
   it('moves the upcoming list with its anchor', async () => {
