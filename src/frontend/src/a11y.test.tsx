@@ -73,9 +73,9 @@ vi.mock('./modules/mail/notify/channels', () => ({
 }))
 
 afterEach(resetViewport)
-// clearAllMocks only clears call history, not implementations. resetAllMocks would be the real
-// guarantee, but it also wipes test-setup.js's window.matchMedia vi.fn() (built once per file,
-// never re-armed per test), which breaks every surface calling useViewport — see task-1-report.md.
+// What keeps the surfaces independent is that every `it` sets each mock value it reads before
+// rendering; clearAllMocks only drops call history. resetAllMocks would also wipe test-setup.js's
+// window.matchMedia stub, armed once per file, breaking every surface that reads the viewport.
 beforeEach(() => vi.clearAllMocks())
 
 function queryClient() {
@@ -126,10 +126,9 @@ describe('accessibility sweep', () => {
     const reader = container.querySelector('.mail-reader') as HTMLElement
     await within(reader).findByText('Hello')
     expect(container.querySelector('.mail-list')).not.toBeNull()
-    // nested-interactive: .message-row is a role="button" wrapping its own checkbox, star and
-    // action buttons — Task 3's mail-list ARIA-grid rewrite removes this waiver.
-    // iframes:false: the reader's real <iframe> defeats axe's cross-frame scan in jsdom — this
-    // surface only, since it is the only one of the eight with a real iframe.
+    // Two waivers: .message-row is a role="button" wrapping its own checkbox, star and action
+    // buttons, which Task 3's grid rewrite removes; and the reader's real <iframe> defeats axe's
+    // cross-frame scan in jsdom, which is true of no other surface here.
     await expectNoAxeViolations(container, {
       extraRules: { 'nested-interactive': { enabled: false } },
       iframes: false,
