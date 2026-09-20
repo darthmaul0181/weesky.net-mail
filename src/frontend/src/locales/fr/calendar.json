@@ -206,7 +206,21 @@
     "name": "Nom",
     "colour": "Couleur",
     "hex": "Code hexadécimal",
-    "colourOption": "Couleur {{hex}}",
+    "colourGrid": "Couleur du calendrier",
+    "colourName": {
+      "blue": "Bleu",
+      "lavender": "Lavande",
+      "emerald": "Émeraude",
+      "coral": "Corail",
+      "gold": "Or",
+      "orange": "Orange",
+      "teal": "Turquoise",
+      "raspberry": "Framboise",
+      "slate": "Ardoise",
+      "violet": "Violet",
+      "forest": "Sapin",
+      "bronze": "Bronze"
+    },
     "save": "Enregistrer",
     "deleteCalendarMessage": "Supprimer « {{name}} » et tous les événements qu’il contient ? Cette action est irréversible.",
     "deleteEventMessage": "Supprimer « {{name}} » ?"

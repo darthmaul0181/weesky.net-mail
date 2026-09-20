@@ -29,7 +29,7 @@ describe('CalendarDialog', () => {
 
   it('takes the colour from a clicked swatch', async () => {
     const { onSubmit } = open({ initialName: 'Work' })
-    await userEvent.click(screen.getByRole('button', { name: `Colour ${CALENDAR_COLORS[3]}` }))
+    await userEvent.click(screen.getByRole('button', { name: 'Coral' }))
     await userEvent.click(save())
     expect(onSubmit).toHaveBeenCalledWith({ displayName: 'Work', color: CALENDAR_COLORS[3] })
   })

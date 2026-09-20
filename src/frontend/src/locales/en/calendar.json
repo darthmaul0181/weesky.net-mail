@@ -206,7 +206,21 @@
     "name": "Name",
     "colour": "Colour",
     "hex": "Hex code",
-    "colourOption": "Colour {{hex}}",
+    "colourGrid": "Calendar colour",
+    "colourName": {
+      "blue": "Blue",
+      "lavender": "Lavender",
+      "emerald": "Emerald",
+      "coral": "Coral",
+      "gold": "Gold",
+      "orange": "Orange",
+      "teal": "Teal",
+      "raspberry": "Raspberry",
+      "slate": "Slate",
+      "violet": "Violet",
+      "forest": "Forest",
+      "bronze": "Bronze"
+    },
     "save": "Save",
     "deleteCalendarMessage": "Delete “{{name}}” and every event it holds? This cannot be undone.",
     "deleteEventMessage": "Delete “{{name}}”?"
