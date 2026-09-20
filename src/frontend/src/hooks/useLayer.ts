@@ -2,7 +2,7 @@ import {
   useEffect, useInsertionEffect, useLayoutEffect, useMemo, useRef, type RefObject,
 } from 'react'
 import {
-  coveredByTrap, focusablesIn, isTopLayer, pushLayer, type LayerHandle,
+  coveredByTrap, focusablesIn, hasOpenLayer, isTopLayer, pushLayer, type LayerHandle,
 } from '../lib/layerStack'
 
 /** Somewhere a keyboard can work from: still in the document, not <body> — whose `focus()` is a
@@ -32,8 +32,10 @@ interface Options {
 export function useLayer({ active, ref, onEscape, initialFocusRef, returnFocusRef }: Options) {
   const handle = useRef<LayerHandle | null>(null)
   const opener = useRef<HTMLElement | null>(null)
-  // Where the cleanup below meant focus to go, for the passive cleanup that checks it landed.
+  // Where the cleanup below meant focus to go, for the passive cleanup that checks it landed, and
+  // whether a layer stood over this one when it closed.
   const handedTo = useRef<HTMLElement | null>(null)
+  const coveredAtClose = useRef(false)
   const latest = useRef({ onEscape, initialFocusRef, returnFocusRef })
 
   // React commits a child's `autoFocus` in the layout phase, before any layout effect, so no
@@ -81,6 +83,7 @@ export function useLayer({ active, ref, onEscape, initialFocusRef, returnFocusRe
       // commit. Recorded even under a layer above, which may be closing in this very commit —
       // having restored to an opener of its own inside the subtree now going.
       handedTo.current = back ?? previous
+      coveredAtClose.current = !wasTop
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
@@ -90,7 +93,14 @@ export function useLayer({ active, ref, onEscape, initialFocusRef, returnFocusRe
   // inside the subtree going with it. A passive cleanup runs once the DOM has settled.
   useEffect(() => () => {
     const back = handedTo.current
+    const covered = coveredAtClose.current
     handedTo.current = null
+    coveredAtClose.current = false
+    // A layer that stood over this one and is still standing owns the focus, whatever state the
+    // element holding it is in — a confirm's own button goes disabled for the width of its write,
+    // which `reachable()` refuses. Recorded at close rather than re-derived: a confirm opened from
+    // inside a dialog must still re-check with that dialog on the stack.
+    if (covered && hasOpenLayer()) return
     if (reachable(back) && !reachable(document.activeElement)) back.focus()
   }, [active])
 

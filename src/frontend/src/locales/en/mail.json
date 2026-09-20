@@ -132,6 +132,7 @@
     "expandThread": "Expand conversation",
     "collapseThread": "Collapse conversation",
     "alreadyEmpty": "This folder is already empty",
+    "emptying": "Emptying the folder…",
     "clearSearchFirst": "Clear the search first",
     "bulkLabel_one": "{{count}} message",
     "bulkLabel_many": "{{count}} messages",

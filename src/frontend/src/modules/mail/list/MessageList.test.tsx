@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   onError: undefined as ((message: string) => void) | undefined,
   moveError: undefined as ((message: string) => void) | undefined,
   deleteError: undefined as ((message: string) => void) | undefined,
+  emptying: false,
 }))
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
@@ -42,7 +43,7 @@ vi.mock('../queries', () => ({
     mocks.deleteError = onError
     return { mutate: mocks.remove, isPending: false }
   },
-  useEmptyFolder: () => ({ mutate: mocks.empty, isPending: false }),
+  useEmptyFolder: () => ({ mutate: mocks.empty, isPending: mocks.emptying }),
   useFolders: () => ({ data: mocks.folders }),
   useSearchMessages: mocks.useSearchMessages,
 }))
@@ -1396,6 +1397,20 @@ describe('multi-select', () => {
       expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
       expect(mocks.empty).toHaveBeenCalledWith({ folderPath: 'Trash' })
+    })
+
+    // One action, two doors: greying the banner while the kebab's own entry stayed live offered the
+    // purge in two states at once.
+    it('closes both doors while the purge is on the wire', async () => {
+      mocks.emptying = true
+      try {
+        renderWithRoles('trash')
+        expect(screen.getByRole('button', { name: 'Empty trash now' })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+        const entry = screen.getByRole('menuitem', { name: 'Empty folder' })
+        expect(entry).toBeDisabled()
+        expect(entry).toHaveAttribute('title', 'Emptying the folder…')
+      } finally { mocks.emptying = false }
     })
 
     it('no banner outside trash/junk', async () => {

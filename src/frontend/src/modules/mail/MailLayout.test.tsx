@@ -780,8 +780,8 @@ describe('focus after the list expunges', () => {
     const confirm = within(document.querySelector('.modal') as HTMLElement)
     await userEvent.click(confirm.getByRole('button', { name: 'Delete' }))
 
-    // The row is drawn for the length of its exit, so the button the confirm was opened from is
-    // still on screen — disabled, which is what sends the hand-back to the column instead.
+    // The row is drawn for the length of its exit, so the opener is still on screen — disabled,
+    // which is what sends the hand-back to the column instead.
     expect(container.querySelector('.message-row-slot.is-leaving')).not.toBeNull()
     expect(container.querySelector('.mail-list')).toHaveFocus()
   })

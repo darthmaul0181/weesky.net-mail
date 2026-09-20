@@ -446,10 +446,9 @@ export default function MessageList(
       when,
     })
 
-    // On its way out: the row is drawn for the length of its exit while the caches have already
-    // dropped it, so its controls are dead. Disabled rather than merely inert, because that is what
-    // `reachable()` asks — the confirm that opened on this very button hands focus to the region
-    // instead of to a control the animation is about to take away.
+    // Fading out. The three cluster actions are already inert — `useRowExit` arms nothing for a uid
+    // already leaving — but the star and read/unread write flags straight away and would race the
+    // move this row is playing out. Disabled, which is also what `reachable()` reads.
     const leaving = rowUids.some(uid => departing.has(uid))
 
     // Cross-folder results neutralize row selection and actions: the row lives in another
@@ -728,7 +727,10 @@ export default function MessageList(
         emptyFolder={{ onRun: requestEmpty,
           // Emptying acts on the whole real folder, so it is off under a search: its reason would
           // otherwise read off the search total, and the non-purge branch fires with no confirm.
-          disabledReason: searching ? t('list.clearSearchFirst') : emptyReason }}
+          // A purge already on the wire closes this door too, or the banner beside it is greyed
+          // while the same action stays live one menu away.
+          disabledReason: emptyFolder.isPending ? t('list.emptying')
+            : searching ? t('list.clearSearchFirst') : emptyReason }}
         searchOpen={searchOpen}
         onToggleSearch={toggleSearch}
         starred={starred}

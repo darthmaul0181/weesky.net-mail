@@ -97,6 +97,29 @@ describe('DeliveryRepliesSection', () => {
     expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
   })
 
+  // The one case the card's own `cardRef` guard cannot reach, and therefore the one that reads the
+  // confirm's `returnFocusRef`: the key goes while the confirm is open — focus is inside the
+  // dialog, not inside the card, so the guard does nothing — and the ✕ then closes over an opener
+  // that is no longer there. Nothing is replaced by the close itself.
+  it('hands focus to the section heading when the ✕ closes over a vanished trash button', async () => {
+    let resolveRefetch: (value: { configured: boolean, enabled: boolean }) => void = () => {}
+    vi.mocked(api.adminGetDeliveryReplyKey)
+      .mockResolvedValueOnce({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
+      .mockReturnValue(new Promise(resolve => { resolveRefetch = resolve }))
+    const { client } = mountExposingClient()
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    // Another admin deleted it: the refetch lands while the confirm stands.
+    void client.invalidateQueries()
+    await act(async () => resolveRefetch({ configured: false, enabled: false }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
+  })
+
   describe('the switch look', () => {
     it('carries is-locked without a key', async () => {
       vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: false, enabled: false })

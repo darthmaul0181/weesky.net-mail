@@ -235,6 +235,39 @@ describe('useLayer', () => {
     expect(trigger).toHaveFocus()
   })
 
+  // The record a layer makes while another stands over it is only ever spent once that other has
+  // gone. Here it has not: the dialog above is still up, and its own confirm button is disabled by
+  // the write on the wire — which `reachable()` calls unreachable, the very door this closes.
+  it('leaves focus in a standing dialog when the layer under it closes', () => {
+    function Confirm({ busy }: { busy: boolean }) {
+      const box = useRef<HTMLDivElement>(null)
+      useLayer({ active: true, ref: box })
+      return <div ref={box}><button type="button" disabled={busy}>confirm delete</button></div>
+    }
+    function Stack({ drawer, confirm, busy }:
+      { drawer: boolean; confirm: boolean; busy: boolean }) {
+      return (
+        <div>
+          <button type="button">hamburger</button>
+          {drawer && <Dialog name="drawer" />}
+          {confirm && <Confirm busy={busy} />}
+        </div>
+      )
+    }
+    const { rerender } = render(<Stack drawer={false} confirm={false} busy={false} />)
+    const hamburger = screen.getByRole('button', { name: 'hamburger' })
+    hamburger.focus()
+    rerender(<Stack drawer confirm={false} busy={false} />)
+    rerender(<Stack drawer confirm busy={false} />)
+    expect(screen.getByRole('button', { name: 'confirm delete' })).toHaveFocus()
+
+    // The deletion's own search-param change closes the drawer while the confirm is still up.
+    rerender(<Stack drawer={false} confirm busy />)
+
+    expect(screen.getByRole('button', { name: 'confirm delete' })).toHaveFocus()
+    expect(hamburger).not.toHaveFocus()
+  })
+
   it('pushes no layer at all while the container ref holds nothing', () => {
     const lower = vi.fn()
     function Detached() {
