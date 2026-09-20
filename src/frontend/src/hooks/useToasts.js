@@ -50,8 +50,8 @@ export function useToasts() {
     arm(id, action ? DISMISS_WITH_ACTION_MS : DISMISS_MS)
   }, [arm])
 
-  // Pausing on hover or focus is WCAG 2.2.1's "no timing" escape hatch: a toast an error toast
-  // never arms, or an id already gone, is simply nothing to pause.
+  // WCAG 2.2.1's "no timing" escape hatch. An id with no entry here — an error toast, which
+  // never arms one, or one already removed — has nothing to pause; this is then a no-op.
   const pauseToast = useCallback((id) => {
     const entry = timers.current.get(id)
     if (entry === undefined || entry.timeoutId === null) return

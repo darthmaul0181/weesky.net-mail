@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useCallback, useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface PaneSplitterProps {
@@ -25,15 +25,31 @@ export default function PaneSplitter(
   // A callback ref rather than a plain one: mount sets state, which re-renders with the node in
   // hand — the only way to read the parent's real span, which does not exist before that commit.
   const [node, setNode] = useState<HTMLDivElement | null>(null)
+  const [max, setMax] = useState<number | undefined>(undefined)
 
-  // Shared by the drag and the arrow keys, so neither can crush the other pane past what the
-  // parent actually has to give.
-  function ceilingOf(element: HTMLElement): number {
+  // Shared by the drag, the arrow keys and the resize observer below, so none of the three can
+  // crush the other pane past what the parent actually has to give. Memoized on its true
+  // dependencies so the observer effect does not tear down and rebuild on every render.
+  const ceilingOf = useCallback((element: HTMLElement): number => {
     const parent = element.parentElement
     const span = vertical ? parent?.clientWidth : parent?.clientHeight
     // jsdom and a not-yet-laid-out parent both answer 0: no ceiling rather than a crushed pane.
     return span ? Math.max(min, span - reserve) : Number.POSITIVE_INFINITY
-  }
+  }, [vertical, min, reserve])
+
+  // aria-valuemax has to stay current on its own: a window resize or a sibling pane changing
+  // size re-renders neither this component nor its parent for any other reason, so nothing
+  // computed during render would ever learn about it. A ResizeObserver is the one thing that
+  // notices a size change with no cause of its own.
+  useEffect(() => {
+    if (!node?.parentElement || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      const ceiling = ceilingOf(node)
+      setMax(Number.isFinite(ceiling) ? ceiling : undefined)
+    })
+    observer.observe(node.parentElement)
+    return () => observer.disconnect()
+  }, [node, ceilingOf])
 
   function startDrag(event: PointerEvent<HTMLDivElement>) {
     event.preventDefault()
@@ -66,11 +82,6 @@ export default function PaneSplitter(
     const grown = size + (event.key === grow ? NUDGE : -NUDGE)
     onResize(Math.min(ceilingOf(event.currentTarget), Math.max(min, grown)))
   }
-
-  // Recomputed on every render, so a size the parent hands back down keeps it current with no
-  // separate effect to go stale; jsdom's and an unmounted parent's 0 span both mean no ceiling.
-  const ceiling = node ? ceilingOf(node) : undefined
-  const max = ceiling !== undefined && Number.isFinite(ceiling) ? ceiling : undefined
 
   return (
     <div

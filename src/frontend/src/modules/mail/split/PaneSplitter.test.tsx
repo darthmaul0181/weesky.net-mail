@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import PaneSplitter from './PaneSplitter'
 
 function renderSplitter(overrides: Partial<Parameters<typeof PaneSplitter>[0]> = {}) {
   const onResize = vi.fn()
-  const { rerender } = render(
+  render(
     <div>
       <PaneSplitter
         orientation="vertical" size={380} defaultSize={380} min={240} reserve={320}
@@ -12,15 +12,25 @@ function renderSplitter(overrides: Partial<Parameters<typeof PaneSplitter>[0]> =
       />
     </div>,
   )
-  const rerenderWith = (next: Partial<Parameters<typeof PaneSplitter>[0]>) => rerender(
-    <div>
-      <PaneSplitter
-        orientation="vertical" size={380} defaultSize={380} min={240} reserve={320}
-        onResize={onResize} {...overrides} {...next}
-      />
-    </div>,
-  )
-  return { onResize, separator: screen.getByRole('separator'), rerenderWith }
+  return { onResize, separator: screen.getByRole('separator') }
+}
+
+/**
+ * jsdom carries no ResizeObserver at all. This fake stands in for it exactly the way
+ * `installPointerEvents` stands in for a missing PointerEvent — it records the callback the
+ * component passed in, so a test can fire it by hand to simulate the browser noticing a resize.
+ */
+let observedCallback: (() => void) | undefined
+
+class FakeResizeObserver {
+  constructor(callback: () => void) { observedCallback = callback }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+function fireResize() {
+  act(() => observedCallback?.())
 }
 
 describe('PaneSplitter', () => {
@@ -144,15 +154,36 @@ describe('PaneSplitter', () => {
     expect(separator).not.toHaveAttribute('aria-valuemax')
   })
 
-  // ceilingOf is recomputed on every render, so a resize the parent hands back down (a new
-  // `size`) picks up whatever the parent's own span is by then — no separate effect to go stale.
-  it('reports the ceiling once the parent has a real span, and keeps it current as size changes', () => {
-    const { separator, rerenderWith } = renderSplitter({ size: 380 })
-    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 800 })
+  // A ResizeObserver on the parent, not a value read during render: a window resize or a
+  // sibling pane changing size does not re-render PaneSplitter for any other reason, so nothing
+  // else would ever notice the ceiling moved.
+  it('reports the ceiling once the parent has a real span, and picks up a later resize', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    const { separator } = renderSplitter({ size: 380 })
+    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 800, configurable: true })
 
-    rerenderWith({ size: 400 })
+    fireResize()
 
     expect(separator).toHaveAttribute('aria-valuemax', '480') // 800 − reserve(320)
-    expect(separator).toHaveAttribute('aria-valuenow', '400')
+
+    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 1000, configurable: true })
+    fireResize()
+
+    expect(separator).toHaveAttribute('aria-valuemax', '680') // 1000 − reserve(320)
+    vi.unstubAllGlobals()
+  })
+
+  it('omits aria-valuemax again if a later resize takes the parent back to no layout', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    const { separator } = renderSplitter({ size: 380 })
+    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 800, configurable: true })
+    fireResize()
+    expect(separator).toHaveAttribute('aria-valuemax', '480')
+
+    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 0, configurable: true })
+    fireResize()
+
+    expect(separator).not.toHaveAttribute('aria-valuemax')
+    vi.unstubAllGlobals()
   })
 })

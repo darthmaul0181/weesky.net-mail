@@ -20,10 +20,12 @@ describe('HelpTooltip', () => {
 
   // Tooltip reveals its bubble on :focus-within — a trigger that cannot take focus can never be
   // reached from the keyboard, so this was the one place the whole pattern was fully broken.
-  it('is a real button, describing itself with the bubble it opens', () => {
+  // Named "Help" (aria-label), not "?" — a screen reader spelling out "question mark, button"
+  // says nothing about what the control does.
+  it('is a real button, named Help and describing itself with the bubble it opens', () => {
     render(<HelpTooltip text="Only an admin can do this." />)
 
-    const trigger = screen.getByRole('button', { name: '?' })
+    const trigger = screen.getByRole('button', { name: 'Help' })
     const bubble = screen.getByRole('tooltip')
 
     expect(trigger).toHaveAttribute('type', 'button')

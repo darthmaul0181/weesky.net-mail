@@ -1567,7 +1567,6 @@ body {
   border-radius: 50%;
   border: 1.5px solid var(--text-muted);
   background: none;
-  padding: 0;
   font: inherit;
   color: var(--text-muted);
   font-size: 11px;
@@ -1580,7 +1579,8 @@ body {
   transition: border-color 0.15s, color 0.15s;
 }
 
-.tooltip-wrap:hover .help-tooltip-icon {
+.tooltip-wrap:hover .help-tooltip-icon,
+.tooltip-wrap:focus-within .help-tooltip-icon {
   border-color: var(--action-primary);
   color: var(--action-primary);
 }

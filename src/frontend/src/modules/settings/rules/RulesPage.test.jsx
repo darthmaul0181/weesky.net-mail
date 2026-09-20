@@ -174,6 +174,19 @@ describe('RuleEditorModal validation error', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Name is required')
   })
+
+  // PlusIcon is the same ad hoc-svg-in-this-file shape as RuleCard's icons.
+  it('hides its PlusIcon from assistive tech', () => {
+    const { container } = render(
+      <RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
+    const svgs = container.querySelectorAll('svg')
+
+    expect(svgs.length).toBeGreaterThan(0)
+    svgs.forEach(svg => {
+      expect(svg).toHaveAttribute('aria-hidden', 'true')
+      expect(svg).toHaveAttribute('focusable', 'false')
+    })
+  })
 })
 
 describe('RuleEditorModal close buttons', () => {
@@ -799,6 +812,19 @@ describe('RuleCard', () => {
   it('renders rule name', () => {
     render(<RuleCard {...makeCardProps()} />)
     expect(screen.getByText('My Rule')).toBeInTheDocument()
+  })
+
+  // The grip, the two reorder arrows and the collapse chevron are ad hoc inline svgs, local to
+  // this file — icons.test.tsx's glob over src/icons/ structurally cannot see them.
+  it('hides its ad hoc icons (grip, reorder arrows, chevron) from assistive tech', () => {
+    const { container } = render(<RuleCard {...makeCardProps()} />)
+    const svgs = container.querySelectorAll('svg')
+
+    expect(svgs.length).toBeGreaterThan(0)
+    svgs.forEach(svg => {
+      expect(svg).toHaveAttribute('aria-hidden', 'true')
+      expect(svg).toHaveAttribute('focusable', 'false')
+    })
   })
 
   it('starts collapsed with inline action pill and no body', () => {
