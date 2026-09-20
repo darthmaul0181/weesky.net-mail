@@ -92,6 +92,7 @@ export default function AccountPage() {
               onKeyDown={e => { if (e.key === 'Enter') saveName() }}
               maxLength={255}
               disabled={saving}
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- an inline rename field, not a dialog Modal: opening it autofocuses the box the way SearchBar's does
               autoFocus
             />
             <button

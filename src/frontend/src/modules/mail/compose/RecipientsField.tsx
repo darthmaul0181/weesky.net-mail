@@ -164,6 +164,8 @@ export default function RecipientsField({
             </span>
           )
         })}
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- documented exception: the composer's
+            To field autofocuses on a fresh open, not a dialog Modal's own focus management */}
         <input id={id} type="text" value={draft} autoFocus={autoFocus}
           role="combobox" aria-expanded={open} aria-autocomplete="list"
           aria-controls={open ? listId : undefined}

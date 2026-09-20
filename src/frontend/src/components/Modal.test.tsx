@@ -270,6 +270,7 @@ describe('Modal', () => {
             <button type="button">Move</button>
             {open && (
               <Modal title="Move messages" onClose={vi.fn()}>
+                {/* eslint-disable-next-line jsx-a11y/no-autofocus -- proves Modal's own focus management wins over a field's autoFocus, per the documented contract */}
                 <input autoFocus placeholder="filter" />
               </Modal>
             )}

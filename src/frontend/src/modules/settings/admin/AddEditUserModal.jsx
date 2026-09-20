@@ -117,14 +117,16 @@ export function AddEditUserModal({ user, domains, onSave, onClose }) {
       <div className="field-h">
         <label htmlFor={fieldId('active')}>{t('accounts.active')}</label>
         <label className="toggle-switch">
-          <input id={fieldId('active')} type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+          <input id={fieldId('active')} type="checkbox" checked={active} onChange={e => setActive(e.target.checked)}
+            aria-label={t('accounts.active')} />
           <span className="toggle-track" />
         </label>
       </div>
       <div className="field-h">
         <label htmlFor={fieldId('admin')}>{t('accounts.administrator')}</label>
         <label className="toggle-switch">
-          <input id={fieldId('admin')} type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)} />
+          <input id={fieldId('admin')} type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)}
+            aria-label={t('accounts.administrator')} />
           <span className="toggle-track" />
         </label>
       </div>

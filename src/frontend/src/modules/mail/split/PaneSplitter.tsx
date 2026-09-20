@@ -84,6 +84,7 @@ export default function PaneSplitter(
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the ARIA "window splitter" pattern: a role="separator" is spec-permitted to be interactive/focusable once it carries aria-valuenow/min/max, which it does below
     <div
       ref={setNode}
       role="separator"
@@ -92,6 +93,7 @@ export default function PaneSplitter(
       aria-valuenow={size}
       aria-valuemin={min}
       aria-valuemax={max}
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- same window-splitter pattern as above
       tabIndex={0}
       className={`pane-splitter is-${orientation}`}
       onPointerDown={startDrag}

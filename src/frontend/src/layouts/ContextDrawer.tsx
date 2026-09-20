@@ -43,7 +43,7 @@ export default function ContextDrawer({ open, onClose, children }: Props) {
 
   return (
     <div className={`context-drawer${open ? ' is-open' : ''}`}>
-      <div className="context-drawer-scrim" onClick={onClose} />
+      <div className="context-drawer-scrim" role="presentation" onClick={onClose} />
       <div className="context-drawer-panel" ref={panel} role="dialog" aria-modal="true"
         aria-label={t('drawer.label')} tabIndex={-1}>
         {children}

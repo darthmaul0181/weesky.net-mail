@@ -128,6 +128,7 @@ export function VirtualDomainsTab({ addToast }) {
                     placeholder={t('virtual.searchUser')}
                     value={searchQuery}
                     onChange={e => { setSearchQuery(e.target.value); setListDismissed(false) }}
+                    // eslint-disable-next-line jsx-a11y/no-autofocus -- an inline owner-search field, not a dialog Modal: opening it autofocuses like SearchBar's does
                     autoFocus
                     style={{ width: '100%', padding: '5px 8px', fontSize: '13px' }}
                     onKeyDown={e => {

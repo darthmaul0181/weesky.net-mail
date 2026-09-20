@@ -191,6 +191,8 @@ export default function EventEditor({
           {/* Both, and neither is redundant: the surface focuses `titleRef` when it opens with the
               form already in hand, and `autoFocus` is what moves the focus off the loading ✕ on
               the commit the form lands in — a later one, which no layer activation follows. */}
+          {/* eslint-disable-next-line jsx-a11y/no-autofocus -- documented exception (Task 4): the
+              Title field's second, later-commit focus path, alongside the ref above */}
           <input id="event-title" type="text" value={form.title} autoFocus ref={titleRef}
             placeholder={t('editor.titlePlaceholder')}
             onChange={event => set({ title: event.target.value })} />
@@ -227,7 +229,7 @@ export default function EventEditor({
                 only label semantics carry a click on the switch itself to the control. */}
             <label className="toggle-switch">
               <input id="event-allday" type="checkbox" checked={form.isAllDay}
-                onChange={event => toggleAllDay(event.target.checked)} />
+                onChange={event => toggleAllDay(event.target.checked)} aria-label={t('editor.allDay')} />
               <span className="toggle-track" />
             </label>
             <label htmlFor="event-allday" className="editor-allday-text">{t('editor.allDay')}</label>
@@ -264,7 +266,7 @@ export default function EventEditor({
           ) : (
             <label className="toggle-switch">
               <input id="event-repeat" type="checkbox" checked={repeating}
-                onChange={event => toggleRepeat(event.target.checked)} />
+                onChange={event => toggleRepeat(event.target.checked)} aria-label={t('editor.repeats')} />
               <span className="toggle-track" />
             </label>
           )}

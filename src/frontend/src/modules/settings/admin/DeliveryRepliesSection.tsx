@@ -90,7 +90,7 @@ export default function DeliveryRepliesSection({ addToast }: Props) {
             <label htmlFor="dlv-enabled">{t('deliveryReplies.toggle')}</label>
             <label className={configured ? 'toggle-switch' : 'toggle-switch is-locked'}>
               <input id="dlv-enabled" type="checkbox" checked={key.enabled} disabled={!configured || setEnabled.isPending}
-                onChange={e => void toggle(e.target.checked)} />
+                onChange={e => void toggle(e.target.checked)} aria-label={t('deliveryReplies.toggle')} />
               <span className="toggle-track" />
             </label>
           </div>

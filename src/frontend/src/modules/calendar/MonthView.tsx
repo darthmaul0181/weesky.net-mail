@@ -90,6 +90,7 @@ export default function MonthView({
             const timed = items.slice(0, MAX_PER_CELL)
               .filter(({ band }) => !band).map(({ occurrence }) => occurrence)
             return (
+              // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- click-to-create reads the pointer's Y position against the day's drawn chips; no keyboard equivalent exists yet, deferred to lot 2b
               <div key={day} className={`month-cell${day.slice(0, 7) === month ? '' : ' is-outside'}${day === today ? ' is-today' : ''}`}
                 onClick={event => onCellClick(day, timed, event)}>
                 <span className="month-day-number">{Number(day.slice(8))}</span>

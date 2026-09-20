@@ -115,7 +115,10 @@ describe('useLayer', () => {
     }
     function Field({ box }: { box: RefObject<HTMLDivElement> }) {
       useLayer({ active: true, ref: box })
-      return <div ref={box}><input autoFocus aria-label="subject" /></div>
+      return <div ref={box}>
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- proves the opener is captured before a field of the layer's own autoFocuses */}
+        <input autoFocus aria-label="subject" />
+      </div>
     }
     const { rerender } = render(<Wrapper open={false} />)
     const trigger = screen.getByRole('button', { name: 'trigger' })

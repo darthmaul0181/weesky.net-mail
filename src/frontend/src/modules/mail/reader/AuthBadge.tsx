@@ -18,6 +18,7 @@ export default function AuthBadge({ authentication }: { authentication: MailAuth
 
   return (
     <Tooltip content={detail} placement="bottom-left">
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the house way this span makes Tooltip's hover bubble keyboard-reachable; deferred to lot 2b to become a real button */}
       <span className={`auth-badge is-${verdict}`} tabIndex={0} role="img" aria-label={label}>
         {verdict === 'pass' ? <ShieldCheckIcon size={20} /> : <ShieldAlertIcon size={20} />}
       </span>

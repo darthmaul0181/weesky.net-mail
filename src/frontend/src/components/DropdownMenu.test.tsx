@@ -71,6 +71,7 @@ describe('DropdownMenu', () => {
     const windowKey = vi.fn((e: KeyboardEvent) => e.defaultPrevented)
     window.addEventListener('keydown', windowKey)
     render(
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- test harness div standing in for an ancestor's keydown listener, not real UI
       <div onKeyDown={() => { if (!hasOpenLayer()) cleared() }}>
         <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
       </div>)
@@ -128,6 +129,7 @@ describe('DropdownMenu', () => {
   it('lets any other key through while it is open', () => {
     const parentKey = vi.fn()
     render(
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- test harness div standing in for an ancestor's keydown listener, not real UI
       <div onKeyDown={parentKey}>
         <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
       </div>)
@@ -144,6 +146,7 @@ describe('DropdownMenu', () => {
   it('lets an Escape through once it is closed', () => {
     const parentKey = vi.fn()
     render(
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- test harness div standing in for an ancestor's keydown listener, not real UI
       <div onKeyDown={parentKey}>
         <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
       </div>)

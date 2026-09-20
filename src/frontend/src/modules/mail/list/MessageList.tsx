@@ -691,6 +691,7 @@ export default function MessageList(
     // hold the split as percentages, so the two can never drift.
     <div
       className="message-list-root"
+      role="presentation"
       style={{ '--row-exit': `${ROW_EXIT_MS}ms` } as CSSProperties}
       onKeyDown={onListKeyDown}
     >

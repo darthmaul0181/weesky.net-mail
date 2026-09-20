@@ -362,6 +362,7 @@ export default function ContactEditView({
             <div className="field-v">
               <label htmlFor="contact-first-name">{t('editor.firstName')}</label>
               <input id="contact-first-name" type="text" value={firstName} maxLength={NAME_MAX}
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- the editor is a full route, not a dialog Modal: its first field autofocuses on open the way SearchBar's does
                 onChange={event => setFirstName(event.target.value)} autoFocus />
             </div>
             <div className="field-v">

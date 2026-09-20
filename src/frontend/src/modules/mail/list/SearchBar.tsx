@@ -29,6 +29,7 @@ export default function SearchBar({ folderTitle, onSearch, onOpenAdvanced, onClo
         placeholder={t('search.placeholder', { folder: folderTitle })}
         aria-label={t('search.placeholder', { folder: folderTitle })}
         value={text}
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- documented exception: the quick search bar autofocuses when it opens, not a dialog Modal's own focus management
         autoFocus
         onChange={event => setText(event.target.value)}
         onKeyDown={onKeyDown}

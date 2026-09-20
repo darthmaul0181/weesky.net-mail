@@ -245,7 +245,8 @@ export function RuleCard({ rule, onEdit, onDelete, onToggleEnabled, isFirst, isL
       <div className="rule-card-header">
         <span className="rule-card-drag" title={t('rules.dragToReorder')}><GripIcon /></span>
         <label className="toggle-switch" title={t(rule.enabled ? 'rules.disable' : 'rules.enable')}>
-          <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)} />
+          <input type="checkbox" checked={rule.enabled} onChange={e => onToggleEnabled(e.target.checked)}
+            aria-label={t(rule.enabled ? 'rules.disable' : 'rules.enable')} />
           <span className="toggle-track" />
         </label>
         <span className="rule-card-name">{rule.name}</span>
@@ -741,7 +742,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
             <div className="rule-wizard-toggle-row">
               <label className="toggle-switch">
                 <input type="checkbox" checked={markAsRead}
-                  onChange={e => setMarkAsRead(e.target.checked)} />
+                  onChange={e => setMarkAsRead(e.target.checked)} aria-label={t('rules.markAsRead')} />
                 <span className="toggle-track" />
               </label>
               <span className="rule-wizard-toggle-label">{t('rules.markAsRead')}</span>
@@ -750,7 +751,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
               <div className="rule-wizard-toggle-row">
                 <label className="toggle-switch">
                   <input type="checkbox" checked={markAsFlagged}
-                    onChange={e => setMarkAsFlagged(e.target.checked)} />
+                    onChange={e => setMarkAsFlagged(e.target.checked)} aria-label={t('rules.markAsFlagged')} />
                   <span className="toggle-track" />
                 </label>
                 <span className="rule-wizard-toggle-label">{t('rules.markAsFlagged')}</span>
@@ -759,7 +760,7 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
             <div className="rule-wizard-toggle-row">
               <label className="toggle-switch">
                 <input type="checkbox" checked={rule.stopAfter}
-                  onChange={e => setField('stopAfter', e.target.checked)} />
+                  onChange={e => setField('stopAfter', e.target.checked)} aria-label={t('rules.stopAfter')} />
                 <span className="toggle-track" />
               </label>
               <span className="rule-wizard-toggle-label">
@@ -1039,6 +1040,7 @@ export default function RulesPage() {
                         checked={extended}
                         disabled={switching || saving}
                         onChange={e => handleToggleExtended(e.target.checked)}
+                        aria-label={t('rules.extended')}
                       />
                       <span className="toggle-track" />
                     </label>
