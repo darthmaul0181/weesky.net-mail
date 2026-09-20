@@ -47,7 +47,14 @@ function onKeyDown(event: KeyboardEvent) {
     // Prevented even with no handler: the point of a layer is that nothing underneath reacts.
     event.preventDefault()
     layer.onEscape?.()
-  } else if (event.key === 'Tab' && layer.trap) keepTab(event, layer.trap)
+  } else if (event.key === 'Tab') {
+    // Tab belongs to the innermost trap still standing, not to the top layer alone: a menu or a
+    // popover holds none of its own and does not suspend the modality of what it was opened from.
+    for (let at = stack.length - 1; at >= 0; at -= 1) {
+      const trap = stack[at].layer.trap
+      if (trap) { keepTab(event, trap); return }
+    }
+  }
 }
 
 // Registered once, at load, and never moved: re-adding it on each push would put it behind every

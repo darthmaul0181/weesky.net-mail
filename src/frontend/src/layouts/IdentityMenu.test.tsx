@@ -176,6 +176,19 @@ describe('IdentityMenu', () => {
     expect(onDrawerClose).not.toHaveBeenCalled()
   })
 
+  // The menu is a layer with no trap of its own, and the drawer under it is still the surface the
+  // user is inside: Tab off its last row comes back to the top of the panel, never to the page.
+  it('keeps Tab inside the drawer while the menu is open', async () => {
+    renderInDrawer(vi.fn())
+    await openMenu()
+    screen.getByText('Sign out').closest('button')!.focus()
+
+    fireEvent.keyDown(document, { key: 'Tab' })
+
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
+    expect(toggle()).toHaveFocus()
+  })
+
   it('marks the toggle expanded only while the menu is open', async () => {
     renderMenu()
     await screen.findByText('mick@weesky.be')

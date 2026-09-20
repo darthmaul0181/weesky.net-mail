@@ -131,11 +131,23 @@ describe('layerStack', () => {
     expect(press('Tab').defaultPrevented).toBe(true)
   })
 
-  it('lets Tab through when the top layer carries no trap', () => {
-    push({ trap: boxOf('lower', 2) })
+  it('lets Tab through when nothing on the stack carries a trap', () => {
     push({ onEscape: () => {} })
 
     expect(press('Tab').defaultPrevented).toBe(false)
+  })
+
+  // A menu or a popover joins the stack with no trap of its own; the dialog or the drawer it was
+  // opened from is still the surface the user is inside, so Tab stays in it.
+  it('keeps Tab in the trap below a trapless layer', () => {
+    const box = boxOf('dialog', 2)
+    push({ trap: box })
+    push({ onEscape: () => {} })
+
+    ;(box.children[1] as HTMLElement).focus()
+    press('Tab')
+
+    expect(document.activeElement).toBe(box.children[0])
   })
 
   // React commits a child's layout effect before its parent's, so a dialog nested in another's
