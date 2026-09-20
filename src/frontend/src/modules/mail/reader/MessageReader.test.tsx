@@ -2,7 +2,8 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import userEvent from '@testing-library/user-event'
 import { mockViewport, resetViewport, settle } from '../../../test-utils'
 import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
 import type { Contact } from '../../contacts/contactTypes'
@@ -1635,6 +1636,32 @@ describe('MessageReader', () => {
       await waitFor(() =>
         expect(mocks.deleteMessages).toHaveBeenCalledWith('Corbeille', [2], { accountId: 'primary' }))
       expect(onDeparted).toHaveBeenCalledWith(2)
+    })
+
+    // The expunged message takes the reader's own Delete button with it — the folder may hold no
+    // next one — so there is no opener left and focus would land on <body>.
+    it('hands focus to the list region when the expunge closes the reader', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      function Host() {
+        const region = useRef<HTMLDivElement>(null)
+        const [open, setOpen] = useState(true)
+        return (
+          <>
+            <div data-testid="region" tabIndex={-1} ref={region} />
+            {open && (
+              <MessageReader folderPath="Corbeille" uid={2} folderRole="trash"
+                regionRef={region} onDeparted={() => setOpen(false)} />
+            )}
+          </>
+        )
+      }
+      render(<Host />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+      await userEvent.click(modal().getByRole('button', { name: 'Delete' }))
+
+      expect(screen.getByTestId('region')).toHaveFocus()
     })
 
     it('expunges nothing when the confirmation is dismissed', async () => {

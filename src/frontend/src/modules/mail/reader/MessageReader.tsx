@@ -1,4 +1,4 @@
-﻿import { cloneElement, useEffect, useMemo, useState } from 'react'
+﻿import { cloneElement, useEffect, useMemo, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
@@ -68,10 +68,13 @@ interface Props {
   /** Draw the actions across the foot of the column instead of inside the header. The caller's
       call, not this component's: only the layout knows whether the reader owns the screen. */
   bottomActions?: boolean
+  /** The list column, where focus goes when an expunge takes the reader's own Delete with it. */
+  regionRef?: RefObject<HTMLElement | null>
 }
 
 export default function MessageReader(
-  { folderPath, uid, folderRole, onBack, onNotify, onDeparted, depart, bottomActions }: Props) {
+  { folderPath, uid, folderRole, onBack, onNotify, onDeparted, depart, bottomActions,
+    regionRef }: Props) {
   const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
@@ -547,6 +550,7 @@ export default function MessageReader(
           onConfirm={expunge}
           onClose={() => setConfirmDelete(false)}
           loading={deleteMessages.isPending}
+          returnFocusRef={regionRef}
         />
       )}
     </article>

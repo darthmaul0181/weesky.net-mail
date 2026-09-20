@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useRef } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import DeleteConfirmModal from './DeleteConfirmModal.jsx'
-import { fireEscape } from '../test-utils'
+import { fireEscape, pressBackdrop } from '../test-utils'
 
 describe('DeleteConfirmModal', () => {
   // A confirm interrupts to ask one question, so it is an alertdialog rather than a dialog.
@@ -77,5 +78,44 @@ describe('DeleteConfirmModal', () => {
   it('disables the confirm button while loading', () => {
     const { container } = render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={vi.fn()} loading={true} />)
     expect(container.querySelector('.btn-primary')).toBeDisabled()
+  })
+
+  // The delete is already on the wire and no dismissal cancels it: a confirm that closed under it
+  // leaves the user with no feedback, and re-confirming the same row sends a second DELETE.
+  it('offers no way out while the delete is in flight', async () => {
+    const onClose = vi.fn()
+    render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={onClose} loading={true} />)
+
+    fireEscape()
+    pressBackdrop()
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // Deleting the last row of a list takes the button that opened this with it, so there is no
+  // opener left to hand the focus back to.
+  it('hands focus to the return ref when the opener goes with the confirmed action', () => {
+    // 0: the row alone — 1: its confirm over it — 2: the row is deleted and the confirm with it.
+    function Host({ phase }) {
+      const region = useRef(null)
+      return (
+        <div>
+          <div data-testid="region" tabIndex={-1} ref={region} />
+          {phase < 2 && <button type="button">Delete alice</button>}
+          {phase === 1 && (
+            <DeleteConfirmModal entityLabel="alice" onConfirm={vi.fn()} onClose={vi.fn()}
+              returnFocusRef={region} />
+          )}
+        </div>
+      )
+    }
+    const { rerender } = render(<Host phase={0} />)
+    screen.getByRole('button', { name: 'Delete alice' }).focus()
+    rerender(<Host phase={1} />)
+
+    rerender(<Host phase={2} />)
+
+    expect(screen.getByTestId('region')).toHaveFocus()
   })
 })

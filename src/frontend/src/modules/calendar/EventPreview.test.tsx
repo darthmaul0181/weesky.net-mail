@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
 import DeleteConfirmModal from '../../components/DeleteConfirmModal.jsx'
@@ -261,6 +262,55 @@ describe('EventPreview', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(anchor).toHaveFocus()
+  })
+
+  /** The bubble over a region of its own — `CalendarLayout` hands it `.calendar-main`. `drop`
+      stands for the layout closing it once a delete lands, and is clicked rather than pressed so
+      the focus the bubble holds does not move first. */
+  function drawWithRegion(anchor: HTMLElement) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    function Host() {
+      const region = useRef<HTMLDivElement>(null)
+      const [open, setOpen] = useState(true)
+      return (
+        <QueryClientProvider client={client}>
+          <div data-testid="region" tabIndex={-1} ref={region} />
+          <button type="button" data-testid="drop" onClick={() => setOpen(false)}>drop</button>
+          {open && (
+            <EventPreview occurrence={occurrenceOf(DENTIST)} calendar={calendarOf('a')}
+              anchor={anchor} rect={anchor.getBoundingClientRect()} returnFocusRef={region}
+              onClose={() => setOpen(false)} onEdit={() => {}} onDelete={() => {}} />
+          )}
+        </QueryClientProvider>
+      )
+    }
+    renderInCalendar(<Host />)
+    return { close: () => fireEvent.click(screen.getByTestId('drop')) }
+  }
+
+  // Route one: a search result clears the results as it opens the bubble, so the chip is already
+  // detached when the bubble mounts and handing focus back to it is a silent no-op.
+  it('falls back to the region when the chip it hangs off is already detached', async () => {
+    const anchor = anchorAt(200, 300)
+    anchor.remove()
+    drawWithRegion(anchor)
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.getByTestId('region')).toHaveFocus()
+  })
+
+  // Route two: deleting from the bubble. The confirm hands focus back to the bubble's Delete
+  // button, then the event — and its chip — go, with the focus still inside the bubble.
+  it('falls back to the region when the chip goes with the event', () => {
+    const anchor = anchorAt(200, 300)
+    const { close } = drawWithRegion(anchor)
+    screen.getByRole('button', { name: 'Delete' }).focus()
+    anchor.remove()
+
+    close()
+
+    expect(screen.getByTestId('region')).toHaveFocus()
   })
 
   it('closes on a click outside itself', async () => {

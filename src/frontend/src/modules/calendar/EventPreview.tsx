@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
+import {
+  useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import BellIcon from '../../icons/BellIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
@@ -31,6 +33,9 @@ export interface EventPreviewProps {
   /** Read when the chip was clicked, not when the bubble mounts: a search result clears the
       results it was clicked in, so the chip has left the screen by then. */
   rect: DOMRect
+  /** Where focus goes when the chip is gone — detached with the results it was clicked in, or
+      deleted with the event itself. `CalendarLayout` hands its `.calendar-main`. */
+  returnFocusRef?: RefObject<HTMLElement | null>
   onClose(): void
   onEdit(): void
   onDelete(): void
@@ -58,7 +63,7 @@ function daysOf(o: Occurrence, tz: string): [PlainDate, PlainDate] | null {
  * the editor's business, so the bell here says only that one is set.
  */
 export default function EventPreview({
-  occurrence, calendar, anchor, rect, onClose, onEdit, onDelete,
+  occurrence, calendar, anchor, rect, returnFocusRef, onClose, onEdit, onDelete,
 }: EventPreviewProps) {
   const { t } = useTranslation('calendar')
   const { tz, lang, region, cycle, calendarById } = useCalendar()
@@ -88,6 +93,14 @@ export default function EventPreview({
   // Opened by a click, so nothing has moved the focus onto it: a keyboard reaches its two
   // actions only if the opening does.
   useLayoutEffect(() => { if (bubble.current) focusablesIn(bubble.current)[0]?.focus() }, [])
+
+  // Where every closing route meets, whichever of them moved the focus first. A layout cleanup,
+  // because a passive one runs after the bubble's nodes have left the document and could no longer
+  // tell whether it was holding the focus at all.
+  useLayoutEffect(() => () => {
+    const chip = anchorRef.current
+    returnFocus(bubble.current, chip?.isConnected ? chip : returnFocusRef?.current)
+  }, [returnFocusRef])
 
   // Always fetched, one request per opening (`ContactCard`'s `useContact` pattern): the bubble
   // carries neither a repeating event's rule nor its participants, and the detail holds both.

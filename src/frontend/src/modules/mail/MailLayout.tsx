@@ -251,6 +251,10 @@ export default function MailLayout() {
   // 360px screen for the sender alone. A phone always takes the stacked one.
   const wideRows = viewport !== 'phone' && pane !== 'right'
 
+  // The column a confirmed delete hands focus back to when it takes its own button with it — the
+  // way `CalendarLayout` holds one for `.calendar-main`. Only one branch below ever mounts.
+  const listRegion = useRef<HTMLDivElement>(null)
+
   const list = (selected: number | null) => (
     <MessageList
       folderPath={folder}
@@ -269,6 +273,7 @@ export default function MailLayout() {
       search={search}
       onSearchChange={changeSearch}
       onOpenResult={openResult}
+      regionRef={listRegion}
     />
   )
 
@@ -345,7 +350,9 @@ export default function MailLayout() {
         <>
           {pane === 'right' && (
             <div className="mail-row">
-              <div className="mail-list" style={{ width: listWidth }}>{list(uid)}</div>
+              <div className="mail-list" ref={listRegion} tabIndex={-1} style={{ width: listWidth }}>
+                {list(uid)}
+              </div>
               {preferences && (
                 <PaneSplitter
                   orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
@@ -354,21 +361,25 @@ export default function MailLayout() {
               )}
               <div className="mail-reader">
                 <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
+                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast}
+                  regionRef={listRegion} />
               </div>
             </div>
           )}
 
           {pane === 'bottom' && (
             <div className="mail-stack">
-              <div className="mail-list" style={{ height: listHeight }}>{list(uid)}</div>
+              <div className="mail-list" ref={listRegion} tabIndex={-1} style={{ height: listHeight }}>
+                {list(uid)}
+              </div>
               <PaneSplitter
                 orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
                 onResize={setListHeight}
               />
               <div className="mail-reader">
                 <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
+                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast}
+                  regionRef={listRegion} />
               </div>
             </div>
           )}
@@ -377,11 +388,13 @@ export default function MailLayout() {
             <>
               {/* Hidden, never unmounted: the scroll position and the streamed blocks live in this
                   subtree. No selected row either — there is no message "open beside". */}
-              <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`}>{list(null)}</div>
+              <div className={`mail-list${uid !== null ? ' is-hidden' : ''}`} ref={listRegion} tabIndex={-1}>
+                {list(null)}
+              </div>
               {uid !== null && (
                 <div className="mail-reader">
                   <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                    bottomActions={viewport === 'phone'}
+                    bottomActions={viewport === 'phone'} regionRef={listRegion}
                     onBack={closeMessage} onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
                 </div>
               )}

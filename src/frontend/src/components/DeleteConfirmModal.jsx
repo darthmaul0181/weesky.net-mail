@@ -15,14 +15,17 @@ import Modal from './Modal'
  * @param {import('react').ReactNode} [props.message]
  * @param {string} [props.title]
  * @param {string} [props.confirmLabel]
+ * @param {import('react').RefObject<HTMLElement | null>} [props.returnFocusRef]
  */
 export function DeleteConfirmModal({
-  entityLabel, onConfirm, onClose, loading, message, title, confirmLabel,
+  entityLabel, onConfirm, onClose, loading, message, title, confirmLabel, returnFocusRef,
 }) {
   const { t } = useTranslation()
   return (
     // alertdialog, not dialog: it interrupts to ask one question rather than offering a surface.
-    <Modal role="alertdialog" title={title ?? t('deleteConfirm.title')} onClose={onClose}>
+    // `busy`: nothing cancels the write already on the wire, so no dismissal may pretend to.
+    <Modal role="alertdialog" title={title ?? t('deleteConfirm.title')} onClose={onClose}
+      busy={loading} returnFocusRef={returnFocusRef}>
       <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
         {/* Self-closing <name/>: entityLabel is a node, so it travels as a component rather
             than as an interpolated value. */}

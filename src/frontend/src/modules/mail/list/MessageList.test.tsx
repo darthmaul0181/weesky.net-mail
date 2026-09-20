@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import MessageList from './MessageList'
@@ -1265,6 +1266,23 @@ describe('multi-select', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))  // confirm modal
     expect(mocks.remove).toHaveBeenCalledWith(
       expect.objectContaining({ folderPath: 'Trash', uids: [2, 1] }))
+  })
+
+  // Confirming clears the selection, so the toolbar button that opened the dialog goes with it:
+  // without a region to fall back on, focus lands on <body> and the keyboard is back at the top.
+  it('hands focus to the list region when the bulk delete takes its own button with it', async () => {
+    const region = document.createElement('div')
+    region.tabIndex = -1
+    document.body.append(region)
+    try {
+      renderWithRoles('trash', { regionRef: { current: region } })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+      await userEvent.click(bar().getByRole('button', { name: 'Delete permanently' }))
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+      expect(region).toHaveFocus()
+    } finally { region.remove() }
   })
 
   it('advances the reader when the open message is in the acted batch', () => {

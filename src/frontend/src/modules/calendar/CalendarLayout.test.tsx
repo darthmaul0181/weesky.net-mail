@@ -1097,9 +1097,10 @@ describe('CalendarLayout', () => {
     await waitFor(() => expect(opener).toHaveFocus())
   })
 
-  // The Edit that opened the editor left with the bubble it sat in, so there is no opener to go
-  // back to: focus lands on the region the dialog covered rather than on <body>.
-  it('hands focus back to the grid column when the bubble that opened it is gone', async () => {
+  // The Edit that opened the editor left with the bubble it sat in, and the bubble hands its focus
+  // back to the chip on the way out: that chip is what the editor then has to return to. The
+  // region stays the fallback for when it is gone too — the phone editor's case, below.
+  it('hands focus back to the chip the bubble hung off', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
     api.getEvent.mockResolvedValue(detail())
     renderAt('/calendar?view=week&date=2026-09-16')
@@ -1110,7 +1111,28 @@ describe('CalendarLayout', () => {
 
     fireEscape()
 
-    await waitFor(() => expect(document.querySelector('.calendar-main')).toHaveFocus())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dentist/ })).toHaveFocus())
+  })
+
+  // Route two of the same rule: the chip goes with the event the bubble was opened on, so the
+  // focus the confirm handed back to the bubble's Delete has nothing on screen to return to.
+  it('hands focus to the grid column when the bubble’s own delete lands', async () => {
+    let rows = [occurrence('e1', 'Stand-up')]
+    api.getOccurrences.mockImplementation(async () => ({ occurrences: rows }))
+    api.deleteEvent.mockImplementation(async () => { rows = []; return null })
+    renderAt('/calendar?view=week&date=2026-09-16')
+    await userEvent.click(await screen.findByRole('button', { name: /Stand-up/ }))
+    const bubble = await screen.findByRole('dialog', { name: 'Stand-up' })
+
+    await userEvent.click(within(bubble).getByRole('button', { name: 'Delete' }))
+    const confirm = await screen.findByRole('alertdialog')
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+
+    // Asserted once the chip has actually left: focus handed to a chip about to vanish reads as
+    // correct for one commit and lands on <body> in the next.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Stand-up/ })).toBeNull())
+    expect(document.querySelector('.calendar-main')).toHaveFocus()
   })
 
   // The bubble launched the confirm and is the screen behind it: one Escape answers the confirm,

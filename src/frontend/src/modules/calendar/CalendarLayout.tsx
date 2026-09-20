@@ -717,6 +717,10 @@ export default function CalendarLayout() {
         id, scope, instanceId: scope === 'All' ? undefined : instanceId,
       })
       addToast(t('editor.deleted'), 'success')
+      // The chip leaves with the event, but only when the window refetch lands: focus handed back
+      // to it would be sitting on a node about to go, so the column takes it while the bubble is
+      // still the surface being closed.
+      if (preview) mainRef.current?.focus()
       setPreview(null)
       if (inEditor) backToGrid()
     } catch (error) {
@@ -870,7 +874,8 @@ export default function CalendarLayout() {
         {preview && (
           <EventPreview occurrence={preview.occurrence}
             calendar={calendarById.get(preview.occurrence.calendarId) ?? null}
-            anchor={preview.anchor} rect={preview.rect} onClose={() => setPreview(null)}
+            anchor={preview.anchor} rect={preview.rect} returnFocusRef={mainRef}
+            onClose={() => setPreview(null)}
             onEdit={() => openFromChip(preview.occurrence)}
             onDelete={() => deletePreviewed(preview.occurrence)} />
         )}

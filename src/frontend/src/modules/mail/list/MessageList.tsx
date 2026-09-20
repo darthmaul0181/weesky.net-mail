@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode } from 'react'
+import type {
+  CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode, RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
@@ -103,6 +105,8 @@ interface Props {
   onSearchChange: (criteria: SearchCriteria | null) => void
   /** A cross-folder hit opens in the folder it names, not the one on screen. */
   onOpenResult?: (uid: number, folderPath: string) => void
+  /** The column itself, where focus goes when a confirmed delete takes its own button with it. */
+  regionRef?: RefObject<HTMLElement | null>
 }
 
 /**
@@ -112,7 +116,7 @@ interface Props {
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
     inDrawer = false, onNotify, onRows, onDeparted, rowExit, search = null, onSearchChange,
-    onOpenResult }: Props) {
+    onOpenResult, regionRef }: Props) {
   const { t } = useTranslation('mail')
   const list = useMessageList(folderPath)
   const { data: preferences } = usePreferences()
@@ -794,6 +798,7 @@ export default function MessageList(
           onConfirm={expungeBulk}
           onClose={() => setConfirmingBulk(false)}
           loading={deleteMessages.isPending}
+          returnFocusRef={regionRef}
         />
       )}
 
