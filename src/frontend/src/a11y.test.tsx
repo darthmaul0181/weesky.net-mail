@@ -73,6 +73,9 @@ vi.mock('./modules/mail/notify/channels', () => ({
 }))
 
 afterEach(resetViewport)
+// clearAllMocks only clears call history, not implementations. resetAllMocks would be the real
+// guarantee, but it also wipes test-setup.js's window.matchMedia vi.fn() (built once per file,
+// never re-armed per test), which breaks every surface calling useViewport — see task-1-report.md.
 beforeEach(() => vi.clearAllMocks())
 
 function queryClient() {
@@ -124,8 +127,13 @@ describe('accessibility sweep', () => {
     await within(reader).findByText('Hello')
     expect(container.querySelector('.mail-list')).not.toBeNull()
     // nested-interactive: .message-row is a role="button" wrapping its own checkbox, star and
-    // action buttons — waits on the mail-list ARIA-grid rewrite this lot's tasks 2-5 do.
-    await expectNoAxeViolations(container, { 'nested-interactive': { enabled: false } })
+    // action buttons — Task 3's mail-list ARIA-grid rewrite removes this waiver.
+    // iframes:false: the reader's real <iframe> defeats axe's cross-frame scan in jsdom — this
+    // surface only, since it is the only one of the eight with a real iframe.
+    await expectNoAxeViolations(container, {
+      extraRules: { 'nested-interactive': { enabled: false } },
+      iframes: false,
+    })
   })
 
   it('ContactsLayout', async () => {
@@ -164,8 +172,10 @@ describe('accessibility sweep', () => {
 
     await screen.findByText('Alice')
     // nested-interactive: .contact-tile is a role="button" wrapping its own checkbox, star and
-    // icon buttons — waits on the contacts-list ARIA-grid rewrite this lot's tasks 2-5 do.
-    await expectNoAxeViolations(container, { 'nested-interactive': { enabled: false } })
+    // icon buttons — Task 4's contacts-list ARIA-grid rewrite removes this waiver.
+    await expectNoAxeViolations(container, {
+      extraRules: { 'nested-interactive': { enabled: false } },
+    })
   })
 
   it('CalendarLayout — month view', async () => {
@@ -221,6 +231,7 @@ describe('accessibility sweep', () => {
       keepRepeat: false, foreignAlarms: [], attendees: [], canInvite: true,
     }
 
+    // Wrapped in the real Modal — a violation here could come from Modal's chrome, not EventEditor.
     const { container } = renderInCalendar(
       <QueryClientProvider client={queryClient()}>
         <Modal header={false} labelledBy={EDITOR_TITLE_ID} onClose={vi.fn()}>
