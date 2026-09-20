@@ -103,7 +103,11 @@ export default function DropdownMenu(
   // stranded. Capture:true so a scroll inside an ancestor band (the attachment row) counts too.
   useEffect(() => {
     if (!open || placement !== 'up') return
-    function onScrollOrResize() { setOpen(false) }
+    // `preventScroll`: the trigger has just been scrolled away from, and focusing it would undo it.
+    function onScrollOrResize() {
+      returnFocus(rootRef.current, triggerRef.current, { preventScroll: true })
+      setOpen(false)
+    }
     window.addEventListener('scroll', onScrollOrResize, true)
     window.addEventListener('resize', onScrollOrResize, true)
     return () => {

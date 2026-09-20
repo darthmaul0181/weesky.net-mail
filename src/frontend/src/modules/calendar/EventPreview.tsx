@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import BellIcon from '../../icons/BellIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
@@ -67,10 +67,23 @@ export default function EventPreview({
   // The chip the bubble hangs off: where the focus goes back when it closes from the inside.
   const anchorRef = useRef(anchor)
   useEffect(() => { anchorRef.current = anchor })
+  // Memoised: a fresh ref callback is detached and re-attached on every commit, which would drive
+  // the position hook's node null and back twice per render.
+  const holdBubble = useCallback((node: HTMLDivElement | null) => {
+    bubble.current = node
+    ref(node)
+  }, [ref])
 
   // Non-modal: no trap, and Tab walks on into the grid. A dialog the bubble launched sits above
   // it on the stack, so neither that Escape nor a press inside it reaches here.
-  useDismiss({ open: true, rootRef: bubble, onDismiss: onClose, refocusRef: anchorRef, closeOnScroll: true })
+  useDismiss({
+    open: true,
+    rootRef: bubble,
+    onDismiss: onClose,
+    anchorRef,
+    refocusRef: anchorRef,
+    closeOnScroll: true,
+  })
 
   // Opened by a click, so nothing has moved the focus onto it: a keyboard reaches its two
   // actions only if the opening does.
@@ -116,8 +129,7 @@ export default function EventPreview({
   const myAnswer = myAnswerOf(occurrence.myPartStat, t)
 
   return (
-    <div className="event-preview" role="dialog" aria-label={title}
-      ref={node => { bubble.current = node; ref(node) }}
+    <div className="event-preview" role="dialog" aria-label={title} ref={holdBubble}
       style={{ left, top, '--cal': color } as CSSProperties}>
       <div className="event-preview-head">
         <span className="event-preview-dot" aria-hidden="true" />

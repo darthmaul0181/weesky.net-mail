@@ -270,6 +270,18 @@ describe('EventPreview', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  // The chip toggles the bubble, so the press that closes it is the chip's own business: closing
+  // here would unmount the `role="dialog"` bubble the chip's click reopens a moment later.
+  it('stays open on a press on the chip it hangs off', () => {
+    const onClose = vi.fn()
+    const anchor = anchorAt(200, 300)
+    draw(DENTIST, anchor, { onClose })
+
+    fireEvent.mouseDown(anchor)
+
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('stays open on a click inside itself', async () => {
     const onClose = vi.fn()
     const bubble = draw(DENTIST, anchorAt(200, 300), { onClose })

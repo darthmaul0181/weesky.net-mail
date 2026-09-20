@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import { useLayer } from './useLayer'
 
 interface Options {
@@ -6,6 +6,9 @@ interface Options {
   /** The surface itself: a press inside it never dismisses. */
   rootRef: RefObject<HTMLElement | null>
   onDismiss: () => void
+  /** What opened the surface and toggles it: a press on it is the trigger's business, not a
+      dismissal — closing here would unmount a surface the trigger is about to reopen. */
+  anchorRef?: RefObject<HTMLElement | null>
   /** Where focus goes when Escape closes the surface from inside it — the trigger, the chip. */
   refocusRef?: RefObject<HTMLElement | null>
   /** A surface pinned to a rectangle rather than to the flow: a scroll strands it. */
@@ -13,8 +16,9 @@ interface Options {
 }
 
 /** Closing unmounts the surface, so focus held inside it would fall to <body>: it goes back. */
-export function returnFocus(root: HTMLElement | null, to: HTMLElement | null | undefined) {
-  if (root?.contains(document.activeElement)) to?.focus()
+export function returnFocus(
+  root: HTMLElement | null, to: HTMLElement | null | undefined, options?: FocusOptions) {
+  if (root?.contains(document.activeElement)) to?.focus(options)
 }
 
 /**
@@ -23,10 +27,12 @@ export function returnFocus(root: HTMLElement | null, to: HTMLElement | null | u
  * it. No trap: Tab may leave a menu, and what it walks into is the page behind it.
  */
 export function useDismiss({
-  open, rootRef, onDismiss, refocusRef, closeOnScroll = false,
+  open, rootRef, onDismiss, anchorRef, refocusRef, closeOnScroll = false,
 }: Options) {
-  const latest = useRef(onDismiss)
-  useEffect(() => { latest.current = onDismiss })
+  // A layout effect, like `useLayer`'s: a press landing between the commit and a passive effect
+  // would otherwise reach the handler the render before it.
+  const latest = useRef({ onDismiss, refocusRef })
+  useLayoutEffect(() => { latest.current = { onDismiss, refocusRef } })
 
   const isTop = useLayer({
     active: open,
@@ -41,10 +47,18 @@ export function useDismiss({
     // A press that lands on a surface above this one is that surface's business: the confirm a
     // menu row opened is "outside" by containment alone, and closing under it is the bug.
     function outside(event: MouseEvent) {
-      if (!isTop() || rootRef.current?.contains(event.target as Node)) return
-      latest.current()
+      const target = event.target as Node
+      if (!isTop()) return
+      if (rootRef.current?.contains(target) || anchorRef?.current?.contains(target)) return
+      latest.current.onDismiss()
     }
-    function scrolled() { if (isTop()) latest.current() }
+    // The surface leaves with the scroll, so the focus it holds has to go somewhere first — and
+    // `preventScroll`, or refocusing what was just scrolled away from fights the gesture.
+    function scrolled() {
+      if (!isTop()) return
+      returnFocus(rootRef.current, latest.current.refocusRef?.current, { preventScroll: true })
+      latest.current.onDismiss()
+    }
     document.addEventListener('mousedown', outside)
     // Capture, so any scroller carries it — the week body, the month stage, the upcoming list.
     if (closeOnScroll) document.addEventListener('scroll', scrolled, true)
@@ -52,5 +66,5 @@ export function useDismiss({
       document.removeEventListener('mousedown', outside)
       if (closeOnScroll) document.removeEventListener('scroll', scrolled, true)
     }
-  }, [open, closeOnScroll, isTop, rootRef])
+  }, [open, closeOnScroll, isTop, rootRef, anchorRef])
 }

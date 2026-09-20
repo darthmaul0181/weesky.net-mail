@@ -171,6 +171,9 @@ export function VirtualDomainsTab({ addToast }) {
                 <button className="admin-icon-btn" title={t('virtual.editOwner')} onClick={() => {
                   setEditingDomainId(o.domainId)
                   setSearchQuery('')
+                  // Reachable from the keyboard: Tab out of one row's box, Enter here, and a flag
+                  // left standing would open this row with its list already suppressed.
+                  setListDismissed(false)
                 }}>
                   <PencilIcon />
                 </button>

@@ -25,6 +25,19 @@ function Surface({ open = true, onDismiss, closeOnScroll }: {
   )
 }
 
+/** The chip shape: a trigger outside the surface, which toggles it rather than dismissing it. */
+function Anchored({ onDismiss }: { onDismiss: () => void }) {
+  const root = useRef<HTMLDivElement>(null)
+  const anchor = useRef<HTMLButtonElement>(null)
+  useDismiss({ open: true, rootRef: root, onDismiss, anchorRef: anchor })
+  return (
+    <>
+      <button type="button" ref={anchor}>Chip</button>
+      <div ref={root}><button type="button">Item</button></div>
+    </>
+  )
+}
+
 /** A trapped layer standing over the surface — the dialog a menu row opened. */
 function Dialog({ onEscape, children }: { onEscape?: () => void; children?: ReactNode }) {
   const box = useRef<HTMLDivElement>(null)
@@ -89,6 +102,7 @@ describe('useDismiss', () => {
 
     press('Escape')
     fireEvent.mouseDown(screen.getByRole('button', { name: 'Confirm' }))
+    fireEvent.mouseDown(document.body)
 
     expect(onDialogEscape).toHaveBeenCalledTimes(1)
     expect(onDismiss).not.toHaveBeenCalled()
@@ -128,6 +142,30 @@ describe('useDismiss', () => {
     press('Escape')
 
     expect(elsewhere).toHaveFocus()
+  })
+
+  // The press that toggles a surface off is the anchor's own; dismissing here would unmount what
+  // the anchor is about to reopen, and the surface would blink out and back.
+  it('leaves a press on the anchor to the anchor', () => {
+    const onDismiss = vi.fn()
+    render(<Anchored onDismiss={onDismiss} />)
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Chip' }))
+    expect(onDismiss).not.toHaveBeenCalled()
+
+    fireEvent.mouseDown(document.body)
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  // The surface leaves with the scroll: focus held inside it would fall to <body>, a trapless
+  // layer having no container for `useLayer` to restore from.
+  it('hands focus back before a scroll dismisses it', () => {
+    render(<Surface onDismiss={vi.fn()} closeOnScroll />)
+    screen.getByRole('button', { name: 'Item' }).focus()
+
+    fireEvent.scroll(document.body)
+
+    expect(screen.getByRole('button', { name: 'Trigger' })).toHaveFocus()
   })
 
   // A bubble pinned to a chip's rectangle is stranded by any scroller carrying it, hence capture.
