@@ -28,10 +28,12 @@ describe('SpamGauge', () => {
   })
 
   // The precedent is HelpTooltip: a real button, describing itself with the bubble it opens.
-  it('is a real button, named for the gauge and describing itself with the raw header', () => {
+  // Fix round 1: named with the score itself, not just "Spam score:" — a plain aria-label
+  // would have hidden the visible "7.0 / 16.0" behind an unlabelled description.
+  it('is a real button, named with the score itself and describing itself with the raw header', () => {
     render(<SpamGauge spamScore={spam} />)
 
-    const trigger = screen.getByRole('button', { name: 'Spam score:' })
+    const trigger = screen.getByRole('button', { name: 'Spam score: 7.0 out of 16.0' })
     const bubble = screen.getByRole('tooltip')
 
     expect(trigger).toHaveAttribute('type', 'button')

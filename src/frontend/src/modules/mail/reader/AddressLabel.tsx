@@ -14,11 +14,11 @@ export default function AddressLabel({ name, address, sender = false }: Props) {
   const className = sender ? 'address-label is-sender' : 'address-label'
   const bubbleId = useId()
 
-  const trigger = sender
-    ? <button type="button" className={className}>{label}</button>
-    : detail
-      ? <button type="button" className={className} aria-describedby={bubbleId}>{label}</button>
-      : <span className={className}>{label}</span>
+  // The sender is always a button (its bubble reachable-by-keyboard precedent predates this
+  // task); a recipient only becomes one when it has a bubble to describe.
+  const trigger = sender || detail
+    ? <button type="button" className={className} aria-describedby={detail ? bubbleId : undefined}>{label}</button>
+    : <span className={className}>{label}</span>
 
   if (!detail) return trigger
 

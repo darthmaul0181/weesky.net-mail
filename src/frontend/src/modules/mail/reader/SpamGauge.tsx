@@ -11,9 +11,16 @@ export function SpamBar({ spamScore }: { spamScore: MailSpamScore | null | undef
   const ratio = spamRatio(spamScore)
   if (ratio === null || !spamScore) return null
 
+  // The visible "7.0 / 16.0" is what a plain aria-label would hide behind "Spam score:" alone —
+  // this interpolates the same two numbers into the name instead.
+  const name = t('reader.spamScoreLabel', {
+    score: spamScore.score.toFixed(1),
+    threshold: spamScore.threshold.toFixed(1),
+  })
+
   return (
     <Tooltip content={spamScore.raw} placement="bottom-left" bubbleId={bubbleId}>
-      <button type="button" className="spam-gauge" aria-label={t('reader.spamScore')} aria-describedby={bubbleId}>
+      <button type="button" className="spam-gauge" aria-label={name} aria-describedby={bubbleId}>
         <span
           className="spam-gauge-track"
           style={{ '--gauge-ratio': String(ratio) } as CSSProperties}
