@@ -144,6 +144,28 @@ describe('FoldersPage', () => {
     expect(container.querySelector('.folder-list')).toHaveFocus()
   })
 
+  // The same hand-back with a real network between the two round trips: the confirm closes on the
+  // DELETE while the row leaves only when the folder refetch lands, a whole macrotask later.
+  it('hands focus to the folder list when the refetch lands after the confirm closed', async () => {
+    let live = folders
+    mocks.getMailFolders.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve(live), 30)))
+    mocks.getFolderRoles.mockResolvedValue(roles)
+    mocks.deleteMailFolder.mockImplementation(async () => {
+      live = live.filter(one => one.path !== 'Projects')
+      return {}
+    })
+    const { container } = render(<FoldersPage />, { wrapper })
+    await screen.findByLabelText('Show Projects')
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Projects' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
+    await waitFor(() => expect(screen.queryByLabelText('Show Projects')).toBeNull())
+    expect(container.querySelector('.folder-list')).toHaveFocus()
+  })
+
   it('reports a load failure instead of an empty list', async () => {
     mocks.getMailFolders.mockRejectedValue(new Error('nope'))
     mocks.getFolderRoles.mockResolvedValue(roles)

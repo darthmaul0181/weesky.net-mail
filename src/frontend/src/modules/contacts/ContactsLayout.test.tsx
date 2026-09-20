@@ -263,6 +263,27 @@ describe('ContactsLayout', () => {
     expect(container.querySelector('.contacts-list')).toHaveFocus()
   })
 
+  // The same hand-back with a real network between the two round trips: the confirm closes on the
+  // DELETE while the tile leaves only when the book refetch lands, a whole macrotask later.
+  it('hands focus to the tile list when the book refetch lands after the confirm closed', async () => {
+    api.deleteContact.mockResolvedValue(undefined)
+    const { container } = renderAt('/contacts')
+    await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /delete bruno/i }))
+
+    const rows = [
+      contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
+      contact({ id: 'c', firstName: 'Carla', isFavorite: true, addresses: ['carla@x.be'] }),
+    ]
+    api.getContacts.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve({ contacts: rows }), 30)))
+    await confirmDeletion()
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Bruno')).toBeNull())
+    expect(container.querySelector('.contacts-list')).toHaveFocus()
+  })
+
   it('creates a contact and returns to the list', async () => {
     api.createContact.mockResolvedValue({ id: 'n' })
     renderAt('/contacts/new')
@@ -1045,6 +1066,24 @@ describe('contact groups', () => {
     serveGroups([])
     await confirmDeletion()
 
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Actions for Friends' })).toBeNull())
+    expect(container.querySelector('.contacts-scopes-column')).toHaveFocus()
+  })
+
+  // The group's own second round trip: the confirm closes on the DELETE, the row leaves when the
+  // group refetch lands a macrotask later.
+  it('hands focus to the scope band when the group refetch lands after the confirm closed', async () => {
+    api.deleteContactGroup.mockResolvedValue(undefined)
+    const { container } = renderAt('/contacts?scope=group:g1')
+    await waitFor(() => expect(groupRow()).toBeInTheDocument())
+    await openGroupMenu()
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete group' }))
+
+    api.getContactGroups.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve({ groups: [] }), 30)))
+    await confirmDeletion()
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Actions for Friends' })).toBeNull())
     expect(container.querySelector('.contacts-scopes-column')).toHaveFocus()
   })

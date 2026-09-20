@@ -970,6 +970,27 @@ describe('CalendarLayout', () => {
     expect(document.querySelector('.calendar-main')).toHaveFocus()
   })
 
+  // The same hand-back with a real network between the two round trips: the confirm closes on the
+  // DELETE while the row leaves only when the calendar refetch lands, a whole macrotask later.
+  it('hands focus to the grid column when the refetch lands after the confirm closed', async () => {
+    let rows = CALENDARS
+    api.getCalendars.mockImplementation(
+      () => new Promise(resolve => setTimeout(() => resolve({ calendars: rows }), 30)))
+    api.deleteCalendar.mockImplementation(async () => {
+      rows = rows.filter(one => one.id !== 'b')
+      return null
+    })
+    renderAt()
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Work' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Actions for Work' })).toBeNull())
+    expect(document.querySelector('.calendar-main')).toHaveFocus()
+  })
+
   // The chevrons, Today and the mini-month all move the anchor; a list reading the clock
   // instead left all three dead on one of the four views.
   it('moves the upcoming list with its anchor', async () => {

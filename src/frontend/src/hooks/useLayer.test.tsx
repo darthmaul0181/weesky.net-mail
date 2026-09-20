@@ -268,6 +268,74 @@ describe('useLayer', () => {
     expect(hamburger).not.toHaveFocus()
   })
 
+  // The opener's reachability stops being the question once a confirmed action has been taken:
+  // the row holding it may leave on the round trip after this one, and nothing re-checks then.
+  it('prefers the return ref over a reachable opener when the flag says so', () => {
+    // Held outside the tree, as the confirm's own ref is written by its button's handler: a ref
+    // the render writes is the one thing this mechanism must not be.
+    const prefer = { current: false }
+    function Wrapper({ open }: { open: boolean }) {
+      const box = useRef<HTMLDivElement>(null)
+      const heading = useRef<HTMLHeadingElement>(null)
+      return (
+        <div>
+          <h2 tabIndex={-1} ref={heading}>heading</h2>
+          <button type="button">trigger</button>
+          {open && <Panel box={box} heading={heading} prefer={prefer} />}
+        </div>
+      )
+    }
+    function Panel({ box, heading, prefer }: {
+      box: RefObject<HTMLDivElement>
+      heading: RefObject<HTMLHeadingElement>
+      prefer: RefObject<boolean>
+    }) {
+      useLayer({ active: true, ref: box, returnFocusRef: heading, preferReturnRef: prefer })
+      return <div ref={box}><button type="button">inside</button></div>
+    }
+    const { rerender } = render(<Wrapper open={false} />)
+    screen.getByRole('button', { name: 'trigger' }).focus()
+    rerender(<Wrapper open />)
+    prefer.current = true
+
+    rerender(<Wrapper open={false} />)
+
+    expect(screen.getByRole('heading', { name: 'heading' })).toHaveFocus()
+  })
+
+  // The flag chooses between two targets; it never buys a layer the right to move focus at all.
+  // A dialog standing over the one that closes still owns it, preference or no preference.
+  it('does not let that preference pull focus out from under a standing dialog', () => {
+    const prefer = { current: true }
+    function Stack({ drawer }: { drawer: boolean }) {
+      const box = useRef<HTMLDivElement>(null)
+      const region = useRef<HTMLDivElement>(null)
+      return (
+        <div>
+          <div data-testid="region" tabIndex={-1} ref={region} />
+          <button type="button">hamburger</button>
+          {drawer && <Drawer box={box} region={region} prefer={prefer} />}
+          <Dialog name="confirm" />
+        </div>
+      )
+    }
+    function Drawer({ box, region, prefer }: {
+      box: RefObject<HTMLDivElement>
+      region: RefObject<HTMLDivElement>
+      prefer: RefObject<boolean>
+    }) {
+      useLayer({ active: true, ref: box, returnFocusRef: region, preferReturnRef: prefer })
+      return <div ref={box}><button type="button">drawer one</button></div>
+    }
+    const { rerender } = render(<Stack drawer />)
+    expect(screen.getByRole('button', { name: 'confirm one' })).toHaveFocus()
+
+    rerender(<Stack drawer={false} />)
+
+    expect(screen.getByRole('button', { name: 'confirm one' })).toHaveFocus()
+    expect(screen.getByTestId('region')).not.toHaveFocus()
+  })
+
   it('pushes no layer at all while the container ref holds nothing', () => {
     const lower = vi.fn()
     function Detached() {

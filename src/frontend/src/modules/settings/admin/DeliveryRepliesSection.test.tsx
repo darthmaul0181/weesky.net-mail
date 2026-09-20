@@ -173,11 +173,10 @@ describe('DeliveryRepliesSection', () => {
       expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
     })
 
-    // The confirm is a layer of its own now, so it hands the focus back to the Regenerate button
-    // it was opened from — still on screen, the key having stayed configured — and the key
-    // dialog, mounting in that same commit, captures it and returns there in turn. It used to
-    // land on the heading, the confirm leaving focus on <body> for the dialog to find.
-    it('returns to the button the regenerate was asked from', async () => {
+    // A confirmed action hands focus to the section's name by decision, not to an opener whose
+    // survival it cannot know — here the Regenerate button does survive, and the heading takes the
+    // focus anyway; the key dialog mounting in that same commit captures it and returns there.
+    it('returns to the section heading after the regenerate is confirmed', async () => {
       vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
       vi.mocked(api.adminGenerateDeliveryReplyKey).mockResolvedValue({ key: 'new-key' })
       mount()
@@ -189,7 +188,7 @@ describe('DeliveryRepliesSection', () => {
       await userEvent.keyboard('{Escape}')
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-      expect(screen.getByRole('button', { name: 'Regenerate' })).toHaveFocus()
+      expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
     })
   })
 

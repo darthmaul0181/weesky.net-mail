@@ -131,6 +131,20 @@ describe('AliasesPage', () => {
     expect(screen.getByRole('heading', { name: 'Aliases' })).toHaveFocus()
   })
 
+  // The control for the latency cases in the other modules: this page drops the tile from its own
+  // state on the same round trip, so a slow DELETE must change nothing about where focus lands.
+  it('hands focus to the page heading even when the delete answers late', async () => {
+    api.deleteAlias.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(null), 30)))
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getAllByTitle('Delete')[0])
+
+    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+
+    await waitFor(() => expect(screen.queryByText('alias1')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Aliases' })).toHaveFocus()
+  })
+
   it('shows a success toast when an alias is created', async () => {
     api.createAlias.mockResolvedValue(null)
     api.getAliases

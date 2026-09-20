@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import Modal from './Modal'
 
@@ -21,11 +22,15 @@ export function DeleteConfirmModal({
   entityLabel, onConfirm, onClose, loading, message, title, confirmLabel, returnFocusRef,
 }) {
   const { t } = useTranslation()
+  // A confirmed action removes its own opener, sometimes only on a second round trip: from the
+  // press on, the return target wins. A cancel leaves the opener where it was, so it keeps it.
+  const confirmed = useRef(false)
   return (
     // alertdialog, not dialog: it interrupts to ask one question rather than offering a surface.
     // `busy`: nothing cancels the write already on the wire, so no dismissal may pretend to.
-    <Modal role="alertdialog" title={title ?? t('deleteConfirm.title')} onClose={onClose}
-      busy={loading} returnFocusRef={returnFocusRef}>
+    <Modal role="alertdialog" title={title ?? t('deleteConfirm.title')}
+      onClose={() => { confirmed.current = false; onClose() }}
+      busy={loading} returnFocusRef={returnFocusRef} preferReturnRef={confirmed}>
       <p style={{ margin: '0 0 20px', fontSize: '14px' }}>
         {/* Self-closing <name/>: entityLabel is a node, so it travels as a component rather
             than as an interpolated value. */}
@@ -35,7 +40,7 @@ export function DeleteConfirmModal({
       </p>
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
         <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
-          onClick={onConfirm} disabled={loading}>
+          onClick={() => { confirmed.current = true; onConfirm() }} disabled={loading}>
           {loading ? <span className="spinner" /> : confirmLabel ?? t('actions.delete')}
         </button>
       </div>

@@ -21,6 +21,10 @@ interface Options {
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Where focus goes on close when the element that opened the layer is gone. */
   returnFocusRef?: RefObject<HTMLElement | null>
+  /** Read at close: true and `returnFocusRef` wins over an opener still on screen. A confirmed
+      destructive action removes its opener, and often on a second round trip this commit cannot
+      see. A ref rather than a prop — the press may close the layer in its own commit. */
+  preferReturnRef?: RefObject<boolean>
 }
 
 /**
@@ -29,14 +33,16 @@ interface Options {
  * questions a surface acting on a pointer of its own asks: whether it is that topmost layer, and
  * whether anything trapped stands over it.
  */
-export function useLayer({ active, ref, onEscape, initialFocusRef, returnFocusRef }: Options) {
+export function useLayer({
+  active, ref, onEscape, initialFocusRef, returnFocusRef, preferReturnRef,
+}: Options) {
   const handle = useRef<LayerHandle | null>(null)
   const opener = useRef<HTMLElement | null>(null)
   // Where the cleanup below meant focus to go, for the passive cleanup that checks it landed, and
   // whether a layer stood over this one when it closed.
   const handedTo = useRef<HTMLElement | null>(null)
   const coveredAtClose = useRef(false)
-  const latest = useRef({ onEscape, initialFocusRef, returnFocusRef })
+  const latest = useRef({ onEscape, initialFocusRef, returnFocusRef, preferReturnRef })
 
   // React commits a child's `autoFocus` in the layout phase, before any layout effect, so no
   // layout effect can still see the opener. An insertion effect can; and one that finds focus
@@ -51,7 +57,7 @@ export function useLayer({ active, ref, onEscape, initialFocusRef, returnFocusRe
   // First and on every render, so the layer below answers with this render's handler and
   // container rather than the ones it was pushed with.
   useLayoutEffect(() => {
-    latest.current = { onEscape, initialFocusRef, returnFocusRef }
+    latest.current = { onEscape, initialFocusRef, returnFocusRef, preferReturnRef }
     handle.current?.update({ onEscape, trap: ref?.current ?? null })
   })
 
@@ -78,7 +84,12 @@ export function useLayer({ active, ref, onEscape, initialFocusRef, returnFocusRe
       // have been disabled by the very write this layer asked about.
       const previous = opener.current
       const back = latest.current.returnFocusRef?.current ?? null
-      if (wasTop) (reachable(previous) ? previous : back)?.focus()
+      // After a confirmed action the return target wins by decision: the opener may be reachable
+      // in this commit and removed by the round trip after it, which nothing here re-checks.
+      const preferReturn = latest.current.preferReturnRef?.current === true
+      if (wasTop) {
+        (preferReturn && reachable(back) ? back : reachable(previous) ? previous : back)?.focus()
+      }
       // The return ref first: it is the target that survives an opener removed later in the same
       // commit. Recorded even under a layer above, which may be closing in this very commit —
       // having restored to an opener of its own inside the subtree now going.
