@@ -20,6 +20,10 @@ export function VirtualDomainsTab({ addToast }) {
   const editRef = useRef(null)
   const comboRef = useRef(null)
   const searchRef = useRef(null)
+  // Escape and an outside press unmount the editor holding the focus, and the pencil that opened it
+  // is not drawn while that row is being edited — a `refocusRef` would be null. The id is
+  // remembered instead, and the pencil claims the focus as it mounts again.
+  const returnTo = useRef(null)
 
   // useCallback so the effect can depend on it: addToast is memoised, so load keeps one identity.
   const load = useCallback(async () => {
@@ -38,10 +42,11 @@ export function VirtualDomainsTab({ addToast }) {
   useEffect(() => { load() }, [load])
 
   const cancelEdit = useCallback(() => {
+    returnTo.current = editingDomainId
     setEditingDomainId(null)
     setSearchQuery('')
     setListDismissed(false)
-  }, [])
+  }, [editingDomainId])
 
   useDismiss({ open: editingDomainId !== null, rootRef: editRef, onDismiss: cancelEdit })
   // The box and its matches are one surface for the arrows: ↓ walks out of the field into the list.
@@ -66,6 +71,8 @@ export function VirtualDomainsTab({ addToast }) {
   }
 
   async function handleUnlink(domainId, userId) {
+    // Read before the write, as handleSelect does: the chip leaves with its own ✕.
+    const fromEditor = editRef.current?.contains(document.activeElement)
     setSaving(true)
     try {
       await api.adminRemoveVirtualDomainOwner(domainId, userId)
@@ -78,6 +85,7 @@ export function VirtualDomainsTab({ addToast }) {
       addToast(apiErrorMessage(err, t('virtual.removeOwnerFailed')), 'error')
     } finally {
       setSaving(false)
+      if (fromEditor) searchRef.current?.focus()
     }
   }
 
@@ -123,7 +131,8 @@ export function VirtualDomainsTab({ addToast }) {
                           className="ownership-tile-remove"
                           title={t('virtual.removeOwner')}
                           disabled={saving}
-                          onMouseDown={e => { e.preventDefault(); handleUnlink(o.domainId, own.ownerId) }}
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => handleUnlink(o.domainId, own.ownerId)}
                         >
                           <TrashIcon />
                         </button>
@@ -184,7 +193,11 @@ export function VirtualDomainsTab({ addToast }) {
             )}
             <div className="admin-list-item-actions">
               {editingDomainId !== o.domainId && (
-                <button className="admin-icon-btn" title={t('virtual.editOwner')} onClick={() => {
+                <button className="admin-icon-btn" title={t('virtual.editOwner')}
+                  ref={el => {
+                    if (el && returnTo.current === o.domainId) { returnTo.current = null; el.focus() }
+                  }}
+                  onClick={() => {
                   setEditingDomainId(o.domainId)
                   setSearchQuery('')
                   // Reachable from the keyboard: Tab out of one row's box, Enter here, and a flag

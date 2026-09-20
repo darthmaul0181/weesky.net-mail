@@ -1,4 +1,6 @@
-import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState,
+} from 'react'
 import { returnFocus, useDismiss } from '../hooks/useDismiss'
 import { useRovingFocus } from '../hooks/useRovingFocus'
 
@@ -58,6 +60,9 @@ interface Props {
 export default function DropdownMenu(
   { ariaLabel, trigger, items, className, direction = 'down', align = 'right' }: Props) {
   const [open, setOpen] = useState(false)
+  // The menu is named by its trigger, which the ARIA menu pattern asks for and which is the only
+  // thing that tells a reader landing on the first row which menu it is in.
+  const triggerId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -129,14 +134,15 @@ export default function DropdownMenu(
       ref={rootRef}
     >
       <button type="button" className={className} aria-label={ariaLabel} aria-expanded={open}
-        ref={triggerRef} onClick={() => setOpen(o => !o)}>
+        id={triggerId} ref={triggerRef} onClick={() => setOpen(o => !o)}>
         {trigger}
       </button>
-      {/* `tabIndex={-1}`: a menu managing its own focus is not itself in the tab order, and
-          `focusablesIn` skips it, so neither the walk nor the stack's Tab lands on it. */}
+      {/* `tabIndex={-1}`: the lint rule wants an element carrying an interactive role to be
+          focusable, and -1 keeps it out of the Tab walk a dialog around it would otherwise find it
+          in. The menu's own walk never sees it — `focusablesIn` queries descendants. */}
       {open && (
-        <div className="dropdown-menu" role="menu" ref={menuRef} style={fixedStyle}
-          tabIndex={-1} onKeyDown={menuKeys}>
+        <div className="dropdown-menu" role="menu" aria-labelledby={triggerId} ref={menuRef}
+          style={fixedStyle} tabIndex={-1} onKeyDown={menuKeys}>
           {items.map((entry, index) =>
             entry === 'separator' ? (
               <hr key={index} className="dropdown-rule" />

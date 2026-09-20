@@ -3,9 +3,9 @@ import { useRef } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { useRovingFocus } from './useRovingFocus'
 
-function Menu({ open, columns, extras }: { open: boolean; columns?: number; extras?: boolean }) {
+function Menu({ open, extras }: { open: boolean; extras?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const keys = useRovingFocus({ active: open, containerRef: ref, columns })
+  const keys = useRovingFocus({ active: open, containerRef: ref })
   if (!open) return null
   return (
     <div role="menu" ref={ref} tabIndex={-1} onKeyDown={keys}>
@@ -30,6 +30,20 @@ function Combobox() {
       <input aria-label="Filter" autoFocus />
       <button type="button">Ada</button>
       <button type="button">Grace</button>
+    </div>
+  )
+}
+
+/** The two multi-line boxes, where ↓/↑ move between lines rather than between items. */
+function Prose() {
+  const ref = useRef<HTMLDivElement>(null)
+  const keys = useRovingFocus({ active: true, containerRef: ref })
+  return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- test harness, not real UI
+    <div ref={ref} onKeyDown={keys}>
+      <textarea aria-label="Body" />
+      <div role="textbox" aria-label="Rich" contentEditable tabIndex={0} />
+      <button type="button">After</button>
     </div>
   )
 }
@@ -88,6 +102,16 @@ describe('useRovingFocus', () => {
     expect(fireEvent.keyDown(item('Two'), { key: 'a' })).toBe(true)
   })
 
+  /* In the menu pattern ←/→ open and close a submenu; a menu that walked on them would be teaching
+     a dialect of its own. */
+  it('leaves the horizontal arrows alone', () => {
+    render(<Menu open />)
+
+    expect(fireEvent.keyDown(item('One'), { key: 'ArrowRight' })).toBe(true)
+    expect(fireEvent.keyDown(item('One'), { key: 'ArrowLeft' })).toBe(true)
+    expect(item('One')).toHaveFocus()
+  })
+
   /* `focusablesIn` is the layer stack's own list, so the walk and its Tab cannot disagree about
      where focus may go — a disabled row is in neither. */
   it('steps over a disabled item, the way Tab does', () => {
@@ -105,8 +129,8 @@ describe('useRovingFocus', () => {
   })
 
   /* In a text box Home and End are the caret's, which is why the combobox's field can sit inside
-     the surface the arrows walk. */
-  it('yields Home and End to a caret and keeps the arrows', () => {
+     the surface the arrows walk — ↓ is what reaches its list. */
+  it('yields Home and End to a caret and keeps the arrows in a one-line field', () => {
     render(<Combobox />)
     const field = screen.getByLabelText('Filter')
 
@@ -118,25 +142,20 @@ describe('useRovingFocus', () => {
     expect(screen.getByRole('button', { name: 'Ada' })).toHaveFocus()
   })
 
-  /* A 2×2 grid: down is a row, right is one cell. A colour palette walked as a flat list sends the
-     down arrow sideways, which is what the column count answers. */
-  it('steps a whole row on the vertical arrows once it is told the column count', () => {
-    render(<Menu open extras={false} columns={2} />)
+  /* A textarea and a contenteditable have lines of their own for the vertical arrows to move
+     between, so those go to the caret as well. */
+  it('yields the vertical arrows to a multi-line box too', () => {
+    render(<Prose />)
+    const body = screen.getByLabelText('Body')
+    const rich = screen.getByLabelText('Rich')
 
-    fireEvent.keyDown(item('One'), { key: 'ArrowDown' })
-    expect(item('Three')).toHaveFocus()
+    body.focus()
+    expect(fireEvent.keyDown(body, { key: 'ArrowDown' })).toBe(true)
+    expect(fireEvent.keyDown(body, { key: 'End' })).toBe(true)
+    expect(body).toHaveFocus()
 
-    fireEvent.keyDown(item('Three'), { key: 'ArrowRight' })
-    expect(item('One')).toHaveFocus()
-
-    fireEvent.keyDown(item('One'), { key: 'ArrowLeft' })
-    expect(item('Three')).toHaveFocus()
-  })
-
-  it('leaves the horizontal arrows alone in a single-column surface', () => {
-    render(<Menu open />)
-
-    expect(fireEvent.keyDown(item('One'), { key: 'ArrowRight' })).toBe(true)
-    expect(item('One')).toHaveFocus()
+    rich.focus()
+    expect(fireEvent.keyDown(rich, { key: 'ArrowUp' })).toBe(true)
+    expect(rich).toHaveFocus()
   })
 })

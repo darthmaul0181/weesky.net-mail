@@ -47,7 +47,7 @@ describe('VirtualDomainsTab', () => {
     mocks.getUsers.mockResolvedValue(users)
     mocks.getVirtualDomains.mockResolvedValue([
       { domainId: 'd1', domainName: 'alpha.com', owners: [] },
-      { domainId: 'd2', domainName: 'beta.com', owners: [] },
+      { domainId: 'd2', domainName: 'beta.com', owners: [{ ownerId: 'u1', ownerEmail: 'ada@weesky.be' }] },
     ])
   })
 
@@ -105,6 +105,32 @@ describe('VirtualDomainsTab', () => {
 
     await waitFor(() => expect(mocks.addOwner).toHaveBeenCalledWith('d1', 'u2'))
     // The picked match left with the list it was in; the box is still there and takes the focus.
+    expect(field()).toHaveFocus()
+  })
+
+  // Escape unmounts the editor holding the focus, and the pencil it was opened from is not on
+  // screen at that moment: it has to claim the focus back as it is drawn again.
+  it('hands the focus back to the pencil when Escape closes the editor', async () => {
+    await renderTab()
+    fireEvent.click(pencils()[0])
+
+    fireEvent.keyDown(field(), { key: 'Escape' })
+
+    expect(screen.queryByPlaceholderText(/Search user/)).not.toBeInTheDocument()
+    expect(pencils()[0]).toHaveFocus()
+  })
+
+  // Tab lands on the chip's ✕, so Enter has to remove the owner — and the chip leaves with it.
+  it('removes an owner from the keyboard and keeps the focus in the editor', async () => {
+    mocks.removeOwner.mockResolvedValue(null)
+    await renderTab()
+    fireEvent.click(pencils()[1])
+    const remove = screen.getByTitle('Remove owner')
+    remove.focus()
+
+    await userEvent.keyboard('{Enter}')
+
+    await waitFor(() => expect(mocks.removeOwner).toHaveBeenCalledWith('d2', 'u1'))
     expect(field()).toHaveFocus()
   })
 

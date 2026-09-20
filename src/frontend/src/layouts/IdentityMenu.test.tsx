@@ -193,6 +193,13 @@ describe('IdentityMenu', () => {
   describe('the keyboard walk', () => {
     const rows = () => screen.getAllByRole('menuitem')
 
+    it('names the menu after the chevron that opens it', async () => {
+      renderMenu()
+      await openMenu()
+
+      expect(screen.getByRole('menu', { name: /account menu/i })).toBeInTheDocument()
+    })
+
     it('puts the focus on the first row as it opens', async () => {
       renderMenu()
       await openMenu()

@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'rea
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { returnFocus, useDismiss } from '../../../hooks/useDismiss'
-import { useRovingFocus } from '../../../hooks/useRovingFocus'
 import { useViewport } from '../../../hooks/useViewport'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import EllipsisIcon from '../../../icons/EllipsisIcon'
@@ -43,9 +42,10 @@ const SWATCHES = [
   '#d0021b', '#e2674a', '#f5a623', '#f8e71c', '#7ed321', '#417505',
   '#4a90d9', '#182238', '#9013fe', '#bd10e0', '#8b572a', '#50e3c2',
 ]
-/** What the keyboard walk needs to know to send ↓ to the row below rather than to the next
-    swatch; it is `.compose-swatches`' own `grid-template-columns` in mail.css, so change both. */
-const SWATCH_COLUMNS = 6
+/** The two colour triggers name the grid each one opens, which is what gives an eighteen-swatch
+    group an accessible name without a catalogue key of its own. */
+const TEXT_COLOUR_ID = 'compose-text-colour'
+const HIGHLIGHT_COLOUR_ID = 'compose-highlight-colour'
 const FONTS = ['Arial', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Courier New']
 const SIZES: { key: string; value: string }[] = [
   { key: 'small', value: '12px' }, { key: 'normal', value: '14px' },
@@ -75,24 +75,6 @@ function alignLabel(value: Alignment, t: TFunction<'compose'>): string {
 function Popover({ open, children }: { open: boolean; children: ReactNode }) {
   if (!open) return null
   return <div className="compose-popover">{children}</div>
-}
-
-/** Eighteen rows that each lay down a colour and close: a menu, and it answers the keyboard like
-    one. The link popover beside it is a form, where Home and End belong to its URL box. */
-function SwatchPopover({ open, apply }: { open: boolean; apply: (colour: string) => void }) {
-  const gridRef = useRef<HTMLDivElement>(null)
-  const gridKeys = useRovingFocus({ active: open, containerRef: gridRef, columns: SWATCH_COLUMNS })
-  if (!open) return null
-  return (
-    <div className="compose-popover">
-      <div className="compose-swatches" role="menu" ref={gridRef} tabIndex={-1} onKeyDown={gridKeys}>
-        {SWATCHES.map(colour => (
-          <button key={colour} type="button" role="menuitem" aria-label={colour}
-            style={{ background: colour }} onClick={() => apply(colour)} />
-        ))}
-      </div>
-    </div>
-  )
 }
 
 interface Props {
@@ -133,12 +115,17 @@ export default function EditorToolbar(
   const highlightTriggerRef = useRef<HTMLButtonElement>(null)
   const linkTriggerRef = useRef<HTMLButtonElement>(null)
   const popoverTrigger = useRef<HTMLButtonElement | null>(null)
+  const urlRef = useRef<HTMLInputElement>(null)
 
   useLayoutEffect(() => {
     popoverTrigger.current = openPopover === 'text' ? textTriggerRef.current
       : openPopover === 'highlight' ? highlightTriggerRef.current
         : openPopover === 'link' ? linkTriggerRef.current : null
   }, [openPopover])
+
+  // A form opens on its field, through a ref and never `autoFocus` — the house rule for a surface
+  // that places its own focus. The colour grids place none: Tab walks them from their trigger.
+  useLayoutEffect(() => { if (openPopover === 'link') urlRef.current?.focus() }, [openPopover])
 
   useDismiss({
     open: openPopover !== null,
@@ -151,6 +138,20 @@ export default function EditorToolbar(
   function closePopover() {
     returnFocus(container.current, popoverTrigger.current)
     setOpenPopover(null)
+  }
+
+  /** A group rather than a menu: eighteen swatches in six columns are a grid, which the menu
+      pattern cannot express — ←/→ are a submenu's there and Home/End name no corner. Tab walks
+      them, and drawing it as a real `role="grid"` is lot 2c's business with the other grids. */
+  function swatchGrid(apply: (colour: string) => void, labelledBy: string) {
+    return (
+      <div className="compose-swatches" role="group" aria-labelledby={labelledBy}>
+        {SWATCHES.map(colour => (
+          <button key={colour} type="button" aria-label={colour} style={{ background: colour }}
+            onClick={() => { apply(colour); closePopover() }} />
+        ))}
+      </div>
+    )
   }
 
   const btn = (
@@ -217,16 +218,28 @@ export default function EditorToolbar(
       </div>
       <div className="compose-tool-group is-extra">
         <span className="compose-popover-anchor">
-          {btn(t('toolbar.textColour'), inked(<TextColourIcon size={INK_ICON} />, textColour),
-            () => setOpenPopover(p => p === 'text' ? null : 'text'), false, false, textTriggerRef)}
-          <SwatchPopover open={openPopover === 'text'}
-            apply={c => { setTextColour(c); editor?.setTextColour(c); closePopover() }} />
+          {/* Not built from btn: that one stamps aria-pressed on everything, and a trigger that
+              opens a surface says aria-expanded instead — it holds no state of its own. */}
+          <button type="button" className="compose-tool" id={TEXT_COLOUR_ID} ref={textTriggerRef}
+            aria-label={t('toolbar.textColour')} title={t('toolbar.textColour')}
+            aria-expanded={openPopover === 'text'}
+            onClick={() => setOpenPopover(p => p === 'text' ? null : 'text')}>
+            {inked(<TextColourIcon size={INK_ICON} />, textColour)}
+          </button>
+          <Popover open={openPopover === 'text'}>
+            {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) }, TEXT_COLOUR_ID)}
+          </Popover>
         </span>
         <span className="compose-popover-anchor">
-          {btn(t('toolbar.highlightColour'), inked(<HighlighterIcon size={INK_ICON} />, highlight),
-            () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'), false, false, highlightTriggerRef)}
-          <SwatchPopover open={openPopover === 'highlight'}
-            apply={c => { setHighlight(c); editor?.setHighlightColour(c); closePopover() }} />
+          <button type="button" className="compose-tool" id={HIGHLIGHT_COLOUR_ID}
+            ref={highlightTriggerRef} aria-expanded={openPopover === 'highlight'}
+            aria-label={t('toolbar.highlightColour')} title={t('toolbar.highlightColour')}
+            onClick={() => setOpenPopover(p => p === 'highlight' ? null : 'highlight')}>
+            {inked(<HighlighterIcon size={INK_ICON} />, highlight)}
+          </button>
+          <Popover open={openPopover === 'highlight'}>
+            {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) }, HIGHLIGHT_COLOUR_ID)}
+          </Popover>
         </span>
       </div>
       <div className="compose-tool-group is-extra">
@@ -272,7 +285,8 @@ export default function EditorToolbar(
           <Popover open={openPopover === 'link'}>
             <div className="compose-link-form">
               <label htmlFor="compose-link-url">{t('toolbar.linkUrl')}</label>
-              <input id="compose-link-url" type="url" value={url} onChange={e => setUrl(e.target.value)} />
+              <input id="compose-link-url" ref={urlRef} type="url" value={url}
+                onChange={e => setUrl(e.target.value)} />
               <button type="button" className="btn btn-primary" disabled={!url}
                 onClick={() => { editor?.makeLink(url); setUrl(''); closePopover() }}>
                 {t('toolbar.apply')}

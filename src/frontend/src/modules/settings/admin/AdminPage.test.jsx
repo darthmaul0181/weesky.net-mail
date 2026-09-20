@@ -1043,7 +1043,8 @@ describe('VirtualDomainsTab', () => {
     render(<VirtualDomainsTab addToast={vi.fn()} />)
     await screen.findByText('extra.com')
     await userEvent.click(screen.getAllByTitle('Edit owner')[0])
-    fireEvent.mouseDown(screen.getByTitle('Remove owner'))
+    // The press only holds the caret in the box; the click is what removes, keyboard included.
+    fireEvent.click(screen.getByTitle('Remove owner'))
     await waitFor(() => expect(api.adminRemoveVirtualDomainOwner).toHaveBeenCalledWith('EXT', 1))
   })
 

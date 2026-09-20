@@ -307,6 +307,15 @@ describe('DropdownMenu', () => {
     ]
     const row = (name: string) => screen.getByRole('menuitem', { name })
 
+    // A reader landing on the first row is told which menu it is in by nothing else.
+    it('names the menu after its trigger', () => {
+      render(<DropdownMenu ariaLabel="Message actions" trigger="⋮" items={rows} />)
+
+      fireEvent.click(screen.getByLabelText('Message actions'))
+
+      expect(screen.getByRole('menu', { name: 'Message actions' })).toBeInTheDocument()
+    })
+
     it('puts the focus on the first item as it opens', () => {
       render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
 
