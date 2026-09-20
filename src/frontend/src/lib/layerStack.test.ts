@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { pushLayer, hasOpenLayer, isTopLayer, type Layer, type LayerHandle } from './layerStack'
+import { fireEscape } from '../test-utils'
 
 const opened: LayerHandle[] = []
 
@@ -9,6 +10,8 @@ function push(layer: Layer) {
   return handle
 }
 
+// Tab has no shared helper of fireEscape's own — its job is cycling a trap, not marking a key as
+// spent — so it keeps a local, cancelable event built the same way.
 function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = document) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
   target.dispatchEvent(event)
@@ -39,12 +42,12 @@ describe('layerStack', () => {
     push({ onEscape: lower })
     const top = push({ onEscape: upper })
 
-    press('Escape')
+    fireEscape()
     expect(upper).toHaveBeenCalledTimes(1)
     expect(lower).not.toHaveBeenCalled()
 
     top.remove()
-    press('Escape')
+    fireEscape()
     expect(lower).toHaveBeenCalledTimes(1)
     expect(upper).toHaveBeenCalledTimes(1)
   })
@@ -82,7 +85,7 @@ describe('layerStack', () => {
     document.addEventListener('keydown', later)
     push({ onEscape })
 
-    press('Escape')
+    fireEscape()
 
     document.removeEventListener('keydown', later)
     expect(onEscape).toHaveBeenCalledTimes(1)
@@ -95,10 +98,20 @@ describe('layerStack', () => {
     window.addEventListener('keydown', spy)
     push({})
 
-    press('Escape')
+    fireEscape()
 
     window.removeEventListener('keydown', spy)
     expect(seen).toHaveBeenCalledWith(true)
+  })
+
+  // fireEscape's own contract: idle, it must not read as spent, or a later task's test against it
+  // would pass for the same wrong reason the old non-cancelable event did.
+  it('marks the Escape fireEscape sends as spent only once a layer is open', () => {
+    expect(fireEscape().defaultPrevented).toBe(false)
+
+    push({})
+
+    expect(fireEscape().defaultPrevented).toBe(true)
   })
 
   it('cycles Tab inside the top trap and leaves the one below it alone', () => {
@@ -161,7 +174,7 @@ describe('layerStack', () => {
     push({ trap: inner, onEscape: onInner })
     push({ trap: outer, onEscape: onOuter })
 
-    press('Escape')
+    fireEscape()
 
     expect(onInner).toHaveBeenCalledTimes(1)
     expect(onOuter).not.toHaveBeenCalled()
@@ -176,11 +189,11 @@ describe('layerStack', () => {
     push({ trap: dialog, onEscape: onDialog })
     push({ onEscape: onMenu })
 
-    press('Escape')
+    fireEscape()
     expect(onMenu).toHaveBeenCalledTimes(1)
 
     push({ trap: elsewhere, onEscape: onSibling })
-    press('Escape')
+    fireEscape()
 
     expect(onSibling).toHaveBeenCalledTimes(1)
     expect(onDialog).not.toHaveBeenCalled()
@@ -193,7 +206,7 @@ describe('layerStack', () => {
     push({ onEscape: upper })
 
     lower.update({ onEscape: replaced })
-    press('Escape')
+    fireEscape()
 
     expect(upper).toHaveBeenCalledTimes(1)
     expect(replaced).not.toHaveBeenCalled()
@@ -222,7 +235,7 @@ describe('layerStack', () => {
     add.mockRestore()
 
     handle.remove()
-    expect(press('Escape').defaultPrevented).toBe(false)
+    expect(fireEscape().defaultPrevented).toBe(false)
     expect(onEscape).not.toHaveBeenCalled()
   })
 

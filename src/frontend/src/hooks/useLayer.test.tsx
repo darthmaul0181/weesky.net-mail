@@ -3,7 +3,9 @@ import { render, screen } from '@testing-library/react'
 import { StrictMode, useRef, type ReactNode, type RefObject } from 'react'
 import { useLayer } from './useLayer'
 import { hasOpenLayer } from '../lib/layerStack'
+import { fireEscape } from '../test-utils'
 
+// Tab is a different job — cycling a trap, not marking a key as spent — so it keeps its own event.
 function press(key: string, init: KeyboardEventInit = {}) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
   document.dispatchEvent(event)
@@ -34,7 +36,7 @@ describe('useLayer', () => {
       </div>,
     )
 
-    press('Escape')
+    fireEscape()
 
     expect(upper).toHaveBeenCalledTimes(1)
     expect(lower).not.toHaveBeenCalled()
@@ -54,7 +56,7 @@ describe('useLayer', () => {
     const { rerender, unmount } = render(<Stack tag="first" />)
 
     rerender(<Stack tag="second" />)
-    press('Escape')
+    fireEscape()
 
     expect(upper).toHaveBeenCalledTimes(1)
     unmount()
@@ -166,7 +168,7 @@ describe('useLayer', () => {
     trigger.focus()
 
     const { unmount } = render(<StrictMode><Dialog name="dialog" onEscape={onEscape} /></StrictMode>)
-    press('Escape')
+    fireEscape()
     expect(onEscape).toHaveBeenCalledTimes(1)
 
     unmount()
@@ -210,7 +212,7 @@ describe('useLayer', () => {
     }
     const { unmount } = render(<div><Dialog name="lower" onEscape={lower} /><Detached /></div>)
 
-    press('Escape')
+    fireEscape()
 
     expect(lower).toHaveBeenCalledTimes(1)
     unmount()

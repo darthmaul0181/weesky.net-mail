@@ -123,9 +123,10 @@ export function pointerDownOn(element: HTMLElement, x = 0, y = 0, target: HTMLEl
 /** Escape as a gesture in flight hears it: on `document`, which is where each of them listens.
     Bubbles and is cancelable, matching the layer stack's own contract — a non-cancelable event
     would make `preventDefault()` a no-op and hide whether a layer actually swallowed the key.
-    Wrapped like the pointer helpers, so the abandonment is on screen before it is asserted. */
+    Returns the event, so a caller can read `defaultPrevented` off it. Wrapped like the pointer
+    helpers, so the abandonment is on screen before it is asserted. */
 export function fireEscape() {
-  act(() => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
-  })
+  const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  act(() => { document.dispatchEvent(event) })
+  return event
 }
