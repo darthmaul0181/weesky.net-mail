@@ -10,6 +10,7 @@
     "application": "Application"
   },
   "help": {
+    "accounts": "Create, edit and delete user mailboxes: username, domain, password, quota and administrator rights. Each account belongs to exactly one of the domains listed in the Domains tab.",
     "domains": "A domain is a mail domain hosted directly on this server (e.g. example.com). Every user account belongs to exactly one domain. Adding a domain enables creating mailboxes of the form user@example.com.",
     "virtualdomains": "A virtual alias domain is a domain with no mailboxes of its own. Emails sent to any address under this domain are redirected to real mailboxes via alias rules. Each virtual alias domain can have one or more owners — accounts authorised to create and manage aliases under it.",
     "externaldomains": "Define the external mail providers users may connect accounts from.",

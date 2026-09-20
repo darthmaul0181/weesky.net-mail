@@ -10,8 +10,18 @@ import VirtualDomainsTab from './VirtualDomainsTab.jsx'
 import ExternalDomainsTab from './ExternalDomainsTab'
 import ApplicationTab from './ApplicationTab'
 
-// The Accounts tab explains itself; the other four earn a help bubble.
-const TABS_WITH_HELP = ['domains', 'virtualdomains', 'externaldomains', 'application']
+/** Each tab is its own literal `t()` call: a key held in a table and read by variable is
+    invisible to `src/locales/keys.test.ts`, which is what let `help.accounts` go missing. */
+function helpTextOf(tab, t) {
+  switch (tab) {
+    case 'accounts': return t('help.accounts')
+    case 'domains': return t('help.domains')
+    case 'virtualdomains': return t('help.virtualdomains')
+    case 'externaldomains': return t('help.externaldomains')
+    case 'application': return t('help.application')
+    default: return null
+  }
+}
 
 export default function AdminPage() {
   const { t } = useTranslation('admin')
@@ -45,11 +55,9 @@ export default function AdminPage() {
             {activeTab === 'application' && <ApplicationTab addToast={addToast} />}
           </div>
         </div>
-        {TABS_WITH_HELP.includes(activeTab) && (
-          <div className="admin-modal-help">
-            <HelpTooltip text={t(`help.${activeTab}`)} />
-          </div>
-        )}
+        <div className="admin-modal-help">
+          <HelpTooltip text={helpTextOf(activeTab, t)} />
+        </div>
       </div>
 
       <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />

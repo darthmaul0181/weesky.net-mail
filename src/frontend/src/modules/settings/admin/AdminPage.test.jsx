@@ -912,6 +912,31 @@ describe('AdminPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Accounts' }))
     expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
   })
+
+  // The Accounts tab used to build its help key from `help.${activeTab}`, a template literal
+  // the missing-key guard cannot see; the key was absent and the "?" bubble showed nothing.
+  it('shows real help text on the Accounts tab, not an empty bubble', async () => {
+    renderAdminPage()
+    await waitFor(() =>
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Create, edit and delete user mailboxes')
+    )
+  })
+
+  it('shows the matching help text on every other tab', async () => {
+    renderAdminPage()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Domains' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('A domain is a mail domain hosted directly')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Virtual domains' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('A virtual alias domain is a domain with no mailboxes')
+
+    await userEvent.click(screen.getByRole('button', { name: 'External domains' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Define the external mail providers')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Offers the webmail for installation')
+  })
 })
 
 // ── VirtualDomainsTab ─────────────────────────────────────────

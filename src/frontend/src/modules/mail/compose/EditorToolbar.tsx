@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { returnFocus, useDismiss } from '../../../hooks/useDismiss'
@@ -105,7 +105,18 @@ export default function EditorToolbar(
   const container = useRef<HTMLDivElement>(null)
   const picker = useRef<HTMLInputElement>(null)
   const attachPicker = useRef<HTMLInputElement>(null)
+  // Each popover's own trigger, held directly the way `DropdownMenu` holds its `triggerRef` —
+  // never read off `document.activeElement`, which Safari does not move on a plain button click.
+  const textTriggerRef = useRef<HTMLButtonElement>(null)
+  const highlightTriggerRef = useRef<HTMLButtonElement>(null)
+  const linkTriggerRef = useRef<HTMLButtonElement>(null)
   const popoverTrigger = useRef<HTMLButtonElement | null>(null)
+
+  useLayoutEffect(() => {
+    popoverTrigger.current = openPopover === 'text' ? textTriggerRef.current
+      : openPopover === 'highlight' ? highlightTriggerRef.current
+        : openPopover === 'link' ? linkTriggerRef.current : null
+  }, [openPopover])
 
   useDismiss({
     open: openPopover !== null,
@@ -120,12 +131,6 @@ export default function EditorToolbar(
     setOpenPopover(null)
   }
 
-  // Whatever held the focus when a popover appeared is what opened it — `useLayer`'s own way of
-  // finding an opener, and the three popovers share one state, so no trigger can name itself.
-  useLayoutEffect(() => {
-    if (openPopover) popoverTrigger.current = document.activeElement as HTMLButtonElement
-  }, [openPopover])
-
   function swatchGrid(apply: (colour: string) => void) {
     return (
       <div className="compose-swatches">
@@ -137,8 +142,11 @@ export default function EditorToolbar(
     )
   }
 
-  const btn = (label: string, glyph: ReactNode, onClick: () => void, on = false, off = false) => (
-    <button type="button" className={`compose-tool${on ? ' is-active' : ''}`} aria-pressed={on}
+  const btn = (
+    label: string, glyph: ReactNode, onClick: () => void, on = false, off = false,
+    ref?: Ref<HTMLButtonElement>,
+  ) => (
+    <button type="button" ref={ref} className={`compose-tool${on ? ' is-active' : ''}`} aria-pressed={on}
       aria-label={label} title={label} disabled={off} onClick={onClick}>
       {glyph}
     </button>
@@ -199,14 +207,14 @@ export default function EditorToolbar(
       <div className="compose-tool-group is-extra">
         <span className="compose-popover-anchor">
           {btn(t('toolbar.textColour'), inked(<TextColourIcon size={INK_ICON} />, textColour),
-            () => setOpenPopover(p => p === 'text' ? null : 'text'))}
+            () => setOpenPopover(p => p === 'text' ? null : 'text'), false, false, textTriggerRef)}
           <Popover open={openPopover === 'text'}>
             {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) })}
           </Popover>
         </span>
         <span className="compose-popover-anchor">
           {btn(t('toolbar.highlightColour'), inked(<HighlighterIcon size={INK_ICON} />, highlight),
-            () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'))}
+            () => setOpenPopover(p => p === 'highlight' ? null : 'highlight'), false, false, highlightTriggerRef)}
           <Popover open={openPopover === 'highlight'}>
             {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) })}
           </Popover>
@@ -250,7 +258,8 @@ export default function EditorToolbar(
       </div>
       <div className="compose-tool-group is-extra">
         <span className="compose-popover-anchor">
-          {btn(t('toolbar.link'), <LinkIcon size={ICON} />, () => setOpenPopover(p => p === 'link' ? null : 'link'))}
+          {btn(t('toolbar.link'), <LinkIcon size={ICON} />,
+            () => setOpenPopover(p => p === 'link' ? null : 'link'), false, false, linkTriggerRef)}
           <Popover open={openPopover === 'link'}>
             <div className="compose-link-form">
               <label htmlFor="compose-link-url">{t('toolbar.linkUrl')}</label>

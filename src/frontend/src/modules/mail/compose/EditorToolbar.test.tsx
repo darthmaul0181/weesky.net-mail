@@ -96,6 +96,47 @@ describe('EditorToolbar', () => {
     expect(trigger).toHaveFocus()
   })
 
+  // Safari focuses no button on click, so `document.activeElement` at open time can be the
+  // editor rather than the trigger — `fireEvent.click` (unlike userEvent.click) does not move
+  // focus in jsdom either, which is what lets this test stand in for that case. Closing is done
+  // from a swatch that *is* focused (as a real click or a keyboard activation would leave it),
+  // which is what lets `returnFocus`'s "was focus inside the surface" guard run at all — and is
+  // exactly the setup that used to send focus to `elsewhere` instead of to the trigger.
+  it('refocuses the button that opened a popover, even when something else held focus when it opened', () => {
+    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+    const elsewhere = document.createElement('button')
+    document.body.appendChild(elsewhere)
+    elsewhere.focus()
+    expect(document.activeElement).toBe(elsewhere)
+
+    const trigger = screen.getByRole('button', { name: 'Text colour' })
+    fireEvent.click(trigger)
+    expect(document.activeElement).toBe(elsewhere) // sanity: opening did not focus the trigger
+
+    const swatch = screen.getByRole('button', { name: '#d0021b' })
+    swatch.focus()
+    fireEvent.click(swatch)
+
+    expect(trigger).toHaveFocus()
+    elsewhere.remove()
+  })
+
+  it('refocuses the highlight trigger, not the last text-colour trigger, when both popovers were used', () => {
+    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
+    const firstSwatch = screen.getByRole('button', { name: '#d0021b' })
+    firstSwatch.focus()
+    fireEvent.click(firstSwatch)
+
+    const highlightTrigger = screen.getByRole('button', { name: 'Highlight colour' })
+    fireEvent.click(highlightTrigger)
+    const secondSwatch = screen.getByRole('button', { name: '#f8e71c' })
+    secondSwatch.focus()
+    fireEvent.click(secondSwatch)
+
+    expect(highlightTrigger).toHaveFocus()
+  })
+
   it('applies font, size and alignment from their menus', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
