@@ -62,6 +62,7 @@
   "list": {
     "searchLabel": "Search contacts",
     "searchPlaceholder": "Search contacts…",
+    "gridLabel": "Contacts",
     "empty": "No contacts yet",
     "emptyGroup": "This group has no members yet",
     "emptyFavourites": "No favourites yet",

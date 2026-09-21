@@ -2413,10 +2413,21 @@ body {
 .contact-tiles.has-selection .contact-tile-check,
 .contact-tile-check:checked { opacity: 1; pointer-events: auto; }
 
+/* Three of the four cells hold nothing in the flow — the box, the star and the cluster are all
+   positioned over the tile — so the skin is the content cell's alone and costs what it did. The
+   star's sits where the name's line already ended it: 26px of button against the content edge. */
+.contact-tile-flag { position: absolute; right: 12px; top: 8px; }
+
 /* Dimmed while it rides the cursor: the pill is the thing being moved, the tile is its origin. */
 .contact-tile.is-dragging { opacity: 0.45; }
 
-.contact-tile-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+/* The star left this line's flex flow for a cell of its own, and the line was as tall as the 26px
+   button: measured, without the floor the line is 15px and every tile loses 11. The reserve
+   replaces the button plus the 7px gap it closed the line with — 334px of name, back to 301. */
+.contact-tile-line {
+  display: flex; align-items: center; min-width: 0;
+  min-height: 26px; padding-right: 33px;
+}
 .contact-tile-name {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-weight: 700; font-size: 13px;
@@ -2452,6 +2463,16 @@ body {
    Unlike the message row's, the count is fixed: edit and delete, never a choice. */
 .contact-tile:hover .contact-tile-address,
 .contact-tile:focus-within .contact-tile-address { padding-right: 60px; }
+
+/* The grid's one tab stop may sit on a cluster button, and a hidden button is focusable by nothing
+   — the whole list would be unreachable by Tab. Specificity rather than order: the touch block and
+   the phone block below restate these selectors at (0,3,0) and (0,1,0) and both sit later. */
+.contact-tile:has(.contact-tile-actions .admin-icon-btn[tabindex="0"]) .contact-tile-actions {
+  visibility: visible; display: flex;
+}
+.contact-tile:has(.contact-tile-actions .admin-icon-btn[tabindex="0"]) .contact-tile-address {
+  padding-right: 60px;
+}
 
 .contact-star {
   flex: none; display: inline-flex; padding: 2px; border: 0; background: transparent;

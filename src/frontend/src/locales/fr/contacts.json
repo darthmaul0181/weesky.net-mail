@@ -62,6 +62,7 @@
   "list": {
     "searchLabel": "Rechercher un contact",
     "searchPlaceholder": "Rechercher un contact…",
+    "gridLabel": "Contacts",
     "empty": "Aucun contact pour l’instant",
     "emptyGroup": "Ce groupe n’a pas encore de membre",
     "emptyFavourites": "Aucun favori pour l’instant",

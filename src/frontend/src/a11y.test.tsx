@@ -167,11 +167,9 @@ describe('accessibility sweep', () => {
     )
 
     await screen.findByText('Alice')
-    // nested-interactive: .contact-tile is a role="button" wrapping its own checkbox, star and
-    // icon buttons — Task 4's contacts-list ARIA-grid rewrite removes this waiver.
-    await expectNoAxeViolations(container, {
-      extraRules: { 'nested-interactive': { enabled: false } },
-    })
+    // No waiver left in this file: the tile is a role="row" of four gridcells now, so nothing
+    // inside it is nested in a button any more.
+    await expectNoAxeViolations(container)
   })
 
   it('CalendarLayout — month view', async () => {

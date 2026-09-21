@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { focusablesIn, tabbablesIn } from '../../lib/layerStack'
 import ContactList from './ContactList'
 import type { Contact } from './contactTypes'
 
@@ -26,6 +27,13 @@ function setup(overrides: Partial<Parameters<typeof ContactList>[0]> = {}) {
   }
   render(<ContactList {...props} />)
   return props
+}
+
+/** The cell that replaced the `role="button"` tile: it carries the name, the keys that open the
+    card and, on the open contact, `aria-current`. */
+function contentCell(id: string): HTMLElement {
+  return screen.getByTestId(`contact-tile-${id}`)
+    .querySelector('.contact-tile-content') as HTMLElement
 }
 
 describe('ContactList', () => {
@@ -157,18 +165,20 @@ describe('ContactList', () => {
 
   // The 13 tests above only check presence, so moving the star or the action cluster in the JSX
   // would leave every one of them green. The anatomy is the assertion, and it is the message row's:
-  // the name takes the first line with the star closing it on the RIGHT, the address sits under
-  // them, and the cluster is the tile's LAST child — out of the flow over the bottom line. The star
-  // back at the head of the line is the page-tile idiom this list deliberately left.
+  // the name takes the first line with the star closing it on the RIGHT — a cell of its own now,
+  // the line it used to end being the content cell's — the address sits under them, and the cluster
+  // is the tile's LAST child, out of the flow over the bottom line. The star back at the head of
+  // the line is the page-tile idiom this list deliberately left.
   it('keeps the tile anatomy in order: the box, name then star, the address, then the actions', () => {
     setup()
 
-    const [check, line, address, actions] = Array.from(screen.getByTestId('contact-tile-a').children)
-    const [name, star] = Array.from(line.children)
+    const [select, content, flag, actions] =
+      Array.from(screen.getByTestId('contact-tile-a').children)
+    const [line, address] = Array.from(content.children)
 
-    expect(check).toHaveClass('contact-tile-check')
-    expect(name).toHaveClass('contact-tile-name')
-    expect(star).toHaveClass('contact-star')
+    expect(select.firstElementChild).toHaveClass('contact-tile-check')
+    expect(line.firstElementChild).toHaveClass('contact-tile-name')
+    expect(flag.firstElementChild).toHaveClass('contact-star')
     expect(address).toHaveClass('contact-tile-address')
     expect(actions).toHaveClass('contact-tile-actions')
   })
@@ -188,7 +198,7 @@ describe('ContactList', () => {
   it('selects the focused tile on Enter', () => {
     const props = setup()
 
-    fireEvent.keyDown(screen.getByTestId('contact-tile-b'), { key: 'Enter' })
+    fireEvent.keyDown(contentCell('b'), { key: 'Enter' })
 
     expect(props.onSelect).toHaveBeenCalledWith('b')
   })
@@ -196,7 +206,7 @@ describe('ContactList', () => {
   it('selects the focused tile on Space', () => {
     const props = setup()
 
-    fireEvent.keyDown(screen.getByTestId('contact-tile-b'), { key: ' ' })
+    fireEvent.keyDown(contentCell('b'), { key: ' ' })
 
     expect(props.onSelect).toHaveBeenCalledWith('b')
   })
@@ -386,5 +396,152 @@ describe('ContactList', () => {
     expect(onRemoveFromGroup).toHaveBeenCalledWith(['a'])
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
     expect(screen.queryByText(/delete this contact/i)).not.toBeInTheDocument()
+  })
+})
+
+/* -- The list as a grid ---------------------------------------------------------------------- */
+
+/* The tile used to be one `role="button"` with `tabIndex={0}`: crossing the book cost one Tab press
+   per contact, and that role being children-presentational, a reader was told the tile was one
+   button and never heard of the checkbox, the star, the pencil or the trash plainly on screen. It
+   is four `role="gridcell"`s in a `role="row"` now, walked by useGridNav — the message row's own
+   shape, which this tile already mirrored on screen. */
+describe('the list as a grid', () => {
+  const grid = () => screen.getByRole('grid')
+  const stopsIn = tabbablesIn
+  const rowOf = (id: string) => screen.getByTestId(`contact-tile-${id}`)
+
+  it('is a grid of contact rows', () => {
+    setup()
+
+    expect(grid()).toHaveClass('contact-tiles')
+    expect(within(grid()).getAllByRole('row')).toHaveLength(2)
+    expect(rowOf('a')).toHaveAttribute('role', 'row')
+  })
+
+  it('offers one tab stop for the whole list', () => {
+    setup()
+
+    // Five widgets a tile: the box, the content cell, the star, the pencil and the trash.
+    expect(focusablesIn(grid())).toHaveLength(10)
+    expect(stopsIn(grid())).toHaveLength(1)
+  })
+
+  it('puts each control in a gridcell of its own, which role=button swallowed', () => {
+    setup()
+    const row = rowOf('a')
+    // ARIA lets a row own nothing but cells, so every focusable part sits in one of its own.
+    const cells = within(row).getAllByRole('gridcell')
+
+    expect(cells).toHaveLength(4)
+    for (const control of [
+      within(row).getByRole('checkbox'),
+      within(row).getByRole('button', { name: /from favourites/i }),
+      within(row).getByRole('button', { name: /^edit alice dupont/i }),
+      within(row).getByRole('button', { name: /^delete alice dupont/i }),
+    ]) expect(cells).toContain(control.closest('[role="gridcell"]'))
+  })
+
+  /* Cells are walked in the order they are written, so that has to be the order they are drawn in:
+     the star closes the name's line, the cluster sits on the corner below it. */
+  it('writes the cells in the order they are drawn', () => {
+    setup()
+
+    expect(within(rowOf('a')).getAllByRole('gridcell').map(cell => cell.className))
+      .toEqual(['contact-tile-select', 'contact-tile-content',
+        'contact-tile-flag', 'contact-tile-actions'])
+  })
+
+  it('walks the tiles with the vertical arrows', () => {
+    setup()
+    contentCell('a').focus()
+
+    fireEvent.keyDown(contentCell('a'), { key: 'ArrowDown' })
+    expect(contentCell('b')).toHaveFocus()
+
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' })
+    expect(contentCell('a')).toHaveFocus()
+  })
+
+  it('reaches the star and the actions with the horizontal arrows', () => {
+    setup()
+    contentCell('a').focus()
+
+    fireEvent.keyDown(contentCell('a'), { key: 'ArrowRight' })
+    expect(within(rowOf('a')).getByRole('button', { name: /remove alice dupont from favourites/i }))
+      .toHaveFocus()
+
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowRight' })
+    expect(within(rowOf('a')).getByRole('button', { name: /^edit alice dupont/i })).toHaveFocus()
+
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' })
+    expect(within(rowOf('a')).getByRole('button', { name: /^delete alice dupont/i })).toHaveFocus()
+  })
+
+  // Tab into the list has to land where Enter means something. `aria-current` and never
+  // `aria-selected`: the checkboxes are a real multi-selection here, so "selected" already means
+  // something else to this list's user.
+  it('opens the tab stop on the contact already open in the card', () => {
+    setup({ selectedId: 'b' })
+
+    expect(contentCell('b')).toHaveAttribute('aria-current', 'true')
+    expect(contentCell('a')).not.toHaveAttribute('aria-current')
+    expect(stopsIn(grid())).toEqual([contentCell('b')])
+  })
+
+  it('opens it on the first checkbox when no contact is open', () => {
+    setup()
+
+    expect(stopsIn(grid())).toEqual([within(rowOf('a')).getByRole('checkbox')])
+  })
+
+  it('keeps the checkbox selection and the band count', async () => {
+    setup()
+
+    await userEvent.click(within(rowOf('a')).getByRole('checkbox'))
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('keeps the drag handlers on the tile', () => {
+    setup()
+    const setData = vi.fn()
+
+    expect(rowOf('a')).toHaveAttribute('draggable', 'true')
+    fireEvent.dragStart(rowOf('a'), { dataTransfer: { setData, setDragImage: vi.fn() } })
+
+    expect(JSON.parse(setData.mock.calls[0][1])).toEqual({ ids: ['a'] })
+  })
+
+  /* The filter is what makes this grid change length under the user's hands — `shown` is
+     filterContacts(contacts, query) — so the tile holding the stop leaves while the caret is in the
+     search field, and a stop left on a detached tile is a list Tab can no longer enter. */
+  it('keeps a live tab stop when a filter removes the focused row', async () => {
+    setup()
+    within(rowOf('b')).getByRole('checkbox').focus()
+
+    await userEvent.type(screen.getByRole('searchbox'), 'dupont')
+
+    expect(screen.queryByTestId('contact-tile-b')).toBeNull()
+    expect(stopsIn(grid())).toHaveLength(1)
+    expect(rowOf('a')).toContainElement(stopsIn(grid())[0])
+  })
+
+  // No pager and every contact drawn, so a count here would be a lie about a list that is complete.
+  it('carries no aria-rowcount: the list is complete', () => {
+    setup()
+
+    expect(grid()).not.toHaveAttribute('aria-rowcount')
+    expect(rowOf('a')).not.toHaveAttribute('aria-rowindex')
+  })
+
+  // A filter matching nothing draws no grid at all: an empty `role="grid"` owns none of the rows
+  // ARIA requires of it, and the hook has nothing to point a stop at.
+  it('draws no grid when the filter matches nothing', async () => {
+    setup()
+
+    await userEvent.type(screen.getByRole('searchbox'), 'zzz')
+
+    expect(screen.queryByRole('grid')).toBeNull()
   })
 })
