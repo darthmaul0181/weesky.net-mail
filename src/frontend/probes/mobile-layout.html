@@ -2012,10 +2012,12 @@
       html: stage(toolbarPhone + `
         <div class="calendar-stage">
           <div class="week-view">
-            <div class="week-head" style="grid-template-columns: var(--cal-gutter) repeat(1, minmax(0, 1fr))">
-              <div class="week-head-gutter">W38</div>
-              <div class="week-day-head is-today">
-                <span class="week-day-name">Wed</span><span class="week-day-number">16</span>
+            <div class="week-head-table" role="table" aria-label="Calendar days">
+              <div class="week-head" role="row" style="grid-template-columns: var(--cal-gutter) repeat(1, minmax(0, 1fr))">
+                <div class="week-head-gutter" role="columnheader">W38</div>
+                <div class="week-day-head is-today" role="columnheader" aria-label="Wednesday 16 September">
+                  <span class="week-day-name">Wed</span><span class="week-day-number">16</span>
+                </div>
               </div>
             </div>
             <div class="allday-band">

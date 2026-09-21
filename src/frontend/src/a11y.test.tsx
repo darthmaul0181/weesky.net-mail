@@ -11,8 +11,11 @@ import ContactsLayout from './modules/contacts/ContactsLayout'
 import type { Contact, ContactDetail } from './modules/contacts/contactTypes'
 import CalendarLayout from './modules/calendar/CalendarLayout'
 import EventEditor, { EDITOR_TITLE_ID } from './modules/calendar/EventEditor'
+import WeekView from './modules/calendar/WeekView'
 import type { EventFormState } from './modules/calendar/eventForm'
-import { calendarOf, renderInCalendar, TZ } from './modules/calendar/calendarTestHarness'
+import {
+  calendarOf, occurrenceOf, renderInCalendar, TZ,
+} from './modules/calendar/calendarTestHarness'
 import Modal from './components/Modal'
 import AdminPage from './modules/settings/admin/AdminPage.jsx'
 import GeneralPage from './modules/settings/general/GeneralPage'
@@ -207,6 +210,24 @@ describe('accessibility sweep', () => {
     )
 
     await screen.findByText('Stand-up')
+    await expectNoAxeViolations(container)
+  })
+
+  /* The week's head is a role="table" holding one row of column headers and no data row, which
+     is precisely the shape axe's required-parent and required-children rules judge. The month is
+     covered by the layout above; this is the surface the layout never mounts on the desktop. */
+  it('WeekView — the hour grid', async () => {
+    const days = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18',
+      '2026-09-19', '2026-09-20']
+    const { container } = renderInCalendar(
+      <WeekView days={days} gestures={false} onOpen={vi.fn()} onOpenEditor={vi.fn()} />,
+      {
+        visible: [occurrenceOf({
+          eventId: 'e1', summary: 'Stand-up',
+          startUtc: '2026-09-16T07:00:00Z', endUtc: '2026-09-16T08:00:00Z',
+        })],
+      })
+
     await expectNoAxeViolations(container)
   })
 

@@ -46,6 +46,18 @@ function week(
 beforeEach(installPointerEvents)
 
 describe('WeekView', () => {
+  // "WED 16" is the whole of what a reader hears otherwise, and a column that heads nothing
+  // leaves every chip under it named by position alone.
+  it('names each week column with its day', () => {
+    week([])
+    const headers = screen.getAllByRole('columnheader')
+
+    expect(headers).toHaveLength(8)
+    expect(headers[0]).toHaveTextContent('W38')
+    expect(headers[1]).toHaveAccessibleName(/Monday.*14 September/)
+    expect(headers[3]).toHaveAccessibleName(/Wednesday.*16 September/)
+  })
+
   // Decision 3: the two pieces carry one occurrence key, so the bubble's highlight reaches both
   // columns rather than the half the pointer happened to be on.
   it('lights both slices of an evening crossing midnight', () => {

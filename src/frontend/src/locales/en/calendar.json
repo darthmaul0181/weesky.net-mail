@@ -32,6 +32,8 @@
     "now": "Current time",
     "weekShort": "W{{number}}",
     "monthGrid": "Month of {{month}}",
+    "dayHeaders": "Calendar days",
+    "chipLabel": "{{title}}, {{when}}",
     "more_one": "+{{count}} more",
     "more_other": "+{{count}} more",
     "noTitle": "(No title)",

@@ -91,7 +91,9 @@
       cell.append(el('span', 'week-day-name', name), el('span', 'week-day-number', String(14 + index)))
       head.append(cell)
     })
-    week.append(head)
+    const headTable = el('div', 'week-head-table')
+    headTable.append(head)
+    week.append(headTable)
 
     const band = el('div', 'allday-band')
     const days = el('div', 'allday-days')

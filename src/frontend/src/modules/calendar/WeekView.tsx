@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { dateFormat } from '../../lib/intl'
 import AllDayBand from './AllDayBand'
 import { useCalendar } from './calendarContext'
-import { dateLocaleOf, formatTime, weekNumberOf } from './calendarLocale'
+import { dateLocaleOf, formatLongDay, formatTime, weekNumberOf } from './calendarLocale'
 import type { Occurrence } from './calendarTypes'
 import DayColumn from './DayColumn'
 import { FIRST_VISIBLE_HOUR, HOURS, minutesToPx } from './gridGeometry'
@@ -78,16 +78,22 @@ export default function WeekView({
 
   return (
     <div className={`week-view${gesturing ? ' is-gesturing' : ''}`}>
-      <div className="week-head" style={{ gridTemplateColumns: template }}>
-        <div className="week-head-gutter">
-          {t('views.weekShort', { number: weekNumberOf(days[0], rules) })}
-        </div>
-        {days.map(day => (
-          <div key={day} className={`week-day-head${day === today ? ' is-today' : ''}`}>
-            <span className="week-day-name">{nameOf(day)}</span>
-            <span className="week-day-number">{Number(day.slice(8))}</span>
+      {/* A row of column headers needs a table to sit in, and the head is the only part of this
+          grid that is one: the body's hours are encoded in position, which is a pattern of its
+          own and deliberately not this one. */}
+      <div className="week-head-table" role="table" aria-label={t('views.dayHeaders')}>
+        <div className="week-head" role="row" style={{ gridTemplateColumns: template }}>
+          <div className="week-head-gutter" role="columnheader">
+            {t('views.weekShort', { number: weekNumberOf(days[0], rules) })}
           </div>
-        ))}
+          {days.map(day => (
+            <div key={day} role="columnheader" aria-label={formatLongDay(day, locale)}
+              className={`week-day-head${day === today ? ' is-today' : ''}`}>
+              <span className="week-day-name">{nameOf(day)}</span>
+              <span className="week-day-number">{Number(day.slice(8))}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <AllDayBand days={days} entries={placements.bands} selectedKey={selectedKey}
