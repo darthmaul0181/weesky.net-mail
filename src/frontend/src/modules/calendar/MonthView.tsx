@@ -133,8 +133,9 @@ export default function MonthView({
                 aria-label={items.length > 0
                   ? t('views.dayCell', { date, count: items.length }) : date}
                 aria-current={day === today ? 'date' : undefined}
-                // The stop the hook opens on, where today is not in this month at all: without it
-                // Tab lands on the first cell, which is an outside day of the month before.
+                // The stop the hook opens on, ahead of today wherever both are on screen: the
+                // layout keys this grid on the month, so a step reopens it here rather than
+                // leaving Tab on the first cell, an outside day of the month before.
                 aria-selected={day === anchor ? true : undefined}
                 className={`month-cell${day.slice(0, 7) === month ? '' : ' is-outside'}${day === today ? ' is-today' : ''}`}
                 onClick={event => onCellClick(day, timed, event)}

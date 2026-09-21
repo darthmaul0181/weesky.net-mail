@@ -818,7 +818,13 @@ export default function CalendarLayout() {
             onOpenEditor={openFromChip} />
         </div>
       )
-      : <MonthView previewOpen={preview !== null} selectedKey={selectedKey} onOpen={openPreview} onOpenEditor={openFromChip} />
+      : (
+        // Keyed on the month: a chevron re-keys five of the six rows, and the hook would recover
+        // its lost stop next door — row 0 at the old weekday, an outside day of the month just
+        // left, where Enter then created. A remount runs its opening `repoint` on the new grid.
+        <MonthView key={anchor.slice(0, 7)} previewOpen={preview !== null}
+          selectedKey={selectedKey} onOpen={openPreview} onOpenEditor={openFromChip} />
+      )
     : view === 'list'
       ? (
         <UpcomingList days={days} selectedKey={selectedKey} onOpen={openPreview}

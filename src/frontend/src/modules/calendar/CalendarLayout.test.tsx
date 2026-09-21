@@ -1009,6 +1009,22 @@ describe('CalendarLayout', () => {
     await waitFor(() => expect(askedFrom()).not.toBe(first))
   })
 
+  // A chevron re-keys five of the six rows, so the hook recovers the lost stop next door and
+  // landed on row 0's Monday, an outside day of the month just left, where Enter then created.
+  it('lands the keyboard on the anchor after a month step', async () => {
+    const router = renderAt('/calendar?view=month&date=2026-09-16')
+    await screen.findByRole('button', { name: 'Next period' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next period' }))
+    await waitFor(() => expect(params(router).get('date')).toBe('2026-10-16'))
+
+    const stops = document.querySelectorAll('.month-view [tabindex="0"]')
+    expect(stops).toHaveLength(1)
+    expect(stops[0]).toHaveAttribute('aria-selected', 'true')
+    expect(stops[0]).not.toHaveClass('is-outside')
+    expect(stops[0].querySelector('.month-day-number')).toHaveTextContent('16')
+  })
+
   it('draws the view the parameters name', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
     renderAt('/calendar?view=month&date=2026-09-16')
