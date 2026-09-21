@@ -2,7 +2,7 @@
     `keys.test.ts`, so `composeColors.test.ts` is the guard that stands in for it. */
 const NAMES = {
   '#000000': 'black', '#444444': 'darkGrey', '#666666': 'grey',
-  '#999999': 'lightGrey', '#cccccc': 'paleGrey', '#ffffff': 'white',
+  '#999999': 'lightGrey', '#cccccc': 'silver', '#ffffff': 'white',
   '#d0021b': 'red', '#e2674a': 'coral', '#f5a623': 'amber',
   '#f8e71c': 'yellow', '#7ed321': 'green', '#417505': 'olive',
   '#4a90d9': 'blue', '#182238': 'navy', '#9013fe': 'purple',

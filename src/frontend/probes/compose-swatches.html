@@ -61,6 +61,8 @@
       const button = document.createElement('button')
       button.type = 'button'
       button.style.background = colour
+      // The key, not the name: this harness has no catalogue. Labels paint nothing, so geometry is
+      // unaffected — but do not reuse this fixture for anything that reads what a swatch announces.
       button.setAttribute('aria-label', swatchNameKey(colour))
       return button
     }

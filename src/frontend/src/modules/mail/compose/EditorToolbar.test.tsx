@@ -17,7 +17,7 @@ function fakeEditor(): EditorHandle {
 
 const noop = () => {}
 
-const NAMES = ['Black', 'Dark grey', 'Grey', 'Light grey', 'Pale grey', 'White',
+const NAMES = ['Black', 'Dark grey', 'Grey', 'Light grey', 'Silver', 'White',
   'Red', 'Coral', 'Amber', 'Yellow', 'Green', 'Olive',
   'Blue', 'Navy', 'Purple', 'Magenta', 'Brown', 'Turquoise']
 

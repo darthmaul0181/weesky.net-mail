@@ -14,6 +14,9 @@ interface Props {
 /** Eighteen swatches, six by three. A grid rather than a menu: ←/→ are a submenu's there and
     Home/End name no corner. One widget per cell, so no `cellEntry` and Escape stays the
     popover's — a swatch under focus still closes the surface it sits in. */
+/** Structurally a twin of calendar/ColorSwatches: kept apart on purpose, since sharing it would
+    take six parameters for a twenty-line body. The one thing that can drift silently is `picked`,
+    which both normalise the same way — hence SwatchGrid.test.tsx. */
 export default function SwatchGrid({ value, labelledBy, onPick }: Props) {
   const { t } = useTranslation('compose')
   const grid = useRef<HTMLDivElement>(null)
