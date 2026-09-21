@@ -960,7 +960,7 @@ export default function CalendarLayout() {
         {/* Anchored 73px up from the edge the tab bar owns, and the editor owns the whole screen
             below 640px: it is withheld there, exactly as mail and contacts withhold theirs. */}
         {!inEditor && (
-          <FloatingAction label={t('phone.newEvent')} onClick={openNewEvent}>
+          <FloatingAction label={t('phone.newEvent')} onClick={() => openNewEvent()}>
             <PlusIcon size={22} />
           </FloatingAction>
         )}

@@ -1474,6 +1474,20 @@ describe('CalendarLayout — the phone tier', () => {
     await waitFor(() => expect(document.querySelector('.floating-action')).not.toBeNull())
   })
 
+  /* Bound straight to the handler, the button hands its own event in as that handler's first
+     argument: a parameter added there writes [object Object] into a bookmarkable URL, and
+     TypeScript sees nothing, one arity being assignable to the shorter one. */
+  it('opens an empty draft from the floating button, with nothing of its own click in the URL', async () => {
+    mockViewport('phone')
+    const router = renderAt('/calendar?view=day&date=2026-09-16')
+    await waitFor(() => expect(document.querySelector('.floating-action')).not.toBeNull())
+
+    await userEvent.click(document.querySelector('.floating-action') as HTMLElement)
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar/new'))
+    expect([...params(router).keys()]).toEqual(['view', 'date'])
+  })
+
   it('has no floating button while the editor holds the screen', async () => {
     mockViewport('phone')
     renderAt('/calendar/new?view=day&date=2026-09-16')
