@@ -107,6 +107,26 @@
       "right": "À droite",
       "justify": "Justifié"
     },
+    "colourName": {
+      "black": "Noir",
+      "darkGrey": "Gris foncé",
+      "grey": "Gris",
+      "lightGrey": "Gris clair",
+      "silver": "Argent",
+      "white": "Blanc",
+      "red": "Rouge",
+      "coral": "Corail",
+      "amber": "Ambre",
+      "yellow": "Jaune",
+      "green": "Vert",
+      "olive": "Olive",
+      "blue": "Bleu",
+      "navy": "Marine",
+      "purple": "Violet",
+      "magenta": "Magenta",
+      "brown": "Brun",
+      "turquoise": "Turquoise"
+    },
     "moreTools": "Plus d’outils de mise en forme",
     "fewerTools": "Moins d’outils de mise en forme"
   },

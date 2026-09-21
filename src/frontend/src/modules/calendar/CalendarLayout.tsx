@@ -818,7 +818,13 @@ export default function CalendarLayout() {
             onOpenEditor={openFromChip} />
         </div>
       )
-      : <MonthView previewOpen={preview !== null} selectedKey={selectedKey} onOpen={openPreview} onOpenEditor={openFromChip} />
+      : (
+        // Keyed on the anchor, so the stop follows it through either door: a chevron re-keys five
+        // rows and the hook recovered next door — an outside day, where Enter created in the month
+        // just left — while a mini-month pick moves only `aria-selected`, which nothing observes.
+        <MonthView key={anchor} previewOpen={preview !== null}
+          selectedKey={selectedKey} onOpen={openPreview} onOpenEditor={openFromChip} />
+      )
     : view === 'list'
       ? (
         <UpcomingList days={days} selectedKey={selectedKey} onOpen={openPreview}
@@ -954,7 +960,7 @@ export default function CalendarLayout() {
         {/* Anchored 73px up from the edge the tab bar owns, and the editor owns the whole screen
             below 640px: it is withheld there, exactly as mail and contacts withhold theirs. */}
         {!inEditor && (
-          <FloatingAction label={t('phone.newEvent')} onClick={openNewEvent}>
+          <FloatingAction label={t('phone.newEvent')} onClick={() => openNewEvent()}>
             <PlusIcon size={22} />
           </FloatingAction>
         )}

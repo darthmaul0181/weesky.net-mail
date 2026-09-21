@@ -12,18 +12,16 @@ import TrashIcon from '../../icons/TrashIcon.jsx'
 import UserIcon from '../../icons/UserIcon'
 import { useCalendar } from './calendarContext'
 import AttendeeStatusList from './AttendeeStatusList'
-import { dateLocaleOf, formatLongDay, formatLongDayRange, formatTime } from './calendarLocale'
 import type { Calendar, Occurrence } from './calendarTypes'
-import { wallClockOf } from './multiDay'
 import { colorOf } from './occurrenceStyle'
-import { addDays, utcOfLocalTime, type PlainDate } from './plainDate'
+import { whenPartsOf } from './occurrenceWhen'
 import { myAnswerOf } from './myAnswer'
 import { useEvent } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
 import { returnFocus, useDismiss } from '../../hooks/useDismiss'
 import { reachable } from '../../hooks/useLayer'
-import { focusablesIn } from '../../lib/layerStack'
+import { tabbablesIn } from '../../lib/layerStack'
 
 export interface EventPreviewProps {
   occurrence: Occurrence
@@ -40,22 +38,6 @@ export interface EventPreviewProps {
   onClose(): void
   onEdit(): void
   onDelete(): void
-}
-
-/** The two ends an occurrence spans, whichever shape its time came in — `null` when the server
-    sent none of the three, which the grid already draws rather than throwing over. */
-function daysOf(o: Occurrence, tz: string): [PlainDate, PlainDate] | null {
-  if (o.isAllDay) {
-    const from = o.startDate
-    if (!from) return null
-    return [from, addDays(o.endDateExclusive ?? addDays(from, 1), -1)]
-  }
-  const [start, end] = wallClockOf(o, tz)
-  if (start.day === '') return null
-  // A start the server sent and an end it did not is still a day worth naming.
-  if (end.day === '') return [start.day, start.day]
-  // An event closing exactly at midnight belongs to the evening it started in.
-  return [start.day, end.minute === 0 ? addDays(end.day, -1) : end.day]
 }
 
 /**
@@ -93,7 +75,7 @@ export default function EventPreview({
 
   // Opened by a click, so nothing has moved the focus onto it: a keyboard reaches its two
   // actions only if the opening does.
-  useLayoutEffect(() => { if (bubble.current) focusablesIn(bubble.current)[0]?.focus() }, [])
+  useLayoutEffect(() => { if (bubble.current) tabbablesIn(bubble.current)[0]?.focus() }, [])
 
   // Where every closing route meets, whichever of them moved the focus first. A layout cleanup,
   // because a passive one runs after the bubble's nodes have left the document and could no longer
@@ -111,24 +93,7 @@ export default function EventPreview({
   // the picker (repeatIsExact false) all fall back to the same generic label as a save-in-flight.
   const recurrenceLabel = rule ? recurrenceSummary(rule, t, lang, region) : t('preview.repeatsGeneric')
 
-  const locale = dateLocaleOf(lang, region)
-  const span = daysOf(occurrence, tz)
-  const when = !span ? null : span[0] === span[1]
-    ? formatLongDay(span[0], locale)
-    : formatLongDayRange(span[0], span[1], locale)
-
-  const clocks = occurrence.isAllDay ? null : wallClockOf(occurrence, tz)
-  const at = (clock: { day: PlainDate; minute: number }) => formatTime(
-    utcOfLocalTime(clock.day, clock.minute, tz),
-    lang, cycle, tz, region)
-  const readable = clocks?.every(clock => clock.day !== '' && Number.isFinite(clock.minute))
-  // Three lines, not two: a whole day of several days is its range and nothing else, a single one
-  // says so, and a dated event whose clocks the server did not send says neither — announcing
-  // "All day" for an event that has an hour is worse than saying nothing about it.
-  const hours = !occurrence.isAllDay && clocks && readable
-    ? `${at(clocks[0])} – ${at(clocks[1])}` : null
-  const allDay = occurrence.isAllDay && (!span || span[0] === span[1]) ? t('preview.allDay') : null
-  const line = [when, allDay ?? hours].filter(Boolean).join(' · ')
+  const line = whenPartsOf(occurrence, { tz, lang, region, cycle }, t).join(' · ')
 
   const title = occurrence.summary || t('views.noTitle')
   const color = colorOf(occurrence, calendarById)

@@ -112,7 +112,7 @@ describe('useRovingFocus', () => {
     expect(item('One')).toHaveFocus()
   })
 
-  /* `focusablesIn` is the layer stack's own list, so the walk and its Tab cannot disagree about
+  /* `tabbablesIn` is the layer stack's own list, so the walk and its Tab cannot disagree about
      where focus may go — a disabled row is in neither. */
   it('steps over a disabled item, the way Tab does', () => {
     render(<Menu open extras />)

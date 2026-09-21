@@ -6,6 +6,7 @@ import { dateLocaleOf, formatTime } from './calendarLocale'
 import type { Occurrence } from './calendarTypes'
 import { dayOf, wallClockOf, type WallClock } from './multiDay'
 import { occurrenceKey, renderingOf } from './occurrenceStyle'
+import { whenPartsOf } from './occurrenceWhen'
 import { utcMidnightOf, utcOfLocalTime } from './plainDate'
 
 export interface EventChipProps {
@@ -53,6 +54,7 @@ export default function EventChip({
 
   const rendering = renderingOf(occurrence)
   const title = occurrence.summary || t('views.noTitle')
+  const locale = dateLocaleOf(lang, region)
 
   // An all-day occurrence carries no clock at all; the other two shapes both reduce to the wall
   // clock the grid places them by, so a chip and its block can never name two different hours.
@@ -75,10 +77,17 @@ export default function EventChip({
     dragging ? 'is-dragging' : '',
   ].filter(Boolean).join(' ')
 
+  // The two parts of when, or neither: a server that sent no readable date leaves them empty,
+  // and the chip is then named by its title rather than by a trailing comma.
+  const when = whenPartsOf(occurrence, { tz, lang, region, cycle }, t).join(', ')
+
   const key = occurrenceKey(occurrence)
   const common = {
     type: 'button' as const,
     className,
+    // The day is in the column or the cell this sits in, which is position and nothing a reader
+    // can hear: without it a month's forty chips all name themselves the same.
+    'aria-label': when ? t('views.chipLabel', { title, when }) : title,
     'data-key': key,
     onPointerEnter: onHover && (() => onHover(key)),
     onPointerLeave: onHover && (() => onHover(null)),
@@ -91,8 +100,8 @@ export default function EventChip({
   if (variant === 'row') {
     const day = dayOf(occurrence, tz)
     const date = showDate && day
-      ? dateFormat({ day: 'numeric', month: 'short', timeZone: 'UTC' },
-        dateLocaleOf(lang, region)).format(utcMidnightOf(day))
+      ? dateFormat({ day: 'numeric', month: 'short', timeZone: 'UTC' }, locale)
+        .format(utcMidnightOf(day))
       : null
     const clock = times ? times[0] : t('views.allDay')
     const sub = occurrence.location || calendarById.get(occurrence.calendarId)?.displayName || ''

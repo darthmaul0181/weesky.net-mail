@@ -138,6 +138,20 @@ describe('layerStack', () => {
     expect(document.activeElement).toBe(box.children[0])
   })
 
+  /* A roving grid demotes widgets that stay perfectly focusable, so the list Tab cycles cannot be
+     the focusable one: its last item would sit past the last one Tab can reach, nothing would be
+     prevented, and focus would walk out of the trap. */
+  it('cycles Tab over the tabbable items alone', () => {
+    const box = boxOf('trap', 3)
+    ;(box.children[1] as HTMLElement).tabIndex = -1
+    ;(box.children[2] as HTMLElement).tabIndex = -1
+    push({ trap: box })
+    ;(box.children[0] as HTMLElement).focus()
+
+    expect(press('Tab').defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(box.children[0])
+  })
+
   it('holds Tab inside a trap with nothing focusable in it', () => {
     push({ trap: boxOf('empty', 0) })
 

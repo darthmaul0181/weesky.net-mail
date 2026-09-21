@@ -14,6 +14,36 @@ Files under `src/modules/mail/`:
 **A folder holding a role carries its controls disabled, not withheld** — the switch, the rename and the delete are all on the row, greyed. Hiding one strands whatever gets filed into it; renaming or deleting one breaks the role for every client on the mailbox. Dropping the buttons entirely made those rows a different *shape* from every other one, which reads as a rendering fault; disabled beside the role badge — which sits against the name, not off in a column of its own — the rule explains itself. **The API refuses these three operations too** (`MailController.RefuseIfSystemFolderAsync`), deletion including the target's whole subtree — a guard living in one client is one new screen away from being forgotten
 
 - `list/MessageList.tsx` + `list/formatDate.ts` — rows between a fixed heading band and a footer; the page index resets when the folder changes. **The footer is the pager's alone, and exists only when there is a page to go to** — paged mode past `lastPage > 0`. Streaming ("All") carries no footer band: it once held a loaded/total counter, which was dropped because a count is what the scrollbar already shows and a permanently non-navigable strip above the list only ate rows. Do not reinstate it as a "you are here" indicator. The preview element is always rendered even when empty, so a bodyless message does not make a shorter row than its neighbours. **The row's hover cluster (`.message-row-cluster`) is built from `mail.rowActions`, in `ROW_ACTIONS` order, and disappears entirely when the account chose none** — an empty cluster would still eat its reserved width. Withheld there is the user's own choice; a button whose role no folder holds is still drawn, disabled, carrying its reason, because *that* absence would read as a rendering fault. The star is not in the set: it is a flag rather than an action, and it lives outside the cluster. The heading band is now `SelectionToolbar` — `MessageList` owns the selection (`useSelection`) and the bulk actions (move/copy/archive/junk/delete/mark read-unread/empty), wiring role-aware enablement and the empty-folder confirm into the toolbar and `EmptyFolderBanner` it renders below
+
+**The message list is an ARIA grid, and the row is four cells.** `.message-list` carries
+`role="grid"` and lives in `MessageGrid`, a component of its own purely so `useGridNav`
+(`src/hooks/useGridNav.ts`) has a grid at its first layout effect: that hook's effect is keyed on
+the ref alone, so a grid rendered conditionally by the hook's own owner would never be attached to.
+Each row is a `role="row"` of exactly four `role="gridcell"`s — `[select] [content] [flag]
+[actions]` narrow, `[select] [content] [actions] [flag]` wide, each skin in its own drawn order so
+the arrows follow the eye — and the count is four whether or not the row is a conversation and whatever
+`mail.rowActions` holds, because a cell count that moves under a setting moves the grid's shape
+under the arrows. **The content cell replaces what used to be a `role="button"` row**: it carries
+the composed `list.rowLabel` name, `tabindex`, and the Enter/Space that opens the message, while the
+*click* stays the row's, so the padding around that box opens the message as it always did. The
+thread toggle sits inside the content cell, not in a fifth one. That role change is what removed the
+`nested-interactive` waiver from `src/a11y.test.tsx`: `role="button"` is children-presentational, so
+a reader was told each row was one button and never announced the checkbox, the star or the actions
+plainly on screen — and crossing fifty messages cost fifty Tab presses, where the grid now holds one
+stop. `aria-rowcount` and `aria-rowindex` are both counted in **rows**, 1-based over the whole
+folder (the page offset, since `expanded` resets with the page), because blocks of rows arrive as the
+reader scrolls — and a row is a conversation wherever the page is a page of conversations, which is
+why `useMessageList` publishes `rowTotal` beside `total`: the server counts them (`totalThreads`),
+an unfolded conversation adds the members it draws, and `-1` is left for the one case nothing counts,
+a grouped *stream*. The open row's content cell carries **`aria-current`**, not `aria-selected` —
+the checkboxes are a real multi-selection and "selected" already means that here — so Tab into the
+list lands on the row the reader is showing rather than on the first row's checkbox, where Enter
+would do nothing. Two consequences in `mail.css`: the star left the sender line for a cell of its own,
+so that line keeps a `min-height: 26px` and a 34px reserve where the button was — measured in
+Chrome, the row is the same 85px it was, item for item — and **a row whose cluster holds the roving
+tab stop reveals it on the `[tabindex="0"]` attribute alone**, because a `display: none` button is a
+stop Tab cannot reach and the list would be unreachable from the keyboard.
+
 - `list/SelectionToolbar.tsx` — the persistent toolbar replacing the old static heading: master checkbox (indeterminate when partial), selected count vs. the role title, the direct actions and a kebab for the rest, all driven by `ToolbarAction` props from `MessageList`
 - `list/EmptyFolderBanner.tsx` — the pinned trash/junk banner offering "Empty trash now" / "Empty junk now", worded as the action to come, only when that folder holds mail
 - `list/useSelection.ts` — checkbox selection over the loaded rows, keyed by uid; `resetKey` (folder + page) clears it, and shift-click range-selects via an anchor

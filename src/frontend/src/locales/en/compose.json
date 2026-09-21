@@ -107,6 +107,26 @@
       "right": "Right",
       "justify": "Justify"
     },
+    "colourName": {
+      "black": "Black",
+      "darkGrey": "Dark grey",
+      "grey": "Grey",
+      "lightGrey": "Light grey",
+      "silver": "Silver",
+      "white": "White",
+      "red": "Red",
+      "coral": "Coral",
+      "amber": "Amber",
+      "yellow": "Yellow",
+      "green": "Green",
+      "olive": "Olive",
+      "blue": "Blue",
+      "navy": "Navy",
+      "purple": "Purple",
+      "magenta": "Magenta",
+      "brown": "Brown",
+      "turquoise": "Turquoise"
+    },
     "moreTools": "More formatting tools",
     "fewerTools": "Fewer formatting tools"
   },

@@ -42,7 +42,8 @@ export default function CalendarSidebar({
   return (
     <div className="calendar-sidebar">
       <div className="column-actions">
-        <button type="button" className="btn btn-primary column-actions-main" onClick={onNewEvent}>
+        <button type="button" className="btn btn-primary column-actions-main"
+          onClick={() => onNewEvent()}>
           {t('sidebar.newEvent')}
         </button>
       </div>

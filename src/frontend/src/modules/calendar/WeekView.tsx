@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { dateFormat } from '../../lib/intl'
 import AllDayBand from './AllDayBand'
 import { useCalendar } from './calendarContext'
-import { dateLocaleOf, formatTime, weekNumberOf } from './calendarLocale'
+import { dateLocaleOf, formatLongDay, formatTime, weekNumberOf } from './calendarLocale'
 import type { Occurrence } from './calendarTypes'
 import DayColumn from './DayColumn'
 import { FIRST_VISIBLE_HOUR, HOURS, minutesToPx } from './gridGeometry'
@@ -64,6 +64,7 @@ export default function WeekView({
   // The gutter is a token rather than a number here: the phone narrows it, and a width written
   // in JS could not be narrowed by a media query at all.
   const template = `var(--cal-gutter) repeat(${days.length}, minmax(0, 1fr))`
+  const week = weekNumberOf(days[0], rules)
   const placements = useMemo(() => placeAll(visible, tz, days), [visible, tz, days])
 
   const body = useRef<HTMLDivElement>(null)
@@ -78,16 +79,23 @@ export default function WeekView({
 
   return (
     <div className={`week-view${gesturing ? ' is-gesturing' : ''}`}>
-      <div className="week-head" style={{ gridTemplateColumns: template }}>
-        <div className="week-head-gutter">
-          {t('views.weekShort', { number: weekNumberOf(days[0], rules) })}
-        </div>
-        {days.map(day => (
-          <div key={day} className={`week-day-head${day === today ? ' is-today' : ''}`}>
-            <span className="week-day-name">{nameOf(day)}</span>
-            <span className="week-day-number">{Number(day.slice(8))}</span>
+      {/* A row of column headers needs a table to sit in, and the head is the only part of this
+          grid that is one: the body's hours are encoded in position, which is a pattern of its
+          own and deliberately not this one. */}
+      <div className="week-head-table" role="table" aria-label={t('views.dayHeaders')}>
+        <div className="week-head" role="row" style={{ gridTemplateColumns: template }}>
+          <div className="week-head-gutter" role="columnheader"
+            aria-label={t('views.weekFull', { number: week })}>
+            {t('views.weekShort', { number: week })}
           </div>
-        ))}
+          {days.map(day => (
+            <div key={day} role="columnheader" aria-label={formatLongDay(day, locale)}
+              className={`week-day-head${day === today ? ' is-today' : ''}`}>
+              <span className="week-day-name">{nameOf(day)}</span>
+              <span className="week-day-number">{Number(day.slice(8))}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <AllDayBand days={days} entries={placements.bands} selectedKey={selectedKey}

@@ -30,7 +30,7 @@
        MessageList does, and each row sits in its slot. -->
   <div class="message-list-root" style="--row-exit: 300ms">
     <div class="frame">
-      <ul class="message-list" id="list"></ul>
+      <div class="message-list" id="list" role="grid" aria-label="Messages"></div>
     </div>
   </div>
 
@@ -48,10 +48,14 @@
     const out = document.getElementById('out')
 
     function build() {
-      list.innerHTML = ROWS.map(([from, date, subject, preview]) => `
-        <li>
-          <div class="message-row-slot">
-            <div class="message-row" role="button" tabindex="0">
+      list.innerHTML = ROWS.map(([from, date, subject, preview], at) => `
+        <div class="message-row-slot" role="presentation">
+          <div class="message-row" role="row" aria-rowindex="${at + 1}">
+            <div class="message-row-select" role="gridcell">
+              <input type="checkbox" class="message-row-check" />
+            </div>
+            <div class="message-row-content" role="gridcell" tabindex="-1"
+                 aria-label="${from}: ${subject}, ${date}">
               <div class="message-row-top">
                 <span class="message-row-from">${from}</span>
                 <span class="message-row-date">${date}</span>
@@ -59,8 +63,12 @@
               <div class="message-row-subject">${subject}</div>
               <div class="message-row-preview">${preview}</div>
             </div>
+            <div class="message-row-flag" role="gridcell">
+              <button class="row-btn row-star" aria-label="Star">★</button>
+            </div>
+            <div class="message-row-actions" role="gridcell"></div>
           </div>
-        </li>`).join('')
+        </div>`).join('')
     }
 
     const slots = () => [...document.querySelectorAll('.message-row-slot')]

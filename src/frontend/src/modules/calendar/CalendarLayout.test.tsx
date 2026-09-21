@@ -1009,6 +1009,37 @@ describe('CalendarLayout', () => {
     await waitFor(() => expect(askedFrom()).not.toBe(first))
   })
 
+  // A chevron re-keys five of the six rows, so the hook recovers the lost stop next door and
+  // landed on row 0's Monday, an outside day of the month just left, where Enter then created.
+  it('lands the keyboard on the anchor after a month step', async () => {
+    const router = renderAt('/calendar?view=month&date=2026-09-16')
+    await screen.findByRole('button', { name: 'Next period' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next period' }))
+    await waitFor(() => expect(params(router).get('date')).toBe('2026-10-16'))
+
+    const stops = document.querySelectorAll('.month-view [tabindex="0"]')
+    expect(stops).toHaveLength(1)
+    expect(stops[0]).toHaveAttribute('aria-selected', 'true')
+    expect(stops[0]).not.toHaveClass('is-outside')
+    expect(stops[0].querySelector('.month-day-number')).toHaveTextContent('16')
+  })
+
+  // The other door onto the anchor, and the one a month key would have missed: picking a day in the
+  // mini-month moves `aria-selected` alone, which no mutation the hook observes carries.
+  it('lands the keyboard on the anchor after a same-month pick', async () => {
+    const router = renderAt('/calendar?view=month&date=2026-09-16')
+    await screen.findByRole('button', { name: 'Next period' })
+
+    const mini = document.querySelector('.mini-month') as HTMLElement
+    await userEvent.click(within(mini).getByRole('button', { name: 'September 24, 2026' }))
+    await waitFor(() => expect(params(router).get('date')).toBe('2026-09-24'))
+
+    const stops = document.querySelectorAll('.month-view [tabindex="0"]')
+    expect(stops).toHaveLength(1)
+    expect(stops[0].querySelector('.month-day-number')).toHaveTextContent('24')
+  })
+
   it('draws the view the parameters name', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
     renderAt('/calendar?view=month&date=2026-09-16')
@@ -1460,6 +1491,20 @@ describe('CalendarLayout — the phone tier', () => {
     mockViewport('phone')
     renderAt('/calendar?view=day&date=2026-09-16')
     await waitFor(() => expect(document.querySelector('.floating-action')).not.toBeNull())
+  })
+
+  /* Bound straight to the handler, the button hands its own event in as that handler's first
+     argument: a parameter added there writes [object Object] into a bookmarkable URL, and
+     TypeScript sees nothing, one arity being assignable to the shorter one. */
+  it('opens an empty draft from the floating button, with nothing of its own click in the URL', async () => {
+    mockViewport('phone')
+    const router = renderAt('/calendar?view=day&date=2026-09-16')
+    await waitFor(() => expect(document.querySelector('.floating-action')).not.toBeNull())
+
+    await userEvent.click(document.querySelector('.floating-action') as HTMLElement)
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/calendar/new'))
+    expect([...params(router).keys()]).toEqual(['view', 'date'])
   })
 
   it('has no floating button while the editor holds the screen', async () => {

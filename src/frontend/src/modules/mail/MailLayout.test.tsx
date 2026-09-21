@@ -62,6 +62,10 @@ beforeEach(() => {
   auth.authMode = 'Password'
 })
 
+/* A mail row is a `role="row"` of four gridcells and its name lives on the content cell, so a
+   control of the row — the star, an action — is found on the row rather than inside that cell. */
+const rowOf = (cell: HTMLElement) => cell.closest('.message-row') as HTMLElement
+
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
     path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
@@ -291,7 +295,7 @@ describe('following an account switch', () => {
       expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
 
     // A message of the second mailbox, whose uid means nothing in the first.
-    fireEvent.click(await screen.findByRole('button', { name: /over there/i }))
+    fireEvent.click(await screen.findByRole('gridcell', { name: /over there/i }))
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=42'))
 
     auth.activeAccountId = 'primary'
@@ -409,7 +413,7 @@ describe('a message detail arriving before the folder listing', () => {
       folderPath: 'INBOX', uidValidity: 1, total: 1, page: 0, pageSize: 30, messages: [unread],
     }), 60)))
 
-    const row = await screen.findByRole('button', { name: /first/i })
+    const row = rowOf(await screen.findByRole('gridcell', { name: /first/i }))
     // The race is only armed if the mark-seen mutation actually fired against the pending list.
     expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [7], 'seen', true, { accountId: 'primary' })
     // And the row the listing brought back unread is reconciled to what the STORE already did.
@@ -440,7 +444,7 @@ describe('a message departing the folder', () => {
   it('selects the next row when the open message is archived', async () => {
     openFolder(summaries, 7)
 
-    const row = await screen.findByRole('button', { name: /first/i })
+    const row = rowOf(await screen.findByRole('gridcell', { name: /first/i }))
     fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
 
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=8'))
@@ -449,7 +453,7 @@ describe('a message departing the folder', () => {
   it('closes the reader when the last remaining message departs', async () => {
     openFolder([summaries[0]], 7)
 
-    const row = await screen.findByRole('button', { name: /first/i })
+    const row = rowOf(await screen.findByRole('gridcell', { name: /first/i }))
     fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
 
     await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
@@ -458,7 +462,7 @@ describe('a message departing the folder', () => {
   it('leaves the selection alone when another row departs', async () => {
     openFolder(summaries, 8)
 
-    const row = await screen.findByRole('button', { name: /first/i })
+    const row = rowOf(await screen.findByRole('gridcell', { name: /first/i }))
     fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
 
     await settle()
@@ -471,7 +475,7 @@ describe('a message departing the folder', () => {
   it('advances past the whole departing batch, never onto a member the action removed', async () => {
     openFolder(summaries, 7)
 
-    await screen.findByRole('button', { name: /first/i })
+    await screen.findByRole('gridcell', { name: /first/i })
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
     const toolbar = document.querySelector('.selection-toolbar') as HTMLElement
     fireEvent.click(within(toolbar).getByRole('button', { name: 'Archive' }))
@@ -562,7 +566,7 @@ describe('dropping a dragged message onto a folder', () => {
     mocks.moveMessages.mockResolvedValue(undefined)
     renderAt('/mail?folder=INBOX', folders, 'right', summaries)
 
-    await screen.findByRole('button', { name: /first/i })
+    await screen.findByRole('gridcell', { name: /first/i })
     dropOn('Archive', [7])
 
     await waitFor(() => expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [7], 'Archives', { accountId: 'primary' }))
@@ -577,7 +581,7 @@ describe('dropping a dragged message onto a folder', () => {
     })
     renderAt('/mail?folder=INBOX&uid=7', folders, 'right', summaries)
 
-    await screen.findByRole('button', { name: /first/i })
+    await screen.findByRole('gridcell', { name: /first/i })
     dropOn('Archive', [7])
 
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=8'))
@@ -823,7 +827,7 @@ describe('opening a draft from the drafts folder', () => {
     })
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
 
-    fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
+    fireEvent.click(await screen.findByRole('gridcell', { name: /unsent/i }))
 
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
     expect(mocks.openDraft).toHaveBeenCalledWith('Drafts', 9, { accountId: 'primary' })
@@ -850,7 +854,7 @@ describe('opening a draft from the drafts folder', () => {
     })
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow], identities)
 
-    fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
+    fireEvent.click(await screen.findByRole('gridcell', { name: /unsent/i }))
     await waitFor(() => expect(mocks.openDraft).toHaveBeenCalled())
     release({ identities: [{
       address: 'michel@weesky.be', displayName: 'Michel', isDefault: false, isPrimary: false,
@@ -868,7 +872,7 @@ describe('opening a draft from the drafts folder', () => {
     mocks.openDraft.mockReturnValue(new Promise(() => {}))
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
 
-    const row = await screen.findByRole('button', { name: /unsent/i })
+    const row = await screen.findByRole('gridcell', { name: /unsent/i })
     fireEvent.click(row)
     await waitFor(() => expect(mocks.openDraft).toHaveBeenCalledTimes(1))
     fireEvent.click(row)
@@ -882,7 +886,7 @@ describe('opening a draft from the drafts folder', () => {
     mocks.openDraft.mockRejectedValue(new Error('Draft is gone'))
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
 
-    fireEvent.click(await screen.findByRole('button', { name: /unsent/i }))
+    fireEvent.click(await screen.findByRole('gridcell', { name: /unsent/i }))
 
     expect(await screen.findByText('Could not open the draft')).toBeInTheDocument()
     expect(screen.getByTestId('path')).toHaveTextContent(/^\/mail$/)
@@ -944,7 +948,7 @@ describe('searching from the layout', () => {
     renderAt('/mail?folder=INBOX')
 
     await runAdvancedAllFolders()
-    fireEvent.click(await screen.findByRole('button', { name: /elsewhere/i }))
+    fireEvent.click(await screen.findByRole('gridcell', { name: /elsewhere/i }))
 
     await waitFor(() =>
       expect(mocks.getMailMessage).toHaveBeenCalledWith('Archives', 20, expect.anything()))
@@ -959,7 +963,7 @@ describe('searching from the layout', () => {
     renderAt('/mail?folder=INBOX')
 
     await runAdvancedAllFolders()
-    fireEvent.click(await screen.findByRole('button', { name: /elsewhere/i }))
+    fireEvent.click(await screen.findByRole('gridcell', { name: /elsewhere/i }))
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=20'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))

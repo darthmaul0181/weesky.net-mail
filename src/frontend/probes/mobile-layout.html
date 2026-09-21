@@ -556,12 +556,13 @@
     //
     // The row is drawn LOADED rather than in its friendliest state, and that is the whole point of
     // the case. `.message-row-top` is a flex line and every optional item in it — the unread dot,
-    // the Draft badge, the priority mark, the paperclip — competes with the date and the star for
-    // the width `.message-row-from` is trying to take with `flex: 1`. `.message-row-from` carries
+    // the Draft badge, the priority mark, the paperclip — competes with the date for the width
+    // `.message-row-from` is trying to take with `flex: 1`; the star left that line for a gridcell
+    // of its own in lot 2c and the line holds a 34px reserve in its place. `.message-row-from` carries
     // `text-overflow: ellipsis` and no element children, so `clipped` exempts it by design and it
-    // absorbs the shrink; anything that instead pushes the date or the star past the line's right
-    // edge lands on `.message-row-top`, which is measured. A row missing those items cannot fail,
-    // and a case that cannot fail is not a guard.
+    // absorbs the shrink; anything that instead pushes the date past the line's right edge — the
+    // star's own 34px reserve included — lands on `.message-row-top`, which is measured. A row
+    // missing those items cannot fail, and a case that cannot fail is not a guard.
     //
     // `.mail-list-scroll` is here because the real list always has it and it is what owns the
     // vertical scrollbar: without it the row is measured against a gutter the app never gives it.
@@ -576,28 +577,39 @@
     const row = (selecting) => `
       <div class="mail-list" style="width:360px">
         <div class="mail-list-scroll">
-          <ul class="message-list${selecting ? ' has-selection' : ''}">
-            <li><div role="button" class="message-row is-unread" style="--row-actions:4">
-              <input type="checkbox" class="message-row-check" />
-              <div class="message-row-top">
-                <span class="message-row-unread-dot"></span>
-                <span class="message-row-draft">Draft</span>
-                <span class="message-row-priority is-high">HIGH</span>
-                <span class="message-row-from">Alice Martin</span>
-                <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
-                <span class="message-row-date">18 Jul</span>
-                <button class="row-btn row-star">★</button>
+          <div class="message-list${selecting ? ' has-selection' : ''}" role="grid" aria-label="Messages" aria-rowcount="1">
+            <div class="message-row-slot" role="presentation">
+              <div role="row" aria-rowindex="1" class="message-row is-unread" style="--row-actions:4">
+                <div class="message-row-select" role="gridcell">
+                  <input type="checkbox" class="message-row-check" />
+                </div>
+                <div class="message-row-content" role="gridcell" tabindex="-1"
+                     aria-label="Unread. Alice Martin: Re: facture du mois de juillet, 18 Jul">
+                  <div class="message-row-top">
+                    <span class="message-row-unread-dot"></span>
+                    <span class="message-row-draft">Draft</span>
+                    <span class="message-row-priority is-high">HIGH</span>
+                    <span class="message-row-from">Alice Martin</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                    <span class="message-row-date">18 Jul</span>
+                  </div>
+                  <div class="message-row-subject">Re: facture du mois de juillet</div>
+                  <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+                </div>
+                <div class="message-row-flag" role="gridcell">
+                  <button class="row-btn row-star">★</button>
+                </div>
+                <div class="message-row-actions" role="gridcell">
+                  <div class="message-row-cluster">
+                    <button class="row-btn">S</button>
+                    <button class="row-btn">A</button>
+                    <button class="row-btn">J</button>
+                    <button class="row-btn is-danger">D</button>
+                  </div>
+                </div>
               </div>
-              <div class="message-row-subject">Re: facture du mois de juillet</div>
-              <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
-              <div class="message-row-cluster">
-                <button class="row-btn">S</button>
-                <button class="row-btn">A</button>
-                <button class="row-btn">J</button>
-                <button class="row-btn is-danger">D</button>
-              </div>
-            </div></li>
-          </ul>
+            </div>
+          </div>
         </div>
       </div>`
     for (const [name, selecting] of [['row-360', false], ['row-selecting-360', true]]) {
@@ -610,7 +622,8 @@
     // three rows and not two.
     //
     // The head is drawn in the SAME loaded state `row` above draws, item for item — dot, Draft
-    // badge, priority mark, sender, paperclip, date, star, four-action cluster — and adds only
+    // badge, priority mark, sender, paperclip, date, then the star and the four-action cluster in
+    // their own cells — and adds only
     // what Task 9 put on that line: the count badge and the chevron. That is deliberate rather
     // than copy-paste: `.message-row-top` is a flex line whose free width is what
     // `.message-row-from` absorbs, so a `clipped` here that `row-360` does not report is
@@ -634,71 +647,99 @@
     const threadRow = (width) => `
       <div class="mail-list" style="width:${width}px">
         <div class="mail-list-scroll">
-          <ul class="message-list">
-            <li>
-              <div role="button" class="message-row is-unread" style="--row-actions:4">
-                <input type="checkbox" class="message-row-check" />
-                <div class="message-row-top">
-                  <span class="message-row-unread-dot"></span>
-                  <span class="message-row-draft">Draft</span>
-                  <span class="message-row-priority is-high">HIGH</span>
-                  <span class="message-row-from">Alice Martin</span>
-                  <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
-                  <span class="message-row-date">18 Jul</span>
-                  <span class="message-row-thread-count" title="2 messages in this conversation">2</span>
-                  <button type="button" class="row-btn thread-toggle is-open" aria-expanded="true" aria-label="Collapse conversation">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7.5 4.5l6 5.5-6 5.5"/></svg>
-                  </button>
+          <div class="message-list" role="grid" aria-label="Messages" aria-rowcount="3">
+            <div class="message-row-slot" role="presentation">
+              <div role="row" aria-rowindex="1" class="message-row is-unread" style="--row-actions:4">
+                <div class="message-row-select" role="gridcell">
+                  <input type="checkbox" class="message-row-check" />
+                </div>
+                <div class="message-row-content" role="gridcell" tabindex="-1" aria-label="2 messages in this conversation. Unread. Alice Martin: Re: facture du mois de juillet, 18 Jul">
+                  <div class="message-row-top">
+                    <span class="message-row-unread-dot"></span>
+                    <span class="message-row-draft">Draft</span>
+                    <span class="message-row-priority is-high">HIGH</span>
+                    <span class="message-row-from">Alice Martin</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                    <span class="message-row-date">18 Jul</span>
+                    <span class="message-row-thread-count" title="2 messages in this conversation">2</span>
+                    <button type="button" class="row-btn thread-toggle is-open" aria-expanded="true" aria-label="Collapse conversation">
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7.5 4.5l6 5.5-6 5.5"/></svg>
+                    </button>
+                  </div>
+                  <div class="message-row-subject">Re: facture du mois de juillet</div>
+                  <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+                </div>
+                <div class="message-row-flag" role="gridcell">
                   <button class="row-btn row-star">★</button>
                 </div>
-                <div class="message-row-subject">Re: facture du mois de juillet</div>
-                <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
-                <div class="message-row-cluster">
-                  <button class="row-btn">S</button>
-                  <button class="row-btn">A</button>
-                  <button class="row-btn">J</button>
-                  <button class="row-btn is-danger">D</button>
+                <div class="message-row-actions" role="gridcell">
+                  <div class="message-row-cluster">
+                    <button class="row-btn">S</button>
+                    <button class="row-btn">A</button>
+                    <button class="row-btn">J</button>
+                    <button class="row-btn is-danger">D</button>
+                  </div>
                 </div>
               </div>
-              <div role="button" class="message-row is-thread-member is-unread" style="--row-actions:4">
-                <input type="checkbox" class="message-row-check" />
-                <div class="message-row-top">
-                  <span class="message-row-unread-dot"></span>
-                  <span class="message-row-draft">Draft</span>
-                  <span class="message-row-priority is-high">HIGH</span>
-                  <span class="message-row-from">Alice Martin</span>
-                  <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
-                  <span class="message-row-date">18 Jul</span>
+            </div>
+            <div class="message-row-slot" role="presentation">
+              <div role="row" aria-rowindex="2" class="message-row is-thread-member is-unread" style="--row-actions:4">
+                <div class="message-row-select" role="gridcell">
+                  <input type="checkbox" class="message-row-check" />
+                </div>
+                <div class="message-row-content" role="gridcell" tabindex="-1" aria-label="Unread. Alice Martin: Re: facture du mois de juillet, 18 Jul">
+                  <div class="message-row-top">
+                    <span class="message-row-unread-dot"></span>
+                    <span class="message-row-draft">Draft</span>
+                    <span class="message-row-priority is-high">HIGH</span>
+                    <span class="message-row-from">Alice Martin</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                    <span class="message-row-date">18 Jul</span>
+                  </div>
+                  <div class="message-row-subject">Re: facture du mois de juillet</div>
+                  <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+                </div>
+                <div class="message-row-flag" role="gridcell">
                   <button class="row-btn row-star">★</button>
                 </div>
-                <div class="message-row-subject">Re: facture du mois de juillet</div>
-                <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
-                <div class="message-row-cluster">
-                  <button class="row-btn">S</button>
-                  <button class="row-btn">A</button>
-                  <button class="row-btn">J</button>
-                  <button class="row-btn is-danger">D</button>
+                <div class="message-row-actions" role="gridcell">
+                  <div class="message-row-cluster">
+                    <button class="row-btn">S</button>
+                    <button class="row-btn">A</button>
+                    <button class="row-btn">J</button>
+                    <button class="row-btn is-danger">D</button>
+                  </div>
                 </div>
               </div>
-              <div role="button" class="message-row is-thread-member" style="--row-actions:4">
-                <input type="checkbox" class="message-row-check" />
-                <div class="message-row-top">
-                  <span class="message-row-draft">Draft</span>
-                  <span class="message-row-from">Bertrand Dupont</span>
-                  <span class="message-row-date">17 Jul</span>
+            </div>
+            <div class="message-row-slot" role="presentation">
+              <div role="row" aria-rowindex="3" class="message-row is-thread-member" style="--row-actions:4">
+                <div class="message-row-select" role="gridcell">
+                  <input type="checkbox" class="message-row-check" />
+                </div>
+                <div class="message-row-content" role="gridcell" tabindex="-1" aria-label="Bertrand Dupont: Re: facture du mois de juillet, 17 Jul">
+                  <div class="message-row-top">
+                    <span class="message-row-draft">Draft</span>
+                    <span class="message-row-from">Bertrand Dupont</span>
+                    <span class="message-row-date">17 Jul</span>
+                  </div>
+                  <div class="message-row-subject">Re: facture du mois de juillet</div>
+                  <div class="message-row-preview">Je vous confirme la réception, bonne journée</div>
+                </div>
+                <div class="message-row-flag" role="gridcell">
                   <button class="row-btn row-star">★</button>
                 </div>
-                <div class="message-row-subject">Re: facture du mois de juillet</div>
-                <div class="message-row-preview">Je vous confirme la réception, bonne journée</div>
-                <div class="message-row-cluster">
-                  <button class="row-btn">S</button>
-                  <button class="row-btn">A</button>
-                  <button class="row-btn">J</button>
-                  <button class="row-btn is-danger">D</button>
+                <div class="message-row-actions" role="gridcell">
+                  <div class="message-row-cluster">
+                    <button class="row-btn">S</button>
+                    <button class="row-btn">A</button>
+                    <button class="row-btn">J</button>
+                    <button class="row-btn is-danger">D</button>
+                  </div>
                 </div>
               </div>
-            </li>
-          </ul>
+            </div>
+          </div>
         </div>
       </div>`
     for (const [name, width] of [
@@ -1971,10 +2012,12 @@
       html: stage(toolbarPhone + `
         <div class="calendar-stage">
           <div class="week-view">
-            <div class="week-head" style="grid-template-columns: var(--cal-gutter) repeat(1, minmax(0, 1fr))">
-              <div class="week-head-gutter">W38</div>
-              <div class="week-day-head is-today">
-                <span class="week-day-name">Wed</span><span class="week-day-number">16</span>
+            <div class="week-head-table" role="table" aria-label="Calendar days">
+              <div class="week-head" role="row" style="grid-template-columns: var(--cal-gutter) repeat(1, minmax(0, 1fr))">
+                <div class="week-head-gutter" role="columnheader">W38</div>
+                <div class="week-day-head is-today" role="columnheader" aria-label="Wednesday 16 September">
+                  <span class="week-day-name">Wed</span><span class="week-day-number">16</span>
+                </div>
               </div>
             </div>
             <div class="allday-band">

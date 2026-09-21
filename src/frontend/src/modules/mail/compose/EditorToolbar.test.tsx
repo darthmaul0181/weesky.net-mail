@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { mockViewport, resetViewport } from '../../../test-utils'
+import { expectNoAxeViolations } from '../../../a11y-test'
 import EditorToolbar from './EditorToolbar'
 import type { EditorHandle } from './SquireEditor'
 
@@ -15,6 +16,10 @@ function fakeEditor(): EditorHandle {
 }
 
 const noop = () => {}
+
+const NAMES = ['Black', 'Dark grey', 'Grey', 'Light grey', 'Silver', 'White',
+  'Red', 'Coral', 'Amber', 'Yellow', 'Green', 'Olive',
+  'Blue', 'Navy', 'Purple', 'Magenta', 'Brown', 'Turquoise']
 
 function pick(trigger: string, option: string) {
   fireEvent.click(screen.getByRole('button', { name: trigger }))
@@ -42,7 +47,7 @@ describe('EditorToolbar', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    fireEvent.click(screen.getByRole('button', { name: '#d0021b' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }))
     expect(editor.setTextColour).toHaveBeenCalledWith('#d0021b')
   })
 
@@ -50,7 +55,7 @@ describe('EditorToolbar', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Highlight colour' }))
-    fireEvent.click(screen.getByRole('button', { name: '#f8e71c' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yellow' }))
     expect(editor.setHighlightColour).toHaveBeenCalledWith('#f8e71c')
     expect(editor.setTextColour).not.toHaveBeenCalled()
   })
@@ -58,7 +63,7 @@ describe('EditorToolbar', () => {
   it('shows the last applied colour under its button', () => {
     render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    fireEvent.click(screen.getByRole('button', { name: '#d0021b' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }))
     expect(screen.getByRole('button', { name: 'Text colour' })
       .querySelector('.compose-tool-ink')).toHaveStyle({ background: '#d0021b' })
   })
@@ -67,20 +72,20 @@ describe('EditorToolbar', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    expect(screen.getByRole('button', { name: '#d0021b' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Red' })).toBeInTheDocument()
     fireEvent.mouseDown(document.body)
-    expect(screen.queryByRole('button', { name: '#d0021b' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Red' })).not.toBeInTheDocument()
   })
 
   it('closes a popover on Escape and hands the focus back to its button', async () => {
     render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     const trigger = screen.getByRole('button', { name: 'Highlight colour' })
     await userEvent.click(trigger)
-    screen.getByRole('button', { name: '#f8e71c' }).focus()
+    screen.getByRole('button', { name: 'Yellow' }).focus()
 
     fireEvent.keyDown(document, { key: 'Escape' })
 
-    expect(screen.queryByRole('button', { name: '#f8e71c' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yellow' })).not.toBeInTheDocument()
     expect(trigger).toHaveFocus()
   })
 
@@ -107,9 +112,9 @@ describe('EditorToolbar', () => {
 
   it.each([
     { trigger: 'Text colour', atOpen: (elsewhere: HTMLElement) => elsewhere,
-      close: () => closeBySwatch('#d0021b') },
+      close: () => closeBySwatch('Red') },
     { trigger: 'Highlight colour', atOpen: (elsewhere: HTMLElement) => elsewhere,
-      close: () => closeBySwatch('#f8e71c') },
+      close: () => closeBySwatch('Yellow') },
     { trigger: 'Link', atOpen: () => screen.getByLabelText('Link URL'), close: () => {
       fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://weesky.net' } })
       const applyBtn = screen.getByRole('button', { name: 'Apply' })
@@ -137,49 +142,97 @@ describe('EditorToolbar', () => {
   it('refocuses the highlight trigger, not the last text-colour trigger, when both popovers were used', () => {
     render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    const firstSwatch = screen.getByRole('button', { name: '#d0021b' })
+    const firstSwatch = screen.getByRole('button', { name: 'Red' })
     firstSwatch.focus()
     fireEvent.click(firstSwatch)
 
     const highlightTrigger = screen.getByRole('button', { name: 'Highlight colour' })
     fireEvent.click(highlightTrigger)
-    const secondSwatch = screen.getByRole('button', { name: '#f8e71c' })
+    const secondSwatch = screen.getByRole('button', { name: 'Yellow' })
     secondSwatch.focus()
     fireEvent.click(secondSwatch)
 
     expect(highlightTrigger).toHaveFocus()
   })
 
-  /* Eighteen swatches in six columns are a grid, not a menu: Tab walks them and the arrows are
-     nobody's, but the group still has to say what it is. Its name comes from the trigger, which is
-     also what stops that trigger announcing itself as an unpressed toggle. */
+  /* Eighteen swatches in six columns are a grid, which the menu pattern cannot express — ←/→ are
+     a submenu's there and Home/End name no corner. The trigger still names it, which is also what
+     stops that trigger announcing itself as an unpressed toggle. */
   describe('the swatch grid', () => {
-    function openTextColour() {
-      render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
+    const toolbar = () => render(<EditorToolbar editor={fakeEditor()} plainText={false}
+      onPickImages={noop} onTogglePlainText={noop} />)
+
+    function open(trigger: string) {
+      const rendered = toolbar()
+      fireEvent.click(screen.getByRole('button', { name: trigger }))
+      return rendered
     }
 
-    it('is a group named by the trigger that opened it', () => {
-      openTextColour()
+    const grid = (name: string) => screen.getByRole('grid', { name })
+    const stops = (name: string) => within(grid(name)).getAllByRole('button')
+      .map(button => button.getAttribute('tabindex'))
 
-      const group = screen.getByRole('group', { name: 'Text colour' })
-      expect(group.className).toContain('compose-swatches')
-      expect(within(group).getAllByRole('button')).toHaveLength(18)
+    it('is three rows of six cells, named by the trigger that opened it', () => {
+      open('Text colour')
+
+      expect(grid('Text colour').className).toContain('compose-swatches')
+      const rows = within(grid('Text colour')).getAllByRole('row')
+      expect(rows).toHaveLength(3)
+      for (const row of rows) expect(within(row).getAllByRole('gridcell')).toHaveLength(6)
     })
 
-    it('answers no arrow key of its own, leaving the eighteen to Tab', () => {
-      openTextColour()
-      const first = screen.getByRole('button', { name: '#000000' })
-      first.focus()
+    it('names each colour instead of reading its hex code', () => {
+      open('Text colour')
 
-      expect(fireEvent.keyDown(first, { key: 'ArrowDown' })).toBe(true)
-      expect(fireEvent.keyDown(first, { key: 'ArrowRight' })).toBe(true)
-      expect(first).toHaveFocus()
+      expect(within(grid('Text colour')).getAllByRole('button')
+        .map(button => button.getAttribute('aria-label'))).toEqual(NAMES)
+    })
+
+    it('offers one tab stop for the eighteen swatches', () => {
+      open('Text colour')
+
+      expect(stops('Text colour')).toEqual(['0', ...Array<string>(17).fill('-1')])
+    })
+
+    // The stop opens where the state is: the highlight in force is yellow, not black.
+    it('puts the tab stop on the colour already applied', () => {
+      open('Highlight colour')
+
+      expect(screen.getByRole('button', { name: 'Yellow' })).toHaveAttribute('aria-pressed', 'true')
+      expect(stops('Highlight colour'))
+        .toEqual([...Array<string>(9).fill('-1'), '0', ...Array<string>(8).fill('-1')])
+    })
+
+    it('walks the two dimensions with the arrow keys', async () => {
+      open('Text colour')
+      screen.getByRole('button', { name: 'Black' }).focus()
+
+      await userEvent.keyboard('{ArrowRight}')
+      expect(screen.getByRole('button', { name: 'Dark grey' })).toHaveFocus()
+
+      await userEvent.keyboard('{ArrowDown}')
+      expect(screen.getByRole('button', { name: 'Coral' })).toHaveFocus()
+
+      await userEvent.keyboard('{End}')
+      expect(screen.getByRole('button', { name: 'Olive' })).toHaveFocus()
+    })
+
+    /* The grid spends no Escape — it opts out of `cellEntry`, so the key passes it and reaches the
+       layer the popover registered. Fired from the focused swatch, the way a real press arrives. */
+    it('leaves Escape to the popover, which closes from a swatch holding the focus', async () => {
+      open('Text colour')
+      const trigger = screen.getByRole('button', { name: 'Text colour' })
+      screen.getByRole('button', { name: 'Red' }).focus()
+
+      await userEvent.keyboard('{Escape}')
+
+      expect(screen.queryByRole('grid', { name: 'Text colour' })).toBeNull()
+      expect(trigger).toHaveFocus()
     })
 
     // A trigger that opens a surface is not a toggle: aria-pressed would announce it unpressed.
     it('marks its trigger expanded rather than pressed', () => {
-      render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
+      toolbar()
       const trigger = screen.getByRole('button', { name: 'Highlight colour' })
       expect(trigger).not.toHaveAttribute('aria-pressed')
       expect(trigger).toHaveAttribute('aria-expanded', 'false')
@@ -187,6 +240,12 @@ describe('EditorToolbar', () => {
       fireEvent.click(trigger)
 
       expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('carries no accessibility violation', async () => {
+      const { container } = open('Text colour')
+
+      await expectNoAxeViolations(container)
     })
   })
 

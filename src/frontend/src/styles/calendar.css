@@ -164,8 +164,9 @@
   display: flex; flex-direction: column; height: 100%; min-height: 0;
 }
 
+.week-head-table { flex: none; }
 .week-head {
-  flex: none; display: grid; align-items: end; border-bottom: 1px solid var(--border);
+  display: grid; align-items: end; border-bottom: 1px solid var(--border);
 }
 .week-head-gutter {
   padding: 8px 8px 10px; color: var(--text-muted); font-size: 11px; font-weight: 700;
@@ -344,8 +345,14 @@
 
 /* ── The month ─────────────────────────────────────────────────────────────── */
 .month-view {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+}
+/* A week is a row of its own rather than eight children of one grid: ARIA owns a cell through a
+   row, and `display: contents` on that row is not a bet this app takes. Six equal rows either
+   way — `flex: 1` from a zero basis is what `grid-template-rows: repeat(6, 1fr)` was. */
+.month-week {
+  flex: 1; min-height: 0;
   display: grid; grid-template-columns: 36px repeat(7, minmax(0, 1fr));
-  grid-template-rows: repeat(6, minmax(0, 1fr)); height: 100%; min-height: 0;
 }
 .month-week-number {
   display: flex; justify-content: center; padding-top: 6px;
@@ -435,17 +442,19 @@
 }
 
 /* ── The dialogues ─────────────────────────────────────────────────────────── */
-/* Twelve swatches, six by two. 24px each, so the grid is its own measure and the row needs no
-   --field-w of its own. */
+/* Twelve swatches, six by two. 24px each, so the grid needs no --field-w of its own; the rows
+   are index.css's shared pair, which reads the two lengths declared here. */
 .color-swatches {
-  display: grid; grid-template-columns: repeat(6, 24px); gap: 6px;
+  display: flex; flex-direction: column; --swatch-size: 24px; --swatch-gap: 6px; gap: var(--swatch-gap);
 }
-.color-swatch {
-  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%;
-  background: var(--cal); cursor: pointer;
+.color-swatches .colour-swatch {
+  width: var(--swatch-size); height: var(--swatch-size); border: 0; border-radius: 50%;
+  background: var(--swatch); cursor: pointer;
 }
-.color-swatch.is-picked { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--cal); }
-.color-swatch.is-picked::after {
+.color-swatches .colour-swatch.is-picked {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--swatch);
+}
+.color-swatches .colour-swatch.is-picked::after {
   content: ''; display: block; width: 5px; height: 9px; margin: 4px auto 0;
   border: solid var(--action-primary-fg); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
@@ -743,7 +752,7 @@
   .week-view { --cal-gutter: 52px; }
   .week-head-gutter,
   .allday-label { font-size: 10px; padding-left: 4px; padding-right: 4px; }
-  .month-view { grid-template-columns: 20px repeat(7, minmax(0, 1fr)); }
+  .month-week { grid-template-columns: 20px repeat(7, minmax(0, 1fr)); }
   .event-row { padding-left: 12px; padding-right: 12px; }
   .upcoming-day { padding-left: 12px; padding-right: 12px; }
 

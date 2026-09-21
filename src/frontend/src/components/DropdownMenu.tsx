@@ -139,7 +139,7 @@ export default function DropdownMenu(
       </button>
       {/* `tabIndex={-1}`: the lint rule wants an element carrying an interactive role to be
           focusable, and -1 keeps it out of the Tab walk a dialog around it would otherwise find it
-          in. The menu's own walk never sees it — `focusablesIn` queries descendants. */}
+          in. The menu's own walk never sees it — `tabbablesIn` queries descendants. */}
       {open && (
         <div className="dropdown-menu" role="menu" aria-labelledby={triggerId} ref={menuRef}
           style={fixedStyle} tabIndex={-1} onKeyDown={menuKeys}>

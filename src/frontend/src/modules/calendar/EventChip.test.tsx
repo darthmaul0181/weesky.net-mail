@@ -40,6 +40,33 @@ describe('EventChip', () => {
     expect(draw({ eventId: 'e1' }).button).toHaveTextContent('(No title)')
   })
 
+  /* `whenPartsOf` answers nothing at all for an occurrence the server sent no readable date for
+     — the grid draws such an event rather than throwing — and the name read "Stand-up, ". */
+  it('names an event with no readable date by its title alone', () => {
+    const { button } = draw({ eventId: 'e1', summary: 'Stand-up' })
+
+    expect(button).toHaveAccessibleName('Stand-up')
+  })
+
+  /* A chip's visible text names the event and, where there is room, the hour it starts at. The
+     day is carried by the column or the cell it sits in — by position, which no role declares
+     and no reader announces, so forty month chips all said the same thing. */
+  it('carries its day in its accessible name', () => {
+    const { button } = draw(DATED)
+
+    expect(button).toHaveAccessibleName(/Stand-up.*16 September.*09:00.*11:00/)
+    expect(button).toHaveTextContent('Stand-up')
+  })
+
+  it('says a whole day is one rather than naming an hour', () => {
+    const { button } = draw({
+      eventId: 'c1', summary: 'Leave', isAllDay: true,
+      startDate: '2026-09-16', endDateExclusive: '2026-09-17',
+    }, { variant: 'band' })
+
+    expect(button).toHaveAccessibleName(/Leave.*16 September.*All day/)
+  })
+
   it('carries its occurrence key for the drag layer to find it by', () => {
     expect(draw({ eventId: 'e1', instanceId: '20260916T090000' }).button)
       .toHaveAttribute('data-key', 'e1#20260916T090000')

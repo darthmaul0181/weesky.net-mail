@@ -104,6 +104,7 @@
     "alreadyJunk": "Déjà dans le dossier des indésirables"
   },
   "list": {
+    "gridLabel": "Messages",
     "selectFolder": "Sélectionnez un dossier",
     "loading": "Chargement des messages…",
     "loadFailed": "Impossible de charger les messages.",

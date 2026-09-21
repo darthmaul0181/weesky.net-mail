@@ -12,6 +12,9 @@ export interface MessageListState {
   /** The groups' members, flattened — what selection, the reader and the bulk actions read. */
   messages: MailMessageSummary[]
   total: number
+  /** What the grid counts: conversations where a page is a page of conversations, messages
+      otherwise, and -1 where the server has not said — a wrong count is worse than an unknown. */
+  rowTotal: number
   isLoading: boolean
   isError: boolean
   paging: { page: number; lastPage: number; onSelect: (page: number) => void } | null
@@ -24,7 +27,7 @@ export interface MessageListState {
 }
 
 const WAITING: MessageListState = {
-  groups: [], messages: [], total: 0, isLoading: true, isError: false,
+  groups: [], messages: [], total: 0, rowTotal: -1, isLoading: true, isError: false,
   paging: null, streaming: null,
 }
 
@@ -75,6 +78,8 @@ export function useMessageList(folderPath: string | null): MessageListState {
       groups: streamedGroups,
       messages: streamedMessages,
       total: blocks.length ? blocks[blocks.length - 1].total : 0,
+      // A stream is loaded in blocks of messages, so nothing here counts a folder's conversations.
+      rowTotal: grouped ? -1 : (blocks.length ? blocks[blocks.length - 1].total : 0),
       isLoading: stream.isLoading,
       isError: stream.isError && blocks.length === 0,
       paging: null,
@@ -99,6 +104,7 @@ export function useMessageList(folderPath: string | null): MessageListState {
     groups: pageGroups,
     messages: pageMessages,
     total,
+    rowTotal: grouped ? (paged.data?.totalThreads ?? -1) : total,
     isLoading: paged.isLoading,
     isError: paged.isError,
     paging: {

@@ -28,6 +28,7 @@ import ClearFormatIcon from '../../../icons/ClearFormatIcon'
 import ImageIcon from '../../../icons/ImageIcon'
 import CheckIcon from '../../../icons/CheckIcon'
 import PlainTextIcon from '../../../icons/PlainTextIcon'
+import SwatchGrid from './SwatchGrid'
 
 /* The bar's icon scale. Its other half — the button, the B/I/U/S letters and the dropdown text —
    lives on .compose-toolbar in mail.css; change the two together or the glyphs stop being centred
@@ -37,13 +38,8 @@ const ICON = 19
 const INK_ICON = 17
 const CHEVRON = 15
 
-const SWATCHES = [
-  '#000000', '#444444', '#666666', '#999999', '#cccccc', '#ffffff',
-  '#d0021b', '#e2674a', '#f5a623', '#f8e71c', '#7ed321', '#417505',
-  '#4a90d9', '#182238', '#9013fe', '#bd10e0', '#8b572a', '#50e3c2',
-]
 /** The two colour triggers name the grid each one opens, which is what gives an eighteen-swatch
-    group an accessible name without a catalogue key of its own. */
+    grid an accessible name without a catalogue key of its own. */
 const TEXT_COLOUR_ID = 'compose-text-colour'
 const HIGHLIGHT_COLOUR_ID = 'compose-highlight-colour'
 const FONTS = ['Arial', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Courier New']
@@ -124,7 +120,8 @@ export default function EditorToolbar(
   }, [openPopover])
 
   // A form opens on its field, through a ref and never `autoFocus` — the house rule for a surface
-  // that places its own focus. The colour grids place none: Tab walks them from their trigger.
+  // that places its own focus. The colour grids place none: Tab walks in from their trigger, onto
+  // the one stop the grid holds.
   useLayoutEffect(() => { if (openPopover === 'link') urlRef.current?.focus() }, [openPopover])
 
   useDismiss({
@@ -138,20 +135,6 @@ export default function EditorToolbar(
   function closePopover() {
     returnFocus(container.current, popoverTrigger.current)
     setOpenPopover(null)
-  }
-
-  /** A group rather than a menu: eighteen swatches in six columns are a grid, which the menu
-      pattern cannot express — ←/→ are a submenu's there and Home/End name no corner. Tab walks
-      them, and drawing it as a real `role="grid"` is lot 2c's business with the other grids. */
-  function swatchGrid(apply: (colour: string) => void, labelledBy: string) {
-    return (
-      <div className="compose-swatches" role="group" aria-labelledby={labelledBy}>
-        {SWATCHES.map(colour => (
-          <button key={colour} type="button" aria-label={colour} style={{ background: colour }}
-            onClick={() => { apply(colour); closePopover() }} />
-        ))}
-      </div>
-    )
   }
 
   const btn = (
@@ -227,7 +210,8 @@ export default function EditorToolbar(
             {inked(<TextColourIcon size={INK_ICON} />, textColour)}
           </button>
           <Popover open={openPopover === 'text'}>
-            {swatchGrid(c => { setTextColour(c); editor?.setTextColour(c) }, TEXT_COLOUR_ID)}
+            <SwatchGrid value={textColour} labelledBy={TEXT_COLOUR_ID}
+              onPick={c => { setTextColour(c); editor?.setTextColour(c); closePopover() }} />
           </Popover>
         </span>
         <span className="compose-popover-anchor">
@@ -238,7 +222,8 @@ export default function EditorToolbar(
             {inked(<HighlighterIcon size={INK_ICON} />, highlight)}
           </button>
           <Popover open={openPopover === 'highlight'}>
-            {swatchGrid(c => { setHighlight(c); editor?.setHighlightColour(c) }, HIGHLIGHT_COLOUR_ID)}
+            <SwatchGrid value={highlight} labelledBy={HIGHLIGHT_COLOUR_ID}
+              onPick={c => { setHighlight(c); editor?.setHighlightColour(c); closePopover() }} />
           </Popover>
         </span>
       </div>

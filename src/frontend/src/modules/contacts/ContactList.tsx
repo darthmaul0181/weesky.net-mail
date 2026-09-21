@@ -9,12 +9,37 @@ import PersonMinusIcon from '../../icons/PersonMinusIcon.jsx'
 import SearchIcon from '../../icons/SearchIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
+import { useGridNav } from '../../hooks/useGridNav'
 import { buildDragPill, LIST_GLYPH } from '../mail/list/dragImage'
 import { useSelection } from '../mail/list/useSelection'
 import { displayNameOf, primaryAddressOf } from './contactName'
 import { filterContacts } from './contactSearch'
 import { CONTACT_DRAG_MIME, dragIds, serializeContactDrag } from './dragContacts'
 import type { Contact } from './contactTypes'
+
+/**
+ * The tiles' container. It is a component of its own because `useGridNav`'s effect is keyed on the
+ * ref alone: a grid that is absent when its owner first lays out never gets the hook at all, and
+ * this element comes and goes with the rows — an empty book or an unmatched filter draws none.
+ */
+function ContactGrid({ label, selecting, children }: {
+  label: string
+  selecting: boolean
+  children: ReactNode
+}) {
+  const grid = useRef<HTMLDivElement>(null)
+  useGridNav({ ref: grid })
+  return (
+    <div
+      className={`contact-tiles${selecting ? ' has-selection' : ''}`}
+      role="grid"
+      aria-label={label}
+      ref={grid}
+    >
+      {children}
+    </div>
+  )
+}
 
 interface Props {
   /** Already scoped by the layout; the text query is this component's own state. */
@@ -166,73 +191,93 @@ export default function ContactList({
           <p className="contacts-empty">{t('list.noMatch')}</p>
         )}
 
-        <div className={`contact-tiles${count > 0 ? ' has-selection' : ''}`}>
-          {shown.map((contact, index) => {
-            const name = displayNameOf(contact)
-            const primary = primaryAddressOf(contact)
-            const extra = contact.addresses.length - 1
+        {shown.length > 0 && (
+          <ContactGrid label={t('list.gridLabel')} selecting={count > 0}>
+            {shown.map((contact, index) => {
+              const name = displayNameOf(contact)
+              const primary = primaryAddressOf(contact)
+              const extra = contact.addresses.length - 1
+              const open = contact.id === selectedId
 
-            return (
-              <div key={contact.id} data-testid={`contact-tile-${contact.id}`}
-                className={`contact-tile${contact.id === selectedId ? ' is-selected' : ''}`
-                  + (draggingIds?.includes(contact.id) ? ' is-dragging' : '')}
-                role="button" tabIndex={0} onClick={() => onSelect(contact.id)}
-                draggable
-                onDragStart={event => onTileDragStart(event, contact.id)}
-                onDragEnd={() => setDraggingIds(null)}
-                onKeyDown={event => {
-                  // Same guard as MessageList's onRowKey: an inner button/checkbox fires
-                  // Enter/Space itself, and without this the tile behind it would also open.
-                  if (event.target !== event.currentTarget) return
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    onSelect(contact.id)
-                  }
-                }}>
-                {/* In the gutter the tile reserves permanently, the message row's arrangement. */}
-                <input type="checkbox" className="contact-tile-check"
-                  aria-label={t('list.selectOne', { name })}
-                  checked={selection.has(contact.id)}
-                  onClick={event => event.stopPropagation()}
-                  onChange={() => selection.toggle(contact.id, index)} />
+              return (
+                /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus --
+                   the grid pattern: the tab stop and the keys that open the card are the content
+                   cell's, and the row's click is the pointer affordance over its padding. */
+                <div key={contact.id} data-testid={`contact-tile-${contact.id}`}
+                  className={`contact-tile${open ? ' is-selected' : ''}`
+                    + (draggingIds?.includes(contact.id) ? ' is-dragging' : '')}
+                  role="row" onClick={() => onSelect(contact.id)}
+                  draggable
+                  onDragStart={event => onTileDragStart(event, contact.id)}
+                  onDragEnd={() => setDraggingIds(null)}>
+                  {/* Four cells, always four: a row may own nothing but cells, so each focusable part
+                      of the tile answers for itself rather than being swallowed by the one button the
+                      tile used to be. In the gutter the tile reserves permanently, as before. */}
+                  <div className="contact-tile-select" role="gridcell">
+                    <input type="checkbox" className="contact-tile-check"
+                      aria-label={t('list.selectOne', { name })}
+                      checked={selection.has(contact.id)}
+                      onClick={event => event.stopPropagation()}
+                      onChange={() => selection.toggle(contact.id, index)} />
+                  </div>
 
-                {/* The message row's layout, not the page tile's: the name takes the first line and
-                    the star closes it on the right, while the actions are the tile's last child —
-                    the cluster idiom, drawn over the bottom line rather than beside the name. */}
-                <div className="contact-tile-line">
-                  <span className="contact-tile-name">{name}</span>
+                  {/* The cell that replaces the old role=button tile: it carries the name, the address
+                      and the keys that open the card, while the CLICK stays the row's, so the padding
+                      around this box opens the contact as it always did. */}
+                  <div className="contact-tile-content" role="gridcell" tabIndex={-1}
+                    // Where the card already is, so Tab into the list lands on the contact on screen
+                    // rather than on the first tile's checkbox.
+                    aria-current={open || undefined}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onSelect(contact.id)
+                      }
+                    }}>
+                    {/* The message row's layout, not the page tile's: the name takes the first line
+                        and the star closes it on the right, while the actions are the tile's last
+                        child — the cluster idiom, drawn over the bottom line rather than beside it. */}
+                    <div className="contact-tile-line">
+                      <span className="contact-tile-name">{name}</span>
+                    </div>
 
-                  <button type="button" className={`contact-star${contact.isFavorite ? ' is-on' : ''}`}
-                    title={t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')}
-                    aria-label={t(
-                      contact.isFavorite ? 'favourites.removeNamed' : 'favourites.addNamed', { name })}
-                    onClick={event => { event.stopPropagation(); onToggleFavorite(contact) }}>
-                    <StarIcon size={18} filled={contact.isFavorite} />
-                  </button>
+                    {/* Always rendered, even empty, so a contact with no address is not a shorter tile
+                        than its neighbours. */}
+                    <div className="contact-tile-address">
+                      {primary ?? ''}{extra > 0 ? ` · +${extra}` : ''}
+                    </div>
+                  </div>
+
+                  {/* The star left the name's line for a cell of its own, drawn where that line's
+                      flow already put it: cell order is arrow order, so it stays between the name
+                      and the cluster, which is what the eye sees. */}
+                  <div className="contact-tile-flag" role="gridcell">
+                    <button type="button" className={`contact-star${contact.isFavorite ? ' is-on' : ''}`}
+                      title={t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')}
+                      aria-label={t(
+                        contact.isFavorite ? 'favourites.removeNamed' : 'favourites.addNamed', { name })}
+                      onClick={event => { event.stopPropagation(); onToggleFavorite(contact) }}>
+                      <StarIcon size={18} filled={contact.isFavorite} />
+                    </button>
+                  </div>
+
+                  <span className="contact-tile-actions" role="gridcell">
+                    <button type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
+                      aria-label={t('list.edit', { name })}
+                      onClick={event => { event.stopPropagation(); onEdit(contact.id) }}>
+                      <PencilIcon size={18} />
+                    </button>
+                    <button type="button" className="admin-icon-btn is-danger" title={t('actions.delete', { ns: 'common' })}
+                      aria-label={t('list.delete', { name })}
+                      onClick={event => { event.stopPropagation(); onDelete(contact) }}>
+                      <TrashIcon size={18} />
+                    </button>
+                  </span>
                 </div>
-
-                {/* Always rendered, even empty, so a contact with no address is not a shorter tile
-                    than its neighbours. */}
-                <div className="contact-tile-address">
-                  {primary ?? ''}{extra > 0 ? ` · +${extra}` : ''}
-                </div>
-
-                <span className="contact-tile-actions">
-                  <button type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
-                    aria-label={t('list.edit', { name })}
-                    onClick={event => { event.stopPropagation(); onEdit(contact.id) }}>
-                    <PencilIcon size={18} />
-                  </button>
-                  <button type="button" className="admin-icon-btn is-danger" title={t('actions.delete', { ns: 'common' })}
-                    aria-label={t('list.delete', { name })}
-                    onClick={event => { event.stopPropagation(); onDelete(contact) }}>
-                    <TrashIcon size={18} />
-                  </button>
-                </span>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </ContactGrid>
+        )}
       </div>
 
       {confirming && (

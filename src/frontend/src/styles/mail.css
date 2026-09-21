@@ -527,6 +527,46 @@
   font-weight: 800;
 }
 
+/* ── The row's four cells ────────────────────────────────── */
+
+/* Every focusable part of a row sits in a `role="gridcell"` of its own, which is the only markup
+   ARIA lets a row own. Two of the four hold nothing in the flow — the box and the cluster are both
+   positioned over the row — so they are boxes of no height and cost the narrow skin nothing. */
+.message-row:not(.is-line) .message-row-flag {
+  position: absolute;
+  right: 12px;
+  top: var(--pad-y);
+}
+
+/* The star left this line's flex flow for a cell of its own, and the line was as tall as the 26px
+   button: without the floor every row in the column would lose 9px. The reserve replaces the gap
+   plus the button the line used to end with. */
+.message-row:not(.is-line) .message-row-top {
+  min-height: 26px;
+  padding-right: 34px;
+}
+
+/* The wide skin is one baseline flex line and the cells are its items: the content cell carries
+   the flow the row used to carry itself, the other three one control each. */
+.message-row.is-line .message-row-content {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.message-row.is-line .message-row-select,
+.message-row.is-line .message-row-flag,
+.message-row.is-line .message-row-actions { display: flex; align-self: center; }
+
+/* A cell drawing nothing is still a flex item costing the row's 8px gap: measured at 900px, the
+   cluster's cell moved the star 8px in, and a cross-folder row — no box, no star, no actions — the
+   content 8px right. The first cell cancels the gap after it, the others the gap before. */
+.message-row.is-line .message-row-select:empty { margin-inline-end: -8px; }
+.message-row.is-line .message-row-actions,
+.message-row.is-line .message-row-flag:empty { margin-inline-start: -8px; }
+.message-row.is-line .message-row-cluster { margin-inline-start: 8px; }
+
 .message-row-top { display: flex; align-items: baseline; gap: 8px; }
 
 .message-row-from {
@@ -671,18 +711,29 @@
 .message-row:hover .message-row-cluster,
 .message-row:focus-within .message-row-cluster { display: flex; }
 
-/* The cluster is always the last child, so the line before it is the one it would cover — the
-   preview, or the subject when previews are off. Reserving its width there ends that line in an
-   ellipsis instead of running it under the buttons.
+/* The cluster is drawn over the content cell's last line — the preview, or the subject when
+   previews are off. Reserving its width there ends that line in an ellipsis instead of running it
+   under the buttons.
 
    The width follows the button count, which the account chooses: n × 26 plus (n − 1) × 2 of gap
    is 28n − 2, plus 6px of air. This was the constant 88px, correct for the three buttons the row
    used to carry and 22px short of the four it can carry now — the subject ran under the icons.
    `:has` is load-bearing rather than tidy: with no cluster (every icon switched off, or a
-   cross-folder result) :nth-last-child(2) is a different element, and it was being padded for a
-   cluster that is not there. */
-.message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
-.message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {
+   cross-folder result) there is nothing over that line to pad for. */
+.message-row:not(.is-line):hover:has(.message-row-cluster) .message-row-content > :last-child,
+.message-row:not(.is-line):focus-within:has(.message-row-cluster) .message-row-content > :last-child {
+  padding-right: calc(var(--row-actions) * 28px + 4px);
+}
+
+/* The grid's one tab stop may sit on a cluster button, and a `display: none` button is in no tab
+   order at all, so the row holding it shows its actions exactly as hover does. Specificity rather
+   than order: the touch block below restates the revealing selectors at (0,3,0) and sits later. */
+.message-row:has(.message-row-cluster .row-btn[tabindex="0"]) .message-row-cluster { display: flex; }
+.message-row.is-line:has(.message-row-cluster .row-btn[tabindex="0"]) .message-row-date {
+  display: none;
+}
+.message-row:not(.is-line):has(.message-row-cluster .row-btn[tabindex="0"])
+  .message-row-content > :last-child {
   padding-right: calc(var(--row-actions) * 28px + 4px);
 }
 
@@ -1613,15 +1664,15 @@ textarea.compose-editor {
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
 }
 
+/* The rows are index.css's shared pair, which reads the two lengths declared here. */
 .compose-swatches {
-  display: grid;
-  grid-template-columns: repeat(6, 20px);
-  gap: 4px;
+  display: flex; flex-direction: column; --swatch-size: 20px; --swatch-gap: 4px; gap: var(--swatch-gap);
 }
 
-.compose-swatches button {
-  width: 20px;
-  height: 20px;
+.compose-swatches .colour-swatch {
+  width: var(--swatch-size);
+  height: var(--swatch-size);
+  background: var(--swatch);
   border: 1px solid var(--border);
   border-radius: 3px;
   cursor: pointer;
@@ -2094,12 +2145,13 @@ textarea.compose-editor {
 
   /* The reserve that hover rule paid for, and it has to share its condition rather than a width:
      released while the cluster is still revealed, the row's last line would run under the buttons.
-     `:has()` and `:nth-last-child()` both still match a `display: none` element, so hiding the
+     `:has()` and `:last-child` both still match a `display: none` element, so hiding the
      cluster does not release its reserve on its own — 116px on the four-action row the probe
      draws (`--row-actions: 4`, so 4 × 28 + 4), and a stuck :hover would ellipsise a narrow row's
      last line around padding held for nothing. */
-  .message-row:not(.is-line):hover:has(> .message-row-cluster) > :nth-last-child(2),
-  .message-row:not(.is-line):focus-within:has(> .message-row-cluster) > :nth-last-child(2) {
+  .message-row:not(.is-line):hover:has(.message-row-cluster) .message-row-content > :last-child,
+  .message-row:not(.is-line):focus-within:has(.message-row-cluster)
+    .message-row-content > :last-child {
     padding-right: 0;
   }
 
@@ -2120,7 +2172,7 @@ textarea.compose-editor {
      while `.message-row-line` absorbs the space and reflows under the finger — permanently, on
      whichever row a tap left focused. `is-line` rows are reachable on touch: `wideRows` is
      `viewport !== 'phone' && pane !== 'right'`, so a tablet at bottom or none draws them, and the
-     row is role=button/tabIndex=0, so a tap satisfies :focus-within before sticky :hover does.
+     content cell is focusable, so a tap on it satisfies :focus-within before sticky :hover does.
      `inline` is the restore, not a new look: .message-row-date is a span declaring no display of
      its own. Its used value here is `block` either way — an `is-line` row is a flex container and
      blockifies its items — measured at both, so this reproduces the base exactly. */
