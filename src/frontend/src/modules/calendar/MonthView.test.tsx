@@ -257,6 +257,18 @@ describe('MonthView', () => {
       expect(createAt.mock.calls[0][0].toISOString()).toBe('2026-09-16T09:00:00.000Z')  // 11:00
     })
 
+    /* The click's own rule, which Enter has to keep: the bubble holds no trap, so Shift+Tab
+       comes back to the grid with it still standing, and Enter drew a draft on top of it. */
+    it('spends Enter on the standing bubble rather than creating under it', () => {
+      const createAt = vi.fn()
+      month([dated('a', 'One', 9)], { createAt }, { previewOpen: true })
+      cell('17 September 2026').focus()
+
+      press('Enter')
+
+      expect(createAt).not.toHaveBeenCalled()
+    })
+
     // Enter on a chip is the chip's: without the guard it opens the bubble AND a draft.
     it('leaves Enter on a chip inside the cell to the chip', () => {
       const createAt = vi.fn()

@@ -15,7 +15,8 @@ export interface MonthViewProps {
   onOpen(o: Occurrence, anchor: HTMLElement): void
   onOpenEditor(o: Occurrence): void
   selectedKey?: string
-  /** A click on an empty cell is spent closing an open bubble, the hour grid's rule. */
+  /** A click or an Enter on an empty cell is spent closing an open bubble, the hour grid's
+      rule: the bubble has no trap, so Shift+Tab comes back to the grid with it still standing. */
   previewOpen?: boolean
 }
 
@@ -102,7 +103,7 @@ export default function MonthView({
       action and has to mean the same thing on an empty day as on a full one, and F2 is already
       the documented way in. A key from a chip inside the cell is the chip's own. */
   const onCellKey = (day: PlainDate, timed: Occurrence[], event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Enter' || event.target !== event.currentTarget) return
+    if (event.key !== 'Enter' || event.target !== event.currentTarget || previewOpen) return
     event.preventDefault()
     createOn(day, startMinuteBelowAll(timed, tz))
   }

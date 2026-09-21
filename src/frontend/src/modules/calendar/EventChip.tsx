@@ -77,15 +77,17 @@ export default function EventChip({
     dragging ? 'is-dragging' : '',
   ].filter(Boolean).join(' ')
 
+  // The two parts of when, or neither: a server that sent no readable date leaves them empty,
+  // and the chip is then named by its title rather than by a trailing comma.
+  const when = whenPartsOf(occurrence, { tz, lang, region, cycle }, t).join(', ')
+
   const key = occurrenceKey(occurrence)
   const common = {
     type: 'button' as const,
     className,
     // The day is in the column or the cell this sits in, which is position and nothing a reader
     // can hear: without it a month's forty chips all name themselves the same.
-    'aria-label': t('views.chipLabel', {
-      title, when: whenPartsOf(occurrence, { tz, lang, region, cycle }, t).join(', '),
-    }),
+    'aria-label': when ? t('views.chipLabel', { title, when }) : title,
     'data-key': key,
     onPointerEnter: onHover && (() => onHover(key)),
     onPointerLeave: onHover && (() => onHover(null)),

@@ -211,8 +211,8 @@ describe('ContactList', () => {
     expect(props.onSelect).toHaveBeenCalledWith('b')
   })
 
-  // Same guard as MessageList's onRowKey: an inner control fires Enter/Space itself, and
-  // without the target check the tile behind it would also open.
+  // The star and the actions sit in cells of their own, outside the content cell that carries
+  // the key: these two pass by the tile's structure now, not by a target check of its own.
   it('does not open the tile when Enter is pressed on the star inside it', () => {
     const props = setup()
     const tile = screen.getByTestId('contact-tile-b')

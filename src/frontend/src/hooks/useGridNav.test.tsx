@@ -507,6 +507,14 @@ describe('useGridNav', () => {
     expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '0', '-1', '-1', '-1'])
   })
 
+  /* Both at once, the mark drawn first: DOM order used to decide, so the current month with its
+     anchor after today opened Tab on today rather than on the day the URL is about. */
+  it('opens on an explicit state ahead of a contextual mark that comes before it', () => {
+    render(<Grid rows={THREE} pressed="C1" current={['A2', 'date']} />)
+
+    expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '-1', '0', '-1', '-1'])
+  })
+
   // Asserted on a first render, not a rerender: `aria-current` is not in the observer's filter, so
   // a changed value fires no repoint and a rerender would pass whatever the predicate answered.
   it('ignores an explicit aria-current of false', () => {

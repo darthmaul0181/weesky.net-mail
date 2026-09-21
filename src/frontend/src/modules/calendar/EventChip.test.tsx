@@ -40,6 +40,14 @@ describe('EventChip', () => {
     expect(draw({ eventId: 'e1' }).button).toHaveTextContent('(No title)')
   })
 
+  /* `whenPartsOf` answers nothing at all for an occurrence the server sent no readable date for
+     — the grid draws such an event rather than throwing — and the name read "Stand-up, ". */
+  it('names an event with no readable date by its title alone', () => {
+    const { button } = draw({ eventId: 'e1', summary: 'Stand-up' })
+
+    expect(button).toHaveAccessibleName('Stand-up')
+  })
+
   /* A chip's visible text names the event and, where there is room, the hour it starts at. The
      day is carried by the column or the cell it sits in — by position, which no role declares
      and no reader announces, so forty month chips all said the same thing. */

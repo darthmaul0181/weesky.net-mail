@@ -94,8 +94,11 @@ function isCurrent(widget: HTMLElement): boolean {
 /** APG puts the stop where the grid already is: a dialog reopened on Coral must not hand Tab to
     Blue, and a list with a message open must not hand Enter to that row's checkbox. */
 function pickedIn(widgets: HTMLElement[]): HTMLElement | undefined {
-  return widgets.find(widget => widget.getAttribute('aria-pressed') === 'true'
-    || widget.getAttribute('aria-selected') === 'true' || isCurrent(widget)) ?? widgets[0]
+  // An explicit state before a contextual mark, in two passes: in one, DOM order decided, so the
+  // current month with its anchor after today opened Tab on today rather than on the chosen day.
+  const chosen = (widget: HTMLElement) => widget.getAttribute('aria-pressed') === 'true'
+    || widget.getAttribute('aria-selected') === 'true'
+  return widgets.find(chosen) ?? widgets.find(isCurrent) ?? widgets[0]
 }
 
 /** Where a lost stop goes: whatever stands where its own row or cell stood, at the same column.
@@ -203,9 +206,9 @@ export function useGridNav({ ref, cellEntry }: GridNavOptions): void {
       const going = event.relatedTarget as Node | null
       if (going && grid.contains(going)) return
       if (going) focused.current = null
-      // A stop the stylesheet has hidden is one Tab cannot reach, and the grid would be
-      // unreachable: one layout read per departure, never one per mutation. `isConnected` is
-      // load-bearing — a removal blurs first, and `repoint` owns that recovery and its column.
+      // The fallback for a consumer that forgot the reveal rule: a stop the stylesheet has
+      // hidden is one Tab cannot reach. Every shipped consumer reveals on `[tabindex="0"]` or
+      // hides nothing, so this is dead on all five — and `visibility: hidden` reports a rect.
       const held = stop.current
       if (!held || !held.isConnected || held.getClientRects().length > 0) return
       const row = held.closest(ROW)
