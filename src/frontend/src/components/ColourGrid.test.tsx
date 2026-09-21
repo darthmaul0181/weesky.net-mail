@@ -7,14 +7,9 @@ const NAMES: Record<string, string> = {
   '#000000': 'Black', '#f8e71c': 'Yellow', '#417505': 'Olive', '#4a90d9': 'Blue',
 }
 
-function mount(value: string) {
-  const onPick = vi.fn()
-  return {
-    onPick,
-    ...render(<ColourGrid className="test-swatches" label="Colour" rows={ROWS} value={value}
-      nameOf={colour => NAMES[colour]} onPick={onPick} />),
-  }
-}
+const mount = (value: string) => render(
+  <ColourGrid className="test-swatches" label="Colour" rows={ROWS} value={value}
+    nameOf={colour => NAMES[colour]} onPick={vi.fn()} />)
 
 const pressed = () => screen.getAllByRole('button')
   .filter(button => button.getAttribute('aria-pressed') === 'true')
@@ -22,7 +17,8 @@ const pressed = () => screen.getAllByRole('button')
 
 /** The two callers spell a colour their own way — the calendar's stored hex, the editor's report
     of what the document says — so where the applied colour is read is the one place they could
-    silently drift apart, and it is this file's whole subject. */
+    silently drift apart, and it is this file's whole subject. The keys, the arrows and the one tab
+    stop are exercised through each caller, in ColorSwatches.test.tsx and EditorToolbar.test.tsx. */
 describe('ColourGrid', () => {
   it('marks the applied colour however the surface spells it', () => {
     mount(' #F8E71C ')

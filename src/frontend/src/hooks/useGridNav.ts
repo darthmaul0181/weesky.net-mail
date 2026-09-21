@@ -206,9 +206,9 @@ export function useGridNav({ ref, cellEntry }: GridNavOptions): void {
       const going = event.relatedTarget as Node | null
       if (going && grid.contains(going)) return
       if (going) focused.current = null
-      // The fallback for a consumer that forgot the reveal rule: a stop the stylesheet has
-      // hidden is one Tab cannot reach. Every shipped consumer reveals on `[tabindex="0"]` or
-      // hides nothing, so this is dead on all five — and `visibility: hidden` reports a rect.
+      // The fallback for a consumer that forgot the reveal rule: every shipped one reveals on
+      // `[tabindex="0"]` or hides nothing, so this is dead on all five. `isConnected` keeps it off
+      // a removal, which blurs first and whose recovery is `repoint`'s, with the column.
       const held = stop.current
       if (!held || !held.isConnected || held.getClientRects().length > 0) return
       const row = held.closest(ROW)

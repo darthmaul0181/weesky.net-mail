@@ -2282,7 +2282,7 @@ body {
   min-width: 0;
 }
 
-/* ── Colour grids ─────────────────────────── */
+/* ── Colour grids ──────────────────────────────────── */
 /* `ColourGrid`'s rows, which the calendar's twelve and the composer's eighteen both draw: a
    column of row-grids rather than one six-column grid, so the rows ARIA owns are the rows drawn.
    The surface's own class declares the two lengths and paints `.colour-swatch`. */
