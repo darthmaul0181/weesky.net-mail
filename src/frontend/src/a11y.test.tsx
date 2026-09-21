@@ -126,13 +126,10 @@ describe('accessibility sweep', () => {
     const reader = container.querySelector('.mail-reader') as HTMLElement
     await within(reader).findByText('Hello')
     expect(container.querySelector('.mail-list')).not.toBeNull()
-    // Two waivers: .message-row is a role="button" wrapping its own checkbox, star and action
-    // buttons, which Task 3's grid rewrite removes; and the reader's real <iframe> defeats axe's
-    // cross-frame scan in jsdom, which is true of no other surface here.
-    await expectNoAxeViolations(container, {
-      extraRules: { 'nested-interactive': { enabled: false } },
-      iframes: false,
-    })
+    // One waiver left: the reader's real <iframe> defeats axe's cross-frame scan in jsdom, which is
+    // true of no other surface here. The nested-interactive one is gone — the row is a role="row"
+    // of four gridcells now, so nothing inside it is nested in a button any more.
+    await expectNoAxeViolations(container, { iframes: false })
   })
 
   it('ContactsLayout', async () => {
