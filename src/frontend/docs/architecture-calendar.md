@@ -363,6 +363,29 @@ module's editor and ends in the same reader.
   `"invitation_uid_unwritable"` when its UID holds a character no reply may carry: either way the
   answer is recorded and no Resend is offered.
 
+**The month is a grid of weeks, and the day cell is the widget.** `.month-view` carries
+`role="grid"` and is `MonthView`'s own root, so it stands at `useGridNav`'s first layout effect
+without the small component `MessageGrid` and `ContactGrid` were extracted to be; each week is a
+`role="row"` opening on its week number as a `role="rowheader"`, and each day a `role="gridcell"`
+that is **itself the activation target** — hence the constant `tabIndex={-1}` on it, and hence
+`cellEntry`, which walks the cells and reaches the chips inside one with **F2**, Escape coming
+back out (the hook spends Escape there and nowhere else, so the bubble and the editor keep it
+everywhere else). **Enter on a cell creates rather than entering it**: creating is a day's primary
+action and has to mean the same thing on an empty day as on a full one, F2 already being the
+documented way in — and the hour it lands on is the click's own rule read with no pointer to read
+it against, which is below every chip the cell drew. **`aria-selected` names the anchor and
+`aria-current="date"` names today**, two different questions that a calendar must not answer with
+one attribute: the stop opens on the anchor ahead of today, and `CalendarLayout` keys the grid on
+the month so a chevron step re-opens it on the new anchor instead of leaving the hook to recover a
+lost stop next door — row 0 at the old weekday, which for Monday to Wednesday is an outside day of
+the month just left, where Enter then created. A cell is named for its day and the count it holds,
+drawn or hidden alike, and **a chip is named with its own day** (`views.chipLabel`): the day is in
+the cell around it, which is position, and no reader hears position. **The week head above the hour
+grid is a `role="table"` of `role="columnheader"`s**, not a second grid: it holds no focusable of
+its own, and the hour slots under it are out of the keyboard **by decision** — a day is ninety-six
+quarter-hour targets, the three gestures over them are the pointer's, and a chip is reached from
+the month, the list or the search instead.
+
 **And the editor's Start and End rows were stacked when they were meant to be on one line.**
 `index.css`'s phone block turns *every* `.field-h` into a `flex-direction: column`, which is right
 for a settings row's sentence-length caption and wrong here — and in a column a `flex-basis: 100%`

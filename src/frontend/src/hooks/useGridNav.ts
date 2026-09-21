@@ -65,6 +65,8 @@ function widgetAt(rows: HTMLElement[][], to: Cell): HTMLElement {
     of an entered cell are a grid one column wide, where a row holds no other end to reach: Home
     and End name the cell's own two there, the way Control does in any grid. */
 function moveOf(event: KeyboardEvent, oneColumn = false): Move | null {
+  // Shift is refused rather than unhandled: Shift+arrow is reserved for the range selection
+  // this product has not built, and a grid must not spend it on a plain move meanwhile.
   if (event.altKey || event.metaKey || event.shiftKey) return null
   const ends = event.ctrlKey || oneColumn
   switch (event.key) {
