@@ -442,17 +442,19 @@
 }
 
 /* ── The dialogues ─────────────────────────────────────────────────────────── */
-/* Twelve swatches, six by two. 24px each, so the grid needs no --field-w of its own; the six
-   columns sit on the role="row" the markup draws, and the flex cell keeps a baseline out of it. */
-.color-swatches { display: flex; flex-direction: column; gap: 6px; }
-.color-swatch-row { display: grid; grid-template-columns: repeat(6, 24px); gap: 6px; }
-.color-swatch-cell { display: flex; }
-.color-swatch {
-  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%;
-  background: var(--cal); cursor: pointer;
+/* Twelve swatches, six by two. 24px each, so the grid needs no --field-w of its own; the rows
+   are index.css's shared pair, which reads the two lengths declared here. */
+.color-swatches {
+  display: flex; flex-direction: column; gap: 6px; --swatch-size: 24px; --swatch-gap: 6px;
 }
-.color-swatch.is-picked { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--cal); }
-.color-swatch.is-picked::after {
+.color-swatches .colour-swatch {
+  width: var(--swatch-size); height: var(--swatch-size); border: 0; border-radius: 50%;
+  background: var(--swatch); cursor: pointer;
+}
+.color-swatches .colour-swatch.is-picked {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--swatch);
+}
+.color-swatches .colour-swatch.is-picked::after {
   content: ''; display: block; width: 5px; height: 9px; margin: 4px auto 0;
   border: solid var(--action-primary-fg); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }

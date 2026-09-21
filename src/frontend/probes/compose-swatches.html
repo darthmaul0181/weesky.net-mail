@@ -1,22 +1,24 @@
 <!doctype html>
 <!--
-  Probe: does turning the composer's eighteen-swatch popover into a `role="grid"` of three
-  `role="row"`s of six `role="gridcell"`s leave it drawn exactly as it was? `.compose-swatches`
-  went from one six-column grid to a flex COLUMN of row-grids, which is the move the calendar's
-  twelve made in lot 2c task 2 and the move that has to carry its own CSS with it.
+  Probe: the two colour grids, drawn before and after they were shared.
 
-  It loads the REAL stylesheets (tokens + palette + index.css + mail.css) and draws the popover
-  twice, at the toolbar's own width:
+  Lot 2c task 6 turned the composer's eighteen-swatch popover into a `role="grid"` of three
+  `role="row"`s of six `role="gridcell"`s; the fix wave then folded it and the calendar's twelve
+  into one `src/components/ColourGrid.tsx`, which moved the row and cell rules into `index.css`
+  (`.colour-grid-row` / `.colour-grid-cell`, reading a `--swatch-size` and a `--swatch-gap` the
+  surface declares) and put the paint on `.colour-swatch` with the colour on a `--swatch`
+  property instead of an inline `background`. Nothing about either grid was meant to move.
 
-    legacy — the markup before the rewrite: eighteen buttons straight inside `.compose-swatches`,
-             which the OLD rule laid out as `grid-template-columns: repeat(6, 20px)`
-    grid   — the markup after: `.compose-swatch-row` / `.compose-swatch-cell` around each button
+  It loads the REAL stylesheets (tokens + palette + index.css + mail.css + calendar.css) and
+  draws each grid twice, at the width it ships at:
 
-  Run it against the stylesheet as it stands: `legacy` is then the old markup under the NEW rule,
-  which is what says whether the old shape would have survived (it does not, and must not — the
-  numbers show the flat markup collapsing to one column). Run it with mail.css reverted and
-  `legacy` is the real before. Read `popover`, `swatchGrid` and the three corner swatches: those
-  are the boxes a re-shaped grid moves.
+    before — the retired markup (`compose-swatch-row`/`-cell`, `color-swatch-row`/`-cell`, the
+             colour inline) under a frozen copy of the retired rules, in the <style> below. It is
+             a historical baseline and nothing ships it; edit it only to correct the history.
+    after  — the markup `ColourGrid` renders, drawn by the stylesheets as they stand.
+
+  Read `swatchGrid` and the three corner swatches: those are the boxes a re-shaped grid moves.
+  `before` and `after` have to agree number for number.
 
   Served by the Vite dev server (npm run dev) at /probes/compose-swatches.html. #out holds the JSON.
 -->
@@ -28,62 +30,129 @@
   <link rel="stylesheet" href="/src/styles/theme-night.css" />
   <link rel="stylesheet" href="/src/index.css" />
   <link rel="stylesheet" href="/src/styles/mail.css" />
+  <link rel="stylesheet" href="/src/styles/calendar.css" />
   <style>
     body { margin: 0; font: var(--font, 14px system-ui); }
-    /* The two popovers are absolute against their anchor, so each gets a band of its own. */
+    /* The popovers are absolute against their anchor, so each gets a band of its own. */
     .case { position: relative; height: 130px; }
+    .case.is-dialog { height: 90px; padding: 8px; }
     #out { padding: 16px; white-space: pre-wrap; font-family: monospace; font-size: 12px; }
+
+    /* ── The retired rules, frozen ─────────────────────────────────────────────
+       mail.css and calendar.css as they read before the two grids were shared. */
+    #before .compose-swatch-row { display: grid; grid-template-columns: repeat(6, 20px); gap: 4px; }
+    #before .compose-swatch-cell { display: flex; }
+    #before .compose-swatches button {
+      width: 20px; height: 20px;
+      border: 1px solid var(--border); border-radius: 3px; cursor: pointer;
+    }
+    #cal-before .color-swatch-row { display: grid; grid-template-columns: repeat(6, 24px); gap: 6px; }
+    #cal-before .color-swatch-cell { display: flex; }
+    #cal-before .color-swatch {
+      width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%;
+      background: var(--cal); cursor: pointer;
+    }
+    #cal-before .color-swatch.is-picked {
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--cal);
+    }
+    #cal-before .color-swatch.is-picked::after {
+      content: ''; display: block; width: 5px; height: 9px; margin: 4px auto 0;
+      border: solid var(--action-primary-fg); border-width: 0 2px 2px 0; transform: rotate(45deg);
+    }
   </style>
 </head>
 <body>
-  <div class="case"><span class="compose-popover-anchor" id="legacy">
-    <button type="button" class="compose-tool" id="legacy-trigger" aria-label="Text colour">A</button>
+  <div class="case"><span class="compose-popover-anchor" id="before">
+    <button type="button" class="compose-tool" id="before-trigger" aria-label="Text colour">A</button>
     <div class="compose-popover">
-      <div class="compose-swatches" role="group" aria-labelledby="legacy-trigger"></div>
+      <div class="compose-swatches" role="grid" aria-labelledby="before-trigger"></div>
     </div>
   </span></div>
 
-  <div class="case"><span class="compose-popover-anchor" id="grid">
-    <button type="button" class="compose-tool" id="grid-trigger" aria-label="Text colour">A</button>
+  <div class="case"><span class="compose-popover-anchor" id="after">
+    <button type="button" class="compose-tool" id="after-trigger" aria-label="Text colour">A</button>
     <div class="compose-popover">
-      <div class="compose-swatches" role="grid" aria-labelledby="grid-trigger"></div>
+      <div class="compose-swatches" role="grid" aria-labelledby="after-trigger"></div>
     </div>
   </span></div>
+
+  <div class="case is-dialog" id="cal-before">
+    <div class="color-swatches" role="grid" aria-label="Calendar colour"></div>
+  </div>
+
+  <div class="case is-dialog" id="cal-after">
+    <div class="color-swatches" role="grid" aria-label="Calendar colour"></div>
+  </div>
 
   <pre id="out"></pre>
 
   <script type="module">
-    import { SWATCH_ROWS, swatchNameKey } from '/src/modules/mail/compose/composeColors.ts'
+    import { SWATCH_ROWS } from '/src/modules/mail/compose/composeColors.ts'
+    import { CALENDAR_COLORS } from '/src/modules/calendar/calendarColors.ts'
 
-    // The colours come from the module the component reads, so a palette edit changes what this
-    // reports rather than leaving it measuring a copy nobody ships.
-    const swatch = colour => {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.style.background = colour
-      // The key, not the name: this harness has no catalogue. Labels paint nothing, so geometry is
-      // unaffected — but do not reuse this fixture for anything that reads what a swatch announces.
-      button.setAttribute('aria-label', swatchNameKey(colour))
-      return button
-    }
+    // The colours come from the modules the components read, so a palette edit changes what this
+    // reports rather than leaving it measuring a copy nobody ships. Labels are left off: they
+    // paint nothing here, and this harness has no catalogue to resolve a name from.
+    const CALENDAR_ROWS = [CALENDAR_COLORS.slice(0, 6), CALENDAR_COLORS.slice(6)]
+    const PICKED = CALENDAR_COLORS[3]
 
-    const flat = document.querySelector('#legacy .compose-swatches')
-    for (const row of SWATCH_ROWS) for (const colour of row) flat.appendChild(swatch(colour))
-
-    const grid = document.querySelector('#grid .compose-swatches')
-    for (const row of SWATCH_ROWS) {
-      const line = document.createElement('div')
-      line.className = 'compose-swatch-row'
-      line.setAttribute('role', 'row')
-      for (const colour of row) {
-        const cell = document.createElement('div')
-        cell.className = 'compose-swatch-cell'
-        cell.setAttribute('role', 'gridcell')
-        cell.appendChild(swatch(colour))
-        line.appendChild(cell)
+    /** One row of cells, under whichever pair of class names the case is drawn with. */
+    function fill(grid, rows, names, swatch) {
+      for (const row of rows) {
+        const line = document.createElement('div')
+        line.className = names.row
+        line.setAttribute('role', 'row')
+        for (const colour of row) {
+          const cell = document.createElement('div')
+          cell.className = names.cell
+          cell.setAttribute('role', 'gridcell')
+          cell.appendChild(swatch(colour))
+          line.appendChild(cell)
+        }
+        grid.appendChild(line)
       }
-      grid.appendChild(line)
     }
+
+    const button = () => {
+      const el = document.createElement('button')
+      el.type = 'button'
+      return el
+    }
+
+    fill(document.querySelector('#before .compose-swatches'), SWATCH_ROWS,
+      { row: 'compose-swatch-row', cell: 'compose-swatch-cell' },
+      colour => {
+        const el = button()
+        el.style.background = colour
+        return el
+      })
+
+    fill(document.querySelector('#after .compose-swatches'), SWATCH_ROWS,
+      { row: 'colour-grid-row', cell: 'colour-grid-cell' },
+      colour => {
+        const el = button()
+        el.className = 'colour-swatch'
+        el.style.setProperty('--swatch', colour)
+        return el
+      })
+
+    fill(document.querySelector('#cal-before .color-swatches'), CALENDAR_ROWS,
+      { row: 'color-swatch-row', cell: 'color-swatch-cell' },
+      colour => {
+        const el = button()
+        el.className = `color-swatch${colour === PICKED ? ' is-picked' : ''}`
+        el.style.setProperty('--cal', colour)
+        return el
+      })
+
+    fill(document.querySelector('#cal-after .color-swatches'), CALENDAR_ROWS,
+      { row: 'colour-grid-row', cell: 'colour-grid-cell' },
+      colour => {
+        const el = button()
+        el.className = `colour-swatch${colour === PICKED ? ' is-picked' : ''}`
+        el.style.setProperty('--swatch', colour)
+        return el
+      })
 
     const round = n => Math.round(n * 100) / 100
     const rect = el => {
@@ -92,47 +161,60 @@
       return { x: round(box.x), y: round(box.y), w: round(box.width), h: round(box.height) }
     }
 
-    /** The worst overhang per edge of every swatch against the popover's own box: a grid that
+    /** The worst overhang per edge of every swatch against the box around it: a grid that
         re-shaped badly spills, and in a `position: absolute` box scrollWidth reports nothing. */
-    function escapeOf(popover) {
-      const outer = popover.getBoundingClientRect()
+    function escapeOf(outer) {
+      const box = outer.getBoundingClientRect()
       let worst = { top: 0, right: 0, bottom: 0, left: 0 }
-      for (const el of popover.querySelectorAll('button')) {
-        const box = el.getBoundingClientRect()
-        if (box.width === 0 && box.height === 0) continue
+      for (const el of outer.querySelectorAll('button')) {
+        const one = el.getBoundingClientRect()
+        if (one.width === 0 && one.height === 0) continue
         worst = {
-          top: Math.max(worst.top, round(outer.top - box.top)),
-          right: Math.max(worst.right, round(box.right - outer.right)),
-          bottom: Math.max(worst.bottom, round(box.bottom - outer.bottom)),
-          left: Math.max(worst.left, round(outer.left - box.left)),
+          top: Math.max(worst.top, round(box.top - one.top)),
+          right: Math.max(worst.right, round(one.right - box.right)),
+          bottom: Math.max(worst.bottom, round(one.bottom - box.bottom)),
+          left: Math.max(worst.left, round(box.left - one.left)),
         }
       }
       return worst
     }
 
-    function read(id) {
-      const popover = document.querySelector(`#${id} .compose-popover`)
-      const swatches = popover.querySelectorAll('button')
+    function read(id, gridSelector, outerSelector) {
+      const outer = document.querySelector(`#${id} ${outerSelector}`)
+      const swatches = outer.querySelectorAll('button')
       const boxes = Array.from(swatches, rect)
+      const first = boxes[0]
+      // Both are read relative to the case's own band, so two cases stacked down the page
+      // compare number for number instead of differing by wherever each one starts.
+      const origin = document.querySelector(`#${id}`).getBoundingClientRect()
+      const local = box => box && { x: round(box.x - origin.x), y: round(box.y - origin.y), w: box.w, h: box.h }
+      const grid = outer.matches(gridSelector) ? outer : outer.querySelector(gridSelector)
+      const picked = outer.querySelector('.is-picked')
       return {
-        popover: rect(popover),
-        swatchGrid: rect(popover.querySelector('.compose-swatches')),
+        swatchGrid: local(rect(grid)),
         count: swatches.length,
-        // Three corners of the eighteen: first, end of the first drawn line, and last.
-        first: boxes[0],
-        sixth: boxes[5],
-        last: boxes[boxes.length - 1],
+        // Three corners: the first, the end of the first drawn line, and the last.
+        first: local(first),
+        sixth: local(boxes[5]),
+        last: local(boxes[boxes.length - 1]),
         // How many share the first swatch's y: six is six per row, one is a collapsed column.
-        perRow: boxes.filter(box => box.y === boxes[0].y).length,
-        rowTops: [...new Set(boxes.map(box => box.y))],
-        escape: escapeOf(popover),
+        perRow: boxes.filter(box => box.y === first.y).length,
+        rowTops: [...new Set(boxes.map(box => round(box.y - origin.y)))],
+        // The ring and the tick the picked calendar swatch wears, both of which moved from
+        // --cal to --swatch and from one selector to another.
+        ring: picked && getComputedStyle(picked).boxShadow,
+        tick: picked && ['width', 'height', 'borderRightWidth']
+          .map(part => getComputedStyle(picked, '::after')[part]).join(' '),
+        escape: escapeOf(outer),
       }
     }
 
     requestAnimationFrame(() => {
       document.getElementById('out').textContent = JSON.stringify({
-        legacy: read('legacy'),
-        grid: read('grid'),
+        composeBefore: read('before', '.compose-swatches', '.compose-popover'),
+        composeAfter: read('after', '.compose-swatches', '.compose-popover'),
+        calendarBefore: read('cal-before', '.color-swatches', '.color-swatches'),
+        calendarAfter: read('cal-after', '.color-swatches', '.color-swatches'),
       }, null, 2)
     })
   </script>
