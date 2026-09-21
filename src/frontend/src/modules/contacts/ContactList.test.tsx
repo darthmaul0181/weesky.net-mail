@@ -434,12 +434,16 @@ describe('the list as a grid', () => {
     const cells = within(row).getAllByRole('gridcell')
 
     expect(cells).toHaveLength(4)
-    for (const control of [
+    const held = [
       within(row).getByRole('checkbox'),
       within(row).getByRole('button', { name: /from favourites/i }),
       within(row).getByRole('button', { name: /^edit alice dupont/i }),
       within(row).getByRole('button', { name: /^delete alice dupont/i }),
-    ]) expect(cells).toContain(control.closest('[role="gridcell"]'))
+    ].map(control => control.closest('[role="gridcell"]'))
+    // A Set, not four containments: the pencil and the trash DO share the actions cell, and
+    // counting them would have passed on a row where the star shared it too.
+    expect(held.every(cell => cells.includes(cell as HTMLElement))).toBe(true)
+    expect(new Set(held).size).toBe(3)
   })
 
   /* Cells are walked in the order they are written, so that has to be the order they are drawn in:

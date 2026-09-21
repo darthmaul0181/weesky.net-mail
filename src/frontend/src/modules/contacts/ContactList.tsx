@@ -20,8 +20,7 @@ import type { Contact } from './contactTypes'
 /**
  * The tiles' container. It is a component of its own because `useGridNav`'s effect is keyed on the
  * ref alone: a grid that is absent when its owner first lays out never gets the hook at all, and
- * this element comes and goes with the rows — an empty book, or a filter matching nothing, draws
- * none rather than an empty `role="grid"` owning none of the rows ARIA requires of it.
+ * this element comes and goes with the rows — an empty book or an unmatched filter draws none.
  */
 function ContactGrid({ label, selecting, children }: {
   label: string

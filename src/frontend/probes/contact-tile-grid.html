@@ -18,6 +18,13 @@
   then the real "before"), once after (the `grid` case is the real "after"). Read `tileHeight`,
   `nameWidth` and the star's rect: those three are what a moved star moves.
 
+  It also carries a bench, which draws nothing until `await window.bench(2000)` is called from the
+  console: contacts is the first useGridNav consumer with no pager, so every contact is a row and
+  nobody had measured what the hook's two hot paths cost on a long book. The bench restates those
+  two paths over the REAL `focusablesIn`/`reachable` — `rowsIn` (one querySelectorAll per row, run
+  on every keydown) and `repoint`'s widget rewrite (run on every mutation inside the grid) — and
+  reports milliseconds against a 16.7ms frame. It is a measurement, not a pass mark.
+
   Served by the Vite dev server (npm run dev) at /probes/contact-tile-grid.html. #out holds the JSON.
 -->
 <html data-palette="night" data-theme="light">
@@ -102,6 +109,8 @@
       </div>
     </div>
   </div>
+  <!-- Filled by window.bench() alone, so an ordinary geometry read pays nothing for it. -->
+  <div class="contact-tiles" id="bench" role="grid" aria-label="Bench"></div>
   <pre id="out"></pre>
   <script>
     const round = n => Math.round(n * 100) / 100
@@ -163,6 +172,72 @@
         'grid-stop': read('grid-stop'),
       }, null, 2)
     })
+  </script>
+  <script type="module">
+    // The hook's own two primitives, imported rather than re-spelled: what is restated below is the
+    // two loops useGridNav runs over them, `rowsIn` and `repoint`'s rewrite.
+    import { focusablesIn } from '/src/lib/layerStack.ts'
+    import { reachable } from '/src/hooks/useLayer.ts'
+
+    const rowsIn = grid => Array.from(grid.querySelectorAll('[role="row"]'))
+      .map(row => focusablesIn(row).filter(reachable))
+      .filter(widgets => widgets.length > 0)
+
+    const cellOf = (rows, widget) => {
+      for (let row = 0; row < rows.length; row += 1) {
+        const col = rows[row].indexOf(widget)
+        if (col !== -1) return { row, col }
+      }
+      return null
+    }
+
+    const rewrite = (widgets, target) => widgets.forEach(widget => {
+      const want = widget === target ? '0' : '-1'
+      if (widget.getAttribute('tabindex') !== want) widget.setAttribute('tabindex', want)
+    })
+
+    const median = runs => runs.slice().sort((a, b) => a - b)[Math.floor(runs.length / 2)]
+    const time = (times, run) => median(Array.from({ length: times }, () => {
+      const at = performance.now()
+      run()
+      return performance.now() - at
+    }))
+
+    window.bench = (n = 2000) => {
+      const grid = document.getElementById('bench')
+      const tile = document.querySelector('#grid .contact-tile')
+      grid.replaceChildren(...Array.from({ length: n }, () => tile.cloneNode(true)))
+      // A forced reflow rather than a frame: a backgrounded tab never runs requestAnimationFrame,
+      // and this has to be drivable from a console the page is not in front of.
+      void grid.offsetHeight
+
+      const rows = rowsIn(grid)
+      const widgets = rows.flat()
+      const firstWidget = rows[0][1]
+      const lastWidget = rows[rows.length - 1][1]
+
+      // One keydown: rowsIn, then cellOf walks until it finds the focused widget. The last row is
+      // that walk's worst case and the first its best; a real book sits between them.
+      const keydownBest = time(9, () => cellOf(rowsIn(grid), firstWidget))
+      const keydownWorst = time(9, () => cellOf(rowsIn(grid), lastWidget))
+      // One repoint: cold is every widget rewritten (the first pass after a mount), warm is the
+      // pass a filter keystroke actually runs, where all but one attribute already say what they
+      // should and `tab()` writes nothing.
+      rewrite(widgets, null)
+      const repointCold = time(1, () => rewrite(rowsIn(grid).flat(), firstWidget))
+      const repointWarm = time(9, () => rewrite(rowsIn(grid).flat(), firstWidget))
+
+      grid.replaceChildren()
+      return {
+        rows: rows.length,
+        widgetsPerRow: rows[0].length,
+        frameBudgetMs: 16.7,
+        keydownBestMs: Math.round(keydownBest * 100) / 100,
+        keydownWorstMs: Math.round(keydownWorst * 100) / 100,
+        repointColdMs: Math.round(repointCold * 100) / 100,
+        repointWarmMs: Math.round(repointWarm * 100) / 100,
+      }
+    }
   </script>
 </body>
 </html>

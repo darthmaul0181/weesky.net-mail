@@ -2946,9 +2946,9 @@ body {
   .contact-tile:hover .contact-tile-actions,
   .contact-tile:focus-within .contact-tile-actions { display: none; }
 
-  /* The reserve goes with what it was reserving. The tile itself is the tab stop, so a tap puts
-     :focus-within on it whether or not the cluster inside is drawn — leaving the address ending in
-     an ellipsis 64px short of a row with nothing in that corner. */
+  /* The reserve goes with what it was reserving. The tab stop is a cell inside the tile now, not
+     the tile, but a tap still puts :focus-within on it whether or not the cluster is drawn —
+     leaving the address ending in an ellipsis 64px short of a row with nothing in that corner. */
   .contact-tile:hover .contact-tile-address,
   .contact-tile:focus-within .contact-tile-address { padding-right: 0; }
 
