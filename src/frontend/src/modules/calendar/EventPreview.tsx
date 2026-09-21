@@ -23,7 +23,7 @@ import { recurrenceSummary } from './recurrenceSummary'
 import { usePopoverPosition } from './usePopoverPosition'
 import { returnFocus, useDismiss } from '../../hooks/useDismiss'
 import { reachable } from '../../hooks/useLayer'
-import { focusablesIn } from '../../lib/layerStack'
+import { tabbablesIn } from '../../lib/layerStack'
 
 export interface EventPreviewProps {
   occurrence: Occurrence
@@ -93,7 +93,7 @@ export default function EventPreview({
 
   // Opened by a click, so nothing has moved the focus onto it: a keyboard reaches its two
   // actions only if the opening does.
-  useLayoutEffect(() => { if (bubble.current) focusablesIn(bubble.current)[0]?.focus() }, [])
+  useLayoutEffect(() => { if (bubble.current) tabbablesIn(bubble.current)[0]?.focus() }, [])
 
   // Where every closing route meets, whichever of them moved the focus first. A layout cleanup,
   // because a passive one runs after the bubble's nodes have left the document and could no longer

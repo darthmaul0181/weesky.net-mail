@@ -12,10 +12,18 @@ export interface LayerHandle {
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), textarea:not([disabled]), '
-  + 'input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  + 'input:not([disabled]), select:not([disabled]), [tabindex]'
 
+/** Everywhere focus can be *put* inside a container, a widget holding `tabindex="-1"` included:
+    what a grid's arrows walk, and never the page's tab order. */
 export function focusablesIn(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE))
+}
+
+/** Where Tab actually goes: the same list without a negative `tabindex`, natives included — the
+    question a trap and a menu walk ask. A roving grid demotes widgets that are still focusable. */
+export function tabbablesIn(container: HTMLElement) {
+  return focusablesIn(container).filter(element => element.tabIndex >= 0)
 }
 
 interface Entry {
@@ -30,7 +38,7 @@ function topEntry(): Entry | undefined {
 }
 
 function keepTab(event: KeyboardEvent, container: HTMLElement) {
-  const items = focusablesIn(container)
+  const items = tabbablesIn(container)
   if (items.length === 0) { event.preventDefault(); return }
   const at = items.indexOf(document.activeElement as HTMLElement)
   const last = items.length - 1

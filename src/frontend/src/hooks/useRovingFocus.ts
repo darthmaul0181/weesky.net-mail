@@ -1,11 +1,15 @@
 import { useLayoutEffect, type KeyboardEvent, type RefObject } from 'react'
-import { focusablesIn } from '../lib/layerStack'
+import { tabbablesIn } from '../lib/layerStack'
 
 interface Options {
   active: boolean
   /** The surface the walk stays inside: the menu itself, never the trigger's wrapper. */
   containerRef: RefObject<HTMLElement | null>
 }
+
+/** The types that hold text. `type` reads `text` for an absent or unknown value, so the untyped
+    default is in; a checkbox, a radio and a button hold no caret and answer to no key of one. */
+const TEXT_TYPES = ['text', 'search', 'url', 'tel', 'email', 'password', 'number']
 
 /**
  * Which keys belong to a caret rather than to the walk: Home and End in any text box, and ↓/↑ in a
@@ -14,7 +18,9 @@ interface Options {
  */
 export function textBox(target: EventTarget | null): 'single' | 'multiline' | null {
   const node = target as HTMLElement | null
-  if (node?.tagName === 'INPUT') return 'single'
+  if (node?.tagName === 'INPUT') {
+    return TEXT_TYPES.includes((node as HTMLInputElement).type) ? 'single' : null
+  }
   if (node?.tagName === 'TEXTAREA') return 'multiline'
   return node?.closest('[contenteditable]:not([contenteditable="false"])') ? 'multiline' : null
 }
@@ -25,7 +31,7 @@ export function textBox(target: EventTarget | null): 'single' | 'multiline' | nu
  * belong to a submenu, and answering them would teach a dialect of our own.
  *
  * Focus itself moves and no `tabindex` is rewritten, so the walk and the layer stack's Tab read one
- * and the same list — `focusablesIn` — and cannot disagree about where focus may go inside a menu
+ * and the same list — `tabbablesIn` — and cannot disagree about where focus may go inside a menu
  * standing over a trapped dialog. What it spends it marks `preventDefault`, so nothing underneath
  * answers the same key.
  *
@@ -41,7 +47,7 @@ export function useRovingFocus({ active, containerRef }: Options) {
   useLayoutEffect(() => {
     const container = active ? containerRef.current : null
     if (!container || container.contains(document.activeElement)) return
-    focusablesIn(container)[0]?.focus({ preventScroll: true })
+    tabbablesIn(container)[0]?.focus({ preventScroll: true })
   }, [active, containerRef])
 
   return function onKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -52,7 +58,7 @@ export function useRovingFocus({ active, containerRef }: Options) {
     if (end === null && step === 0) return
     const box = textBox(event.target)
     if (box && (end !== null || box === 'multiline')) return
-    const items = focusablesIn(container)
+    const items = tabbablesIn(container)
     if (items.length === 0) return
     const last = items.length - 1
     const at = items.indexOf(document.activeElement as HTMLElement)

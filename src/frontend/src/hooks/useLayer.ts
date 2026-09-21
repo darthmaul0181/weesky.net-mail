@@ -2,7 +2,7 @@ import {
   useEffect, useInsertionEffect, useLayoutEffect, useMemo, useRef, type RefObject,
 } from 'react'
 import {
-  coveredByTrap, focusablesIn, hasOpenLayer, isTopLayer, pushLayer, type LayerHandle,
+  coveredByTrap, hasOpenLayer, isTopLayer, pushLayer, tabbablesIn, type LayerHandle,
 } from '../lib/layerStack'
 
 /** Somewhere a keyboard can work from: still in the document, not <body> — whose `focus()` is a
@@ -71,7 +71,7 @@ export function useLayer({
     if (ref && !container) return undefined
     handle.current = pushLayer({ onEscape: latest.current.onEscape, trap: container })
     if (container) {
-      (latest.current.initialFocusRef?.current ?? focusablesIn(container)[0] ?? container).focus()
+      (latest.current.initialFocusRef?.current ?? tabbablesIn(container)[0] ?? container).focus()
     }
     return () => {
       // Read before the removal: a layer closing under another one must leave focus where the
