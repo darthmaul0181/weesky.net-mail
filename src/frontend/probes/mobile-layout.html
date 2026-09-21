@@ -561,8 +561,8 @@
     // of its own in lot 2c and the line holds a 34px reserve in its place. `.message-row-from` carries
     // `text-overflow: ellipsis` and no element children, so `clipped` exempts it by design and it
     // absorbs the shrink; anything that instead pushes the date past the line's right edge — the
-    // star's own 34px reserve included — lands on `.message-row-top`, which is measured. A row missing those items cannot fail,
-    // and a case that cannot fail is not a guard.
+    // star's own 34px reserve included — lands on `.message-row-top`, which is measured. A row
+    // missing those items cannot fail, and a case that cannot fail is not a guard.
     //
     // `.mail-list-scroll` is here because the real list always has it and it is what owns the
     // vertical scrollbar: without it the row is measured against a gutter the app never gives it.

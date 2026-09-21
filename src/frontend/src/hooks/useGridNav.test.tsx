@@ -384,13 +384,18 @@ describe('useGridNav', () => {
   })
 
   // A calendar's today cell carries a token, not a boolean: the test is present and not "false".
-  it('reads a token aria-current, and ignores an explicit false', () => {
-    const { rerender } = render(<Grid rows={THREE} current={['B3', 'date']} />)
-    expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '0', '-1', '-1', '-1'])
+  it('reads a token aria-current', () => {
+    render(<Grid rows={THREE} current={['B3', 'date']} />)
 
-    rerender(<Grid rows={THREE} current={['B3', 'false']} />)
-    // Nothing is current any more, and the stop stays where it already was rather than moving.
-    expect(widget('B3')).toHaveAttribute('tabindex', '0')
+    expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '0', '-1', '-1', '-1'])
+  })
+
+  // Asserted on a first render, not a rerender: `aria-current` is not in the observer's filter, so
+  // a changed value fires no repoint and a rerender would pass whatever the predicate answered.
+  it('ignores an explicit aria-current of false', () => {
+    render(<Grid rows={THREE} current={['B3', 'false']} />)
+
+    expect(stops()).toEqual(['0', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1'])
   })
 
   /* A row deleted from the keyboard leaves focus on `<body>`: the stop's recovery is an attribute,

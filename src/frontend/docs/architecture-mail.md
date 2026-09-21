@@ -20,7 +20,8 @@ Files under `src/modules/mail/`:
 (`src/hooks/useGridNav.ts`) has a grid at its first layout effect: that hook's effect is keyed on
 the ref alone, so a grid rendered conditionally by the hook's own owner would never be attached to.
 Each row is a `role="row"` of exactly four `role="gridcell"`s — `[select] [content] [flag]
-[actions]` — and the count is four whether or not the row is a conversation and whatever
+[actions]` narrow, `[select] [content] [actions] [flag]` wide, each skin in its own drawn order so
+the arrows follow the eye — and the count is four whether or not the row is a conversation and whatever
 `mail.rowActions` holds, because a cell count that moves under a setting moves the grid's shape
 under the arrows. **The content cell replaces what used to be a `role="button"` row**: it carries
 the composed `list.rowLabel` name, `tabindex`, and the Enter/Space that opens the message, while the

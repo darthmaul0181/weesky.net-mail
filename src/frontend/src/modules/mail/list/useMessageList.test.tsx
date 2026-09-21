@@ -61,7 +61,23 @@ describe('useMessageList', () => {
 
     await waitFor(() => expect(result.current.streaming).not.toBeNull())
     expect(result.current.paging).toBeNull()
+    // Flat rows are messages, so the block's own total is the number the grid can claim.
+    expect(result.current.rowTotal).toBe(2)
     expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 100, expect.anything())
+  })
+
+  // Nothing counts a folder's conversations while streaming, and a grid that guessed would tell a
+  // screen reader "row 4 of 2". -1 is the honest answer, and the only mode that still needs it.
+  it('claims no row count for a grouped stream', async () => {
+    mocks.getPreferences.mockResolvedValue({
+      'mail.pageSize': 'all', 'mail.showPreview': 'true', 'mail.groupConversations': 'true',
+    })
+    mocks.getMailMessages.mockResolvedValue(groupedPageOf([[2, 1]], 2, 1))
+
+    const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
+
+    await waitFor(() => expect(result.current.streaming).not.toBeNull())
+    expect(result.current.rowTotal).toBe(-1)
   })
 
   // The inactive mode must not fire a second request for the same folder.
@@ -161,6 +177,8 @@ describe('useMessageList', () => {
     expect(result.current.paging?.lastPage).toBe(2)
     // The heading still counts messages: only the pager moved to threads.
     expect(result.current.total).toBe(300)
+    // The rows are threads, so that is what the grid tells a screen reader it holds.
+    expect(result.current.rowTotal).toBe(61)
     expect(mocks.getMailMessages).toHaveBeenCalledWith(
       'INBOX', 0, 30, expect.objectContaining({ grouped: true }))
   })
