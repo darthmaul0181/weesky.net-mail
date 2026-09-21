@@ -18,12 +18,14 @@
   then the real "before"), once after (the `grid` case is the real "after"). Read `tileHeight`,
   `nameWidth` and the star's rect: those three are what a moved star moves.
 
-  It also carries a bench, which draws nothing until `await window.bench(2000)` is called from the
+  It also carries a bench, which draws nothing until `window.bench(2000)` is called from the
   console: contacts is the first useGridNav consumer with no pager, so every contact is a row and
   nobody had measured what the hook's two hot paths cost on a long book. The bench restates those
-  two paths over the REAL `focusablesIn`/`reachable` — `rowsIn` (one querySelectorAll per row, run
-  on every keydown) and `repoint`'s widget rewrite (run on every mutation inside the grid) — and
-  reports milliseconds against a 16.7ms frame. It is a measurement, not a pass mark.
+  two paths over the REAL `focusablesIn`/`reachable` — `rowsIn`, which used to run on every keydown
+  and is now cached, and `repoint`'s widget rewrite, which runs on every mutation inside the grid and
+  must still walk — against a 16.7ms frame. `keydownWalked` is the pre-cache path and
+  `keydownCached` the shipped one, read in the same run so the pair is comparable. It is a
+  measurement, not a pass mark.
 
   Served by the Vite dev server (npm run dev) at /probes/contact-tile-grid.html. #out holds the JSON.
 -->
@@ -197,11 +199,16 @@
     })
 
     const median = runs => runs.slice().sort((a, b) => a - b)[Math.floor(runs.length / 2)]
-    const time = (times, run) => median(Array.from({ length: times }, () => {
-      const at = performance.now()
+    // One warm-up pass is dropped before timing: the first read after a build pays the layout and
+    // the allocation, and reported 47ms where the settled runs said 19.
+    const time = (times, run, per = 1) => {
       run()
-      return performance.now() - at
-    }))
+      return median(Array.from({ length: times }, () => {
+        const at = performance.now()
+        for (let i = 0; i < per; i += 1) run()
+        return (performance.now() - at) / per
+      }))
+    }
 
     window.bench = (n = 2000) => {
       const grid = document.getElementById('bench')
@@ -216,10 +223,14 @@
       const firstWidget = rows[0][1]
       const lastWidget = rows[rows.length - 1][1]
 
-      // One keydown: rowsIn, then cellOf walks until it finds the focused widget. The last row is
-      // that walk's worst case and the first its best; a real book sits between them.
-      const keydownBest = time(9, () => cellOf(rowsIn(grid), firstWidget))
-      const keydownWorst = time(9, () => cellOf(rowsIn(grid), lastWidget))
+      // One keydown, before and after the matrix cache. The last row is cellOf's worst case and the
+      // first its best; a real book sits between them.
+      const keydownWalkedBest = time(9, () => cellOf(rowsIn(grid), firstWidget))
+      const keydownWalkedWorst = time(9, () => cellOf(rowsIn(grid), lastWidget))
+      // 1000 repeats a window, because one cached lookup is under performance.now()'s own
+      // resolution here and reported a flat 0.
+      const keydownCachedBest = time(9, () => cellOf(rows, firstWidget), 1000)
+      const keydownCachedWorst = time(9, () => cellOf(rows, lastWidget), 1000)
       // One repoint: cold is every widget rewritten (the first pass after a mount), warm is the
       // pass a filter keystroke actually runs, where all but one attribute already say what they
       // should and `tab()` writes nothing.
@@ -232,8 +243,10 @@
         rows: rows.length,
         widgetsPerRow: rows[0].length,
         frameBudgetMs: 16.7,
-        keydownBestMs: Math.round(keydownBest * 100) / 100,
-        keydownWorstMs: Math.round(keydownWorst * 100) / 100,
+        keydownWalkedBestMs: Math.round(keydownWalkedBest * 1000) / 1000,
+        keydownWalkedWorstMs: Math.round(keydownWalkedWorst * 1000) / 1000,
+        keydownCachedBestMs: Math.round(keydownCachedBest * 1000) / 1000,
+        keydownCachedWorstMs: Math.round(keydownCachedWorst * 1000) / 1000,
         repointColdMs: Math.round(repointCold * 100) / 100,
         repointWarmMs: Math.round(repointWarm * 100) / 100,
       }

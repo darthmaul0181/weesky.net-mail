@@ -242,6 +242,38 @@ describe('useGridNav', () => {
     expect(widget('A2')).toHaveFocus()
   })
 
+  /* The rows the arrows walk are built by `repoint` and kept, so a keydown does no walk of its own
+     — the observer below invalidates them, and it watches exactly the changes that can: a row or a
+     widget added or removed, and a control gone disabled. These two prove both halves of that
+     invalidation; without it the arrow would walk a grid that no longer exists. */
+  it('walks the rows a mutation rebuilt, not the ones it had', async () => {
+    const { rerender } = render(<Grid rows={[THREE[0], THREE[1]]} />)
+    widget('A2').focus()
+    press('ArrowDown')
+    expect(widget('B2')).toHaveFocus()
+
+    rerender(<Grid rows={THREE} />)
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'C2' })).not.toBeNull())
+
+    press('ArrowDown')
+
+    expect(widget('C2')).toHaveFocus()
+  })
+
+  // The other half, and the one only the attribute filter can catch: nothing was added or removed,
+  // a button simply stopped being somewhere a keyboard can work from.
+  it('steps over a widget that went disabled since the last walk', async () => {
+    const { rerender } = render(<Grid rows={THREE} />)
+    widget('B1').focus()
+
+    rerender(<Grid rows={THREE} disable="B2" />)
+    await waitFor(() => expect(widget('B2')).toBeDisabled())
+
+    press('ArrowRight')
+
+    expect(widget('B3')).toHaveFocus()
+  })
+
   it('takes Home and End to the ends of the row', () => {
     render(<Grid rows={THREE} />)
     widget('B2').focus()
