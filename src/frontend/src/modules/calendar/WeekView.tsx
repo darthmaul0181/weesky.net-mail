@@ -64,6 +64,7 @@ export default function WeekView({
   // The gutter is a token rather than a number here: the phone narrows it, and a width written
   // in JS could not be narrowed by a media query at all.
   const template = `var(--cal-gutter) repeat(${days.length}, minmax(0, 1fr))`
+  const week = weekNumberOf(days[0], rules)
   const placements = useMemo(() => placeAll(visible, tz, days), [visible, tz, days])
 
   const body = useRef<HTMLDivElement>(null)
@@ -84,8 +85,8 @@ export default function WeekView({
       <div className="week-head-table" role="table" aria-label={t('views.dayHeaders')}>
         <div className="week-head" role="row" style={{ gridTemplateColumns: template }}>
           <div className="week-head-gutter" role="columnheader"
-            aria-label={t('views.weekFull', { number: weekNumberOf(days[0], rules) })}>
-            {t('views.weekShort', { number: weekNumberOf(days[0], rules) })}
+            aria-label={t('views.weekFull', { number: week })}>
+            {t('views.weekShort', { number: week })}
           </div>
           {days.map(day => (
             <div key={day} role="columnheader" aria-label={formatLongDay(day, locale)}
