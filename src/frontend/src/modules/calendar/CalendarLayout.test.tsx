@@ -422,6 +422,18 @@ describe('CalendarLayout', () => {
     expect(screen.getByLabelText('End time')).toHaveValue(clockPlusOneHour(expectedStart))
   })
 
+  /* A month cell's Enter names a day and no hour — a keyboard cannot supply the pointer Y the
+     click path reads — so the hour stays the one the sidebar's own button means. */
+  it('opens the editor on the day a keyboard creation named, at that same next hour', async () => {
+    const expectedStart = nextHourClock()
+    renderAt('/calendar/new?view=month&date=2026-09-16&day=2026-09-30')
+
+    expect(await screen.findByLabelText('Title')).toBeInTheDocument()
+    expect(screen.getByLabelText('Start date')).toHaveValue('2026-09-30')
+    expect(screen.getByLabelText('Start time')).toHaveValue(expectedStart)
+    expect(screen.getByLabelText('End time')).toHaveValue(clockPlusOneHour(expectedStart))
+  })
+
   // A parsed end that would land before, or at, a fallback start is not a real duration — the
   // fallback start (an unparsable start) must not inherit a stale or reversed end from the URL.
   it('falls back to start + 1h when the parsed end is not after the fallback start', async () => {

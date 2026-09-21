@@ -31,6 +31,7 @@
     "allDay": "All day",
     "now": "Current time",
     "weekShort": "W{{number}}",
+    "monthGrid": "Month of {{month}}",
     "more_one": "+{{count}} more",
     "more_other": "+{{count}} more",
     "noTitle": "(No title)",

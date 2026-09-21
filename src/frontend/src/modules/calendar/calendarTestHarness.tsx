@@ -37,7 +37,7 @@ export function renderInCalendar(node: ReactNode, overrides: Partial<CalendarCon
     window: windowOf(view, anchor, TZ, RULES),
     occurrences: [], visible: [],
     windowError: null, retryWindow: () => {},
-    openEditor: () => {}, createAt: () => {}, askScope: async () => 'All',
+    openEditor: () => {}, openNewEvent: () => {}, createAt: () => {}, askScope: async () => 'All',
     startGesture: () => {}, moveOccurrence: () => {}, resizeOccurrence: () => {},
     ...overrides,
   }

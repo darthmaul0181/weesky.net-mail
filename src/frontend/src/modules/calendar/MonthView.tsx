@@ -1,7 +1,10 @@
-import { Fragment, useMemo, type MouseEvent } from 'react'
+import { useMemo, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useGridNav } from '../../hooks/useGridNav'
 import { useCalendar } from './calendarContext'
-import { monthGrid, weekNumberOf } from './calendarLocale'
+import {
+  dateLocaleOf, formatLongDay, formatRangeTitle, monthGrid, weekNumberOf,
+} from './calendarLocale'
 import type { Occurrence } from './calendarTypes'
 import EventChip from './EventChip'
 import { itemsByDay, placeAll, wallClockOf } from './multiDay'
@@ -52,8 +55,13 @@ export default function MonthView({
 }: MonthViewProps) {
   const { t } = useTranslation('calendar')
   const {
-    tz, rules, anchor, today, visible, calendarById, setView, setAnchor, createAt,
+    tz, rules, lang, region, anchor, today, visible, calendarById,
+    setView, setAnchor, createAt, openNewEvent,
   } = useCalendar()
+  // The grid is this component's own root, so it stands at the hook's first layout effect
+  // without the small component `MessageGrid` and `ContactGrid` were extracted to be.
+  const grid = useRef<HTMLDivElement>(null)
+  useGridNav({ ref: grid, cellEntry: true })
 
   const weeks = useMemo(
     () => monthGrid(Number(anchor.slice(0, 4)), Number(anchor.slice(5, 7)), rules),
@@ -62,6 +70,7 @@ export default function MonthView({
   const byDay = useMemo(
     () => itemsByDay(placeAll(visible, tz, days), days), [visible, tz, days])
   const month = anchor.slice(0, 7)
+  const locale = dateLocaleOf(lang, region)
 
   const openDay = (day: PlainDate) => {
     setView('day')
@@ -77,11 +86,23 @@ export default function MonthView({
     createAt(utcOfLocalTime(day, start, tz), utcOfLocalTime(day, start + HOUR, tz), false)
   }
 
+  /** Enter creates, where the pattern would also enter the cell: creating is a day's primary
+      action and has to mean the same thing on an empty day as on a full one, and F2 is already
+      the documented way in. A key from a chip inside the cell is the chip's own. */
+  const onCellKey = (day: PlainDate, event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' || event.target !== event.currentTarget) return
+    event.preventDefault()
+    openNewEvent(day)
+  }
+
   return (
-    <div className="month-view">
+    <div className="month-view" role="grid" ref={grid}
+      aria-label={t('views.monthGrid', {
+        month: formatRangeTitle(anchor, anchor, 'month', lang, region),
+      })}>
       {weeks.map(week => (
-        <Fragment key={week[0]}>
-          <div className="month-week-number">{weekNumberOf(week[0], rules)}</div>
+        <div className="month-week" role="row" key={week[0]}>
+          <div className="month-week-number" role="rowheader">{weekNumberOf(week[0], rules)}</div>
           {week.map(day => {
             const items = byDay.get(day) ?? []
             const hidden = items.length - MAX_PER_CELL
@@ -90,9 +111,14 @@ export default function MonthView({
             const timed = items.slice(0, MAX_PER_CELL)
               .filter(({ band }) => !band).map(({ occurrence }) => occurrence)
             return (
-              // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- click-to-create reads the pointer's Y position against the day's drawn chips; no keyboard equivalent exists yet, deferred to lot 2b
-              <div key={day} className={`month-cell${day.slice(0, 7) === month ? '' : ' is-outside'}${day === today ? ' is-today' : ''}`}
-                onClick={event => onCellClick(day, timed, event)}>
+              // The cell is the activation target itself, so it carries the roving attribute's
+              // constant -1 and the widgets it holds are reached with F2 rather than walked into.
+              <div key={day} role="gridcell" tabIndex={-1}
+                aria-label={formatLongDay(day, locale, true)}
+                aria-current={day === today ? 'date' : undefined}
+                className={`month-cell${day.slice(0, 7) === month ? '' : ' is-outside'}${day === today ? ' is-today' : ''}`}
+                onClick={event => onCellClick(day, timed, event)}
+                onKeyDown={event => onCellKey(day, event)}>
                 <span className="month-day-number">{Number(day.slice(8))}</span>
                 {items.slice(0, MAX_PER_CELL).map(({ occurrence, band }) => (
                   <EventChip key={occurrenceKey(occurrence)} occurrence={occurrence}
@@ -108,7 +134,7 @@ export default function MonthView({
               </div>
             )
           })}
-        </Fragment>
+        </div>
       ))}
     </div>
   )

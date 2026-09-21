@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import MonthView from './MonthView'
@@ -38,6 +38,10 @@ function pin(el: Element, top: number, bottom: number) {
   })
 }
 const hourOf = (iso: string) => new Date(iso).getUTCHours()
+
+const grid = () => screen.getByRole('grid', { name: /September 2026/ })
+const cell = (date: string) => screen.getByRole('gridcell', { name: new RegExp(date) })
+const press = (key: string) => fireEvent.keyDown(document.activeElement as HTMLElement, { key })
 
 describe('MonthView', () => {
   it('always draws the six rows the grid holds', () => {
@@ -128,6 +132,93 @@ describe('MonthView', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
     await userEvent.click(cellOf16())
     expect(createAt).not.toHaveBeenCalled()
+  })
+
+  /* A month is a true two-dimensional grid — seven days across, six weeks down — and its cell
+     holds several widgets rather than one, so it is the pattern's cell-entry case. */
+  describe('as a grid', () => {
+    it('is a grid of weeks, each carrying its week number as a row header', () => {
+      month([])
+      const rows = within(grid()).getAllByRole('row')
+
+      expect(rows).toHaveLength(6)
+      expect(within(rows[0]).getByRole('rowheader')).toHaveTextContent('36')
+      expect(within(rows[2]).getByRole('rowheader')).toHaveTextContent('38')
+      expect(within(rows[2]).getAllByRole('gridcell')).toHaveLength(7)
+    })
+
+    // The day a cell stands for is carried by its position on screen and by nothing else.
+    it('names every day cell with its full date', () => {
+      month([])
+
+      expect(within(grid()).getAllByRole('gridcell')).toHaveLength(42)
+      expect(cell('16 September 2026')).toHaveClass('is-today')
+      expect(cell('31 August 2026')).toHaveClass('is-outside')
+    })
+
+    it('offers one tab stop for the month, on today', () => {
+      month([dated('a', 'One', 9)])
+
+      const stops = [...grid().querySelectorAll('[tabindex="0"]')]
+      expect(stops).toEqual([cell('16 September 2026')])
+      expect(cell('16 September 2026')).toHaveAttribute('aria-current', 'date')
+    })
+
+    it('walks day to day with the arrow keys, and week to week vertically', () => {
+      month([])
+      cell('16 September 2026').focus()
+
+      press('ArrowRight')
+      expect(cell('17 September 2026')).toHaveFocus()
+      press('ArrowDown')
+      expect(cell('24 September 2026')).toHaveFocus()
+      press('ArrowLeft')
+      expect(cell('23 September 2026')).toHaveFocus()
+      press('ArrowUp')
+      expect(cell('16 September 2026')).toHaveFocus()
+    })
+
+    // Enter creates rather than entering the cell: creating is the cell's primary action and has
+    // to mean the same thing on an empty day as on a full one. F2 is the documented way in.
+    it('creates an event on the focused day with Enter', () => {
+      const openNewEvent = vi.fn()
+      month([dated('a', 'One', 9)], { openNewEvent })
+      cell('17 September 2026').focus()
+
+      press('Enter')
+
+      expect(openNewEvent).toHaveBeenCalledWith('2026-09-17')
+    })
+
+    it("reaches the day's chips with F2 and comes back with Escape", () => {
+      month([dated('a', 'One', 9), dated('b', 'Two', 10)])
+      const day = cell('16 September 2026')
+      day.focus()
+
+      press('F2')
+      expect(screen.getByRole('button', { name: /One/ })).toHaveFocus()
+      press('ArrowDown')
+      expect(screen.getByRole('button', { name: /Two/ })).toHaveFocus()
+
+      press('Escape')
+      expect(day).toHaveFocus()
+      press('ArrowRight')
+      expect(cell('17 September 2026')).toHaveFocus()
+    })
+
+    // The count is a widget of the cell like the chips, and the last one it draws.
+    it('reaches the "+N more" count from the keyboard too', () => {
+      month([dated('a', 'One', 9), dated('b', 'Two', 10), dated('c', 'Three', 11),
+        dated('d', 'Four', 12)])
+      cell('16 September 2026').focus()
+
+      press('F2')
+      press('ArrowDown')
+      press('ArrowDown')
+      press('ArrowDown')
+
+      expect(screen.getByRole('button', { name: '+1 more' })).toHaveFocus()
+    })
   })
 
   it('opens the day the count was clicked on', async () => {

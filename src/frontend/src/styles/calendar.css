@@ -344,8 +344,14 @@
 
 /* ── The month ─────────────────────────────────────────────────────────────── */
 .month-view {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+}
+/* A week is a row of its own rather than eight children of one grid: ARIA owns a cell through a
+   row, and `display: contents` on that row is not a bet this app takes. Six equal rows either
+   way — `flex: 1` from a zero basis is what `grid-template-rows: repeat(6, 1fr)` was. */
+.month-week {
+  flex: 1; min-height: 0;
   display: grid; grid-template-columns: 36px repeat(7, minmax(0, 1fr));
-  grid-template-rows: repeat(6, minmax(0, 1fr)); height: 100%; min-height: 0;
 }
 .month-week-number {
   display: flex; justify-content: center; padding-top: 6px;
@@ -743,7 +749,7 @@
   .week-view { --cal-gutter: 52px; }
   .week-head-gutter,
   .allday-label { font-size: 10px; padding-left: 4px; padding-right: 4px; }
-  .month-view { grid-template-columns: 20px repeat(7, minmax(0, 1fr)); }
+  .month-week { grid-template-columns: 20px repeat(7, minmax(0, 1fr)); }
   .event-row { padding-left: 12px; padding-right: 12px; }
   .upcoming-day { padding-left: 12px; padding-right: 12px; }
 

@@ -151,7 +151,10 @@
     // ── The month ───────────────────────────────────────────────────────────
     const month = el('div', 'month-view')
     for (let row = 0; row < 6; row += 1) {
-      month.append(el('div', 'month-week-number', String(36 + row)))
+      // A week is a row of its own — the rowheader and its seven cells — which is what lets the
+      // month carry role=grid/row/gridcell. Six equal rows of flex where six of grid stood.
+      const weekRow = el('div', 'month-week')
+      weekRow.append(el('div', 'month-week-number', String(36 + row)))
       for (let column = 0; column < 7; column += 1) {
         const outside = row === 0 || row === 5
         const cell = el('div', `month-cell${outside ? ' is-outside' : ''}${row === 2 && column === 2 ? ' is-today' : ''}`)
@@ -170,8 +173,9 @@
           cell.append(chip('month', 'free', 'Coffee', '--cal:#3bb0c4', '11:00'))
           cell.append(chip('month', 'cancelled', 'Workshop', '--cal:#c43b6e', '13:00'))
         }
-        month.append(cell)
+        weekRow.append(cell)
       }
+      month.append(weekRow)
     }
     mount('case-month', month)
 
@@ -490,6 +494,7 @@
       `chip 09:00         top ${(dentistRect.top - columnRect.top).toFixed(1)}  height ${dentistRect.height.toFixed(1)}   want 504 / 56`,
       `chip share         ${(dentistRect.width / columnRect.width * 100).toFixed(1)}% of the column   want 50%`,
       `week body scroll   ${q('.week-body').scrollHeight} in ${Math.round(rect(q('.week-body')).height)}`,
+      `head row           ${size(q('.week-head'))}`,
       `head escape        ${escape(q('.week-head'), '.week-day-head')}   want 0`,
       `band escape        ${escape(q('.allday-band'), '.event-chip')}   want 0`,
       `body escape        ${escape(q('.week-body'), '.event-chip', 'x')}   want 0 (x only: the body scrolls, and a dragged chip leaves its column on purpose)`,
@@ -497,8 +502,10 @@
       `dragged chip       ${(rect(q('.event-chip.is-dragging')).left - rect(q('.day-column.is-today')).left).toFixed(1)} right of today's column   want one column plus one`,
       `create ghost       ${size(q('.event-ghost'))}   want 90 minutes of grid (84) high`,
       `now line           ${size(q('.now-line'))} dot at ${(rect(q('.now-line-today')).left - rect(q('.now-line')).left).toFixed(1)}`,
+      `month week row     ${size(q('.month-week'))}   want the stage's width, a sixth of its height`,
       `month gutter       ${size(q('.month-week-number'))}    want 36 wide`,
       `month cell         ${size(q('.month-cell'))}`,
+      `month row escape   ${escape(q('.month-week'), '.month-cell, .month-week-number')}   want 0`,
       `month day disc     ${size(q('.month-cell.is-today .month-day-number'))}  want 18 x 18`,
       `month escape       ${escape(q('.month-cell.is-today'), '.event-chip, .month-more')}   want 0`,
       `hour label top     ${labelTop.toFixed(1)}   want >= 0 (midnight carries none: -8px would clip)`,

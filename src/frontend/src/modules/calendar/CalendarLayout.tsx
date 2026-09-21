@@ -40,7 +40,8 @@ import { colorOf, occurrenceKey } from './occurrenceStyle'
 import DayStrip from './phone/DayStrip'
 import PhoneMonth from './phone/PhoneMonth'
 import {
-  addDays, daysBetween, isPlainDate, MINUTES_PER_DAY, todayIn, type PlainDate,
+  addDays, daysBetween, isPlainDate, MINUTES_PER_DAY, minutesIntoDay, todayIn, utcOfLocalTime,
+  type PlainDate,
 } from './plainDate'
 import {
   calendarKeys, isConflict, useCalendars, useCreateCalendar, useCreateEvent, useDeleteCalendar,
@@ -299,8 +300,8 @@ export default function CalendarLayout() {
     })
   }, [setParams])
 
-  const openNewEvent = useCallback(() => {
-    navigate(`/calendar/new${searchWith()}`)
+  const openNewEvent = useCallback((day?: PlainDate) => {
+    navigate(`/calendar/new${searchWith(day ? { day } : {})}`)
   }, [navigate, searchWith])
 
   const openEditor = useCallback((id: string, instanceId?: string) => {
@@ -466,10 +467,10 @@ export default function CalendarLayout() {
   const context: CalendarContextValue = useMemo(() => ({
     tz, rules, lang, region, cycle, view, anchor, today, setView, setAnchor, calendars,
     calendarById, window, occurrences: windowQuery.data, visible, windowError, retryWindow,
-    openEditor, createAt, askScope, startGesture, moveOccurrence, resizeOccurrence,
+    openEditor, openNewEvent, createAt, askScope, startGesture, moveOccurrence, resizeOccurrence,
   }), [tz, rules, lang, region, cycle, view, anchor, today, setView, setAnchor, calendars,
     calendarById, window, windowQuery.data, visible, windowError, retryWindow, openEditor,
-    createAt, askScope, startGesture, moveOccurrence, resizeOccurrence])
+    openNewEvent, createAt, askScope, startGesture, moveOccurrence, resizeOccurrence])
 
   const eventQuery = useEvent(routeId)
   const detail = eventQuery.data ?? null
@@ -509,7 +510,12 @@ export default function CalendarLayout() {
 
   // The slot the grid named, or the next hour when the sidebar's button was the door.
   const newDraft = (): EventFormState => {
-    const start = parseDraftDate(params.get('start')) ?? nextHour()
+    // A day and no slot is the keyboard's creation from a month cell: the same next hour, read
+    // on the day it named rather than on today, since no pointer said which hour it meant.
+    const named = params.get('day')
+    const onDay = named && isPlainDate(named) ? named : null
+    const start = parseDraftDate(params.get('start'))
+      ?? (onDay ? utcOfLocalTime(onDay, minutesIntoDay(nextHour(), tz), tz) : nextHour())
     const parsedEnd = parseDraftDate(params.get('end'))
     // An end that does not follow start — missing, unparsable, or from a URL whose start fell
     // back to a different instant — is not a duration worth keeping.
