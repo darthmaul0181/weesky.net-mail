@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, type AriaAttributes } from 'react'
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { pushLayer, type LayerHandle } from '../lib/layerStack'
@@ -11,13 +11,16 @@ interface GridProps {
   rows: string[][]
   /** The widget that carries `aria-pressed`, as a picked swatch or a selected row does. */
   pressed?: string
+  /** The widget that carries `aria-current`, and the value it carries: a mail row spells it
+      `"true"`, a calendar's today cell `"date"`. */
+  current?: [string, AriaAttributes['aria-current']]
   disable?: string
   /** The row (named by its first widget) that stops being a `role="row"` at all. */
   unrow?: string
 }
 
 /** A row named by no widget holds a text cell and nothing focusable. */
-function Grid({ rows, pressed, disable, unrow }: GridProps) {
+function Grid({ rows, pressed, current, disable, unrow }: GridProps) {
   const ref = useRef<HTMLDivElement>(null)
   useGridNav({ ref })
   return (
@@ -29,6 +32,7 @@ function Grid({ rows, pressed, disable, unrow }: GridProps) {
             {labels.length === 0 ? <div role="gridcell">—</div> : labels.map(label => (
               <div role="gridcell" key={label}>
                 <button type="button" disabled={label === disable}
+                  aria-current={current && label === current[0] ? current[1] : undefined}
                   aria-pressed={label === pressed ? true : undefined}>{label}</button>
               </div>
             ))}
@@ -124,6 +128,15 @@ const stops = () => within(screen.getByRole('grid')).getAllByRole('button')
 
 function press(key: string, init: Partial<KeyboardEventInit> = {}) {
   return fireEvent.keyDown(document.activeElement as HTMLElement, { key, ...init })
+}
+
+/* jsdom lays nothing out, so every element answers `getClientRects()` with nothing at all — which
+   is the answer a `display: none` widget gives in a browser. The visible ones are therefore given
+   a rect by hand, so the one the stylesheet would hide is the only one without. */
+function drawn(element: Element, yes: boolean) {
+  Object.defineProperty(element, 'getClientRects', {
+    configurable: true, value: () => (yes ? [{ width: 26, height: 26 }] : []),
+  })
 }
 
 afterEach(() => { opened.splice(0).forEach(handle => handle.remove()) })
@@ -360,6 +373,76 @@ describe('useGridNav', () => {
 
     await waitFor(() => expect(widget('B3')).toHaveAttribute('tabindex', '0'))
     expect(widget('B2')).not.toHaveAttribute('tabindex', '0')
+  })
+
+  // `aria-current` names the one item of a set the view is on — the message open in the reader,
+  // today's date — and Tab into the grid has to land there, or Enter opens the wrong thing.
+  it('opens the tab stop on the current widget as well as a pressed one', () => {
+    render(<Grid rows={THREE} current={['C1', 'true']} />)
+
+    expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '-1', '0', '-1', '-1'])
+  })
+
+  // A calendar's today cell carries a token, not a boolean: the test is present and not "false".
+  it('reads a token aria-current, and ignores an explicit false', () => {
+    const { rerender } = render(<Grid rows={THREE} current={['B3', 'date']} />)
+    expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '0', '-1', '-1', '-1'])
+
+    rerender(<Grid rows={THREE} current={['B3', 'false']} />)
+    // Nothing is current any more, and the stop stays where it already was rather than moving.
+    expect(widget('B3')).toHaveAttribute('tabindex', '0')
+  })
+
+  /* A row deleted from the keyboard leaves focus on `<body>`: the stop's recovery is an attribute,
+     and an attribute is not somewhere a keyboard can go on working from. */
+  it('hands focus back, not only the stop, when the row holding it goes', async () => {
+    const { rerender } = render(<Grid rows={THREE} />)
+    widget('B2').focus()
+
+    rerender(<Grid rows={[THREE[0], THREE[2]]} />)
+
+    await waitFor(() => expect(widget('C2')).toHaveFocus())
+  })
+
+  /* And never when the user has already moved on: a background removal must not yank focus out of
+     whatever it is now in. */
+  it('leaves focus alone when the user has already left the grid', async () => {
+    const { rerender } = render(<Grid rows={THREE} />)
+    // Drawn, so leaving the grid is the ordinary departure rather than the hidden-stop one below.
+    screen.getAllByRole('button').forEach(button => drawn(button, true))
+    widget('B2').focus()
+    widget('After').focus()
+
+    rerender(<Grid rows={[THREE[0], THREE[2]]} />)
+
+    await waitFor(() => expect(widget('C2')).toHaveAttribute('tabindex', '0'))
+    expect(widget('After')).toHaveFocus()
+  })
+
+  /* The stylesheet may hide the widget holding the stop — the mail row's action cluster is
+     `display: none` until the row is hovered — and a hidden widget is in no tab order at all, so
+     Tab would never come back into the grid. One layout read, on the way out. */
+  it('moves a stop nothing draws when focus leaves the grid', async () => {
+    render(<Grid rows={THREE} />)
+    const hidden = widget('B3')
+    screen.getAllByRole('button').forEach(button => drawn(button, button !== hidden))
+    hidden.focus()
+    expect(hidden).toHaveAttribute('tabindex', '0')
+
+    await userEvent.tab()
+
+    expect(widget('B1')).toHaveAttribute('tabindex', '0')
+    expect(hidden).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('leaves a stop that is drawn exactly where it is', async () => {
+    render(<Grid rows={THREE} />)
+    screen.getAllByRole('button').forEach(button => drawn(button, true))
+    widget('B3').focus()
+
+    await userEvent.tab()
+
+    expect(widget('B3')).toHaveAttribute('tabindex', '0')
   })
 
   /* Inside the grid is not the same question as inside one of its rows: a widget whose row stopped

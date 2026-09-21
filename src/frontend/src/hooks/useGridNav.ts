@@ -65,11 +65,18 @@ function moveOf(event: KeyboardEvent): Move | null {
   }
 }
 
-/** APG puts the stop on the selected item where the grid has one: a dialog reopened on Coral must
-    not hand Tab to Blue. */
+/** `aria-current` names the one item of a set the view is on, which a calendar spells as a token
+    (`aria-current="date"`) rather than `"true"` — so the test is present and not `"false"`. */
+function isCurrent(widget: HTMLElement): boolean {
+  const value = widget.getAttribute('aria-current')
+  return value !== null && value !== 'false'
+}
+
+/** APG puts the stop where the grid already is: a dialog reopened on Coral must not hand Tab to
+    Blue, and a list with a message open must not hand Enter to that row's checkbox. */
 function pickedIn(widgets: HTMLElement[]): HTMLElement | undefined {
   return widgets.find(widget => widget.getAttribute('aria-pressed') === 'true'
-    || widget.getAttribute('aria-selected') === 'true') ?? widgets[0]
+    || widget.getAttribute('aria-selected') === 'true' || isCurrent(widget)) ?? widgets[0]
 }
 
 /** Where a lost stop goes: whatever stands where its own row or cell stood, at the same column.
@@ -112,6 +119,9 @@ function yieldsToCaret(event: KeyboardEvent): boolean {
  */
 export function useGridNav({ ref }: GridNavOptions): void {
   const stop = useRef<HTMLElement | null>(null)
+  // Where focus last was, which is not where the stop is: a control that goes disabled hands the
+  // stop on while focus stays on it, so the removal that follows has to know what it is taking.
+  const focused = useRef<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
     const grid = ref.current
@@ -150,7 +160,35 @@ export function useGridNav({ ref }: GridNavOptions): void {
       const row = widget.closest(ROW)
       if (row && grid.contains(row) && widgetsIn(row as HTMLElement).includes(widget)) {
         point(widget)
+        focused.current = widget
       }
+    }
+
+    // Focus leaving the grid: a `relatedTarget` of null is a blur to `<body>` — a control gone
+    // disabled, a row removed — and not the user moving on, so the memory of where focus was
+    // survives it; anything else clears it, or a later removal would yank focus back.
+    const onFocusOut = (event: FocusEvent) => {
+      const going = event.relatedTarget as Node | null
+      if (going && grid.contains(going)) return
+      if (going) focused.current = null
+      // A stop the stylesheet has hidden is one Tab cannot reach, and the grid would be
+      // unreachable: one layout read per departure, never one per mutation. `isConnected` is
+      // load-bearing — a removal blurs first, and `repoint` owns that recovery and its column.
+      const held = stop.current
+      if (!held || !held.isConnected || held.getClientRects().length > 0) return
+      const row = held.closest(ROW)
+      const widgets = row ? widgetsIn(row as HTMLElement) : []
+      if (widgets.length > 0) point(widgets[0])
+    }
+
+    // The stop's recovery is an attribute; the focus the removal took with it is not, and nothing
+    // else gives it back — the browser drops it on `<body>` and Tab would restart at the top.
+    const onMutation = (records: MutationRecord[]) => {
+      const lost = focused.current
+      const taken = !!lost && records.some(record => Array.from(record.removedNodes)
+        .some(node => node.contains(lost)))
+      repoint(records)
+      if (taken && stop.current && !reachable(document.activeElement)) stop.current.focus()
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -166,19 +204,21 @@ export function useGridNav({ ref }: GridNavOptions): void {
 
     // Rows and widgets come and go without a render of the grid itself — a hover cluster, a
     // filtered row, a streamed block — so the invariant is kept against the DOM, not the render.
-    // `disabled` is watched too: a native that goes disabled is focusable by nothing. `hidden`
-    // is not — no part of the stack has ever read it as gone, so a hidden widget keeps the stop.
+    // `disabled` is watched too: a native that goes disabled is focusable by nothing.
     repoint()
-    const observer = new MutationObserver(repoint)
+    const observer = new MutationObserver(onMutation)
     observer.observe(grid, {
       childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'],
     })
     grid.addEventListener('keydown', onKeyDown)
     grid.addEventListener('focusin', onFocusIn)
+    grid.addEventListener('focusout', onFocusOut)
     return () => {
       observer.disconnect()
       grid.removeEventListener('keydown', onKeyDown)
       grid.removeEventListener('focusin', onFocusIn)
+      grid.removeEventListener('focusout', onFocusOut)
+      focused.current = null
     }
   }, [ref])
 }
