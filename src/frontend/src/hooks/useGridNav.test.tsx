@@ -89,6 +89,39 @@ function GuardedGrid() {
   )
 }
 
+/** The other case the pattern names: a cell that is the activation target itself AND holds
+    widgets of its own — a month's day cell, with its chips and its "+N more". */
+function CellGrid({ guard }: { guard?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useGridNav({ ref, cellEntry: true })
+  return (
+    <>
+      <button type="button">Before</button>
+      <div role="grid" aria-label="Days" ref={ref}>
+        {['A', 'B'].map(row => (
+          <div role="row" key={row}>
+            <div role="rowheader">{row}</div>
+            {[1, 2].map(column => (
+              <div role="gridcell" tabIndex={-1} aria-label={`${row}${column}`} key={column}>
+                {row === 'A' && column === 1 && (
+                  <>
+                    <button type="button"
+                      ref={node => {
+                        if (guard) node?.addEventListener('keydown', e => e.preventDefault())
+                      }}>One</button>
+                    <button type="button">Two</button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <button type="button">After</button>
+    </>
+  )
+}
+
 const opened: LayerHandle[] = []
 
 /** The shipped shape of the leak: a roving grid inside a dialog's Tab trap. */
@@ -527,5 +560,131 @@ describe('useGridNav', () => {
 
     await waitFor(() => expect(widget('A1')).toHaveAttribute('tabindex', '0'))
     expect(widget('B2')).not.toHaveAttribute('tabindex', '0')
+  })
+
+  /* The pattern's cell-entry mode, for the other case of the two: a cell holding SEVERAL widgets
+     is entered rather than walked into, so the arrows stay on the cells and F2 is the way in. */
+  describe('entering a cell', () => {
+    const cell = (name: string) => screen.getByRole('gridcell', { name })
+
+    it('walks the cells rather than the widgets they hold', () => {
+      render(<CellGrid />)
+      cell('A1').focus()
+
+      press('ArrowRight')
+      expect(cell('A2')).toHaveFocus()
+      press('ArrowDown')
+      expect(cell('B2')).toHaveFocus()
+    })
+
+    it('holds one tab stop, on a cell, whatever the cells hold', () => {
+      render(<CellGrid />)
+
+      expect(within(screen.getByRole('grid')).getAllByRole('button')
+        .map(button => button.getAttribute('tabindex'))).toEqual(['-1', '-1'])
+      expect(cell('A1')).toHaveAttribute('tabindex', '0')
+    })
+
+    it('places focus on the first widget in the cell on F2', () => {
+      render(<CellGrid />)
+      cell('A1').focus()
+
+      expect(press('F2')).toBe(false)
+
+      expect(widget('One')).toHaveFocus()
+      // The stop stays on the cell: the widgets inside it are no more stops of the grid than a
+      // dialog's are, and Tab still leaves the grid altogether.
+      expect(cell('A1')).toHaveAttribute('tabindex', '0')
+    })
+
+    it('walks the widgets of the cell it is inside', () => {
+      render(<CellGrid />)
+      cell('A1').focus()
+      press('F2')
+
+      press('ArrowDown')
+      expect(widget('Two')).toHaveFocus()
+      press('ArrowUp')
+      expect(widget('One')).toHaveFocus()
+    })
+
+    it('restores grid navigation on Escape', () => {
+      render(<CellGrid />)
+      cell('A1').focus()
+      press('F2')
+
+      expect(press('Escape')).toBe(false)
+
+      expect(cell('A1')).toHaveFocus()
+      press('ArrowRight')
+      expect(cell('A2')).toHaveFocus()
+    })
+
+    it('restores grid navigation on a second F2', () => {
+      render(<CellGrid />)
+      cell('A1').focus()
+      press('F2')
+      expect(widget('One')).toHaveFocus()
+
+      press('F2')
+
+      expect(cell('A1')).toHaveFocus()
+    })
+
+    /* Escape has a standing owner: a grid is not a layer, so the key is spent only when there is
+       a cell to come back from — and marked when it is, or the dialog underneath closes too. */
+    it('leaves Escape to the layer stack while focus is on the cell itself', () => {
+      const onEscape = vi.fn()
+      render(<CellGrid />)
+      opened.push(pushLayer({ onEscape }))
+      cell('A1').focus()
+
+      press('Escape')
+
+      expect(onEscape).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the layer stack out of an Escape that left a cell', () => {
+      const onEscape = vi.fn()
+      render(<CellGrid />)
+      opened.push(pushLayer({ onEscape }))
+      cell('A1').focus()
+      press('F2')
+
+      press('Escape')
+
+      expect(onEscape).not.toHaveBeenCalled()
+      expect(cell('A1')).toHaveFocus()
+    })
+
+    it('does not swallow Escape when the event is already defaultPrevented', () => {
+      render(<CellGrid guard />)
+      cell('A1').focus()
+      press('F2')
+
+      press('Escape')
+
+      expect(widget('One')).toHaveFocus()
+    })
+
+    it('leaves F2 alone in a cell that holds no widget', () => {
+      render(<CellGrid />)
+      cell('A2').focus()
+
+      expect(press('F2')).toBe(true)
+
+      expect(cell('A2')).toHaveFocus()
+    })
+
+    // A chip clicked with the pointer is inside a cell too, and the grid has to know which day
+    // the arrows resume from — the cell holding it, not wherever the stop happened to be.
+    it('points the stop at the cell holding a widget focused from outside', () => {
+      render(<CellGrid />)
+      widget('Two').focus()
+
+      expect(cell('A1')).toHaveAttribute('tabindex', '0')
+      press('Escape')
+      expect(cell('A1')).toHaveFocus()
+    })
   })
 })

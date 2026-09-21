@@ -6,6 +6,9 @@ import { textBox } from './useRovingFocus'
 export interface GridNavOptions {
   /** The element carrying role="grid". Navigation is scoped to its role="row" descendants. */
   ref: RefObject<HTMLElement | null>
+  /** The pattern's other case: a cell holding SEVERAL widgets is entered rather than walked
+      into, so the arrows walk the cells themselves and F2 is the way in. */
+  cellEntry?: boolean
 }
 
 interface Cell { row: number; col: number }
@@ -16,6 +19,7 @@ type Move = (rows: HTMLElement[][], at: Cell) => Cell
     a selector spelled twice there would stop matching the day this one moved, and the bench
     would go on reporting numbers for a grid it had found none of. */
 export const ROW = '[role="row"]'
+const CELL = '[role="gridcell"]'
 const END = Infinity
 
 const last = <T>(list: T[]) => list.length - 1
@@ -27,11 +31,18 @@ function widgetsIn(container: HTMLElement): HTMLElement[] {
   return focusablesIn(container).filter(reachable)
 }
 
+/** What one container contributes to the walk. In cell-entry mode that is its cells themselves:
+    a cell holding several widgets is entered with F2, so what it holds is no more a stop of the
+    grid than a dialog's is. Elsewhere every focusable is a stop, cells being ARIA's scaffolding. */
+type Stops = (nodes: HTMLElement[]) => HTMLElement[]
+const everything: Stops = nodes => nodes
+const cellsOnly: Stops = nodes => nodes.filter(node => node.matches(CELL))
+
 /** The rows holding a widget, each as its own list. A row holding none is dropped rather than
     listed, which is how vertical movement steps over it instead of landing in it. */
-function rowsIn(grid: HTMLElement): HTMLElement[][] {
+function rowsIn(grid: HTMLElement, stops: Stops): HTMLElement[][] {
   return Array.from(grid.querySelectorAll<HTMLElement>(ROW))
-    .map(row => widgetsIn(row))
+    .map(row => stops(widgetsIn(row)))
     .filter(widgets => widgets.length > 0)
 }
 
@@ -86,17 +97,17 @@ function pickedIn(widgets: HTMLElement[]): HTMLElement | undefined {
     The record names those neighbours, and the detached subtree still answers `closest`, so the
     column survives the removal that took the widget. */
 function nextTo(
-  grid: HTMLElement, held: HTMLElement, records: MutationRecord[],
+  grid: HTMLElement, held: HTMLElement, records: MutationRecord[], stops: Stops,
 ): HTMLElement | undefined {
   const gone = records.find(record => Array.from(record.removedNodes)
     .some(node => node.contains(held)))
   const row = held.closest(ROW)
   // The column is read off the list its own row held, detached or disabled and all; the landing is
   // read off the list a keyboard can use.
-  const col = row ? focusablesIn(row as HTMLElement).indexOf(held) : -1
+  const col = row ? stops(focusablesIn(row as HTMLElement)).indexOf(held) : -1
   for (const beside of [gone?.nextSibling, gone?.previousSibling, gone?.target, row]) {
     if (!(beside instanceof Element) || !grid.contains(beside)) continue
-    const widgets = widgetsIn(beside as HTMLElement)
+    const widgets = stops(widgetsIn(beside as HTMLElement))
     if (widgets.length > 0) return widgets[Math.min(Math.max(col, 0), last(widgets))]
   }
   return undefined
@@ -116,11 +127,12 @@ function yieldsToCaret(event: KeyboardEvent): boolean {
  * a time, the arrows, Home and End move between widgets, and Tab leaves the grid altogether.
  *
  * Focus lands on the widget a cell holds rather than on the cell, which is the pattern's own answer
- * wherever that widget needs no arrow key of its own — a checkbox, a star, a colour swatch. The
+ * wherever that widget needs no arrow key of its own — a checkbox, a star, a colour swatch. Under
+ * `cellEntry` it is the other case: the cell is the stop, F2 enters it and Escape comes back. The
  * listener is the container's, never `document`'s: a grid is not a layer and must not compete with
  * the stack for Escape or Tab.
  */
-export function useGridNav({ ref }: GridNavOptions): void {
+export function useGridNav({ ref, cellEntry }: GridNavOptions): void {
   const stop = useRef<HTMLElement | null>(null)
   // Where focus last was, which is not where the stop is: a control that goes disabled hands the
   // stop on while focus stays on it, so the removal that follows has to know what it is taking.
@@ -133,8 +145,10 @@ export function useGridNav({ ref }: GridNavOptions): void {
     // The rows the arrows walk, built once per change rather than once per keypress — an arrow was
     // 19ms of walk at 2000 rows. Dropped by the observer and by nothing else, which is the same set
     // of changes `repoint` answers to; local to the effect, so no re-run can inherit another grid's.
+    const stops: Stops = cellEntry ? cellsOnly : everything
+    const widgetsOf = (container: HTMLElement) => stops(widgetsIn(container))
     let matrix: HTMLElement[][] | null = null
-    const rowsNow = () => (matrix ??= rowsIn(grid))
+    const rowsNow = () => (matrix ??= rowsIn(grid, stops))
 
     const tab = (widget: HTMLElement, value: number) => {
       const want = String(value)
@@ -153,24 +167,33 @@ export function useGridNav({ ref }: GridNavOptions): void {
       const widgets = rowsNow().flat()
       const held = stop.current
       const kept = held && widgets.includes(held) ? held : null
-      const target = kept ?? (held ? nextTo(grid, held, records) : undefined) ?? pickedIn(widgets)
+      const target = kept ?? (held ? nextTo(grid, held, records, stops) : undefined)
+        ?? pickedIn(widgets)
       if (!target) { stop.current = null; return }
       // A stop that left the rows' world — a row that stopped being one, a control gone disabled —
       // is no longer in the list below, and a `0` left on it is a second tab stop.
       if (held && held !== target) tab(held, -1)
-      widgets.forEach(widget => tab(widget, widget === target ? 0 : -1))
+      // Under `cellEntry` every focusable the grid holds, the widgets inside a cell being no
+      // stops of its own and a native left at its own 0 one Tab press each; elsewhere the walk's
+      // own list, which is that same set and one pass of a 2000-row grid cheaper.
+      const owned = cellEntry ? widgetsIn(grid) : widgets
+      owned.forEach(widget => tab(widget, widget === target ? 0 : -1))
       stop.current = target
     }
 
     // A click, a `.focus()` of our own, a caret leaving one cell for the next: the stop follows
     // focus wherever it came from, and costs two attributes rather than a walk of the grid.
     const onFocusIn = (event: FocusEvent) => {
-      const widget = event.target as HTMLElement
-      const row = widget.closest(ROW)
-      if (row && grid.contains(row) && widgetsIn(row as HTMLElement).includes(widget)) {
-        point(widget)
-        focused.current = widget
-      }
+      const target = event.target as HTMLElement
+      const row = target.closest(ROW)
+      if (!row || !grid.contains(row)) return
+      const widgets = widgetsOf(row as HTMLElement)
+      // A widget inside an entered cell holds no stop of its own: the cell does, so a chip clicked
+      // with the pointer leaves the grid pointing at the day it belongs to.
+      const widget = widgets.includes(target) ? target : widgets.find(one => one.contains(target))
+      if (!widget) return
+      point(widget)
+      focused.current = target
     }
 
     // Focus leaving the grid: a `relatedTarget` of null is a blur to `<body>` — a control gone
@@ -186,7 +209,7 @@ export function useGridNav({ ref }: GridNavOptions): void {
       const held = stop.current
       if (!held || !held.isConnected || held.getClientRects().length > 0) return
       const row = held.closest(ROW)
-      const widgets = row ? widgetsIn(row as HTMLElement) : []
+      const widgets = row ? widgetsOf(row as HTMLElement) : []
       if (widgets.length > 0) point(widgets[0])
     }
 
@@ -201,15 +224,43 @@ export function useGridNav({ ref }: GridNavOptions): void {
       if (taken && stop.current && !reachable(document.activeElement)) stop.current.focus()
     }
 
+    // The cell focus is inside but not on — where F2 put it, or a click on a chip. `null`
+    // everywhere else, which is what leaves Escape to the layer stack and the arrows to the grid.
+    const entered = (): HTMLElement | null => {
+      const at = document.activeElement
+      if (!cellEntry || !(at instanceof HTMLElement) || !grid.contains(at)) return null
+      const cell = at.closest<HTMLElement>(CELL)
+      return cell && cell !== at ? cell : null
+    }
+
+    /** APG: F2 places focus on the first widget a cell holds, and a second F2 restores grid
+        navigation; Escape does too. Escape has a standing owner, so it is spent only when there is
+        a cell to come back from — and marked when it is, or a dialog underneath closes on it. */
+    const cellKey = (event: KeyboardEvent, inside: HTMLElement | null): boolean => {
+      if (event.key !== 'F2' && event.key !== 'Escape') return false
+      const at = document.activeElement as HTMLElement | null
+      const target = inside
+        ?? (event.key === 'F2' && at?.matches(CELL) ? widgetsIn(at)[0] : undefined)
+      if (!target) return false
+      event.preventDefault()
+      target.focus()
+      return true
+    }
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
+      const inside = entered()
+      if (cellEntry && cellKey(event, inside)) return
       const move = moveOf(event)
       if (!move || yieldsToCaret(event)) return
-      const rows = rowsNow()
+      // Inside a cell the arrows walk what it holds, in the order it draws them — a column of one
+      // widget each, since a cell stacks its widgets — and the stop stays on the cell itself.
+      const rows = inside ? widgetsIn(inside).map(widget => [widget]) : rowsNow()
       const at = cellOf(rows, document.activeElement)
       if (!at) return
       event.preventDefault()
       const target = widgetAt(rows, move(rows, at))
+      if (inside) { target.focus(); return }
       // The stop moves first, and back if focus refuses it: a consumer that reveals a hidden widget
       // on `[tabindex="0"]` arms the arrow the way it already arms Tab, and `.focus()` on a widget
       // nothing draws is a silent no-op that would strand the walk on a dead key.
@@ -237,5 +288,5 @@ export function useGridNav({ ref }: GridNavOptions): void {
       grid.removeEventListener('focusout', onFocusOut)
       focused.current = null
     }
-  }, [ref])
+  }, [ref, cellEntry])
 }
