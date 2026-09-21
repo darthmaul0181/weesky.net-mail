@@ -25,13 +25,8 @@ function month(visible: Occurrence[], overrides = {}, props = {}) {
     { visible, anchor: '2026-09-16', view: 'month', ...overrides })
 }
 
-/** The cell of 16 September, and a chip's box pinned so a click can land above or below it —
-    jsdom lays nothing out, so the rectangles are the test's own. */
-function cellOf16() {
-  return [...document.querySelectorAll<HTMLElement>('.month-cell')]
-    .find(cell => cell.querySelector('.month-day-number')?.textContent === '16'
-      && !cell.classList.contains('is-outside'))!
-}
+/** A chip's box pinned so a click can land above or below it — jsdom lays nothing out, so the
+    rectangles are the test's own. */
 function pin(el: Element, top: number, bottom: number) {
   Object.defineProperty(el, 'getBoundingClientRect', {
     value: () => ({ top, bottom, left: 0, right: 100, width: 100, height: bottom - top }),
@@ -39,8 +34,9 @@ function pin(el: Element, top: number, bottom: number) {
 }
 const hourOf = (iso: string) => new Date(iso).getUTCHours()
 
-const grid = () => screen.getByRole('grid', { name: /September 2026/ })
+const grid = (month = /September 2026/) => screen.getByRole('grid', { name: month })
 const cell = (date: string) => screen.getByRole('gridcell', { name: new RegExp(date) })
+const cellOf16 = () => cell('16 September 2026')
 const press = (key: string) => fireEvent.keyDown(document.activeElement as HTMLElement, { key })
 
 describe('MonthView', () => {
@@ -156,12 +152,39 @@ describe('MonthView', () => {
       expect(cell('31 August 2026')).toHaveClass('is-outside')
     })
 
+    /* With a name on the cell a reader hears the cell and not what it holds, so a Tuesday with
+       three events and an empty one sound identical — and nothing says there is an F2 to press.
+       The count is what the cell draws plus what it could not: the reason to go in. */
+    it("counts the day's events in its name, the hidden ones included", () => {
+      month([dated('a', 'One', 9), dated('b', 'Two', 10), dated('c', 'Three', 11),
+        dated('d', 'Four', 12)])
+
+      expect(cellOf16()).toHaveAccessibleName('Wednesday, 16 September 2026, 4 events')
+      expect(cell('17 September 2026')).toHaveAccessibleName('Thursday, 17 September 2026')
+    })
+
+    it('names one event in the singular', () => {
+      month([dated('a', 'One', 9)])
+
+      expect(cellOf16()).toHaveAccessibleName('Wednesday, 16 September 2026, 1 event')
+    })
+
     it('offers one tab stop for the month, on today', () => {
       month([dated('a', 'One', 9)])
 
       const stops = [...grid().querySelectorAll('[tabindex="0"]')]
-      expect(stops).toEqual([cell('16 September 2026')])
-      expect(cell('16 September 2026')).toHaveAttribute('aria-current', 'date')
+      expect(stops).toEqual([cellOf16()])
+      expect(cellOf16()).toHaveAttribute('aria-current', 'date')
+    })
+
+    /* A month that is not today's holds no current cell at all, and its first is an outside day
+       of the month before — 28 September in October 2026, where Enter would create. */
+    it('puts that stop on the day the URL is about when today is elsewhere', () => {
+      month([], { anchor: '2026-10-15' })
+
+      const stops = [...grid(/October 2026/).querySelectorAll('[tabindex="0"]')]
+      expect(stops).toEqual([cell('15 October 2026')])
+      expect(cell('15 October 2026')).toHaveAttribute('aria-selected', 'true')
     })
 
     it('walks day to day with the arrow keys, and week to week vertically', () => {
@@ -178,16 +201,44 @@ describe('MonthView', () => {
       expect(cell('16 September 2026')).toHaveFocus()
     })
 
-    // Enter creates rather than entering the cell: creating is the cell's primary action and has
-    // to mean the same thing on an empty day as on a full one. F2 is the documented way in.
-    it('creates an event on the focused day with Enter', () => {
-      const openNewEvent = vi.fn()
-      month([dated('a', 'One', 9)], { openNewEvent })
+    /* Enter creates rather than entering the cell: creating is the cell's primary action and has
+       to mean the same thing on an empty day as on a full one. F2 is the documented way in. The
+       hour is the click path's own rule, which invents nothing a key cannot supply. */
+    it('creates an event on the focused day with Enter, at nine on an empty one', () => {
+      const createAt = vi.fn()
+      month([dated('a', 'One', 9)], { createAt })
       cell('17 September 2026').focus()
 
       press('Enter')
 
-      expect(openNewEvent).toHaveBeenCalledWith('2026-09-17')
+      expect(createAt).toHaveBeenCalledTimes(1)
+      const [start, end, allDay] = createAt.mock.calls[0]
+      expect(start.toISOString()).toBe('2026-09-17T07:00:00.000Z')   // 09:00 in Brussels
+      expect(end.getTime() - start.getTime()).toBe(3_600_000)
+      expect(allDay).toBe(false)
+    })
+
+    // The same rule a click below the last chip lands on: after it, rounded up to the quarter.
+    it("creates after the day's last chip when it holds one", () => {
+      const createAt = vi.fn()
+      month([dated('a', 'One', 9), dated('b', 'Two', 10)], { createAt })
+      cellOf16().focus()
+
+      press('Enter')
+
+      expect(createAt.mock.calls[0][0].toISOString()).toBe('2026-09-16T09:00:00.000Z')  // 11:00
+    })
+
+    // Enter on a chip is the chip's: without the guard it opens the bubble AND a draft.
+    it('leaves Enter on a chip inside the cell to the chip', () => {
+      const createAt = vi.fn()
+      month([dated('a', 'One', 9)], { createAt })
+      cellOf16().focus()
+      press('F2')
+
+      press('Enter')
+
+      expect(createAt).not.toHaveBeenCalled()
     })
 
     it("reaches the day's chips with F2 and comes back with Escape", () => {

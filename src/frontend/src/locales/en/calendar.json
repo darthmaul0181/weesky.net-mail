@@ -32,6 +32,8 @@
     "now": "Current time",
     "weekShort": "W{{number}}",
     "monthGrid": "Month of {{month}}",
+    "dayCell_one": "{{date}}, {{count}} event",
+    "dayCell_other": "{{date}}, {{count}} events",
     "dayHeaders": "Calendar days",
     "chipLabel": "{{title}}, {{when}}",
     "more_one": "+{{count}} more",

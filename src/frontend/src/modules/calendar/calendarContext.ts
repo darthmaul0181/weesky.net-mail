@@ -27,9 +27,6 @@ export interface CalendarContextValue {
   windowError: string | null
   retryWindow: () => void
   openEditor: (id: string, instanceId?: string) => void
-  /** The sidebar's New event, and the month cell's Enter: a cell names a day and no hour, so the
-      day is all it adds — the hour stays the one that button already means. */
-  openNewEvent: (day?: PlainDate) => void
   createAt: (start: Date, end: Date, allDay: boolean) => void
   /**
    * The recurring-scope question, as a promise: the layout owns the dialog, every caller awaits

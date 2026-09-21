@@ -212,8 +212,10 @@ grid invites. The second waits and reads the version the first wrote. A drop on 
 scope question first, through `askScope`, which is a **promise**: the layout owns the one dialog
 and three callers await its answer, `null` being the ✕ and nothing written.
 
-**A click on the empty part of a month cell creates, and the chips around it name the hour.** A
-month cell names a day and no hour, so the one hint there is is where the click lands among the
+**A click on the empty part of a month cell creates, and the chips around it name the hour** —
+and so does **Enter** on the focused cell, which lands below every chip the cell drew, since a
+key cannot supply the pointer Y the rule below is read against. A month cell names a day and no
+hour, so the one hint there is is where the click lands among the
 timed chips, which are stacked in order: below a chip, the new event starts when that one ends
 (rounded up to the quarter); above the first, it ends when that one starts; on a day with no
 timed chip, nine to ten. Bands carry no hour and are skipped. A click that started on a chip or
