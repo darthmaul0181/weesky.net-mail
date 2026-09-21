@@ -1,0 +1,168 @@
+<!doctype html>
+<!--
+  Probe: does turning the contact tile into a `role="row"` of four gridcells leave it drawn exactly
+  as it was? The star left the name's flex line for a cell of its own, which is the move that cost
+  the message row 9px a row in lot 2c task 3 — here it is the line's own height that is at stake.
+
+  It loads the REAL stylesheets (tokens + palette + index.css) and builds three tiles side by side
+  in a 380px column, the width `usePaneSize('contacts.split.right', 380, 240)` draws by default:
+
+    legacy     — the markup before the rewrite: star inside `.contact-tile-line`, no cells
+    grid       — the markup after: [select] [content] [flag] [actions], four gridcells
+    grid-stop  — the same, with `tabindex="0"` on a cluster button, which is what the roving stop
+                 puts there. The cluster is `visibility: hidden` at rest and a hidden button is
+                 focusable by nothing, so the `[tabindex="0"]` reveal in index.css is what keeps
+                 the whole list reachable by Tab. `clusterVisibility` is that rule, read.
+
+  Run it twice to compare: once with index.css as it stood before the change (the `legacy` case is
+  then the real "before"), once after (the `grid` case is the real "after"). Read `tileHeight`,
+  `nameWidth` and the star's rect: those three are what a moved star moves.
+
+  Served by the Vite dev server (npm run dev) at /probes/contact-tile-grid.html. #out holds the JSON.
+-->
+<html data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <style>
+    body { margin: 0; font: var(--font, 14px system-ui); }
+    /* The contacts list column at its own default width. */
+    .contacts-list-scroll { width: 380px; }
+    #out { padding: 16px; white-space: pre-wrap; font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="contacts-list-scroll">
+    <!-- Before: one role="button" tile, the star inside the name's line. -->
+    <div class="contact-tiles" id="legacy">
+      <div class="contact-tile" role="button" tabindex="0">
+        <input type="checkbox" class="contact-tile-check" aria-label="Select Alice Dupont" />
+        <div class="contact-tile-line">
+          <span class="contact-tile-name">Alice Dupont de la Villeneuve</span>
+          <button type="button" class="contact-star is-on" aria-label="Remove from favourites">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z" /></svg>
+          </button>
+        </div>
+        <div class="contact-tile-address">alice@example.be · +2</div>
+        <span class="contact-tile-actions">
+          <button type="button" class="admin-icon-btn" aria-label="Edit Alice Dupont"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" /></svg></button>
+          <button type="button" class="admin-icon-btn is-danger" aria-label="Delete Alice Dupont"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" /></svg></button>
+        </span>
+      </div>
+    </div>
+
+    <!-- After: role="row" of four gridcells, the star in one of its own. -->
+    <div class="contact-tiles" id="grid" role="grid" aria-label="Contacts">
+      <div class="contact-tile" role="row">
+        <div class="contact-tile-select" role="gridcell">
+          <input type="checkbox" class="contact-tile-check" aria-label="Select Alice Dupont" />
+        </div>
+        <div class="contact-tile-content" role="gridcell" tabindex="-1">
+          <div class="contact-tile-line">
+            <span class="contact-tile-name">Alice Dupont de la Villeneuve</span>
+          </div>
+          <div class="contact-tile-address">alice@example.be · +2</div>
+        </div>
+        <div class="contact-tile-flag" role="gridcell">
+          <button type="button" class="contact-star is-on" aria-label="Remove from favourites" tabindex="-1">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z" /></svg>
+          </button>
+        </div>
+        <span class="contact-tile-actions" role="gridcell">
+          <button type="button" class="admin-icon-btn" aria-label="Edit Alice Dupont" tabindex="-1"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" /></svg></button>
+          <button type="button" class="admin-icon-btn is-danger" aria-label="Delete Alice Dupont" tabindex="-1"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" /></svg></button>
+        </span>
+      </div>
+    </div>
+
+    <!-- The roving stop parked on a cluster button, which is the case the reveal exists for. -->
+    <div class="contact-tiles" id="grid-stop" role="grid" aria-label="Contacts">
+      <div class="contact-tile" role="row">
+        <div class="contact-tile-select" role="gridcell">
+          <input type="checkbox" class="contact-tile-check" aria-label="Select Bruno Mertens" tabindex="-1" />
+        </div>
+        <div class="contact-tile-content" role="gridcell" tabindex="-1">
+          <div class="contact-tile-line">
+            <span class="contact-tile-name">Bruno Mertens de la Villeneuve</span>
+          </div>
+          <div class="contact-tile-address">bruno@example.be · +2</div>
+        </div>
+        <div class="contact-tile-flag" role="gridcell">
+          <button type="button" class="contact-star" aria-label="Add to favourites" tabindex="-1">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z" /></svg>
+          </button>
+        </div>
+        <span class="contact-tile-actions" role="gridcell">
+          <button type="button" class="admin-icon-btn" aria-label="Edit Bruno Mertens" tabindex="0"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" /></svg></button>
+          <button type="button" class="admin-icon-btn is-danger" aria-label="Delete Bruno Mertens" tabindex="-1"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" /></svg></button>
+        </span>
+      </div>
+    </div>
+  </div>
+  <pre id="out"></pre>
+  <script>
+    const round = n => Math.round(n * 100) / 100
+    const rect = el => {
+      if (!el) return null
+      const box = el.getBoundingClientRect()
+      return { x: round(box.x), y: round(box.y), w: round(box.width), h: round(box.height) }
+    }
+
+    /** The worst overhang per edge of every match against the tile's own box: a right-aligned
+        cluster that escapes spills LEFT, which scrollWidth can never report. */
+    function escapeOf(tile, selector) {
+      const outer = tile.getBoundingClientRect()
+      let worst = { top: 0, right: 0, bottom: 0, left: 0 }
+      for (const el of tile.querySelectorAll(selector)) {
+        const box = el.getBoundingClientRect()
+        if (box.width === 0 && box.height === 0) continue
+        worst = {
+          top: Math.max(worst.top, round(outer.top - box.top)),
+          right: Math.max(worst.right, round(box.right - outer.right)),
+          bottom: Math.max(worst.bottom, round(box.bottom - outer.bottom)),
+          left: Math.max(worst.left, round(outer.left - box.left)),
+        }
+      }
+      return worst
+    }
+
+    function read(id) {
+      const tile = document.querySelector(`#${id} .contact-tile`)
+      const star = tile.querySelector('.contact-star')
+      const cluster = tile.querySelector('.contact-tile-actions')
+      const name = tile.querySelector('.contact-tile-name')
+      const address = tile.querySelector('.contact-tile-address')
+      const line = tile.querySelector('.contact-tile-line')
+      const starBox = star.getBoundingClientRect()
+      const clusterBox = cluster.getBoundingClientRect()
+      return {
+        tileHeight: round(tile.getBoundingClientRect().height),
+        lineHeight: round(line.getBoundingClientRect().height),
+        nameWidth: round(name.getBoundingClientRect().width),
+        nameClipped: name.scrollWidth - name.clientWidth,
+        star: rect(star),
+        cluster: rect(cluster),
+        address: rect(address),
+        addressPaddingRight: getComputedStyle(address).paddingRight,
+        clusterVisibility: getComputedStyle(cluster).visibility,
+        clusterDisplay: getComputedStyle(cluster).display,
+        // Pre-existing on both skins: the star's 26px box ends 4px inside the cluster's top edge.
+        starClusterOverlap: round(Math.max(0, starBox.bottom - clusterBox.top)),
+        escape: escapeOf(tile, '.contact-star, .contact-tile-actions, .contact-tile-name, .contact-tile-address'),
+      }
+    }
+
+    requestAnimationFrame(() => {
+      document.getElementById('out').textContent = JSON.stringify({
+        column: round(document.querySelector('.contacts-list-scroll').getBoundingClientRect().width),
+        legacy: read('legacy'),
+        grid: read('grid'),
+        'grid-stop': read('grid-stop'),
+      }, null, 2)
+    })
+  </script>
+</body>
+</html>
