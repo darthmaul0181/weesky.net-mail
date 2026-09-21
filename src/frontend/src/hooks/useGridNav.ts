@@ -15,13 +15,20 @@ type Move = (rows: HTMLElement[][], at: Cell) => Cell
 const ROW = '[role="row"]'
 const END = Infinity
 
-const last = <T, >(list: T[]) => list.length - 1
+const last = <T>(list: T[]) => list.length - 1
+
+/** The widgets of one container: focusable, and somewhere a keyboard can work from. A roving
+    `tabindex="-1"` is one; a disabled control is not, however it was made focusable, since
+    `.focus()` on one is a no-op and an arrow landing there would strand the walk. */
+function widgetsIn(container: HTMLElement): HTMLElement[] {
+  return focusablesIn(container).filter(reachable)
+}
 
 /** The rows holding a widget, each as its own list. A row holding none is dropped rather than
     listed, which is how vertical movement steps over it instead of landing in it. */
 function rowsIn(grid: HTMLElement): HTMLElement[][] {
   return Array.from(grid.querySelectorAll<HTMLElement>(ROW))
-    .map(row => focusablesIn(row))
+    .map(row => widgetsIn(row))
     .filter(widgets => widgets.length > 0)
 }
 
@@ -56,6 +63,33 @@ function moveOf(event: KeyboardEvent): Move | null {
       : (rows, at) => ({ row: at.row, col: END })
     default: return null
   }
+}
+
+/** APG puts the stop on the selected item where the grid has one: a dialog reopened on Coral must
+    not hand Tab to Blue. */
+function pickedIn(widgets: HTMLElement[]): HTMLElement | undefined {
+  return widgets.find(widget => widget.getAttribute('aria-pressed') === 'true'
+    || widget.getAttribute('aria-selected') === 'true') ?? widgets[0]
+}
+
+/** Where a lost stop goes: whatever stands where its own row or cell stood, at the same column.
+    The record names those neighbours, and the detached subtree still answers `closest`, so the
+    column survives the removal that took the widget. */
+function nextTo(
+  grid: HTMLElement, held: HTMLElement, records: MutationRecord[],
+): HTMLElement | undefined {
+  const gone = records.find(record => Array.from(record.removedNodes)
+    .some(node => node.contains(held)))
+  const row = held.closest(ROW)
+  // The column is read off the list its own row held, detached or disabled and all; the landing is
+  // read off the list a keyboard can use.
+  const col = row ? focusablesIn(row as HTMLElement).indexOf(held) : -1
+  for (const beside of [gone?.nextSibling, gone?.previousSibling, gone?.target, row]) {
+    if (!(beside instanceof Element) || !grid.contains(beside)) continue
+    const widgets = widgetsIn(beside as HTMLElement)
+    if (widgets.length > 0) return widgets[Math.min(Math.max(col, 0), last(widgets))]
+  }
+  return undefined
 }
 
 /** `useRovingFocus`' guards, unchanged: a caret owns Home, End and ←/→ in any text box, and ↓/↑
@@ -94,13 +128,17 @@ export function useGridNav({ ref }: GridNavOptions): void {
       stop.current = widget
     }
 
-    // The whole invariant, restated: one stop, and a stop whose widget has gone recovers to the
-    // first live one. The hook owns the stop, so it owns that recovery — no consumer repeats it.
-    const repoint = () => {
+    // The whole invariant, restated: one stop, and a stop whose widget has gone recovers next
+    // door. The hook owns the stop, so it owns that recovery — no consumer repeats it.
+    const repoint = (records: MutationRecord[] = []) => {
       const widgets = rowsIn(grid).flat()
       const held = stop.current
-      const target = held && widgets.includes(held) && reachable(held) ? held : widgets[0]
+      const kept = held && widgets.includes(held) ? held : null
+      const target = kept ?? (held ? nextTo(grid, held, records) : undefined) ?? pickedIn(widgets)
       if (!target) { stop.current = null; return }
+      // A stop that left the rows' world — a row that stopped being one, a control gone disabled —
+      // is no longer in the list below, and a `0` left on it is a second tab stop.
+      if (held && held !== target) tab(held, -1)
       widgets.forEach(widget => tab(widget, widget === target ? 0 : -1))
       stop.current = target
     }
@@ -110,7 +148,7 @@ export function useGridNav({ ref }: GridNavOptions): void {
     const onFocusIn = (event: FocusEvent) => {
       const widget = event.target as HTMLElement
       const row = widget.closest(ROW)
-      if (row && grid.contains(row) && focusablesIn(row as HTMLElement).includes(widget)) {
+      if (row && grid.contains(row) && widgetsIn(row as HTMLElement).includes(widget)) {
         point(widget)
       }
     }
@@ -128,9 +166,12 @@ export function useGridNav({ ref }: GridNavOptions): void {
 
     // Rows and widgets come and go without a render of the grid itself — a hover cluster, a
     // filtered row, a streamed block — so the invariant is kept against the DOM, not the render.
+    // `disabled` is watched too: a native that goes disabled is focusable by nothing.
     repoint()
     const observer = new MutationObserver(repoint)
-    observer.observe(grid, { childList: true, subtree: true })
+    observer.observe(grid, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden'],
+    })
     grid.addEventListener('keydown', onKeyDown)
     grid.addEventListener('focusin', onFocusIn)
     return () => {
