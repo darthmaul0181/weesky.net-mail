@@ -35,7 +35,9 @@ function pin(el: Element, top: number, bottom: number) {
 const hourOf = (iso: string) => new Date(iso).getUTCHours()
 
 const grid = (month = /September 2026/) => screen.getByRole('grid', { name: month })
-const cell = (date: string) => screen.getByRole('gridcell', { name: new RegExp(date) })
+// The digit guard, or "1 February 2026" also names the cell of the 11th.
+const cell = (date: string) =>
+  screen.getByRole('gridcell', { name: new RegExp(`(^|[^0-9])${date}`) })
 const cellOf16 = () => cell('16 September 2026')
 const press = (key: string) => fireEvent.keyDown(document.activeElement as HTMLElement, { key })
 
@@ -185,6 +187,32 @@ describe('MonthView', () => {
       const stops = [...grid(/October 2026/).querySelectorAll('[tabindex="0"]')]
       expect(stops).toEqual([cell('15 October 2026')])
       expect(cell('15 October 2026')).toHaveAttribute('aria-selected', 'true')
+    })
+
+    /* The two months the brief names, and the grid's own shape is what they turn on: February
+       2026 opens on a Sunday, so its first row is six days of January, and August 2026 genuinely
+       spans six weeks — the 31st is in the last row, where ArrowDown has nowhere left to go. */
+    it('keeps its six rows and clamps at their edges whatever the month', () => {
+      month([], { anchor: '2026-02-15' })
+      expect(within(grid(/February 2026/)).getAllByRole('row')).toHaveLength(6)
+      expect(cell('1 February 2026')).not.toHaveClass('is-outside')
+      expect(cell('26 January 2026')).toHaveClass('is-outside')
+
+      cell('26 January 2026').focus()
+      press('ArrowUp')
+      expect(cell('26 January 2026')).toHaveFocus()
+      press('ArrowLeft')
+      expect(cell('26 January 2026')).toHaveFocus()
+    })
+
+    it('reaches the last day of a month that spans six weeks', () => {
+      month([], { anchor: '2026-08-15' })
+      expect(cell('31 August 2026')).not.toHaveClass('is-outside')
+
+      cell('31 August 2026').focus()
+      press('ArrowDown')
+
+      expect(cell('31 August 2026')).toHaveFocus()
     })
 
     it('walks day to day with the arrow keys, and week to week vertically', () => {
