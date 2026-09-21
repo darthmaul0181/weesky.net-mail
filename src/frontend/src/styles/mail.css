@@ -1664,11 +1664,10 @@ textarea.compose-editor {
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
 }
 
-.compose-swatches {
-  display: grid;
-  grid-template-columns: repeat(6, 20px);
-  gap: 4px;
-}
+/* A column of row-grids rather than one six-column grid: the rows ARIA owns are the rows drawn. */
+.compose-swatches { display: flex; flex-direction: column; gap: 4px; }
+.compose-swatch-row { display: grid; grid-template-columns: repeat(6, 20px); gap: 4px; }
+.compose-swatch-cell { display: flex; }
 
 .compose-swatches button {
   width: 20px;

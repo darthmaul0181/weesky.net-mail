@@ -1,0 +1,138 @@
+<!doctype html>
+<!--
+  Probe: does turning the composer's eighteen-swatch popover into a `role="grid"` of three
+  `role="row"`s of six `role="gridcell"`s leave it drawn exactly as it was? `.compose-swatches`
+  went from one six-column grid to a flex COLUMN of row-grids, which is the move the calendar's
+  twelve made in lot 2c task 2 and the move that has to carry its own CSS with it.
+
+  It loads the REAL stylesheets (tokens + palette + index.css + mail.css) and draws the popover
+  twice, at the toolbar's own width:
+
+    legacy — the markup before the rewrite: eighteen buttons straight inside `.compose-swatches`,
+             which the OLD rule laid out as `grid-template-columns: repeat(6, 20px)`
+    grid   — the markup after: `.compose-swatch-row` / `.compose-swatch-cell` around each button
+
+  Run it against the stylesheet as it stands: `legacy` is then the old markup under the NEW rule,
+  which is what says whether the old shape would have survived (it does not, and must not — the
+  numbers show the flat markup collapsing to one column). Run it with mail.css reverted and
+  `legacy` is the real before. Read `popover`, `swatchGrid` and the three corner swatches: those
+  are the boxes a re-shaped grid moves.
+
+  Served by the Vite dev server (npm run dev) at /probes/compose-swatches.html. #out holds the JSON.
+-->
+<html data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    body { margin: 0; font: var(--font, 14px system-ui); }
+    /* The two popovers are absolute against their anchor, so each gets a band of its own. */
+    .case { position: relative; height: 130px; }
+    #out { padding: 16px; white-space: pre-wrap; font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="case"><span class="compose-popover-anchor" id="legacy">
+    <button type="button" class="compose-tool" id="legacy-trigger" aria-label="Text colour">A</button>
+    <div class="compose-popover">
+      <div class="compose-swatches" role="group" aria-labelledby="legacy-trigger"></div>
+    </div>
+  </span></div>
+
+  <div class="case"><span class="compose-popover-anchor" id="grid">
+    <button type="button" class="compose-tool" id="grid-trigger" aria-label="Text colour">A</button>
+    <div class="compose-popover">
+      <div class="compose-swatches" role="grid" aria-labelledby="grid-trigger"></div>
+    </div>
+  </span></div>
+
+  <pre id="out"></pre>
+
+  <script type="module">
+    import { SWATCH_ROWS, swatchNameKey } from '/src/modules/mail/compose/composeColors.ts'
+
+    // The colours come from the module the component reads, so a palette edit changes what this
+    // reports rather than leaving it measuring a copy nobody ships.
+    const swatch = colour => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.style.background = colour
+      button.setAttribute('aria-label', swatchNameKey(colour))
+      return button
+    }
+
+    const flat = document.querySelector('#legacy .compose-swatches')
+    for (const row of SWATCH_ROWS) for (const colour of row) flat.appendChild(swatch(colour))
+
+    const grid = document.querySelector('#grid .compose-swatches')
+    for (const row of SWATCH_ROWS) {
+      const line = document.createElement('div')
+      line.className = 'compose-swatch-row'
+      line.setAttribute('role', 'row')
+      for (const colour of row) {
+        const cell = document.createElement('div')
+        cell.className = 'compose-swatch-cell'
+        cell.setAttribute('role', 'gridcell')
+        cell.appendChild(swatch(colour))
+        line.appendChild(cell)
+      }
+      grid.appendChild(line)
+    }
+
+    const round = n => Math.round(n * 100) / 100
+    const rect = el => {
+      if (!el) return null
+      const box = el.getBoundingClientRect()
+      return { x: round(box.x), y: round(box.y), w: round(box.width), h: round(box.height) }
+    }
+
+    /** The worst overhang per edge of every swatch against the popover's own box: a grid that
+        re-shaped badly spills, and in a `position: absolute` box scrollWidth reports nothing. */
+    function escapeOf(popover) {
+      const outer = popover.getBoundingClientRect()
+      let worst = { top: 0, right: 0, bottom: 0, left: 0 }
+      for (const el of popover.querySelectorAll('button')) {
+        const box = el.getBoundingClientRect()
+        if (box.width === 0 && box.height === 0) continue
+        worst = {
+          top: Math.max(worst.top, round(outer.top - box.top)),
+          right: Math.max(worst.right, round(box.right - outer.right)),
+          bottom: Math.max(worst.bottom, round(box.bottom - outer.bottom)),
+          left: Math.max(worst.left, round(outer.left - box.left)),
+        }
+      }
+      return worst
+    }
+
+    function read(id) {
+      const popover = document.querySelector(`#${id} .compose-popover`)
+      const swatches = popover.querySelectorAll('button')
+      const boxes = Array.from(swatches, rect)
+      return {
+        popover: rect(popover),
+        swatchGrid: rect(popover.querySelector('.compose-swatches')),
+        count: swatches.length,
+        // Three corners of the eighteen: first, end of the first drawn line, and last.
+        first: boxes[0],
+        sixth: boxes[5],
+        last: boxes[boxes.length - 1],
+        // How many share the first swatch's y: six is six per row, one is a collapsed column.
+        perRow: boxes.filter(box => box.y === boxes[0].y).length,
+        rowTops: [...new Set(boxes.map(box => box.y))],
+        escape: escapeOf(popover),
+      }
+    }
+
+    requestAnimationFrame(() => {
+      document.getElementById('out').textContent = JSON.stringify({
+        legacy: read('legacy'),
+        grid: read('grid'),
+      }, null, 2)
+    })
+  </script>
+</body>
+</html>
