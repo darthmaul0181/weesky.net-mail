@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode, RefObject,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
+  DEFAULT_ROW_ACTIONS, groupConversationsOf, requestSizeOf, rowActionsOf, showPreviewOf,
+  usePreferences,
 } from '../../../hooks/usePreferences'
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
@@ -39,6 +40,7 @@ import { useSelection } from './useSelection'
 import { ROW_EXIT_MS } from './useRowExit'
 import type { RowExit } from './useRowExit'
 import { useMessageList } from './useMessageList'
+import { useGridNav } from '../../../hooks/useGridNav'
 import { useLongPress } from '../../../hooks/useLongPress'
 import { usePullToRefresh } from '../../../hooks/usePullToRefresh'
 
@@ -73,6 +75,33 @@ function Row({ onLongPress, children, ...rest }:
         event.preventDefault()
         event.stopPropagation()
       }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The rows' container. It is a component of its own because `useGridNav`'s effect is keyed on the
+ * ref alone: a grid that is absent when its owner first lays out never gets the hook at all, and
+ * this element comes and goes with the rows — a loading, failed or empty list draws none.
+ */
+function MessageGrid({ label, rowCount, selecting, children }: {
+  label: string
+  /** The folder's own row total, or -1 where it is not knowable in rows. */
+  rowCount: number
+  selecting: boolean
+  children: ReactNode
+}) {
+  const grid = useRef<HTMLDivElement>(null)
+  useGridNav({ ref: grid })
+  return (
+    <div
+      className={`message-list${selecting ? ' has-selection' : ''}`}
+      role="grid"
+      aria-label={label}
+      aria-rowcount={rowCount}
+      ref={grid}
     >
       {children}
     </div>
@@ -133,8 +162,8 @@ export default function MessageList(
   const [shownFolder, setShownFolder] = useState(folderPath)
   if (folderPath !== shownFolder) { setShownFolder(folderPath); setSearchOpen(false); setAdvanced(null) }
 
-  const searchSize = preferences ? requestSizeOf(preferences) : 0
-  const searchQuery = useSearchMessages(search, searchPage, searchSize)
+  const pageSize = preferences ? requestSizeOf(preferences) : 0
+  const searchQuery = useSearchMessages(search, searchPage, pageSize)
   const searching = search !== null
   const crossFolder = searching && search.allFolders
   const starred = searching && search.flagged === true
@@ -151,8 +180,8 @@ export default function MessageList(
         isError: searchQuery.isError,
         paging: {
           page: searchPage,
-          lastPage: searchSize > 0
-            ? Math.max(0, Math.ceil((searchQuery.data?.total ?? 0) / searchSize) - 1)
+          lastPage: pageSize > 0
+            ? Math.max(0, Math.ceil((searchQuery.data?.total ?? 0) / pageSize) - 1)
             : 0,
           onSelect: setSearchPage,
         },
@@ -160,6 +189,16 @@ export default function MessageList(
       }
     : list
   const { groups, messages, total, isLoading, isError, paging, streaming } = view
+
+  // aria-rowindex is 1-based over the whole folder, never over the loaded slice: the pages behind
+  // this one hold exactly `pageSize` rows each, since `expanded` resets with the page. Streaming
+  // loads from the folder's first row, so its own offset is nothing.
+  const rowOffset = (paging?.page ?? 0) * pageSize
+  // A row is a message only while conversations are not grouped: a collapsed thread stands for
+  // several, and an unfolded one draws rows the folder total never counted. -1 is the honest
+  // answer there. Search results are never threaded, whatever the setting says.
+  const grouped = preferences ? groupConversationsOf(preferences) : false
+  const rowCount = grouped && !searching ? -1 : total
   const scrollRef = useRef<HTMLDivElement>(null)
   const { pull, armed } = usePullToRefresh(scrollRef, () => onRefresh?.())
   const setFlags = useSetFlags(onNotify)
@@ -326,7 +365,7 @@ export default function MessageList(
     setConfirmingEmpty(false)
   }
 
-  // Inner buttons handle their own keys; the row only opens when the row itself has focus.
+  // The thread toggle handles its own keys; the cell only opens when the cell itself has focus.
   function onRowKey(event: KeyboardEvent<HTMLDivElement>, message: MailMessageSummary) {
     if (event.target !== event.currentTarget) return
     if (event.key === 'Enter' || event.key === ' ') {
@@ -395,9 +434,10 @@ export default function MessageList(
    * One row — a plain message, a collapsed thread head, or an unfolded member. With `thread`
    * present the row is a whole conversation: its dot, star and paperclip aggregate the members,
    * and every control acts on all of them at once. `rowIndex` runs over the flattened members,
-   * the order `loadedUids` publishes, so shift-ranges stay coherent across both shapes.
+   * the order `loadedUids` publishes, so shift-ranges stay coherent across both shapes, while
+   * `ariaRow` counts the rows actually drawn, which is what the grid numbers.
    */
-  function renderRow(message: MailMessageSummary, rowIndex: number, thread?: {
+  function renderRow(message: MailMessageSummary, rowIndex: number, ariaRow: number, thread?: {
     count: number; uids: number[]; expanded: boolean; onToggle: () => void
     anyUnread: boolean; anyFlagged: boolean; anyAttachments: boolean
   }, member = false): ReactNode {
@@ -433,8 +473,9 @@ export default function MessageList(
         {t(message.priority === 'high' ? 'list.high' : 'list.low')}
       </span>
     )
-    // role=button is children-presentational: nothing inside the row is exposed on its
-    // own, so everything the row states visually has to be said in its name.
+    // The row is no longer one button, so the checkbox, the star and the actions answer for
+    // themselves — but the name is not shortened here: a name change is audible where a role
+    // change is not, and the two together would make a regression impossible to bisect.
     const label = t('list.rowLabel', {
       prefix: `${thread ? `${t('list.threadCount', { count: thread.count })}. ` : ''}`
         + `${unread ? t('list.aria.unread') : ''}`
@@ -574,21 +615,21 @@ export default function MessageList(
     )
 
     // The slot is the box that collapses; the row inside it only fades. A thread member has its
-    // own, so one member can leave without taking the fold's other lines with it.
+    // own, so one member can leave without taking the fold's other lines with it. It is
+    // presentational, or the grid would own a box of its own instead of the rows.
     return (
       <div
         key={message.uid}
         className={`message-row-slot${leaving ? ' is-leaving' : ''}`}
+        role="presentation"
       >
       <Row
-        role="button"
-        tabIndex={0}
-        aria-label={label}
+        role="row"
+        aria-rowindex={ariaRow}
         className={classes.join(' ')}
         style={{ '--row-actions': shownActions.length } as CSSProperties}
         draggable={!crossFolder}
         onClick={() => openRow(message)}
-        onKeyDown={event => onRowKey(event, message)}
         onDragStart={event => onRowDragStart(event, rowUids)}
         onDragEnd={() => setDraggingUids(null)}
         // Entering selection with no visible checkbox to aim at: the row itself is the target.
@@ -597,46 +638,57 @@ export default function MessageList(
           else selection.toggle(message.uid, rowIndex)
         }}
       >
-        {wide ? (
-          <>
-            {check}
-            {unread && <span className="message-row-unread-dot" />}
-            {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
-            {priorityMark}
-            <span className="message-row-from">{from}</span>
-            {attachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
-            <span className="message-row-line">
-              {subject}
-              {showsPreview && message.preview && (
-                <span className="message-row-line-preview"> — {message.preview}</span>
-              )}
-            </span>
-            <span className="message-row-date">{when}</span>
-            {threadBits}
-            {cluster}
-            {star}
-          </>
-        ) : (
-          <>
-            {check}
-            <div className="message-row-top">
+        {/* Four cells, always four: a row may own nothing but cells, and a count that moved with
+            a setting or with the thread would change the grid's shape under the arrows. The
+            empty ones hold no widget, which is how the walk steps over them. */}
+        <div className="message-row-select" role="gridcell">{check}</div>
+        {/* The cell that replaces the old role=button row: it carries the composed name, the keys
+            that open the message, and the thread toggle, which unfolds its own content. The click
+            stays the row's, so the padding around this box opens the message as it always did. */}
+        <div
+          className="message-row-content"
+          role="gridcell"
+          tabIndex={-1}
+          aria-label={label}
+          onKeyDown={event => onRowKey(event, message)}
+        >
+          {wide ? (
+            <>
               {unread && <span className="message-row-unread-dot" />}
               {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
               {priorityMark}
               <span className="message-row-from">{from}</span>
               {attachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
+              <span className="message-row-line">
+                {subject}
+                {showsPreview && message.preview && (
+                  <span className="message-row-line-preview"> — {message.preview}</span>
+                )}
+              </span>
               <span className="message-row-date">{when}</span>
               {threadBits}
-              {star}
-            </div>
-            <div className="message-row-subject">{subject}</div>
-            {/* Always rendered when previews are on, even empty: a message with no body
-                would otherwise make a shorter row than its neighbours and break the rhythm
-                of the column. The reserved height lives in CSS. */}
-            {showsPreview && <div className="message-row-preview">{message.preview}</div>}
-            {cluster}
-          </>
-        )}
+            </>
+          ) : (
+            <>
+              <div className="message-row-top">
+                {unread && <span className="message-row-unread-dot" />}
+                {drafts && <span className="message-row-draft">{t('list.draft')}</span>}
+                {priorityMark}
+                <span className="message-row-from">{from}</span>
+                {attachments && <PaperclipIcon size={13} title={t('list.hasAttachments')} />}
+                <span className="message-row-date">{when}</span>
+                {threadBits}
+              </div>
+              <div className="message-row-subject">{subject}</div>
+              {/* Always rendered when previews are on, even empty: a message with no body
+                  would otherwise make a shorter row than its neighbours and break the rhythm
+                  of the column. The reserved height lives in CSS. */}
+              {showsPreview && <div className="message-row-preview">{message.preview}</div>}
+            </>
+          )}
+        </div>
+        <div className="message-row-flag" role="gridcell">{star}</div>
+        <div className="message-row-actions" role="gridcell">{cluster}</div>
       </Row>
       </div>
     )
@@ -652,10 +704,12 @@ export default function MessageList(
     // The sentinel counts list rows, and a collapsed thread is one row: groups, not messages.
     const sentinelRow = streaming?.hasMore ? sentinelIndexOf(groups.length) : -1
     let rowIndex = 0
+    let drawn = 0
+    const nextRow = () => rowOffset + (drawn += 1)
 
     return (
       <>
-        <ul className={`message-list${count > 0 ? ' has-selection' : ''}`}>
+        <MessageGrid label={t('list.gridLabel')} rowCount={rowCount} selecting={count > 0}>
           {groups.map((group, groupIndex) => {
             const single = group.messages.length === 1
             const latest = group.messages[0]
@@ -672,17 +726,17 @@ export default function MessageList(
               anyAttachments: group.messages.some(m => m.hasAttachments),
             }
             return (
-              <li key={group.key}>
+              <Fragment key={group.key}>
                 {streaming && groupIndex === sentinelRow && <LoadMoreSentinel onReach={streaming.loadMore} />}
-                {renderRow(latest, startIndex, thread)}
+                {renderRow(latest, startIndex, nextRow(), thread)}
                 {/* The parent stands for the thread; unfolded, every member gets its own line,
                     the latest included. */}
                 {isOpen && !single &&
-                  group.messages.map((m, i) => renderRow(m, startIndex + i, undefined, true))}
-              </li>
+                  group.messages.map((m, i) => renderRow(m, startIndex + i, nextRow(), undefined, true))}
+              </Fragment>
             )
           })}
-        </ul>
+        </MessageGrid>
 
         {streaming?.isLoadingMore && <p className="mail-block-state">{t('list.loadingMore')}</p>}
         {streaming?.loadMoreFailed && (

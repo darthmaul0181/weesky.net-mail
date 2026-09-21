@@ -119,6 +119,19 @@ function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record
   return render(<MessageList {...defaultListProps()} {...props} />, { wrapper })
 }
 
+/* The row is a `role="row"` carrying four gridcells, and its accessible name lives on the content
+   cell -- which is also the open target. Two helpers, because a control in another cell is not
+   inside that one. The select cell is named by the checkbox it holds, which names the sender too,
+   so a sender alone matches two cells. */
+function contentOf(name: RegExp): HTMLElement {
+  const cell = screen.getAllByRole('gridcell', { name })
+    .find(one => one.classList.contains('message-row-content'))
+  if (!cell) throw new Error(`no content cell named ${name}`)
+  return cell
+}
+const rowOf = (name: RegExp) => contentOf(name).closest('.message-row') as HTMLElement
+const stopsIn = (grid: HTMLElement) => Array.from(grid.querySelectorAll('[tabindex="0"]'))
+
 function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
     path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
@@ -218,9 +231,9 @@ describe('MessageList', () => {
 
     // Only the message that has one — the marker must not be announced on every row.
     expect(container.querySelectorAll('svg[aria-label="Has attachments"]')).toHaveLength(1)
-    // The row is a role=button, which hides the marker from assistive tech whatever it is named,
-    // so the row's own name is what has to carry it — on that one row.
-    const named = screen.getAllByRole('button')
+    // The marker's `title` is a pointer tooltip rather than a name a reader is given, so the
+    // row's own composed name is what has to carry it — on that one row.
+    const named = screen.getAllByRole('gridcell')
       .filter(element => /has attachments/i.test(element.getAttribute('aria-label') || ''))
     expect(named).toHaveLength(1)
   })
@@ -369,13 +382,13 @@ describe('the declared priority', () => {
     expect(screen.queryByTitle('Low priority')).not.toBeInTheDocument()
   })
 
-  // The row is children-presentational, so anything it states visually has to be in its name.
+  // A mark the row shows and its name omits is one a reader is never given.
   it('says the priority in the row name', async () => {
     mocks.useMessageList.mockReturnValue(
       pagedState({}, { messages: [{ ...sample[0], subject: 'Devis', fromName: 'Camille', priority: 'high' }] }))
     renderList()
 
-    expect(await screen.findByRole('button', { name: /High priority/ })).toBeInTheDocument()
+    expect(await screen.findByRole('gridcell', { name: /High priority/ })).toBeInTheDocument()
   })
 
   it('marks a high-priority row in the wide skin too, out of the subject line', async () => {
@@ -419,11 +432,11 @@ describe('a drafts folder', () => {
     expect(screen.getAllByText('Draft')).toHaveLength(draftSample.length)
   })
 
-  // The row is children-presentational, so a marker it shows and its name omits is invisible.
+  // A marker the row shows and its name omits is one a reader is never given.
   it('voices the Draft marker in the row name', async () => {
     renderList({ folderRole: 'drafts' })
 
-    expect(await screen.findByRole('button', { name: /^Draft\. Bob, carol@ext\.example: To Bob/ }))
+    expect(await screen.findByRole('gridcell', { name: /^Draft\. Bob, carol@ext\.example: To Bob/ }))
       .toBeInTheDocument()
   })
 
@@ -466,13 +479,12 @@ describe('the row controls', () => {
     mocks.useMessageList.mockReturnValue(pagedState())
   })
 
-  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
 
   it('opens a row from the keyboard', () => {
     const onSelect = vi.fn()
     renderList({ onSelect })
 
-    fireEvent.keyDown(rowOf(/alice martin/i), { key: 'Enter' })
+    fireEvent.keyDown(contentOf(/alice martin/i), { key: 'Enter' })
 
     expect(onSelect).toHaveBeenCalledWith(2)
   })
@@ -482,40 +494,43 @@ describe('the row controls', () => {
     renderList({ onSelect })
 
     // keyDown returns false when a listener called preventDefault; Space would scroll otherwise.
-    const notScrolled = !fireEvent.keyDown(rowOf(/alice martin/i), { key: ' ' })
+    const notScrolled = !fireEvent.keyDown(contentOf(/alice martin/i), { key: ' ' })
 
     expect(onSelect).toHaveBeenCalledWith(2)
     expect(notScrolled).toBe(true)
   })
 
-  // fireEvent reaches an unfocusable node just as well; without this the row could leave the tab
-  // order — no keyboard path, and no :focus-within to reveal the cluster — and nothing would say so.
-  it('puts the row in the tab order', () => {
+  // The stop roves, so no element keeps `tabindex="0"`; what the content cell must keep is the
+  // attribute itself, since a cell carrying none is one the walk cannot find — no keyboard path to
+  // the row, and no :focus-within to reveal the cluster.
+  it('puts the content cell in the grid walk', async () => {
     renderList()
+    await settle()
 
-    expect(rowOf(/alice martin/i)).toHaveAttribute('tabindex', '0')
+    expect(contentOf(/alice martin/i)).toHaveAttribute('tabindex')
+    expect(stopsIn(screen.getByRole('grid'))).toHaveLength(1)
   })
 
-  // A role=button with no name of its own takes it from its contents: every row would announce
-  // "…Star, Mark as unread, button". The date is read off the row rather than hard-coded —
-  // formatListDate answers in the runner's locale.
+  // The name is composed rather than read off the contents, which would announce the row's own
+  // controls as part of it. The date is read off the row rather than hard-coded — formatListDate
+  // answers in the runner's locale.
   it('names the row after the message, not after its controls', () => {
     renderList()
 
-    const row = rowOf(/alice martin/i)
-    const date = row.querySelector('.message-row-date')!.textContent
-    expect(row).toHaveAttribute(
+    const cell = contentOf(/alice martin/i)
+    const date = cell.querySelector('.message-row-date')!.textContent
+    expect(cell).toHaveAttribute(
       'aria-label', `Unread. Alice Martin: Re: facture, has attachments, ${date}`)
-    expect(row.getAttribute('aria-label')).not.toMatch(/star/i)
+    expect(cell.getAttribute('aria-label')).not.toMatch(/star/i)
   })
 
-  // role=button is children-presentational, so the dot, the weight and the colour that carry
-  // read state visually reach nobody: the name is the only place left to say it.
+  // The dot, the weight and the colour that carry read state are visual only: the name is the
+  // only place left to say it.
   it('says unread in the name, and says nothing on a read row', () => {
     renderList()
 
-    expect(rowOf(/alice martin/i).getAttribute('aria-label')).toMatch(/^Unread\. /)
-    expect(rowOf(/bob@x\.be/i).getAttribute('aria-label')).not.toMatch(/unread/i)
+    expect(contentOf(/alice martin/i).getAttribute('aria-label')).toMatch(/^Unread\. /)
+    expect(contentOf(/bob@x\.be/i).getAttribute('aria-label')).not.toMatch(/unread/i)
   })
 
   // An inner button fires Enter itself; without the target guard the row would open behind it.
@@ -614,7 +629,6 @@ describe('archive and trash from the row', () => {
     mocks.useMessageList.mockReturnValue(pagedState())
   })
 
-  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
   // The modal's confirm button is named "Delete" too — the row's own must not answer for it.
   const modal = () => within(document.querySelector('.modal') as HTMLElement)
 
@@ -766,8 +780,7 @@ describe('archive and trash from the row', () => {
 // The timing is useRowExit's; what belongs here is that the set it publishes reaches the DOM, and
 // reaches the slot rather than the row — the row only fades, the slot is the box that collapses.
 describe('a row on its way out', () => {
-  const slotOf = (name: RegExp) =>
-    screen.getByRole('button', { name }).closest('.message-row-slot')
+  const slotOf = (name: RegExp) => rowOf(name).closest('.message-row-slot')
 
   it('marks the slot of every uid the exit is holding', () => {
     renderList({ rowExit: { departing: new Set([2]), depart: (_uids, fire) => fire() } })
@@ -796,31 +809,32 @@ describe('wide rows', () => {
   it('renders a single-line row with the preview inline', async () => {
     renderList({ wide: true })
 
-    const row = await screen.findByRole('button', { name: /alice/i })
+    const row = rowOf(/alice/i)
     expect(row).toHaveClass('is-line')
-    expect(row.querySelector('.message-row-line-preview')).toHaveTextContent('the preview text')
+    await vi.waitFor(() => expect(row.querySelector('.message-row-line-preview'))
+      .toHaveTextContent('the preview text'))
     expect(row.querySelector('.message-row-top')).toBeNull()
   })
 
   it('ends the line at the subject when previews are off', async () => {
     renderList({ wide: true }, { 'mail.showPreview': 'false' })
 
-    const row = await screen.findByRole('button', { name: /alice/i })
+    const row = rowOf(/alice/i)
     await vi.waitFor(() => expect(row.querySelector('.message-row-line-preview')).toBeNull())
   })
 
-  it('keeps the unread dot and classes in wide rows', async () => {
+  it('keeps the unread dot and classes in wide rows', () => {
     renderList({ wide: true })
 
-    const unreadRow = await screen.findByRole('button', { name: /unseen sender/i })
+    const unreadRow = rowOf(/unseen sender/i)
     expect(unreadRow).toHaveClass('is-unread')
     expect(unreadRow.querySelector('.message-row-unread-dot')).not.toBeNull()
   })
 
-  it('keeps stacked rows when wide is off', async () => {
+  it('keeps stacked rows when wide is off', () => {
     renderList()
 
-    const row = await screen.findByRole('button', { name: /alice/i })
+    const row = rowOf(/alice/i)
     expect(row).not.toHaveClass('is-line')
     expect(row.querySelector('.message-row-top')).not.toBeNull()
   })
@@ -943,8 +957,10 @@ describe('MessageList streaming', () => {
     mocks.useMessageList.mockReturnValue(streamingState())
     const { container } = renderList()
 
-    const rows = Array.from(container.querySelectorAll('.message-list > li'))
-    const carrying = rows.findIndex(row => row.querySelector('.message-list-sentinel'))
+    // The sentinel is a child of the grid, drawn just before the row it precedes, so the rows
+    // ahead of it are its own index among those children.
+    const drawn = Array.from(container.querySelectorAll('.message-list > *'))
+    const carrying = drawn.findIndex(node => node.classList.contains('message-list-sentinel'))
     expect(carrying).toBe(80)
   })
 
@@ -953,8 +969,8 @@ describe('MessageList streaming', () => {
     mocks.useMessageList.mockReturnValue(streamingState({}, 250))
     const { container } = renderList()
 
-    const rows = Array.from(container.querySelectorAll('.message-list > li'))
-    const carrying = rows.findIndex(row => row.querySelector('.message-list-sentinel'))
+    const drawn = Array.from(container.querySelectorAll('.message-list > *'))
+    const carrying = drawn.findIndex(node => node.classList.contains('message-list-sentinel'))
     expect(carrying).toBe(230)
   })
 
@@ -1143,7 +1159,7 @@ describe('multi-select', () => {
     try {
       const onSelect = vi.fn()
       renderWithRoles(undefined, { onSelect })
-      const row = screen.getByRole('button', { name: /alice martin/i })
+      const row = rowOf(/alice martin/i)
 
       fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
@@ -1160,7 +1176,7 @@ describe('multi-select', () => {
     vi.useFakeTimers()
     try {
       renderWithRoles()
-      const row = screen.getByRole('button', { name: /alice martin/i })
+      const row = rowOf(/alice martin/i)
 
       fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
@@ -1177,7 +1193,7 @@ describe('multi-select', () => {
     try {
       const onSelect = vi.fn()
       renderWithRoles(undefined, { onSelect })
-      const row = screen.getByRole('button', { name: /alice martin/i })
+      const row = rowOf(/alice martin/i)
 
       fireEvent.pointerDown(row, { pointerType: 'mouse', isPrimary: true, button: 0 })
       act(() => { vi.advanceTimersByTime(600) })
@@ -1197,7 +1213,7 @@ describe('multi-select', () => {
     try {
       const onSelect = vi.fn()
       renderWithRoles(undefined, { onSelect })
-      const row = screen.getByRole('button', { name: /alice martin/i })
+      const row = rowOf(/alice martin/i)
 
       fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
@@ -1217,7 +1233,7 @@ describe('multi-select', () => {
     try {
       const onSelect = vi.fn()
       renderWithRoles(undefined, { onSelect })
-      const row = screen.getByRole('button', { name: /alice martin/i })
+      const row = rowOf(/alice martin/i)
 
       fireEvent.pointerDown(row, FINGER)
       act(() => { vi.advanceTimersByTime(500) })
@@ -1442,7 +1458,6 @@ describe('MessageList as a drag source', () => {
     mocks.useMessageList.mockReturnValue(pagedState())
   })
 
-  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
   const checkOf = (label: string) => screen.getByRole('checkbox', { name: label })
 
   function dragDT() {
@@ -1793,7 +1808,6 @@ describe('choosable row actions', () => {
     mocks.useMessageList.mockReturnValue(pagedState())
   })
 
-  const rowOf = (name: RegExp) => screen.getByRole('button', { name })
 
   // An older backend answers without the key at all. Reading that as "nothing chosen" would
   // strip every icon off every row on the first render after a deploy.
@@ -1942,9 +1956,10 @@ describe('conversation rows', () => {
     expect(within(row).getByRole('button', { name: 'Unstar' })).toBeInTheDocument()
     expect(row.querySelector('svg[aria-label="Has attachments"]')).not.toBeNull()
 
-    // role=button is children-presentational: the count badge's title reaches nobody, so a
-    // 2-message thread has to say "conversation" in the accessible name itself.
-    expect(row).toHaveAttribute('aria-label', expect.stringContaining('2 messages in this conversation'))
+    // The count badge's `title` is a pointer tooltip, so a 2-message thread has to say
+    // "conversation" in the row's own name as well.
+    expect(contentOf(/Re: quote/i))
+      .toHaveAttribute('aria-label', expect.stringContaining('2 messages in this conversation'))
   })
 
   it('renders a single-message thread exactly as a plain row', () => {
@@ -2139,5 +2154,231 @@ describe('conversation rows', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
 
     expect(onDeparted).toHaveBeenCalledWith(30, [30, 10])
+  })
+})
+
+/* -- The list as a grid ---------------------------------------------------------------------- */
+
+/* The row used to be one `role="button"` with `tabIndex={0}`: fifty messages cost fifty Tab
+   presses, and because that role is children-presentational a reader was told the row was a single
+   button and never announced the checkbox, the star or the actions plainly on screen. It is now a
+   `role="row"` of four `role="gridcell"`s walked by `useGridNav`. */
+describe('the list as a grid', () => {
+  const three = [
+    ...sample,
+    {
+      uid: 3, subject: 'Third', fromName: 'Carol Dupont', fromAddress: 'carol@x.be',
+      date: '2026-07-16T09:00:00Z', seen: true, flagged: false, answered: false,
+      hasAttachments: false, size: 80, preview: '',
+    },
+  ]
+
+  const thread = [
+    {
+      uid: 30, subject: 'Re: quote', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
+      date: '2026-07-18T09:00:00Z', seen: true, flagged: false, answered: false,
+      hasAttachments: false, size: 100, preview: 'newest body',
+    },
+    {
+      uid: 10, subject: 'quote', fromName: 'Bob', fromAddress: 'bob@x.be',
+      date: '2026-07-17T09:00:00Z', seen: false, flagged: true, answered: false,
+      hasAttachments: true, size: 90, preview: 'oldest body',
+    },
+  ]
+
+  const grid = () => screen.getByRole('grid')
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  // Blocks of rows arrive as the reader scrolls, so APG asks for the count and the index: a row on
+  // page 3 of 50 is the folder's 101st, not the slice's first.
+  it('is a grid whose rows carry their index in the folder', async () => {
+    mocks.useMessageList.mockReturnValue(pagedState({ page: 2 }, { total: 120 }))
+    renderList()
+
+    // The offset comes from the page size, which is a preference: awaited, never settled.
+    await waitFor(() => expect(within(grid()).getAllByRole('row')[0])
+      .toHaveAttribute('aria-rowindex', '101'))
+    expect(grid()).toHaveAttribute('aria-rowcount', '120')
+    expect(within(grid()).getAllByRole('row').map(row => row.getAttribute('aria-rowindex')))
+      .toEqual(['101', '102'])
+  })
+
+  it('offers one tab stop for the whole list', async () => {
+    renderList()
+
+    // Six widgets a row -- the box, the content cell, the star and three actions -- behind one stop.
+    await waitFor(() => expect(grid().querySelectorAll('[tabindex="-1"]')).toHaveLength(11))
+    expect(stopsIn(grid())).toHaveLength(1)
+  })
+
+  it('walks rows with the vertical arrows', async () => {
+    renderList()
+    await settle()
+    const first = contentOf(/alice martin/i)
+    first.focus()
+
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+
+    expect(contentOf(/bob@x\.be/i)).toHaveFocus()
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' })
+    expect(first).toHaveFocus()
+  })
+
+  it('reaches the star and the delete button with the horizontal arrows', async () => {
+    renderList()
+    await settle()
+    const cell = contentOf(/alice martin/i)
+    cell.focus()
+
+    fireEvent.keyDown(cell, { key: 'ArrowRight' })
+    expect(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Star' })).toHaveFocus()
+
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' })
+    expect(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete' })).toHaveFocus()
+  })
+
+  it('announces the row actions, which role=button used to hide', async () => {
+    renderList()
+    await settle()
+    const row = rowOf(/alice martin/i)
+
+    expect(row).toHaveAttribute('role', 'row')
+    // ARIA lets a row own nothing but cells, so every focusable part sits in one of its own.
+    const cells = within(row).getAllByRole('gridcell')
+    expect(cells).toHaveLength(4)
+    for (const control of [
+      within(row).getByRole('checkbox'),
+      within(row).getByRole('button', { name: 'Star' }),
+      within(row).getByRole('button', { name: 'Delete' }),
+    ]) expect(cells).toContain(control.closest('[role="gridcell"]'))
+  })
+
+  it('opens the message with Enter on the content cell', async () => {
+    const onSelect = vi.fn()
+    renderList({ onSelect })
+    await settle()
+
+    fireEvent.keyDown(contentOf(/alice martin/i), { key: 'Enter' })
+
+    expect(onSelect).toHaveBeenCalledWith(2)
+  })
+
+  it('keeps the checkbox selection', async () => {
+    renderList()
+    await settle()
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('checkbox'))
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('keeps the Shift+click range', async () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: three, total: 3 }))
+    renderList()
+    await settle()
+    const boxes = screen.getAllByRole('checkbox', { name: /select message from/i })
+
+    fireEvent.click(boxes[0])
+    fireEvent.click(boxes[2], { shiftKey: true })
+
+    expect(screen.getByText('3 selected')).toBeInTheDocument()
+  })
+
+  it('keeps the long-press entry into selection', async () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      renderList({ onSelect })
+      const row = rowOf(/alice martin/i)
+
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.click(row)
+
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+      expect(onSelect).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('keeps the drag handlers on the row', async () => {
+    renderList()
+    await settle()
+    const row = rowOf(/alice martin/i)
+    const dataTransfer = {
+      setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: 'uninitialized',
+    }
+
+    expect(row).toHaveAttribute('draggable', 'true')
+    fireEvent.dragStart(row, { dataTransfer })
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      DRAG_MIME, serializeDrag({ sourcePath: 'INBOX', uids: [2] }))
+  })
+
+  // In the content cell rather than a fifth one: the toggle unfolds that cell's own content, and
+  // the count stays four whether or not the row is a conversation.
+  it('keeps the thread toggle, inside the content cell', async () => {
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: thread, groups: [{ key: 10, messages: thread }], total: 2 }))
+    renderList()
+    await settle()
+
+    const toggle = screen.getByLabelText('Expand conversation')
+    expect(toggle.closest('[role="gridcell"]')).toBe(contentOf(/Re: quote/i))
+    expect(within(rowOf(/Re: quote/i)).getAllByRole('gridcell')).toHaveLength(4)
+
+    fireEvent.click(toggle)
+    expect(screen.getByLabelText('Collapse conversation')).toBeInTheDocument()
+  })
+
+  // useRowExit holds the row on screen for 300ms and then it goes; the stop must not go with it,
+  // and the browser's own sequential-navigation point is no help -- Tab would restart at the top.
+  it('hands the tab stop to a live row when a departing row unmounts', async () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: three, total: 3 }))
+    const { rerender } = renderList()
+    await settle()
+    contentOf(/bob@x\.be/i).focus()
+    expect(contentOf(/bob@x\.be/i)).toHaveAttribute('tabindex', '0')
+
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: [three[0], three[2]], total: 2 }))
+    rerender(<MessageList {...defaultListProps()} />)
+
+    await waitFor(() => expect(stopsIn(grid())).toHaveLength(1))
+    expect(contentOf(/carol dupont/i)).toHaveAttribute('tabindex', '0')
+  })
+
+  it('still clears the selection on Escape', async () => {
+    renderList()
+    await settle()
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('checkbox'))
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    const cell = contentOf(/alice martin/i)
+    cell.focus()
+
+    // The grid must not spend Escape: the list's own handler reads defaultPrevented before acting.
+    expect(fireEvent.keyDown(cell, { key: 'Escape' })).toBe(true)
+
+    expect(screen.queryByText('1 selected')).not.toBeInTheDocument()
+  })
+
+  it('skips the actions cell when the setting shows no action', async () => {
+    renderList({}, { 'mail.rowActions': '' })
+    await waitFor(() => expect(document.querySelector('.message-row-cluster')).toBeNull())
+    const row = rowOf(/alice martin/i)
+
+    // The cell is still drawn, so the structure does not change under a setting.
+    expect(within(row).getAllByRole('gridcell')).toHaveLength(4)
+    const star = within(row).getByRole('button', { name: 'Star' })
+    star.focus()
+    fireEvent.keyDown(star, { key: 'End' })
+
+    expect(star).toHaveFocus()
   })
 })

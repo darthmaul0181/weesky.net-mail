@@ -104,6 +104,7 @@
     "alreadyJunk": "Already in the junk folder"
   },
   "list": {
+    "gridLabel": "Messages",
     "selectFolder": "Select a folder",
     "loading": "Loading messages…",
     "loadFailed": "Could not load messages.",
