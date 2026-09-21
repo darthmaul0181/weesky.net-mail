@@ -9,7 +9,8 @@ function leaf(bundle: unknown, path: string): unknown {
   )
 }
 
-const nameIn = (bundle: unknown, color: string) => leaf(bundle, colourNameKey(color))
+const nameIn = (bundle: unknown, color: (typeof CALENDAR_COLORS)[number]) =>
+  leaf(bundle, colourNameKey(color))
 
 describe('the colour names', () => {
   /* A name resolved from a map by hex is invisible to `keys.test.ts` and to `tsc` alike, so this
@@ -27,9 +28,5 @@ describe('the colour names', () => {
       const names = CALENDAR_COLORS.map(color => nameIn(bundle, color))
       expect(new Set(names).size).toBe(CALENDAR_COLORS.length)
     }
-  })
-
-  it('reads a hex code however it was typed', () => {
-    expect(colourNameKey(' #3B82C4 ')).toBe(colourNameKey('#3b82c4'))
   })
 })

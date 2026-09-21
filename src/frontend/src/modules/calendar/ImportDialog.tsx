@@ -36,7 +36,7 @@ export default function ImportDialog({
   const [file, setFile] = useState<File | null>(null)
   const [id, setId] = useState(targetId)
   const [name, setName] = useState('')
-  const [color, setColor] = useState(CALENDAR_COLORS[0])
+  const [color, setColor] = useState<string>(CALENDAR_COLORS[0])
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function pick(event: ChangeEvent<HTMLInputElement>) {

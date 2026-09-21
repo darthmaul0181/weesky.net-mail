@@ -435,9 +435,8 @@
 }
 
 /* ── The dialogues ─────────────────────────────────────────────────────────── */
-/* Twelve swatches, six by two. 24px each, so the grid is its own measure and the row needs no
-   --field-w of its own. The six columns are declared on the role="row" the markup now draws, and
-   the cell is a flex box so the button's own baseline cannot lengthen the row. */
+/* Twelve swatches, six by two. 24px each, so the grid needs no --field-w of its own; the six
+   columns sit on the role="row" the markup draws, and the flex cell keeps a baseline out of it. */
 .color-swatches { display: flex; flex-direction: column; gap: 6px; }
 .color-swatch-row { display: grid; grid-template-columns: repeat(6, 24px); gap: 6px; }
 .color-swatch-cell { display: flex; }

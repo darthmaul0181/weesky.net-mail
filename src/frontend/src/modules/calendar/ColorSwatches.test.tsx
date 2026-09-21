@@ -40,6 +40,14 @@ describe('ColorSwatches', () => {
       .toEqual(['0', ...Array<string>(11).fill('-1')])
   })
 
+  // The stop opens where the state is: a dialog reopened on Coral must not offer Blue to Tab.
+  it('puts the tab stop on the picked colour', () => {
+    mount(CALENDAR_COLORS[3])
+
+    expect(screen.getAllByRole('button').map(button => button.getAttribute('tabindex')))
+      .toEqual(['-1', '-1', '-1', '0', ...Array<string>(8).fill('-1')])
+  })
+
   it('walks the grid with the arrow keys', async () => {
     mount()
     swatch('Blue').focus()
