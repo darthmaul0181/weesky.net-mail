@@ -4,8 +4,7 @@ import type {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  DEFAULT_ROW_ACTIONS, groupConversationsOf, requestSizeOf, rowActionsOf, showPreviewOf,
-  usePreferences,
+  DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
 } from '../../../hooks/usePreferences'
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
@@ -186,19 +185,16 @@ export default function MessageList(
           onSelect: setSearchPage,
         },
         streaming: null,
+        // Results are never threaded, whatever the grouping setting says: one hit, one row.
+        rowTotal: searchQuery.data?.total ?? 0,
       }
     : list
-  const { groups, messages, total, isLoading, isError, paging, streaming } = view
+  const { groups, messages, total, rowTotal, isLoading, isError, paging, streaming } = view
 
   // aria-rowindex is 1-based over the whole folder, never over the loaded slice: the pages behind
   // this one hold exactly `pageSize` rows each, since `expanded` resets with the page. Streaming
   // loads from the folder's first row, so its own offset is nothing.
   const rowOffset = (paging?.page ?? 0) * pageSize
-  // A row is a message only while conversations are not grouped: a collapsed thread stands for
-  // several, and an unfolded one draws rows the folder total never counted. -1 is the honest
-  // answer there. Search results are never threaded, whatever the setting says.
-  const grouped = preferences ? groupConversationsOf(preferences) : false
-  const rowCount = grouped && !searching ? -1 : total
   const scrollRef = useRef<HTMLDivElement>(null)
   const { pull, armed } = usePullToRefresh(scrollRef, () => onRefresh?.())
   const setFlags = useSetFlags(onNotify)
@@ -243,6 +239,11 @@ export default function MessageList(
     if (next.has(key)) next.delete(key); else next.add(key)
     return next
   })
+  // aria-rowcount counts rows, and an unfolded conversation draws members the folder's own count
+  // never knew about — the pages behind this one hold none, since `expanded` resets with the page.
+  const unfolded = groups.reduce((extra, group) =>
+    extra + (group.messages.length > 1 && expanded.has(group.key) ? group.messages.length : 0), 0)
+  const rowCount = rowTotal < 0 ? -1 : rowTotal + unfolded
   const selectedUids = loadedUids.filter(uid => selection.has(uid))
   const count = selectedUids.length
   const allSelected = count > 0 && count === messages.length
@@ -452,7 +453,8 @@ export default function MessageList(
     if (unread) classes.push('is-unread')
     // The collapsed row stands for every member, so it highlights whichever of them is open —
     // reading an older member then collapsing must not leave the list with no selected row.
-    if (selectedUid !== null && rowUids.includes(selectedUid)) classes.push('is-selected')
+    const open = selectedUid !== null && rowUids.includes(selectedUid)
+    if (open) classes.push('is-selected')
     if (draggingUids?.includes(message.uid)) classes.push('is-dragging')
 
     const from = drafts
@@ -649,6 +651,9 @@ export default function MessageList(
           className="message-row-content"
           role="gridcell"
           tabIndex={-1}
+          // Where the grid already is, so Tab into the list lands on a cell Enter means something
+          // on rather than on the first row's checkbox.
+          aria-current={open || undefined}
           aria-label={label}
           onKeyDown={event => onRowKey(event, message)}
         >
@@ -687,8 +692,20 @@ export default function MessageList(
             </>
           )}
         </div>
-        <div className="message-row-flag" role="gridcell">{star}</div>
-        <div className="message-row-actions" role="gridcell">{cluster}</div>
+        {/* Each skin's own drawn order, because that is the order the arrows walk: the wide row
+            ends on the star, the narrow one carries it top-right above the cluster. The other way
+            round, revealing the actions moved the star out from under the pointer aimed at it. */}
+        {wide ? (
+          <>
+            <div className="message-row-actions" role="gridcell">{cluster}</div>
+            <div className="message-row-flag" role="gridcell">{star}</div>
+          </>
+        ) : (
+          <>
+            <div className="message-row-flag" role="gridcell">{star}</div>
+            <div className="message-row-actions" role="gridcell">{cluster}</div>
+          </>
+        )}
       </Row>
       </div>
     )

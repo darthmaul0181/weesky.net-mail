@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import MessageList from './MessageList'
 import type { MailFolderNode } from '../api/mailTypes'
 import { fireTouch as dispatchTouch, settle } from '../../../test-utils'
+import { focusablesIn, tabbablesIn } from '../../../lib/layerStack'
 import { DRAG_MIME, serializeDrag } from './dragMessages'
 import type { RowExit } from './useRowExit'
 
@@ -84,6 +85,7 @@ function pagedState(paging = {}, overrides = {}) {
   const state = {
     messages: sample,
     total: 2,
+    rowTotal: 2,
     isLoading: false,
     isError: false,
     paging: { page: 0, lastPage: 0, onSelect: vi.fn(), ...paging },
@@ -119,10 +121,9 @@ function renderList(props: Partial<ListProps> = {}, preferencesOverride?: Record
   return render(<MessageList {...defaultListProps()} {...props} />, { wrapper })
 }
 
-/* The row is a `role="row"` carrying four gridcells, and its accessible name lives on the content
-   cell -- which is also the open target. Two helpers, because a control in another cell is not
-   inside that one. The select cell is named by the checkbox it holds, which names the sender too,
-   so a sender alone matches two cells. */
+/* The row's name lives on its content cell, which is also the open target; a control in another
+   cell is not inside it. The select cell is named by the checkbox it holds, which names the sender
+   too, so a sender alone matches two cells. */
 function contentOf(name: RegExp): HTMLElement {
   const cell = screen.getAllByRole('gridcell', { name })
     .find(one => one.classList.contains('message-row-content'))
@@ -130,7 +131,7 @@ function contentOf(name: RegExp): HTMLElement {
   return cell
 }
 const rowOf = (name: RegExp) => contentOf(name).closest('.message-row') as HTMLElement
-const stopsIn = (grid: HTMLElement) => Array.from(grid.querySelectorAll('[tabindex="0"]'))
+const stopsIn = tabbablesIn
 
 function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
@@ -143,6 +144,20 @@ const roleTree: MailFolderNode[] = [
   folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
   folderNode({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
   folderNode({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+]
+
+// Newest first, as the backend sends them; the key is the oldest member's uid.
+const thread = [
+  {
+    uid: 30, subject: 'Re: quote', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
+    date: '2026-07-18T09:00:00Z', seen: true, flagged: false, answered: false,
+    hasAttachments: false, size: 100, preview: 'newest body',
+  },
+  {
+    uid: 10, subject: 'quote', fromName: 'Bob', fromAddress: 'bob@x.be',
+    date: '2026-07-17T09:00:00Z', seen: false, flagged: true, answered: false,
+    hasAttachments: true, size: 90, preview: 'oldest body',
+  },
 ]
 
 const wideSample = [
@@ -533,13 +548,15 @@ describe('the row controls', () => {
     expect(contentOf(/bob@x\.be/i).getAttribute('aria-label')).not.toMatch(/unread/i)
   })
 
-  // An inner button fires Enter itself; without the target guard the row would open behind it.
-  it('does not open the row when a control inside it takes the key', () => {
+  // The thread toggle is the one control still inside the content cell, so it is the one whose
+  // Enter would reach the cell's own handler: without the target guard the row opens behind it.
+  it('does not open the row when a control inside the cell takes the key', () => {
     const onSelect = vi.fn()
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages: thread, groups: [{ key: 10, messages: thread }], total: 2 }))
     renderList({ onSelect })
 
-    fireEvent.keyDown(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Star' }),
-      { key: 'Enter' })
+    fireEvent.keyDown(screen.getByLabelText('Expand conversation'), { key: 'Enter' })
 
     expect(onSelect).not.toHaveBeenCalled()
   })
@@ -1912,20 +1929,6 @@ describe('choosable row actions', () => {
 /** The grouped list: one row per conversation, newest member rendered, aggregate state, and the
     collapsed row's controls acting on every member at once. */
 describe('conversation rows', () => {
-  // Newest first, as the backend sends them; the key is the oldest member's uid.
-  const thread = [
-    {
-      uid: 30, subject: 'Re: quote', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
-      date: '2026-07-18T09:00:00Z', seen: true, flagged: false, answered: false,
-      hasAttachments: false, size: 100, preview: 'newest body',
-    },
-    {
-      uid: 10, subject: 'quote', fromName: 'Bob', fromAddress: 'bob@x.be',
-      date: '2026-07-17T09:00:00Z', seen: false, flagged: true, answered: false,
-      hasAttachments: true, size: 90, preview: 'oldest body',
-    },
-  ]
-
   const groupedState = () =>
     pagedState({}, { messages: thread, groups: [{ key: 10, messages: thread }], total: 2 })
 
@@ -2160,9 +2163,8 @@ describe('conversation rows', () => {
 /* -- The list as a grid ---------------------------------------------------------------------- */
 
 /* The row used to be one `role="button"` with `tabIndex={0}`: fifty messages cost fifty Tab
-   presses, and because that role is children-presentational a reader was told the row was a single
-   button and never announced the checkbox, the star or the actions plainly on screen. It is now a
-   `role="row"` of four `role="gridcell"`s walked by `useGridNav`. */
+   presses, and that role being children-presentational, a reader never heard of the checkbox, the
+   star or the actions. It is four `role="gridcell"`s in a `role="row"` now, walked by useGridNav. */
 describe('the list as a grid', () => {
   const three = [
     ...sample,
@@ -2170,19 +2172,6 @@ describe('the list as a grid', () => {
       uid: 3, subject: 'Third', fromName: 'Carol Dupont', fromAddress: 'carol@x.be',
       date: '2026-07-16T09:00:00Z', seen: true, flagged: false, answered: false,
       hasAttachments: false, size: 80, preview: '',
-    },
-  ]
-
-  const thread = [
-    {
-      uid: 30, subject: 'Re: quote', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
-      date: '2026-07-18T09:00:00Z', seen: true, flagged: false, answered: false,
-      hasAttachments: false, size: 100, preview: 'newest body',
-    },
-    {
-      uid: 10, subject: 'quote', fromName: 'Bob', fromAddress: 'bob@x.be',
-      date: '2026-07-17T09:00:00Z', seen: false, flagged: true, answered: false,
-      hasAttachments: true, size: 90, preview: 'oldest body',
     },
   ]
 
@@ -2198,7 +2187,7 @@ describe('the list as a grid', () => {
   // Blocks of rows arrive as the reader scrolls, so APG asks for the count and the index: a row on
   // page 3 of 50 is the folder's 101st, not the slice's first.
   it('is a grid whose rows carry their index in the folder', async () => {
-    mocks.useMessageList.mockReturnValue(pagedState({ page: 2 }, { total: 120 }))
+    mocks.useMessageList.mockReturnValue(pagedState({ page: 2 }, { total: 120, rowTotal: 120 }))
     renderList()
 
     // The offset comes from the page size, which is a preference: awaited, never settled.
@@ -2212,8 +2201,8 @@ describe('the list as a grid', () => {
   it('offers one tab stop for the whole list', async () => {
     renderList()
 
-    // Six widgets a row -- the box, the content cell, the star and three actions -- behind one stop.
-    await waitFor(() => expect(grid().querySelectorAll('[tabindex="-1"]')).toHaveLength(11))
+    // Six widgets a row: the box, the content cell, the star and three actions.
+    await waitFor(() => expect(focusablesIn(grid())).toHaveLength(12))
     expect(stopsIn(grid())).toHaveLength(1)
   })
 
@@ -2243,7 +2232,7 @@ describe('the list as a grid', () => {
     expect(within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete' })).toHaveFocus()
   })
 
-  it('announces the row actions, which role=button used to hide', async () => {
+  it('puts each control in a gridcell of its own, which role=button swallowed', async () => {
     renderList()
     await settle()
     const row = rowOf(/alice martin/i)
@@ -2337,21 +2326,94 @@ describe('the list as a grid', () => {
     expect(screen.getByLabelText('Collapse conversation')).toBeInTheDocument()
   })
 
-  // useRowExit holds the row on screen for 300ms and then it goes; the stop must not go with it,
-  // and the browser's own sequential-navigation point is no help -- Tab would restart at the top.
+  /* A delete from the keyboard is two steps: useRowExit disables the row's controls for 300ms and
+     only then unmounts it. The stop leaves the disabled button at the first, the focus leaves the
+     row at the second — otherwise Tab restarts at the top of the folder. */
   it('hands the tab stop to a live row when a departing row unmounts', async () => {
-    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: three, total: 3 }))
-    const { rerender } = renderList()
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: three, total: 3, rowTotal: 3 }))
+    const held: RowExit = { departing: new Set(), depart: (_uids, fire) => fire() }
+    const { rerender } = renderList({ rowExit: held })
     await settle()
-    contentOf(/bob@x\.be/i).focus()
-    expect(contentOf(/bob@x\.be/i)).toHaveAttribute('tabindex', '0')
+    const remove = within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Delete' })
+    remove.focus()
+    expect(remove).toHaveAttribute('tabindex', '0')
 
+    // Step one: the row is leaving, so its star and its actions go disabled under the focus.
+    rerender(<MessageList {...defaultListProps()}
+      rowExit={{ departing: new Set([1]), depart: held.depart }} />)
+
+    await waitFor(() => expect(contentOf(/bob@x\.be/i)).toHaveAttribute('tabindex', '0'))
+    expect(remove).toBeDisabled()
+
+    // Step two: 300ms later the row unmounts, and the stop AND the focus go next door.
     mocks.useMessageList.mockReturnValue(
-      pagedState({}, { messages: [three[0], three[2]], total: 2 }))
-    rerender(<MessageList {...defaultListProps()} />)
+      pagedState({}, { messages: [three[0], three[2]], total: 2, rowTotal: 2 }))
+    rerender(<MessageList {...defaultListProps()} rowExit={NOW} />)
 
-    await waitFor(() => expect(stopsIn(grid())).toHaveLength(1))
-    expect(contentOf(/carol dupont/i)).toHaveAttribute('tabindex', '0')
+    await waitFor(() => expect(contentOf(/carol dupont/i)).toHaveFocus())
+    expect(stopsIn(grid())).toHaveLength(1)
+  })
+
+  // Tab into the list has to land where Enter means something. With no message open the first
+  // checkbox is right; with one open, the row showing it is.
+  it('opens the tab stop on the row already open in the reader', async () => {
+    renderList({ selectedUid: 1 })
+    await settle()
+
+    expect(contentOf(/bob@x\.be/i)).toHaveAttribute('aria-current', 'true')
+    expect(contentOf(/alice martin/i)).not.toHaveAttribute('aria-current')
+    expect(stopsIn(grid())).toEqual([contentOf(/bob@x\.be/i)])
+  })
+
+  it('opens it on the first checkbox when no message is open', async () => {
+    renderList()
+    await settle()
+
+    expect(stopsIn(grid())).toEqual([within(rowOf(/alice martin/i)).getByRole('checkbox')])
+  })
+
+  /* Cells are walked in the order they are written, so that has to be the order they are drawn in:
+     the star sits last on a wide row and above the cluster on a narrow one. The other way round,
+     revealing the actions moved the star 90px left and Delete took the corner it was aimed at. */
+  it('writes the narrow row\'s cells in the order they are drawn', async () => {
+    renderList()
+    await settle()
+
+    expect(within(rowOf(/alice martin/i)).getAllByRole('gridcell').map(cell => cell.className))
+      .toEqual(['message-row-select', 'message-row-content',
+        'message-row-flag', 'message-row-actions'])
+  })
+
+  it('writes the wide row\'s cells in the order they are drawn', async () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: wideSample }))
+    renderList({ wide: true })
+    await settle()
+
+    expect(within(rowOf(/wide row test/i)).getAllByRole('gridcell').map(cell => cell.className))
+      .toEqual(['message-row-select', 'message-row-content',
+        'message-row-actions', 'message-row-flag'])
+  })
+
+  // A page of conversations is paged in conversations, and the server counts them: a reader told
+  // "-1 rows" where the number was there to be had is the worse answer.
+  it('counts the grid in rows, which a grouped folder counts in conversations', async () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, {
+      messages: thread, groups: [{ key: 10, messages: thread }], total: 240, rowTotal: 120,
+    }))
+    renderList()
+
+    await waitFor(() => expect(grid()).toHaveAttribute('aria-rowcount', '120'))
+
+    // Unfolding draws two rows the folder's own count never knew about.
+    fireEvent.click(screen.getByLabelText('Expand conversation'))
+    expect(grid()).toHaveAttribute('aria-rowcount', '122')
+  })
+
+  it('says -1 only where the row total is not knowable', async () => {
+    mocks.useMessageList.mockReturnValue(pagedState({}, { total: 2, rowTotal: -1 }))
+    renderList()
+
+    await waitFor(() => expect(grid()).toHaveAttribute('aria-rowcount', '-1'))
   })
 
   it('still clears the selection on Escape', async () => {
@@ -2362,7 +2424,7 @@ describe('the list as a grid', () => {
     const cell = contentOf(/alice martin/i)
     cell.focus()
 
-    // The grid must not spend Escape: the list's own handler reads defaultPrevented before acting.
+    // The grid answers no key but the arrows, Home and End, so Escape reaches the list unspent.
     expect(fireEvent.keyDown(cell, { key: 'Escape' })).toBe(true)
 
     expect(screen.queryByText('1 selected')).not.toBeInTheDocument()

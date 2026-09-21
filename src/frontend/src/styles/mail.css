@@ -559,11 +559,12 @@
 .message-row.is-line .message-row-flag,
 .message-row.is-line .message-row-actions { display: flex; align-self: center; }
 
-/* The cluster is `display: none` at rest, so before it had a cell of its own it was no flex item
-   and cost the line no gap. Its cell always is one: measured at 900px, the empty box took the
-   row's own 8px and moved the star 8px in. The cell gives that gap back and the cluster pays it
-   again when it is drawn, so the line is what it always was in both states. */
-.message-row.is-line .message-row-actions { margin-inline-start: -8px; }
+/* A cell drawing nothing is still a flex item costing the row's 8px gap: measured at 900px, the
+   cluster's cell moved the star 8px in, and a cross-folder row — no box, no star, no actions — the
+   content 8px right. The first cell cancels the gap after it, the others the gap before. */
+.message-row.is-line .message-row-select:empty { margin-inline-end: -8px; }
+.message-row.is-line .message-row-actions,
+.message-row.is-line .message-row-flag:empty { margin-inline-start: -8px; }
 .message-row.is-line .message-row-cluster { margin-inline-start: 8px; }
 
 .message-row-top { display: flex; align-items: baseline; gap: 8px; }
@@ -724,12 +725,9 @@
   padding-right: calc(var(--row-actions) * 28px + 4px);
 }
 
-/* The grid keeps one tab stop, and it may sit on a cluster button: `display: none` would take that
-   stop out of the tab order altogether and the list would become unreachable from the keyboard.
-   The row holding it therefore shows its actions exactly as hover does, wherever the pointer is.
-   Specificity rather than source order — the touch block at the foot of this file restates the two
-   revealing selectors at (0,3,0) and sits later, so these have to out-weigh it rather than follow
-   it. */
+/* The grid's one tab stop may sit on a cluster button, and a `display: none` button is in no tab
+   order at all, so the row holding it shows its actions exactly as hover does. Specificity rather
+   than order: the touch block below restates the revealing selectors at (0,3,0) and sits later. */
 .message-row:has(.message-row-cluster .row-btn[tabindex="0"]) .message-row-cluster { display: flex; }
 .message-row.is-line:has(.message-row-cluster .row-btn[tabindex="0"]) .message-row-date {
   display: none;
