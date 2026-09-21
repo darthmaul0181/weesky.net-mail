@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { useLayoutEffect, useRef, type AriaAttributes } from 'react'
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -192,6 +192,43 @@ describe('useGridNav', () => {
     expect(widget('C2')).toHaveFocus()
     press('ArrowUp')
     expect(widget('B2')).toHaveFocus()
+  })
+
+  /* A consumer reveals a widget its stylesheet hides at rest on `[tabindex="0"]` — the mail row's
+     cluster, the contact tile's. That attribute is the hook's to write, so an arrow aimed at a
+     hidden widget has to write it BEFORE it focuses: `.focus()` on one is a silent no-op, no
+     `focusin` follows, and ArrowDown is a dead key for anyone parked on a cluster. jsdom focuses a
+     hidden element happily, so the attribute's order is what a test here can see, not the refusal. */
+  it('arms the target with the tab stop before it focuses it', () => {
+    render(<Grid rows={THREE} />)
+    widget('A2').focus()
+    let armed: string | null = 'never focused'
+    const target = widget('B2')
+    const spy = vi.spyOn(target, 'focus').mockImplementation(function (this: HTMLElement) {
+      armed = target.getAttribute('tabindex')
+      HTMLElement.prototype.focus.call(this)
+    })
+
+    press('ArrowDown')
+
+    expect(armed).toBe('0')
+    spy.mockRestore()
+  })
+
+  // And rolls it back when the widget refuses after all, or the arrow would leave the stop on
+  // something nothing can focus — the very state the reveal exists to prevent.
+  it('leaves the stop where it was when the target refuses focus', () => {
+    render(<Grid rows={THREE} />)
+    widget('A2').focus()
+    const target = widget('B2')
+    const spy = vi.spyOn(target, 'focus').mockImplementation(() => {})
+
+    press('ArrowDown')
+
+    expect(widget('A2')).toHaveAttribute('tabindex', '0')
+    expect(target).toHaveAttribute('tabindex', '-1')
+    expect(widget('A2')).toHaveFocus()
+    spy.mockRestore()
   })
 
   it('clamps to the last widget when the next row is shorter', () => {

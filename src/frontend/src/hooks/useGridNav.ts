@@ -199,7 +199,14 @@ export function useGridNav({ ref }: GridNavOptions): void {
       const at = cellOf(rows, document.activeElement)
       if (!at) return
       event.preventDefault()
-      widgetAt(rows, move(rows, at)).focus()
+      const target = widgetAt(rows, move(rows, at))
+      // The stop moves first, and back if focus refuses it: a consumer that reveals a hidden widget
+      // on `[tabindex="0"]` arms the arrow the way it already arms Tab, and `.focus()` on a widget
+      // nothing draws is a silent no-op that would strand the walk on a dead key.
+      const held = stop.current
+      point(target)
+      target.focus()
+      if (document.activeElement !== target && held) point(held)
     }
 
     // Rows and widgets come and go without a render of the grid itself — a hover cluster, a
