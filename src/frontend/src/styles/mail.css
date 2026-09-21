@@ -1666,7 +1666,7 @@ textarea.compose-editor {
 
 /* The rows are index.css's shared pair, which reads the two lengths declared here. */
 .compose-swatches {
-  display: flex; flex-direction: column; gap: 4px; --swatch-size: 20px; --swatch-gap: 4px;
+  display: flex; flex-direction: column; --swatch-size: 20px; --swatch-gap: 4px; gap: var(--swatch-gap);
 }
 
 .compose-swatches .colour-swatch {

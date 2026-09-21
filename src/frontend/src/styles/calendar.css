@@ -445,7 +445,7 @@
 /* Twelve swatches, six by two. 24px each, so the grid needs no --field-w of its own; the rows
    are index.css's shared pair, which reads the two lengths declared here. */
 .color-swatches {
-  display: flex; flex-direction: column; gap: 6px; --swatch-size: 24px; --swatch-gap: 6px;
+  display: flex; flex-direction: column; --swatch-size: 24px; --swatch-gap: 6px; gap: var(--swatch-gap);
 }
 .color-swatches .colour-swatch {
   width: var(--swatch-size); height: var(--swatch-size); border: 0; border-radius: 50%;

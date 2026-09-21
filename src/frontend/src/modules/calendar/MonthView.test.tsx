@@ -259,7 +259,7 @@ describe('MonthView', () => {
 
     /* The click's own rule, which Enter has to keep: the bubble holds no trap, so Shift+Tab
        comes back to the grid with it still standing, and Enter drew a draft on top of it. */
-    it('spends Enter on the standing bubble rather than creating under it', () => {
+    it('refuses Enter while a bubble stands rather than creating under it', () => {
       const createAt = vi.fn()
       month([dated('a', 'One', 9)], { createAt }, { previewOpen: true })
       cell('17 September 2026').focus()

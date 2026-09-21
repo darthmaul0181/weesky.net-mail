@@ -819,10 +819,10 @@ export default function CalendarLayout() {
         </div>
       )
       : (
-        // Keyed on the month: a chevron re-keys five of the six rows, and the hook would recover
-        // its lost stop next door — row 0 at the old weekday, an outside day of the month just
-        // left, where Enter then created. A remount runs its opening `repoint` on the new grid.
-        <MonthView key={anchor.slice(0, 7)} previewOpen={preview !== null}
+        // Keyed on the anchor, so the stop follows it through either door: a chevron re-keys five
+        // rows and the hook recovered next door — an outside day, where Enter created in the month
+        // just left — while a mini-month pick moves only `aria-selected`, which nothing observes.
+        <MonthView key={anchor} previewOpen={preview !== null}
           selectedKey={selectedKey} onOpen={openPreview} onOpenEditor={openFromChip} />
       )
     : view === 'list'

@@ -15,8 +15,8 @@ export interface MonthViewProps {
   onOpen(o: Occurrence, anchor: HTMLElement): void
   onOpenEditor(o: Occurrence): void
   selectedKey?: string
-  /** A click or an Enter on an empty cell is spent closing an open bubble, the hour grid's
-      rule: the bubble has no trap, so Shift+Tab comes back to the grid with it still standing. */
+  /** A click on an empty cell is spent closing an open bubble; an Enter is refused for the same
+      reason and the bubble stands, since the bubble has no trap and Shift+Tab comes back here. */
   previewOpen?: boolean
 }
 

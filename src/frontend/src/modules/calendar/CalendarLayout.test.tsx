@@ -1025,6 +1025,21 @@ describe('CalendarLayout', () => {
     expect(stops[0].querySelector('.month-day-number')).toHaveTextContent('16')
   })
 
+  // The other door onto the anchor, and the one a month key would have missed: picking a day in the
+  // mini-month moves `aria-selected` alone, which no mutation the hook observes carries.
+  it('lands the keyboard on the anchor after a same-month pick', async () => {
+    const router = renderAt('/calendar?view=month&date=2026-09-16')
+    await screen.findByRole('button', { name: 'Next period' })
+
+    const mini = document.querySelector('.mini-month') as HTMLElement
+    await userEvent.click(within(mini).getByRole('button', { name: 'September 24, 2026' }))
+    await waitFor(() => expect(params(router).get('date')).toBe('2026-09-24'))
+
+    const stops = document.querySelectorAll('.month-view [tabindex="0"]')
+    expect(stops).toHaveLength(1)
+    expect(stops[0].querySelector('.month-day-number')).toHaveTextContent('24')
+  })
+
   it('draws the view the parameters name', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
     renderAt('/calendar?view=month&date=2026-09-16')
