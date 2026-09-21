@@ -166,11 +166,12 @@ export function useGridNav({ ref }: GridNavOptions): void {
 
     // Rows and widgets come and go without a render of the grid itself — a hover cluster, a
     // filtered row, a streamed block — so the invariant is kept against the DOM, not the render.
-    // `disabled` is watched too: a native that goes disabled is focusable by nothing.
+    // `disabled` is watched too: a native that goes disabled is focusable by nothing. `hidden`
+    // is not — no part of the stack has ever read it as gone, so a hidden widget keeps the stop.
     repoint()
     const observer = new MutationObserver(repoint)
     observer.observe(grid, {
-      childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden'],
+      childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'],
     })
     grid.addEventListener('keydown', onKeyDown)
     grid.addEventListener('focusin', onFocusIn)
