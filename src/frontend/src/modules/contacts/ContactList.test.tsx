@@ -427,7 +427,7 @@ describe('the list as a grid', () => {
     expect(stopsIn(grid())).toHaveLength(1)
   })
 
-  it('puts each control in a gridcell of its own, which role=button swallowed', () => {
+  it('puts every control in a gridcell, the pencil and the trash sharing one', () => {
     setup()
     const row = rowOf('a')
     // ARIA lets a row own nothing but cells, so every focusable part sits in one of its own.

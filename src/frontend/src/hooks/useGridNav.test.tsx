@@ -194,11 +194,9 @@ describe('useGridNav', () => {
     expect(widget('B2')).toHaveFocus()
   })
 
-  /* A consumer reveals a widget its stylesheet hides at rest on `[tabindex="0"]` — the mail row's
-     cluster, the contact tile's. That attribute is the hook's to write, so an arrow aimed at a
-     hidden widget has to write it BEFORE it focuses: `.focus()` on one is a silent no-op, no
-     `focusin` follows, and ArrowDown is a dead key for anyone parked on a cluster. jsdom focuses a
-     hidden element happily, so the attribute's order is what a test here can see, not the refusal. */
+  /* A consumer reveals a widget hidden at rest on `[tabindex="0"]`, and that attribute is the
+     hook's: an arrow has to write it BEFORE focusing, or `.focus()` is a no-op, no `focusin` follows
+     and the key is dead. jsdom focuses hidden elements, so only the order is visible here. */
   it('arms the target with the tab stop before it focuses it', () => {
     render(<Grid rows={THREE} />)
     widget('A2').focus()

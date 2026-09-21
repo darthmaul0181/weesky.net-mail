@@ -12,7 +12,10 @@ interface Cell { row: number; col: number }
 /** Where one key goes, before any clamping: `widgetAt` is what brings it back inside the grid. */
 type Move = (rows: HTMLElement[][], at: Cell) => Cell
 
-const ROW = '[role="row"]'
+/** Exported for `probes/contact-tile-grid.html`, whose bench times `rowsIn`'s own two loops:
+    a selector spelled twice there would stop matching the day this one moved, and the bench
+    would go on reporting numbers for a grid it had found none of. */
+export const ROW = '[role="row"]'
 const END = Infinity
 
 const last = <T>(list: T[]) => list.length - 1
@@ -122,18 +125,16 @@ export function useGridNav({ ref }: GridNavOptions): void {
   // Where focus last was, which is not where the stop is: a control that goes disabled hands the
   // stop on while focus stays on it, so the removal that follows has to know what it is taking.
   const focused = useRef<HTMLElement | null>(null)
-  // The rows the arrows walk, built once per change instead of once per keypress: the observer
-  // below watches exactly what can invalidate them, so a keydown has no walk of its own left. At
-  // 2000 contacts that walk was 20ms, and a filter keystroke used to run two of them.
-  const matrix = useRef<HTMLElement[][] | null>(null)
 
   useLayoutEffect(() => {
     const grid = ref.current
     if (!grid) return undefined
 
-    // Dropped by the observer and by nothing else, so the cache can never hold a grid the hook was
-    // told about and did not act on — `repoint` already answers to that same set of changes.
-    const rowsNow = () => (matrix.current ??= rowsIn(grid))
+    // The rows the arrows walk, built once per change rather than once per keypress — an arrow was
+    // 19ms of walk at 2000 rows. Dropped by the observer and by nothing else, which is the same set
+    // of changes `repoint` answers to; local to the effect, so no re-run can inherit another grid's.
+    let matrix: HTMLElement[][] | null = null
+    const rowsNow = () => (matrix ??= rowsIn(grid))
 
     const tab = (widget: HTMLElement, value: number) => {
       const want = String(value)
@@ -192,7 +193,7 @@ export function useGridNav({ ref }: GridNavOptions): void {
     // The stop's recovery is an attribute; the focus the removal took with it is not, and nothing
     // else gives it back — the browser drops it on `<body>` and Tab would restart at the top.
     const onMutation = (records: MutationRecord[]) => {
-      matrix.current = null
+      matrix = null
       const lost = focused.current
       const taken = !!lost && records.some(record => Array.from(record.removedNodes)
         .some(node => node.contains(lost)))
@@ -215,7 +216,7 @@ export function useGridNav({ ref }: GridNavOptions): void {
       const held = stop.current
       point(target)
       target.focus()
-      if (document.activeElement !== target && held) point(held)
+      if (document.activeElement !== target) point(held ?? widgetAt(rows, at))
     }
 
     // Rows and widgets come and go without a render of the grid itself — a hover cluster, a
@@ -235,7 +236,6 @@ export function useGridNav({ ref }: GridNavOptions): void {
       grid.removeEventListener('focusin', onFocusIn)
       grid.removeEventListener('focusout', onFocusOut)
       focused.current = null
-      matrix.current = null
     }
   }, [ref])
 }

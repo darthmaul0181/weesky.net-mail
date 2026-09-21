@@ -180,8 +180,9 @@
     // two loops useGridNav runs over them, `rowsIn` and `repoint`'s rewrite.
     import { focusablesIn } from '/src/lib/layerStack.ts'
     import { reachable } from '/src/hooks/useLayer.ts'
+    import { ROW } from '/src/hooks/useGridNav.ts'
 
-    const rowsIn = grid => Array.from(grid.querySelectorAll('[role="row"]'))
+    const rowsIn = grid => Array.from(grid.querySelectorAll(ROW))
       .map(row => focusablesIn(row).filter(reachable))
       .filter(widgets => widgets.length > 0)
 
@@ -219,6 +220,7 @@
       void grid.offsetHeight
 
       const rows = rowsIn(grid)
+      if (rows.length !== n) throw new Error(`the bench built ${n} rows and found ${rows.length}`)
       const widgets = rows.flat()
       const firstWidget = rows[0][1]
       const lastWidget = rows[rows.length - 1][1]
