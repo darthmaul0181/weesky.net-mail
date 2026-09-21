@@ -83,7 +83,8 @@ export default function WeekView({
           own and deliberately not this one. */}
       <div className="week-head-table" role="table" aria-label={t('views.dayHeaders')}>
         <div className="week-head" role="row" style={{ gridTemplateColumns: template }}>
-          <div className="week-head-gutter" role="columnheader">
+          <div className="week-head-gutter" role="columnheader"
+            aria-label={t('views.weekFull', { number: weekNumberOf(days[0], rules) })}>
             {t('views.weekShort', { number: weekNumberOf(days[0], rules) })}
           </div>
           {days.map(day => (

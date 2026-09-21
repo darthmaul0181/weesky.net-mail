@@ -1,18 +1,17 @@
 import type { TFunction } from 'i18next'
-import { formatLongDay, formatLongDayRange, formatTime } from './calendarLocale'
+import { dateLocaleOf, formatLongDay, formatLongDayRange, formatTime } from './calendarLocale'
 import type { Occurrence } from './calendarTypes'
 import { wallClockOf } from './multiDay'
 import { addDays, utcOfLocalTime, type PlainDate } from './plainDate'
 
-/** How a screen reads an instant: the zone it is read in, and what `Intl` needs to write it.
-    One object rather than five arguments — every caller holds the module's context, and
-    `locale` is `dateLocaleOf(lang, region)`, grafted by the caller that already needed it. */
+/** How a screen reads an instant: the zone it is read in, and what `Intl` needs to write it. One
+    object rather than four arguments, every caller holding the module's context — and the date
+    locale is grafted here, so no caller can hand in one its own language disagrees with. */
 export interface WhenFormat {
   tz: string
   lang: string
   region: string
   cycle: 'h12' | 'h23'
-  locale: string
 }
 
 /** The two ends an occurrence spans, whichever shape its time came in — `null` when the server
@@ -33,17 +32,13 @@ export function daysOf(o: Occurrence, tz: string): [PlainDate, PlainDate] | null
 
 /**
  * What an occurrence says about when it happens, in its two parts: the day or the days it spans,
- * then its hours or that it takes the whole day. The bubble prints them with a dot between, and
- * a chip's accessible name with a comma — a chip's own day is carried by the column or the cell
- * it sits in, which is position, and position is not something a reader can hear.
- *
- * Two parts rather than three: a whole day of several days is its range and nothing else, a
- * single one says so, and a dated event whose clocks the server did not send says neither —
- * announcing "All day" for an event that has an hour is worse than saying nothing about it.
+ * then its hours or that it takes the whole day. The bubble prints them with a dot between, a
+ * chip's name with a comma — its own day being carried by position, which no reader can hear.
  */
 export function whenPartsOf(
-  o: Occurrence, { tz, lang, region, cycle, locale }: WhenFormat, t: TFunction<'calendar'>,
+  o: Occurrence, { tz, lang, region, cycle }: WhenFormat, t: TFunction<'calendar'>,
 ): string[] {
+  const locale = dateLocaleOf(lang, region)
   const span = daysOf(o, tz)
   const days = !span ? null : span[0] === span[1]
     ? formatLongDay(span[0], locale)
@@ -54,6 +49,9 @@ export function whenPartsOf(
     utcOfLocalTime(clock.day, clock.minute, tz), lang, cycle, tz, region)
   const readable = clocks?.every(clock => clock.day !== '' && Number.isFinite(clock.minute))
   const hours = !o.isAllDay && clocks && readable ? `${at(clocks[0])} – ${at(clocks[1])}` : null
+  // Two parts and not three: a whole day of several days is its range and nothing else, and a
+  // dated event whose clocks the server did not send says neither — "All day" for an event that
+  // has an hour is worse than silence. The namespace is spelled for `locales/keys.test.ts`.
   const allDay = o.isAllDay && (!span || span[0] === span[1])
     ? t('preview.allDay', { ns: 'calendar' }) : null
 

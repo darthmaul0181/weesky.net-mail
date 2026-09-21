@@ -61,18 +61,21 @@ function widgetAt(rows: HTMLElement[][], to: Cell): HTMLElement {
   return row[Math.min(Math.max(to.col, 0), last(row))]
 }
 
-/** The one place the key list lives, so nothing spends a key this does not answer. */
-function moveOf(event: KeyboardEvent): Move | null {
+/** The one place the key list lives, so nothing spends a key this does not answer. The widgets
+    of an entered cell are a grid one column wide, where a row holds no other end to reach: Home
+    and End name the cell's own two there, the way Control does in any grid. */
+function moveOf(event: KeyboardEvent, oneColumn = false): Move | null {
   if (event.altKey || event.metaKey || event.shiftKey) return null
+  const ends = event.ctrlKey || oneColumn
   switch (event.key) {
     case 'ArrowLeft': return (rows, at) => ({ row: at.row, col: at.col - 1 })
     case 'ArrowRight': return (rows, at) => ({ row: at.row, col: at.col + 1 })
     case 'ArrowUp': return (rows, at) => ({ row: at.row - 1, col: at.col })
     case 'ArrowDown': return (rows, at) => ({ row: at.row + 1, col: at.col })
-    case 'Home': return event.ctrlKey
+    case 'Home': return ends
       ? () => ({ row: 0, col: 0 })
       : (rows, at) => ({ row: at.row, col: 0 })
-    case 'End': return event.ctrlKey
+    case 'End': return ends
       ? rows => ({ row: last(rows), col: END })
       : (rows, at) => ({ row: at.row, col: END })
     default: return null
@@ -123,14 +126,9 @@ function yieldsToCaret(event: KeyboardEvent): boolean {
 }
 
 /**
- * Roving tabindex over a `role="grid"`: exactly one widget inside it is in the page tab sequence at
- * a time, the arrows, Home and End move between widgets, and Tab leaves the grid altogether.
- *
- * Focus lands on the widget a cell holds rather than on the cell, which is the pattern's own answer
- * wherever that widget needs no arrow key of its own — a checkbox, a star, a colour swatch. Under
- * `cellEntry` it is the other case: the cell is the stop, F2 enters it and Escape comes back. The
- * listener is the container's, never `document`'s: a grid is not a layer and must not compete with
- * the stack for Escape or Tab.
+ * Roving tabindex over a `role="grid"`: one tab stop at a time, the arrows and Home/End walking the
+ * widgets a cell holds — or, under `cellEntry`, the cells themselves, which F2 enters and Escape
+ * leaves. The listener is the container's: a grid is not a layer and must not compete for Escape.
  */
 export function useGridNav({ ref, cellEntry }: GridNavOptions): void {
   const stop = useRef<HTMLElement | null>(null)
@@ -251,7 +249,7 @@ export function useGridNav({ ref, cellEntry }: GridNavOptions): void {
       if (event.defaultPrevented) return
       const inside = entered()
       if (cellEntry && cellKey(event, inside)) return
-      const move = moveOf(event)
+      const move = moveOf(event, inside !== null)
       if (!move || yieldsToCaret(event)) return
       // Inside a cell the arrows walk what it holds, in the order it draws them — a column of one
       // widget each, since a cell stacks its widgets — and the stop stays on the cell itself.

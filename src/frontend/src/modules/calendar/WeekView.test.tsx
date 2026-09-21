@@ -54,6 +54,7 @@ describe('WeekView', () => {
 
     expect(headers).toHaveLength(8)
     expect(headers[0]).toHaveTextContent('W38')
+    expect(headers[0]).toHaveAccessibleName('Week 38')
     expect(headers[1]).toHaveAccessibleName(/Monday.*14 September/)
     expect(headers[3]).toHaveAccessibleName(/Wednesday.*16 September/)
   })

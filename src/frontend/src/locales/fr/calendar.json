@@ -31,6 +31,7 @@
     "allDay": "Journée entière",
     "now": "Heure actuelle",
     "weekShort": "S{{number}}",
+    "weekFull": "Semaine {{number}}",
     "monthGrid": "Mois de {{month}}",
     "dayCell_one": "{{date}}, {{count}} événement",
     "dayCell_other": "{{date}}, {{count}} événements",

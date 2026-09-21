@@ -12,7 +12,6 @@ import TrashIcon from '../../icons/TrashIcon.jsx'
 import UserIcon from '../../icons/UserIcon'
 import { useCalendar } from './calendarContext'
 import AttendeeStatusList from './AttendeeStatusList'
-import { dateLocaleOf } from './calendarLocale'
 import type { Calendar, Occurrence } from './calendarTypes'
 import { colorOf } from './occurrenceStyle'
 import { whenPartsOf } from './occurrenceWhen'
@@ -94,8 +93,7 @@ export default function EventPreview({
   // the picker (repeatIsExact false) all fall back to the same generic label as a save-in-flight.
   const recurrenceLabel = rule ? recurrenceSummary(rule, t, lang, region) : t('preview.repeatsGeneric')
 
-  const locale = dateLocaleOf(lang, region)
-  const line = whenPartsOf(occurrence, { tz, lang, region, cycle, locale }, t).join(' · ')
+  const line = whenPartsOf(occurrence, { tz, lang, region, cycle }, t).join(' · ')
 
   const title = occurrence.summary || t('views.noTitle')
   const color = colorOf(occurrence, calendarById)

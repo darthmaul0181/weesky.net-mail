@@ -89,6 +89,23 @@ function GuardedGrid() {
   )
 }
 
+/** The mail row's content cell: a cell that is the activation target itself and holds a widget
+    besides. Without `cellEntry` the two are stops alike. */
+function NestedGrid() {
+  const ref = useRef<HTMLDivElement>(null)
+  useGridNav({ ref })
+  return (
+    <div role="grid" aria-label="Cells" ref={ref}>
+      <div role="row">
+        <div role="gridcell"><button type="button">A1</button></div>
+        <div role="gridcell" tabIndex={-1} aria-label="Outer">
+          <button type="button">Inner</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** The other case the pattern names: a cell that is the activation target itself AND holds
     widgets of its own — a month's day cell, with its chips and its "+N more". */
 function CellGrid({ guard }: { guard?: boolean }) {
@@ -562,6 +579,20 @@ describe('useGridNav', () => {
     expect(widget('B2')).not.toHaveAttribute('tabindex', '0')
   })
 
+  /* The stop follows focus to the widget it landed on, never to the one around it: a row of this
+     shape is the mail list's own, where the content cell and its thread toggle are two stops. */
+  it('points the stop at a nested widget itself, not at the widget around it', () => {
+    render(<NestedGrid />)
+    const outer = screen.getByRole('gridcell', { name: 'Outer' })
+    widget('Inner').focus()
+
+    expect(widget('Inner')).toHaveAttribute('tabindex', '0')
+    expect(outer).toHaveAttribute('tabindex', '-1')
+
+    press('ArrowLeft')
+    expect(outer).toHaveFocus()
+  })
+
   /* The pattern's cell-entry mode, for the other case of the two: a cell holding SEVERAL widgets
      is entered rather than walked into, so the arrows stay on the cells and F2 is the way in. */
   describe('entering a cell', () => {
@@ -605,6 +636,18 @@ describe('useGridNav', () => {
       press('ArrowDown')
       expect(widget('Two')).toHaveFocus()
       press('ArrowUp')
+      expect(widget('One')).toHaveFocus()
+    })
+
+    // A one-column grid has no row to walk, so a key that names an end has to name the cell's.
+    it('takes Home and End to the ends of the cell it is inside', () => {
+      render(<CellGrid />)
+      cell('A1').focus()
+      press('F2')
+
+      expect(press('End')).toBe(false)
+      expect(widget('Two')).toHaveFocus()
+      press('Home')
       expect(widget('One')).toHaveFocus()
     })
 

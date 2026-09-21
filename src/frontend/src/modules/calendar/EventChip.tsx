@@ -84,7 +84,7 @@ export default function EventChip({
     // The day is in the column or the cell this sits in, which is position and nothing a reader
     // can hear: without it a month's forty chips all name themselves the same.
     'aria-label': t('views.chipLabel', {
-      title, when: whenPartsOf(occurrence, { tz, lang, region, cycle, locale }, t).join(', '),
+      title, when: whenPartsOf(occurrence, { tz, lang, region, cycle }, t).join(', '),
     }),
     'data-key': key,
     onPointerEnter: onHover && (() => onHover(key)),
