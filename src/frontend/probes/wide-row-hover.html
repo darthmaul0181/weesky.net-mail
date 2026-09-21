@@ -5,8 +5,8 @@
 
   It loads the REAL stylesheets (tokens + palette + mail.css) and builds the exact markup
   MessageList emits for a wide row: a `role="row"` of four gridcells — the box, the content cell
-  carrying from · line(subject+preview) · date, the star, then the cluster. The star sits BEFORE
-  the cluster since lot 2c: cells are walked in DOM order, so the ARIA order is the drawn one.
+  carrying from · line(subject+preview) · date, the cluster, then the star. Cells are walked in DOM
+  order, so each skin writes them in its own drawn order and the star still ends the line.
 
   The reveal that hover triggers is driven by the same CSS selectors as :focus-within
   (.message-row:hover / :focus-within), so focusing a button inside the row reproduces the hovered
@@ -45,15 +45,15 @@
               class="message-row-line-preview"> &mdash; and then a long inline preview that continues well past the visible width so the flex item has to clip it with an ellipsis rather than let it run under the buttons</span></span>
             <span class="message-row-date">Jul 19</span>
           </div>
-          <div class="message-row-flag" role="gridcell">
-            <button type="button" class="row-btn row-star" aria-label="Star"></button>
-          </div>
           <div class="message-row-actions" role="gridcell">
             <div class="message-row-cluster">
               <button type="button" class="row-btn" aria-label="Mark as read"></button>
               <button type="button" class="row-btn" aria-label="Archive"></button>
               <button type="button" class="row-btn" aria-label="Delete"></button>
             </div>
+          </div>
+          <div class="message-row-flag" role="gridcell">
+            <button type="button" class="row-btn row-star" aria-label="Star"></button>
           </div>
         </div>
       </div>
@@ -84,7 +84,6 @@
         lineRightEdge: Math.round(lineBox.right),
         clusterLeftEdge: Math.round(clusterBox.left),
         starLeftEdge: Math.round(star.getBoundingClientRect().left),
-        gap_line_to_star: Math.round(star.getBoundingClientRect().left - lineBox.right),
         gap_line_to_cluster: Math.round(clusterBox.left - lineBox.right),
         textOverflow: cs.textOverflow,
         whiteSpace: cs.whiteSpace,

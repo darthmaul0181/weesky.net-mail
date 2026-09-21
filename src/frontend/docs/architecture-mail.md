@@ -29,10 +29,15 @@ thread toggle sits inside the content cell, not in a fifth one. That role change
 `nested-interactive` waiver from `src/a11y.test.tsx`: `role="button"` is children-presentational, so
 a reader was told each row was one button and never announced the checkbox, the star or the actions
 plainly on screen — and crossing fifty messages cost fifty Tab presses, where the grid now holds one
-stop. `aria-rowcount` is the folder total and `aria-rowindex` is 1-based **over the whole folder**
-(the page offset, since `expanded` resets with the page), because blocks of rows arrive as the reader
-scrolls; grouping conversations makes rows and messages different units, and `aria-rowcount` is then
-an honest `-1`. Two consequences in `mail.css`: the star left the sender line for a cell of its own,
+stop. `aria-rowcount` and `aria-rowindex` are both counted in **rows**, 1-based over the whole
+folder (the page offset, since `expanded` resets with the page), because blocks of rows arrive as the
+reader scrolls — and a row is a conversation wherever the page is a page of conversations, which is
+why `useMessageList` publishes `rowTotal` beside `total`: the server counts them (`totalThreads`),
+an unfolded conversation adds the members it draws, and `-1` is left for the one case nothing counts,
+a grouped *stream*. The open row's content cell carries **`aria-current`**, not `aria-selected` —
+the checkboxes are a real multi-selection and "selected" already means that here — so Tab into the
+list lands on the row the reader is showing rather than on the first row's checkbox, where Enter
+would do nothing. Two consequences in `mail.css`: the star left the sender line for a cell of its own,
 so that line keeps a `min-height: 26px` and a 34px reserve where the button was — measured in
 Chrome, the row is the same 85px it was, item for item — and **a row whose cluster holds the roving
 tab stop reveals it on the `[tabindex="0"]` attribute alone**, because a `display: none` button is a
