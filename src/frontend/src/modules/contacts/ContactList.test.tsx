@@ -36,6 +36,16 @@ function contentCell(id: string): HTMLElement {
     .querySelector('.contact-tile-content') as HTMLElement
 }
 
+/** A getter on the one field nothing but a tile reads: the list reads a contact's id and nothing
+    else, and `matches` never looks at this one — so the count is the real component drawing. */
+function watched(base: Contact) {
+  const one = { ...base }
+  const { isFavorite } = base
+  const seen = { reads: 0 }
+  Object.defineProperty(one, 'isFavorite', { get() { seen.reads += 1; return isFavorite } })
+  return { contact: one as Contact, seen }
+}
+
 describe('ContactList', () => {
   it('renders one tile per contact, named by displayNameOf', () => {
     setup()
@@ -396,6 +406,55 @@ describe('ContactList', () => {
     expect(onRemoveFromGroup).toHaveBeenCalledWith(['a'])
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
     expect(screen.queryByText(/delete this contact/i)).not.toBeInTheDocument()
+  })
+
+  /* The lot's headline change, measured rather than assumed: one tick cost 130ms at 2000 tiles
+     because every tile redrew. Nothing is mocked — a getter counts the real memoised component. */
+  it('does not re-render the other tiles when one checkbox changes', async () => {
+    const one = watched(alice)
+    const other = watched(bruno)
+    setup({ contacts: [one.contact, other.contact] })
+    const [drewOne, drewOther] = [one.seen.reads, other.seen.reads]
+    expect(drewOther).toBeGreaterThan(0)
+
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    expect(other.seen.reads).toBe(drewOther)
+    expect(one.seen.reads).toBeGreaterThan(drewOne)
+  })
+
+  /* And the interaction the mail list does not have: `useSelection` is keyed on the query, so a
+     letter used to rebuild the selection and redraw every tile that survived the filter — twice,
+     the reset scheduling a second render of its own. */
+  it('does not re-render the surviving tiles when a letter is typed in the search box', async () => {
+    const one = watched(alice)
+    const other = watched(bruno)
+    setup({ contacts: [one.contact, other.contact] })
+    const [drewOne, drewOther] = [one.seen.reads, other.seen.reads]
+
+    // A letter both contacts match, so the grid keeps its length and nothing here is about a
+    // shorter list.
+    await userEvent.type(screen.getByRole('searchbox'), 'e')
+
+    expect(screen.getAllByRole('row')).toHaveLength(2)
+    expect(one.seen.reads).toBe(drewOne)
+    expect(other.seen.reads).toBe(drewOther)
+  })
+
+  /* The content cell renders a constant tabIndex={-1} and the hook writes 0 onto the DOM itself,
+     so a tile redrawing must not take the roving stop back. fireEvent.click, never userEvent:
+     a real click would move focus to the checkbox and repoint the stop legitimately. */
+  it("leaves the hook's tab stop alone when a tile re-renders", async () => {
+    setup()
+    const cell = contentCell('a')
+    fireEvent.focus(cell)
+    expect(cell).toHaveAttribute('tabindex', '0')
+
+    fireEvent.click(screen.getByLabelText('Select Alice Dupont'))
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    expect(cell).toHaveAttribute('tabindex', '0')
   })
 })
 

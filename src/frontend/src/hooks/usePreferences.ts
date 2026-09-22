@@ -74,9 +74,18 @@ export const BLOCK_SIZE = 100
 
 export const ALL = 'all'
 
+/** The steps the `<select>` offers, and the only strings `requestSizeOf` trusts as a row count.
+    `GeneralPage` draws its options from this same list, so the picker and the bound can never
+    drift apart. */
+export const PAGE_SIZES = ['10', '20', '30', '50', '100'] as const
+
+/** Bounded, not merely parsed: a newer build, a hand-edited row or a direct `PUT` can write
+    anything. A value outside `PAGE_SIZES` falls back to `BLOCK_SIZE` — what the account's own
+    backend default (`'all'`) already resolves to, so a garbled row reads as none stored. */
 export function requestSizeOf(preferences: Preferences): number {
   const stored = preferences[PREFERENCE_KEYS.pageSize]
-  return stored === ALL ? BLOCK_SIZE : Number(stored)
+  if (stored === ALL) return BLOCK_SIZE
+  return (PAGE_SIZES as readonly string[]).includes(stored) ? Number(stored) : BLOCK_SIZE
 }
 
 /** The only reader of the raw "all", so a NaN cannot be born anywhere else. */

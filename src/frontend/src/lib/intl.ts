@@ -6,6 +6,15 @@ export function activeLocale(): string {
   return i18next.language || 'en'
 }
 
+const pad = (value: number) => String(value).padStart(2, '0')
+
+/** The local calendar day as `YYYY-MM-DD`: "is this the same day as that", asked as one comparable
+    primitive. Fixed width, so the first four characters are the year and nothing else. */
+export function localDay(date: Date): string {
+  const year = String(date.getFullYear()).padStart(4, '0')
+  return `${year}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 const dateFormats = new Map<string, Intl.DateTimeFormat>()
 const collators = new Map<string, Intl.Collator>()
 

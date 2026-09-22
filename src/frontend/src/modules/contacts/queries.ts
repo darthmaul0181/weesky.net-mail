@@ -30,10 +30,20 @@ function invalidateBook(queryClient: QueryClient, accountId: string) {
   queryClient.invalidateQueries({ queryKey: contactGroupKeys.all(accountId) })
 }
 
+/** Declared once, outside the hook, and so is `groupsOf` below: TanStack re-runs `select` whenever
+    the function's identity is new, so an inline arrow re-sorts the whole book — and deep-compares it
+    against the last answer — on every render of the hook's owner. */
+const sortBook = (data: ContactListResponse): Contact[] => [...data.contacts].sort(compareContacts)
+const groupsOf = (data: ContactGroupsResponse): ContactGroup[] => data.groups
+
 /**
  * The whole book, cached. Sorted in `select`, so the page and the composer read one already-
  * ordered list rather than each sorting its own copy. The reader passes false when its
  * contact-trust setting is off, so an account that never opens Contacts pays nothing.
+ *
+ * `ContactTile`'s memo rests on TanStack's default `structuralSharing`, which keeps an untouched
+ * contact's object identity across a refetch: with it off every tile redraws on every poll —
+ * slower, never stale — and the list's headline cost comes back.
  */
 export function useContacts(enabled = true) {
   const accountId = useAccountId()
@@ -42,7 +52,7 @@ export function useContacts(enabled = true) {
     queryKey: contactKeys.all(accountId),
     queryFn: () => api.getContacts() as Promise<ContactListResponse>,
     staleTime: 5 * 60_000,
-    select: (data): Contact[] => [...data.contacts].sort(compareContacts),
+    select: sortBook,
     enabled,
   })
 }
@@ -139,7 +149,7 @@ export function useContactGroups(enabled = true) {
     queryKey: contactGroupKeys.all(accountId),
     queryFn: () => api.getContactGroups() as Promise<ContactGroupsResponse>,
     staleTime: 5 * 60_000,
-    select: (data) => data.groups,
+    select: groupsOf,
     enabled,
   })
 }
