@@ -1,18 +1,19 @@
 import {
-  useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type RefObject,
+  useEffect, useMemo, useRef, useState,
+  type DragEvent, type ReactNode, type RefObject,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import SelectionBand from '../../components/SelectionBand'
 import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
-import PencilIcon from '../../icons/PencilIcon.jsx'
 import PersonMinusIcon from '../../icons/PersonMinusIcon.jsx'
 import SearchIcon from '../../icons/SearchIcon'
-import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon.jsx'
+import { useForwarders } from '../../hooks/useForwarders'
 import { useGridNav } from '../../hooks/useGridNav'
 import { buildDragPill, LIST_GLYPH } from '../mail/list/dragImage'
 import { useSelection } from '../mail/list/useSelection'
-import { displayNameOf, primaryAddressOf } from './contactName'
+import ContactTile from './ContactTile'
+import type { TileCallbacks } from './ContactTile'
 import { filterContacts } from './contactSearch'
 import { CONTACT_DRAG_MIME, dragIds, serializeContactDrag } from './dragContacts'
 import type { Contact } from './contactTypes'
@@ -82,7 +83,9 @@ export default function ContactList({
   const { t } = useTranslation('contacts')
   const [query, setQuery] = useState('')
   const [confirming, setConfirming] = useState(false)
-  const [draggingIds, setDraggingIds] = useState<string[] | null>(null)
+  // A Set, not the array: `includes` per tile is quadratic across the book, and a drag carrying the
+  // whole selection is exactly when the book is largest.
+  const [draggingIds, setDraggingIds] = useState<Set<string> | null>(null)
   const searchBox = useRef<HTMLInputElement>(null)
   const wantsSearch = useRef(false)
   const shown = useMemo(() => filterContacts(contacts, query), [contacts, query])
@@ -91,8 +94,9 @@ export default function ContactList({
   // The query is in the reset key as well as the scope: a search narrows what is on screen, and a
   // batch acting on rows the user can no longer see is the accident this forestalls.
   const selection = useSelection<string>(`${scope}::${query}`)
-  const shownIds = shown.map(contact => contact.id)
-  const selectedIds = shownIds.filter(id => selection.has(id))
+  const selected = selection.selected
+  const shownIds = useMemo(() => shown.map(contact => contact.id), [shown])
+  const selectedIds = useMemo(() => shownIds.filter(id => selected.has(id)), [shownIds, selected])
   const count = selectedIds.length
 
   // The loupe asks for a field that is not mounted yet — clearing the selection is what renders it.
@@ -115,7 +119,7 @@ export default function ContactList({
     document.body.appendChild(pill)
     event.dataTransfer.setDragImage(pill, 12, 12)
     setTimeout(() => pill.remove(), 0)
-    setDraggingIds(ids)
+    setDraggingIds(new Set(ids))
   }
 
   // Joined rather than compared as an array: the identity changes on every render, so the effect
@@ -125,6 +129,18 @@ export default function ContactList({
     onSelectionChange?.(selectionKey === '' ? [] : selectionKey.split(','))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionKey])
+
+  // What a tile calls, as one object built once and never rebuilt: a tile handed a callback this
+  // render created would redraw whenever anything did.
+  const tileOn: TileCallbacks = useForwarders({
+    open: onSelect,
+    check: (id: string) => selection.toggle(id, shownIds.indexOf(id)),
+    toggleFavorite: onToggleFavorite,
+    edit: onEdit,
+    remove: onDelete,
+    dragStart: onTileDragStart,
+    dragEnd: () => setDraggingIds(null),
+  })
 
   return (
     <>
@@ -193,89 +209,15 @@ export default function ContactList({
 
         {shown.length > 0 && (
           <ContactGrid label={t('list.gridLabel')} selecting={count > 0}>
-            {shown.map((contact, index) => {
-              const name = displayNameOf(contact)
-              const primary = primaryAddressOf(contact)
-              const extra = contact.addresses.length - 1
-              const open = contact.id === selectedId
-
-              return (
-                /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus --
-                   the grid pattern: the tab stop and the keys that open the card are the content
-                   cell's, and the row's click is the pointer affordance over its padding. */
-                <div key={contact.id} data-testid={`contact-tile-${contact.id}`}
-                  className={`contact-tile${open ? ' is-selected' : ''}`
-                    + (draggingIds?.includes(contact.id) ? ' is-dragging' : '')}
-                  role="row" onClick={() => onSelect(contact.id)}
-                  draggable
-                  onDragStart={event => onTileDragStart(event, contact.id)}
-                  onDragEnd={() => setDraggingIds(null)}>
-                  {/* Four cells, always four: a row may own nothing but cells, so each focusable part
-                      of the tile answers for itself rather than being swallowed by the one button the
-                      tile used to be. In the gutter the tile reserves permanently, as before. */}
-                  <div className="contact-tile-select" role="gridcell">
-                    <input type="checkbox" className="contact-tile-check"
-                      aria-label={t('list.selectOne', { name })}
-                      checked={selection.has(contact.id)}
-                      onClick={event => event.stopPropagation()}
-                      onChange={() => selection.toggle(contact.id, index)} />
-                  </div>
-
-                  {/* The cell that replaces the old role=button tile: it carries the name, the address
-                      and the keys that open the card, while the CLICK stays the row's, so the padding
-                      around this box opens the contact as it always did. */}
-                  <div className="contact-tile-content" role="gridcell" tabIndex={-1}
-                    // Where the card already is, so Tab into the list lands on the contact on screen
-                    // rather than on the first tile's checkbox.
-                    aria-current={open || undefined}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onSelect(contact.id)
-                      }
-                    }}>
-                    {/* The message row's layout, not the page tile's: the name takes the first line
-                        and the star closes it on the right, while the actions are the tile's last
-                        child — the cluster idiom, drawn over the bottom line rather than beside it. */}
-                    <div className="contact-tile-line">
-                      <span className="contact-tile-name">{name}</span>
-                    </div>
-
-                    {/* Always rendered, even empty, so a contact with no address is not a shorter tile
-                        than its neighbours. */}
-                    <div className="contact-tile-address">
-                      {primary ?? ''}{extra > 0 ? ` · +${extra}` : ''}
-                    </div>
-                  </div>
-
-                  {/* The star left the name's line for a cell of its own, drawn where that line's
-                      flow already put it: cell order is arrow order, so it stays between the name
-                      and the cluster, which is what the eye sees. */}
-                  <div className="contact-tile-flag" role="gridcell">
-                    <button type="button" className={`contact-star${contact.isFavorite ? ' is-on' : ''}`}
-                      title={t(contact.isFavorite ? 'favourites.remove' : 'favourites.add')}
-                      aria-label={t(
-                        contact.isFavorite ? 'favourites.removeNamed' : 'favourites.addNamed', { name })}
-                      onClick={event => { event.stopPropagation(); onToggleFavorite(contact) }}>
-                      <StarIcon size={18} filled={contact.isFavorite} />
-                    </button>
-                  </div>
-
-                  <span className="contact-tile-actions" role="gridcell">
-                    <button type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
-                      aria-label={t('list.edit', { name })}
-                      onClick={event => { event.stopPropagation(); onEdit(contact.id) }}>
-                      <PencilIcon size={18} />
-                    </button>
-                    <button type="button" className="admin-icon-btn is-danger" title={t('actions.delete', { ns: 'common' })}
-                      aria-label={t('list.delete', { name })}
-                      onClick={event => { event.stopPropagation(); onDelete(contact) }}>
-                      <TrashIcon size={18} />
-                    </button>
-                  </span>
-                </div>
-              )
-            })}
+            {shown.map(contact => (
+              <ContactTile
+                key={contact.id}
+                contact={contact}
+                checked={selected.has(contact.id)}
+                open={contact.id === selectedId}
+                dragging={draggingIds?.has(contact.id) ?? false}
+                on={tileOn} />
+            ))}
           </ContactGrid>
         )}
       </div>

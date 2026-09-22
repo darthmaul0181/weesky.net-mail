@@ -53,6 +53,14 @@ describe('GeneralPage', () => {
     expect(await screen.findByLabelText('Messages per page')).toHaveValue('all')
   })
 
+  /* A stored value outside the offered steps — a hand-edited row, a newer build, the unbounded
+     '2000' `requestSizeOf` now caps — has to read here as what the list will actually ask for. */
+  it('shows the bounded size when the stored value is not one of the steps', async () => {
+    renderPage({ 'mail.pageSize': '2000', 'mail.showPreview': 'true' })
+
+    expect(await screen.findByLabelText('Messages per page')).toHaveValue('100')
+  })
+
   it('saves All as the string the backend accepts', async () => {
     renderPage()
 

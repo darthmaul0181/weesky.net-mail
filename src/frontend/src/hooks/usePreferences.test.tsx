@@ -71,6 +71,30 @@ describe('the accessors', () => {
     expect(Number.isNaN(requestSizeOf(preferences))).toBe(false)
   })
 
+  // The stored type promises six literals, but nothing between the <select> and the wire refuses
+  // a hand-edited row or an older/newer build's own idea of a step. A value outside the offered
+  // steps must not be honoured as a row count.
+  it('bounds an out-of-range stored value to the block size, never the raw number', () => {
+    expect(requestSizeOf({ [PREFERENCE_KEYS.pageSize]: '2000' })).toBe(BLOCK_SIZE)
+    expect(requestSizeOf({ [PREFERENCE_KEYS.pageSize]: '2000' })).not.toBe(2000)
+  })
+
+  it.each([
+    ['0', BLOCK_SIZE],
+    ['-10', BLOCK_SIZE],
+    ['garbage', BLOCK_SIZE],
+    [undefined, BLOCK_SIZE],
+  ])('falls back to the block size for stored %s', (stored, expected) => {
+    const preferences: Record<string, string> =
+      stored === undefined ? {} : { [PREFERENCE_KEYS.pageSize]: stored }
+
+    expect(requestSizeOf(preferences)).toBe(expected)
+  })
+
+  it.each(['10', '20', '30', '50', '100'])('honours the offered step %s unchanged', stored => {
+    expect(requestSizeOf({ [PREFERENCE_KEYS.pageSize]: stored })).toBe(Number(stored))
+  })
+
   it.each([
     ['all', true],
     ['30', false],

@@ -1528,6 +1528,9 @@ describe('MessageList as a drag source', () => {
       DRAG_MIME, serializeDrag({ sourcePath: 'INBOX', uids: [1] }))
     // The checkbox made for Alice is still checked.
     expect(checkOf('Select message from Alice Martin')).toBeChecked()
+    // Membership, never "a drag is on": the row outside the set stays unmarked.
+    expect(rowOf(/bob@x\.be/i)).toHaveClass('is-dragging')
+    expect(rowOf(/alice martin/i)).not.toHaveClass('is-dragging')
   })
 
   it('marks the dragged rows while the drag lasts and clears them after', () => {
@@ -2324,6 +2327,70 @@ describe('the list as a grid', () => {
 
     fireEvent.click(toggle)
     expect(screen.getByLabelText('Collapse conversation')).toBeInTheDocument()
+  })
+
+  /* The lot's headline change, measured rather than assumed: one tick used to cost 93ms at 2000
+     rows because every row re-rendered. Nothing is mocked — a getter on a field only `MessageRow`
+     reads counts the real memoised component rendering, or not. */
+  it('does not re-render the other rows when one checkbox changes', async () => {
+    const messages = three.map(message => ({ ...message }))
+    let drawn = 0
+    const { subject } = messages[2]
+    Object.defineProperty(messages[2], 'subject',
+      { get() { drawn += 1; return subject } })
+    mocks.useMessageList.mockReturnValue(
+      pagedState({}, { messages, total: 3, rowTotal: 3 }))
+    renderList({}, { 'mail.showPreview': 'false' })
+    /* Awaited on something the preferences derive, never on `settle()`: their arrival re-renders
+       every row (`rowActions` comes back a fresh array), and one drained macrotask let that land
+       inside the click below instead — a red run per full pass. */
+    await waitFor(() => expect(screen.queryByText('Merci pour l’envoi')).toBeNull())
+    const drawnAtRest = drawn
+    expect(drawnAtRest).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select message from/i })[0])
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    expect(drawn).toBe(drawnAtRest)
+  })
+
+  /* "Today" is an input the prop list has to carry. It used to be refreshed by accident, every
+     list re-render redrawing every row; a memoised row whose message TanStack never replaced would
+     otherwise print 18:32 next to yesterday's mail for the rest of the session. */
+  it('follows the calendar day when the list is left open past midnight', () => {
+    vi.useFakeTimers()
+    try {
+      // Local wall-clock components on purpose: the claim is about the local calendar day, so
+      // 22:00 to 00:00:30 crosses one on every host.
+      vi.setSystemTime(new Date(2026, 6, 18, 22, 0, 0))
+      const messages = [{ ...sample[0], date: new Date(2026, 6, 18, 18, 32).toISOString() }]
+      mocks.useMessageList.mockReturnValue(pagedState({}, { messages, total: 1, rowTotal: 1 }))
+      renderList()
+      const label = () => document.querySelector('.message-row-date') as HTMLElement
+      expect(label().textContent).toMatch(/\d{1,2}:\d{2}/)
+
+      // advanceTimersByTime moves the faked clock along with the timers, so two hours is midnight.
+      act(() => { vi.advanceTimersByTime(2 * 60 * 60 * 1000) })
+
+      expect(label().textContent).not.toMatch(/\d{1,2}:\d{2}/)
+      expect(label().textContent).toMatch(/18/)
+    } finally { vi.useRealTimers() }
+  })
+
+  /* The one interaction between this memo and lot 2c's hook. The content cell renders a constant
+     `tabIndex={-1}` and the hook writes `0` onto the DOM; React rewrites only a prop that changed
+     between renders, so a row re-rendering must not take the stop back. */
+  it('leaves the hook\'s tab stop alone when a row re-renders', async () => {
+    renderList()
+    await settle()
+    const cell = contentOf(/alice martin/i)
+    fireEvent.focus(cell)
+    expect(cell).toHaveAttribute('tabindex', '0')
+
+    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('checkbox'))
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+    expect(cell).toHaveAttribute('tabindex', '0')
   })
 
   /* A delete from the keyboard is two steps: useRowExit disables the row's controls for 300ms and

@@ -1,6 +1,6 @@
 import i18next from 'i18next'
 import { afterEach, describe, expect, it } from 'vitest'
-import { activeLocale, collator, dateFormat, relativeFromNow } from './intl'
+import { activeLocale, collator, dateFormat, localDay, relativeFromNow } from './intl'
 
 describe('intl', () => {
   afterEach(async () => { await i18next.changeLanguage('en') })
@@ -20,6 +20,10 @@ describe('intl', () => {
 
   it('hands back the same collator for the same locale and options', () => {
     expect(collator({ sensitivity: 'base' }, 'fr')).toBe(collator({ sensitivity: 'base' }, 'fr'))
+  })
+
+  it('localDay pads the month and the day, so the year is always the first four', () => {
+    expect(localDay(new Date(2026, 0, 5, 12, 0))).toBe('2026-01-05')
   })
 })
 

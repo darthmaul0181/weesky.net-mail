@@ -7,10 +7,10 @@ import ToggleRow from '../../../components/ToggleRow'
 import Toasts from '../../../components/Toasts.jsx'
 import { useToasts } from '../../../hooks/useToasts.js'
 import {
-  ALL, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf,
-  groupConversationsOf, notifyDesktopOf, notifySoundOf, readingPaneOf, rowActionsOf,
-  showFolderIconsOf, showPreviewOf, showSpamScoreOf, trustContactsOf, usePreferences,
-  useSetPreference,
+  ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf,
+  composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf, notifySoundOf,
+  readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf, showPreviewOf, showSpamScoreOf,
+  trustContactsOf, usePreferences, useSetPreference,
   type ComposeFormat, type ReadingPane, type RowAction,
 } from '../../../hooks/usePreferences'
 import {
@@ -22,8 +22,6 @@ import MailOpenIcon from '../../../icons/MailOpenIcon'
 import SlidersIcon from '../../../icons/SlidersIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
-
-const PAGE_SIZES = ['10', '20', '30', '50', '100']
 
 function pageSizeToast(value: string, t: TFunction<'settings'>): string {
   return value === ALL
@@ -188,9 +186,12 @@ export default function GeneralPage() {
                 <label htmlFor="page-size">{t('general.pageSize.label')}</label>
                 <span className="setting-hint">{t('general.pageSize.hint')}</span>
               </span>
+              {/* Read through the same pair the list reads, never raw: a stored value outside the
+                  steps pages by one block there, and a `<select>` with no matching option would
+                  say 10 here. */}
               <select
                 id="page-size"
-                value={preferences[PREFERENCE_KEYS.pageSize]}
+                value={isStreaming(preferences) ? ALL : String(requestSizeOf(preferences))}
                 disabled={setPreference.isPending}
                 onChange={event =>
                   save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value, t))}

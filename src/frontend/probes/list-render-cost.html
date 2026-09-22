@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  Host page for `list-render-cost.jsx` — the React harness that mounts the REAL MessageList and
+  ContactList over a fixture and times the three things a reader does to a long list: the list
+  appearing, one checkbox, one arrow key. Everything the bench does, what it mocks and what it
+  cannot see is documented at the head of the .jsx; read that before reading a number out of here.
+
+  One line, so a re-run needs no reconstruction: it measures React mount plus one checkbox tick plus
+  one arrow key, real components, `window.fetch` the only seam — it does NOT measure paint, network,
+  or the streamed block-arrival pattern.
+
+  Unlike the other probes in this folder this one is not a slab of restated markup: a React
+  re-render cannot be measured on a clone, which is exactly the bound `contact-tile-grid.html`'s
+  bench declared and this page exists to lift.
+
+  Served by the Vite dev server (npm run dev) at /probes/list-render-cost.html, which is React's
+  DEVELOPMENT build behind Fast Refresh — slower than what ships. Build the page with a production
+  Vite config and serve the output for the shipping number. Say which run a figure came from.
+
+  The palette and theme attributes are index.html's own, so the rows are drawn in the colours and
+  the type scale that ship. #out holds the JSON; window.ready resolves once i18n is loaded.
+-->
+<html data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>List render cost</title>
+  <style>
+    body { margin: 0; font: 14px system-ui; }
+    #out {
+      position: fixed; right: 0; top: 0; width: 46vw; height: 100vh; margin: 0; z-index: 9;
+      overflow: auto; padding: 12px; white-space: pre-wrap; font-family: monospace;
+      font-size: 11px; background: #fff; border-left: 1px solid #ccc; color: #111;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <pre id="out">loading…</pre>
+  <script type="module" src="./list-render-cost.jsx"></script>
+</body>
+</html>
