@@ -7,7 +7,7 @@ import { addDays, type PlainDate, utcMidnightOf } from '../plainDate'
 
 export interface DayStripProps {
   selected: PlainDate
-  onPick(day: PlainDate): void
+  onPick: (day: PlainDate) => void
 }
 
 /** Two weeks either side of the one on screen: a swipe reaches them without a request, and the

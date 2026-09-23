@@ -9,7 +9,7 @@ describe('shouldRetry', () => {
     expect(shouldRetry(2, boom)).toBe(false)
   })
 
-  // api.js has already cleared the session: a retry only delays the redirect to /login.
+  // api.ts has already cleared the session: a retry only delays the redirect to /login.
   it('never retries an unauthorized failure', () => {
     expect(shouldRetry(0, Object.assign(new Error('nope'), { status: 401 }))).toBe(false)
   })

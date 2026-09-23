@@ -42,5 +42,5 @@ export function initialsOf(first: string, last: string, nickname: string): strin
   const letters = [first.trim(), last.trim()].filter(Boolean).map(part => part[0])
   if (letters.length > 0) return letters.join('').toUpperCase()
   const fallback = nickname.trim()
-  return fallback === '' ? '' : fallback[0].toUpperCase()
+  return fallback === '' ? '' : fallback.charAt(0).toUpperCase()
 }

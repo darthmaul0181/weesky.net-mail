@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { useStagedAttachments } from './useStagedAttachments'
 import { uploadAttachment, api } from '../../../api.js'
+import type { StagedAttachmentInfo } from '../api/mailTypes'
 
 vi.mock('../../../api.js', () => ({
   uploadAttachment: vi.fn(),
@@ -22,9 +23,9 @@ describe('useStagedAttachments', () => {
 
     await act(async () => { result.current.addFiles([file]) })
 
-    expect(vi.mocked(uploadAttachment).mock.calls[0][1]).toMatchObject({ accountId: 'linked-1' })
+    expect(vi.mocked(uploadAttachment).mock.calls[0]![1]).toMatchObject({ accountId: 'linked-1' })
 
-    act(() => { result.current.remove(result.current.items[0].key) })
+    act(() => { result.current.remove(result.current.items[0]!.key) })
     expect(api.deleteAttachment).toHaveBeenCalledWith('id-1', { accountId: 'linked-1' })
   })
 
@@ -58,7 +59,7 @@ describe('useStagedAttachments', () => {
   })
 
   it('reports uploading while a file is in flight', async () => {
-    let resolve!: (v: unknown) => void
+    let resolve!: (v: StagedAttachmentInfo) => void
     vi.mocked(uploadAttachment).mockReturnValue(new Promise(r => { resolve = r }))
     const { result } = renderHook(() => useStagedAttachments('primary'))
 
@@ -76,7 +77,7 @@ describe('useStagedAttachments', () => {
 
     await act(async () => { result.current.addFiles([file]) })
 
-    expect(result.current.items[0].error).toBe('Could not upload the attachment')
+    expect(result.current.items[0]!.error).toBe('Could not upload the attachment')
     expect(result.current.ids).toEqual([])
   })
 
@@ -89,7 +90,7 @@ describe('useStagedAttachments', () => {
 
     await act(async () => { result.current.addFiles([file]) })
 
-    expect(result.current.items[0].error).toBe('This attachment is larger than the upload limit.')
+    expect(result.current.items[0]!.error).toBe('This attachment is larger than the upload limit.')
     expect(result.current.ids).toEqual([])
   })
 
@@ -98,7 +99,7 @@ describe('useStagedAttachments', () => {
     const { result } = renderHook(() => useStagedAttachments('primary'))
     await act(async () => { result.current.addFiles([file]) })
 
-    await act(async () => { result.current.remove(result.current.items[0].key) })
+    await act(async () => { result.current.remove(result.current.items[0]!.key) })
 
     expect(api.deleteAttachment).toHaveBeenCalledWith('id-1', { accountId: 'primary' })
     expect(result.current.items).toHaveLength(0)
@@ -124,12 +125,12 @@ describe('useStagedAttachments', () => {
   })
 
   it('remove while the upload is still in flight skips the DELETE', async () => {
-    let resolve!: (v: unknown) => void
+    let resolve!: (v: StagedAttachmentInfo) => void
     vi.mocked(uploadAttachment).mockReturnValue(new Promise(r => { resolve = r }))
     const { result } = renderHook(() => useStagedAttachments('primary'))
 
     act(() => { result.current.addFiles([file]) })
-    const key = result.current.items[0].key
+    const key = result.current.items[0]!.key
 
     act(() => { result.current.remove(key) })
     expect(result.current.items).toHaveLength(0)
@@ -151,8 +152,8 @@ describe('useStagedAttachments', () => {
   })
 
   it('keeps each row on its own progress when two uploads interleave', async () => {
-    let resolveA!: (v: unknown) => void
-    let resolveB!: (v: unknown) => void
+    let resolveA!: (v: StagedAttachmentInfo) => void
+    let resolveB!: (v: StagedAttachmentInfo) => void
     const fileB = new File(['xyz'], 'b.txt', { type: 'text/plain' })
     let onProgressA!: (ratio: number) => void
     let onProgressB!: (ratio: number) => void

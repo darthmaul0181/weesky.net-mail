@@ -36,6 +36,16 @@ describe('folderChanged', () => {
     expect(folderChanged(base, { ...base })).toBe(false)
   })
 
+  // The API omits a count it has not got: the first value to arrive is discovery, not change.
+  it('reads a count the server starts reporting as discovery, not change', () => {
+    const unreported: MailFolderNode = {
+      path: 'INBOX', name: 'Inbox', selectable: true, subscribed: true, total: 5, uidValidity: 33,
+      uidNext: 44, children: [],
+    }
+
+    expect(folderChanged(snapshotOf(unreported), snapshotOf({ ...unreported, unread: 3 }))).toBe(false)
+  })
+
   it.each([
     ['an arrival', { ...base, uidNext: 11 }],
     ['a deletion made elsewhere', { ...base, total: 4 }],

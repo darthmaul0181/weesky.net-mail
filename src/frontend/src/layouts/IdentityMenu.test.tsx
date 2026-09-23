@@ -2,7 +2,7 @@
 // folder column. Same behaviours, minus the Settings entry — the rail's gear owns that route.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../contexts/AuthContext'
 import { registerLeaveGuard } from '../lib/leaveGuard'
@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   hasSession: vi.fn(() => true),
   clearSession: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
-  setIsAdmin: vi.fn(),
 }))
 
 vi.mock('../api.js', () => ({
@@ -27,7 +26,6 @@ vi.mock('../api.js', () => ({
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
-  setIsAdmin: mocks.setIsAdmin,
 }))
 
 function Path() {
@@ -210,7 +208,7 @@ describe('IdentityMenu', () => {
     it('walks the rows on the vertical arrows, wrapping, and jumps to the ends', async () => {
       renderMenu()
       await openMenu()
-      const [first, , signOut] = rows()
+      const [first, , signOut] = rows() as [HTMLElement, HTMLElement, HTMLElement]
 
       fireEvent.keyDown(first, { key: 'ArrowUp' })
       expect(signOut).toHaveFocus()
@@ -230,7 +228,7 @@ describe('IdentityMenu', () => {
     it('keeps the walk inside the menu where Tab leaves it', async () => {
       renderInDrawer(vi.fn())
       await openMenu()
-      const [first, , signOut] = rows()
+      const [first, , signOut] = rows() as [HTMLElement, HTMLElement, HTMLElement]
       signOut.focus()
 
       fireEvent.keyDown(signOut, { key: 'ArrowDown' })
@@ -262,8 +260,8 @@ describe('IdentityMenu', () => {
     const rows = await screen.findAllByRole('menuitem', { name: /@/ })
     expect(rows).toHaveLength(2)
     rows.forEach(row => expect(row.tagName).toBe('BUTTON'))
-    expect(rows[0].className).toContain('is-active')
-    expect(rows[1].className).not.toContain('is-active')
+    expect(rows[0]!.className).toContain('is-active')
+    expect(rows[1]!.className).not.toContain('is-active')
   })
 
   // The mail list's own unread marker, in the place it sits there. The inactive rows keep the
@@ -274,10 +272,10 @@ describe('IdentityMenu', () => {
     await openMenu()
 
     const rows = await screen.findAllByRole('menuitem', { name: /@/ })
-    expect(rows[0].querySelector('.identity-active-dot')).toBeInTheDocument()
+    expect(rows[0]!.querySelector('.identity-active-dot')).toBeInTheDocument()
     expect(rows[0]).toHaveAttribute('aria-current', 'true')
-    expect(rows[1].querySelector('.identity-active-dot')).toBeNull()
-    expect(rows[1].querySelector('.identity-dot-slot')).toBeInTheDocument()
+    expect(rows[1]!.querySelector('.identity-active-dot')).toBeNull()
+    expect(rows[1]!.querySelector('.identity-dot-slot')).toBeInTheDocument()
     expect(rows[1]).not.toHaveAttribute('aria-current')
   })
 
@@ -326,7 +324,7 @@ describe('IdentityMenu', () => {
 
   // A shared mailbox carries no external domain; the band still has to say where it lives.
   it('falls back to Weesky on the band when the account has no domain', async () => {
-    mocks.getConnectedAccounts.mockResolvedValue([connected({ domainName: null })])
+    mocks.getConnectedAccounts.mockResolvedValue([connected({ domainId: undefined, domainName: undefined })])
     renderMenu()
     await openMenu()
 
@@ -383,6 +381,6 @@ describe('IdentityMenu', () => {
 
     const rows = screen.getAllByRole('menuitem', { name: /@/ })
     expect(rows).toHaveLength(1)
-    expect(rows[0].className).not.toContain('is-active')
+    expect(rows[0]!.className).not.toContain('is-active')
   })
 })

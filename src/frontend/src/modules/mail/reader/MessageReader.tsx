@@ -1,6 +1,6 @@
-﻿import { cloneElement, useEffect, useMemo, useState, type RefObject } from 'react'
+import { cloneElement, useEffect, useMemo, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { downloadBlob } from '../../../lib/downloadBlob'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -15,7 +15,7 @@ import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
+import PencilIcon from '../../../icons/PencilIcon'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import Tooltip from '../../../components/Tooltip'
 import ImageOffIcon from '../../../icons/ImageOffIcon'
@@ -28,7 +28,7 @@ import {
 import { rolePathsOf } from '../folders/folderNodes'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
 import type { MailAttachmentInfo, SpecialUse } from '../api/mailTypes'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import MoveMessagesModal from '../MoveMessagesModal'
 import AttachmentViewerModal from './AttachmentViewerModal'
 import {
@@ -262,7 +262,7 @@ export default function MessageReader(
       const seed = buildComposeSeed(
         action, data!, prepared, identityList ?? [], aliases ?? [],
         [activeAccount?.email ?? null, identity?.email ?? null], accountId)
-      navigate('/mail/compose', { state: { from: folderPath, seed } })
+      void navigate('/mail/compose', { state: { from: folderPath, seed } })
     } catch (error) {
       onNotify?.(apiErrorMessage(error, t('reader.prepareFailed')))
     }
@@ -311,9 +311,9 @@ export default function MessageReader(
       onToggleColours={() => setOriginalColours(v => !v)}
       seen={seen}
       flagged={flagged}
-      onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'seen', value: !seen })}
+      onToggleSeen={() => setFlags.mutate({ folderPath: folderPath!, uids: [uid], flag: 'seen', value: !seen })}
       onToggleFlagged={() =>
-        setFlags.mutate({ folderPath: folderPath!, uids: [uid!], flag: 'flagged', value: !flagged })}
+        setFlags.mutate({ folderPath: folderPath!, uids: [uid], flag: 'flagged', value: !flagged })}
       deleteLabel={deleteLabel}
       deleteDisabled={deleteDisabled}
       onDelete={onDelete}
@@ -448,8 +448,8 @@ export default function MessageReader(
           key={`${folderPath}:${uid}`}
           invitation={data.invitation}
           folderPath={folderPath!}
-          uid={uid!}
-          onTrashed={() => { leave([uid!], () => {}); onDeparted?.(uid!) }}
+          uid={uid}
+          onTrashed={() => { leave([uid], () => {}); onDeparted?.(uid) }}
         />
       )}
 
@@ -486,7 +486,7 @@ export default function MessageReader(
               <button
                 type="button"
                 className="attachment-chip"
-                onClick={() => download(attachment.part, attachment.fileName)}
+                onClick={() => void download(attachment.part, attachment.fileName)}
               >
                 <PaperclipIcon size={14} />
                 {attachment.fileName}
@@ -505,7 +505,7 @@ export default function MessageReader(
                   className="attachment-split-more"
                   trigger={<ChevronUpIcon size={13} />}
                   items={[
-                    { label: t('reader.download'), onSelect: () => download(attachment.part, attachment.fileName) },
+                    { label: t('reader.download'), onSelect: () => void download(attachment.part, attachment.fileName) },
                     { label: t('reader.view'), onSelect: () => setViewed(attachment) },
                   ]}
                 />
@@ -523,12 +523,12 @@ export default function MessageReader(
         <AttachmentViewerModal
           images={imageAttachments.map(a => ({
             part: a.part,
-            src: mailAttachmentUrl(folderPath!, uid!, a.part, accountId),
+            src: mailAttachmentUrl(folderPath!, uid, a.part, accountId),
             fileName: a.fileName,
             size: a.size,
           }))}
           initialIndex={Math.max(0, imageAttachments.findIndex(a => a.part === viewed.part))}
-          onDownload={image => download(image.part, image.fileName)}
+          onDownload={image => void download(image.part, image.fileName)}
           onClose={() => setViewed(null)}
         />
       )}

@@ -2,10 +2,10 @@ import {
   createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode,
 } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, hasSession, clearSession, setUnauthorizedHandler, setIsAdmin } from '../api.js'
+import { api, hasSession, clearSession, setUnauthorizedHandler } from '../api.js'
 import { deriveIdentity, type Account, type AccountIdentity } from '../lib/accountIdentity'
 import { forgetNotificationClaim } from '../modules/mail/notify/channels'
-import type { MailAuthMode } from '../modules/settings/accounts/useConnectedAccounts'
+import type { ConnectedAccount, MailAuthMode } from '../modules/settings/accounts/useConnectedAccounts'
 import type { Capabilities } from '../types/capabilities'
 
 const ACTIVE_ACCOUNT_KEY = 'mail.activeAccount'
@@ -25,18 +25,6 @@ export interface ActiveAccount {
   credentialsValid: boolean
   sieveSupported: boolean
   /** Which repair an unusable mailbox needs: a password, or a fresh consent at the provider. */
-  authMode: MailAuthMode
-}
-
-interface ConnectedAccountRow {
-  id: string
-  email: string
-  displayName: string
-  domainId: string | null
-  domainName: string | null
-  sieveSupported: boolean
-  credentialsValid: boolean
-  creationDate: string
   authMode: MailAuthMode
 }
 
@@ -65,13 +53,13 @@ interface AuthContextValue {
   refreshAccount: () => Promise<void>
 }
 
-function mapRow(row: ConnectedAccountRow): ActiveAccount {
+function mapRow(row: ConnectedAccount): ActiveAccount {
   return {
     id: row.id,
     email: row.email,
     displayName: row.displayName || row.email,
     isPrimary: false,
-    domainName: row.domainName,
+    domainName: row.domainName ?? null,
     credentialsValid: row.credentialsValid,
     sieveSupported: row.sieveSupported,
     authMode: row.authMode,
@@ -103,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // The key is shared with the Connected accounts settings page, whose mutations invalidate it —
   // which is what refreshes this list when an account is added, repaired or removed.
-  const { data: connectedRows, isLoading: accountsLoading } = useQuery<ConnectedAccountRow[]>({
+  const { data: connectedRows, isLoading: accountsLoading } = useQuery({
     queryKey: ['connectedAccounts'],
     queryFn: () => api.getConnectedAccounts(),
     enabled: isLoggedIn,
@@ -123,8 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // rest of the app) must not wait on capabilities to resolve.
     const capabilitiesPromise = fetchCapabilities()
     try {
-      const data: Account = await api.getAccount()
-      if (current()) { setAccount(data); setIsAdmin(data?.isAdmin === true) }
+      const data = await api.getAccount()
+      if (current()) setAccount(data)
     } catch {
       if (current()) setAccount(null)
     } finally {
@@ -154,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isLoggedIn) {
       wasLoggedIn.current = true
       // eslint-disable-next-line react-hooks/set-state-in-effect -- follows the session flag, set by login, logout and a 401: loads the account, or drops it and flushes the caches
-      refreshAccount()
+      void refreshAccount()
     } else {
       sessionGeneration.current += 1
       setAccount(null)
@@ -179,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // mounted above the router had already started — the app-settings read behind the install
       // manifest among them, which left /login unable to offer installation at all.
       if (wasLoggedIn.current) {
-        queryClient.resetQueries()
+        void queryClient.resetQueries()
         queryClient.getMutationCache().clear()
         forgetNotificationClaim()
         localStorage.removeItem(ACTIVE_ACCOUNT_KEY)

@@ -3,7 +3,7 @@ import { capturable, splitFullName } from './captureModel'
 import type { Contact } from './contactTypes'
 
 function contact(id: string, addresses: string[]): Contact {
-  return { id, firstName: null, lastName: null, nickname: null, isFavorite: false, addresses }
+  return { id, isFavorite: false, addresses }
 }
 
 describe('splitFullName', () => {

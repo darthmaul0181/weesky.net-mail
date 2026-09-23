@@ -23,7 +23,8 @@ const parse = (html: string) => new DOMParser().parseFromString(html, 'text/html
 const CSS_CID = /url\(\s*(?:"cid:([^"]*)"|'cid:([^']*)'|cid:([^)\s]*))\s*\)/gi
 
 const cidsInStyle = (style: string): string[] =>
-  [...style.matchAll(CSS_CID)].map(match => match[1] ?? match[2] ?? match[3]).filter(Boolean)
+  [...style.matchAll(CSS_CID)].map(match => match[1] ?? match[2] ?? match[3])
+    .filter((cid): cid is string => Boolean(cid))
 
 const HAS_CID = /cid:/i
 
@@ -67,8 +68,11 @@ export function substituteInlineImages(
     const style = styled.getAttribute('style') ?? ''
     if (!HAS_CID.test(style)) continue
 
-    const rewritten = style.replace(CSS_CID, (whole, quoted, single, bare) => {
-      const uri = dataUriByCid[quoted ?? single ?? bare]
+    const rewritten = style.replace(CSS_CID, (
+      whole: string, quoted: string | undefined, single: string | undefined, bare: string | undefined,
+    ) => {
+      const cid = quoted ?? single ?? bare
+      const uri = cid === undefined ? undefined : dataUriByCid[cid]
       // Quotes/backslashes escaped before re-entering CSS — an unescaped " in the uri would
       // close the url("...") string early, same gate sanitizeBody.ts applies on its own write.
       return typeof uri === 'string' ? `url("${uri.replace(/["\\]/g, encodeURIComponent)}")` : whole

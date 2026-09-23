@@ -21,7 +21,7 @@ function tileNames(container: HTMLElement) {
 }
 
 describe('IdentitiesPage', () => {
-  const mutate = vi.fn()
+  const mutate = vi.fn<(rows: unknown, options: { onError: (error: Error) => void }) => void>()
 
   beforeEach(() => {
     mutate.mockReset()

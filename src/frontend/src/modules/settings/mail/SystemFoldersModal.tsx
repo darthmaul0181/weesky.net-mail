@@ -70,7 +70,7 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
       {!loading && !failed && (
         <div className="system-folders-roles">
           {ROLES.map(role => {
-            const entry = roles!.find(item => item.role === role)
+            const entry = roles.find(item => item.role === role)
             const selected = entry?.provenance === 'override' ? entry.folderPath ?? '' : ''
             const options = all.filter(({ node }) =>
               node.selectable
@@ -85,7 +85,7 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
                     id={`role-${role}`}
                     value={selected}
                     disabled={pendingRole === role}
-                    onChange={event => onChange(role, event.target.value)}
+                    onChange={event => void onChange(role, event.target.value)}
                     aria-describedby={entry?.staleOverride ? `role-${role}-stale` : undefined}
                   >
                     <option value="">{automaticLabel(entry, nameOf, t)}</option>

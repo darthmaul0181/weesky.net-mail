@@ -8,7 +8,7 @@ import type { ContactGroup } from './contactGroupTypes'
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
-    firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+    isFavorite: false, addresses: [], ...fields,
   }
 }
 
@@ -148,7 +148,7 @@ describe('suggestionsFor', () => {
   })
 
   it('names each row with its contact', () => {
-    expect(addressesFor([chloe], 'chlo')[0].names).toEqual(['Chloé Vermeulen'])
+    expect(addressesFor([chloe], 'chlo')[0]!.names).toEqual(['Chloé Vermeulen'])
   })
 
   // The decision to allow a shared address lands here: one row, every owner named. Two rows would
@@ -161,8 +161,8 @@ describe('suggestionsFor', () => {
     const rows = addressesFor([first, second], 'info')
 
     expect(rows).toHaveLength(1)
-    expect(rows[0].address).toBe(shared)
-    expect(rows[0].names).toEqual(['Alice Dupont', 'Compta Weesky'])
+    expect(rows[0]!.address).toBe(shared)
+    expect(rows[0]!.names).toEqual(['Alice Dupont', 'Compta Weesky'])
   })
 
   // A nameless card names nobody: printing its address as its own name put the same string twice
@@ -170,7 +170,7 @@ describe('suggestionsFor', () => {
   it('leaves a row unnamed when the contact carries no name of its own', () => {
     const shadow = contact({ id: 's', nickname: 'ghost@example.com', addresses: ['ghost@example.com'] })
 
-    expect(addressesFor([shadow], 'ghost')[0].names).toEqual([])
+    expect(addressesFor([shadow], 'ghost')[0]!.names).toEqual([])
   })
 
   it('names a shared address after the contact that has a name', () => {
@@ -178,7 +178,7 @@ describe('suggestionsFor', () => {
     const shadow = contact({ id: 's', nickname: shared, addresses: [shared] })
     const named = contact({ id: 'n', firstName: 'Compta', lastName: 'Weesky', addresses: [shared] })
 
-    expect(addressesFor([shadow, named], 'info')[0].names).toEqual(['Compta Weesky'])
+    expect(addressesFor([shadow, named], 'info')[0]!.names).toEqual(['Compta Weesky'])
   })
 
   // Same mailbox, different case: two rows would be the identical bug the shared-address test
@@ -190,8 +190,8 @@ describe('suggestionsFor', () => {
     const rows = addressesFor([first, second], 'info')
 
     expect(rows).toHaveLength(1)
-    expect(rows[0].address).toBe('Info@Example.com')
-    expect(rows[0].names).toEqual(['Alice Dupont', 'Compta Weesky'])
+    expect(rows[0]!.address).toBe('Info@Example.com')
+    expect(rows[0]!.names).toEqual(['Alice Dupont', 'Compta Weesky'])
   })
 
   // Task 14 builds `exclude` from what the user typed into the field, where case is free — an
@@ -264,7 +264,7 @@ describe('suggestionsFor', () => {
 
     const rows = addressesFor([bruno, zoe], 'e')
 
-    expect(rows[0].address).toBe('zoe@example.com')
+    expect(rows[0]!.address).toBe('zoe@example.com')
   })
 
   it('puts a primary address before a secondary one', () => {
@@ -325,7 +325,8 @@ describe('groupOptionsOf', () => {
     const first = contact({ id: '1', firstName: 'Alice', addresses: ['Info@Example.com'] })
     const second = contact({ id: '2', firstName: 'Compta', addresses: ['info@example.com'] })
 
-    const [option] = groupOptionsOf([group({ id: 'g', memberIds: ['1', '2'] })], [first, second])
+    const [option] = groupOptionsOf([group({ id: 'g', memberIds: ['1', '2'] })], [first, second]) as
+      [GroupOption]
 
     expect(option.addresses).toEqual(['Info@Example.com'])
   })
@@ -336,7 +337,7 @@ describe('groupOptionsOf', () => {
     const nameless = contact({ id: 'n', firstName: 'Nobody' })
 
     const [option] = groupOptionsOf(
-      [group({ id: 'g', memberIds: ['n', 'gone', 'a'] })], [nameless, alice])
+      [group({ id: 'g', memberIds: ['n', 'gone', 'a'] })], [nameless, alice]) as [GroupOption]
 
     expect(option.memberCount).toBe(3)
     expect(option.addresses).toEqual(['alice@example.com'])
@@ -356,7 +357,7 @@ describe('groupOptionsOf', () => {
     const joseAscii = contact({ id: 'j2', firstName: 'Jose', addresses: ['jose@x.com'] })
 
     const [option] = groupOptionsOf(
-      [group({ id: 'g', memberIds: ['j1', 'j2'] })], [jose, joseAscii])
+      [group({ id: 'g', memberIds: ['j1', 'j2'] })], [jose, joseAscii]) as [GroupOption]
 
     expect(option.addresses).toEqual(['josé@x.com', 'jose@x.com'])
   })

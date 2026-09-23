@@ -1,13 +1,13 @@
-﻿import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Link, useMatch, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useMatch, useNavigate, useSearchParams } from 'react-router'
 import type { SearchCriteria } from './list/searchCriteria'
 import { PRIMARY_ACCOUNT_ID, useAuth } from '../../contexts/AuthContext'
 import LoadingBlock from '../../components/LoadingBlock'
-import Toasts from '../../components/Toasts.jsx'
-import { useToasts } from '../../hooks/useToasts.js'
+import Toasts from '../../components/Toasts'
+import { useToasts } from '../../hooks/useToasts'
 import { flatten } from './folders/folderNodes'
 import FolderTree from './folders/FolderTree'
 import RocketIcon from '../../icons/RocketIcon'
@@ -32,6 +32,7 @@ import { usePaneSize } from './split/usePaneSize'
 import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/ContextDrawer'
 import FloatingAction from '../../components/FloatingAction'
 import { useViewport } from '../../hooks/useViewport'
+import { reachable } from '../../hooks/useLayer'
 import { effectivePane } from './effectivePane'
 
 // Lazy: pulls in squire-rte, which every /mail visitor would otherwise download unread.
@@ -45,6 +46,11 @@ function needsAccountPassword(error: unknown): boolean {
   return failure?.status === 409 && failure.code === 'connected_credentials_invalid'
 }
 
+function resultFolderOf(state: unknown): string | null {
+  return typeof state === 'object' && state !== null && 'resultFolder' in state
+    && typeof state.resultFolder === 'string' ? state.resultFolder : null
+}
+
 /**
  * The mail module's three columns. The shell provides a single outlet, so a module builds its
  * own columns inside it — the same way the settings section does.
@@ -56,6 +62,10 @@ function needsAccountPassword(error: unknown): boolean {
 export default function MailLayout() {
   const { t } = useTranslation('mail')
   const [params, setParams] = useSearchParams()
+  // A functional `setParams` updater that returns its input still navigates (one more Back),
+  // so callbacks decide from this, kept current before any event can read it.
+  const paramsRef = useRef(params)
+  useLayoutEffect(() => { paramsRef.current = params }, [params])
   const composing = useMatch('/mail/compose') != null
   const navigate = useNavigate()
   const accountId = useAccountId()
@@ -79,8 +89,12 @@ export default function MailLayout() {
   const uid = uidParam ? Number(uidParam) : null
 
   const [search, setSearch] = useState<SearchCriteria | null>(null)
-  // The folder a cross-folder result was opened from; null when the reader shows the URL folder.
-  const [resultFolder, setResultFolder] = useState<string | null>(null)
+  // The folder a cross-folder result was opened from, carried by the history entry that opened it
+  // so it lands in the same commit as the uid. Honoured only while a search stands and a message
+  // is open: Back or a reload without a search shows the URL folder's list, which the entry's
+  // folder would contradict, and an entry whose reader closed names no hit to wind back.
+  const entryState: unknown = useLocation().state
+  const resultFolder = search && uid !== null ? resultFolderOf(entryState) : null
 
   // A search belongs to the folder it was typed in: navigating away drops it (render-time reset,
   // the useMessageList pattern, not an effect).
@@ -88,11 +102,7 @@ export default function MailLayout() {
   if (folder !== searchFolder) {
     setSearchFolder(folder)
     setSearch(null)
-    setResultFolder(null)
   }
-  // The reader closed (departed past the last row, Back): a stale cross-folder origin must not
-  // survive to relabel the next open.
-  if (uid === null && resultFolder !== null) setResultFolder(null)
 
   useListRefresh(folder, !settling)
 
@@ -119,7 +129,7 @@ export default function MailLayout() {
     // never survives either way — a message id means nothing in another mailbox.
     if (uid === null && folder !== null
       && pick?.accountId === accountId && pick.path === folder) return
-    navigate('/mail', { replace: true })
+    void navigate('/mail', { replace: true })
   }, [accountId, composing, folder, uid, navigate])
 
   // The list heading shows the same label as the tree: the role label when the folder has a
@@ -152,19 +162,18 @@ export default function MailLayout() {
     picked.current = { path, accountId }
     // While composing this is a navigation out of /mail/compose; the ComposeView blocker owns
     // the "discard?" question. Otherwise it drops uid: a message id means nothing elsewhere.
-    if (composing) navigate(`/mail?folder=${encodeURIComponent(path)}`)
+    if (composing) void navigate(`/mail?folder=${encodeURIComponent(path)}`)
     else setParams({ folder: path })
   }
 
   const openCompose = useCallback(() => {
-    navigate('/mail/compose', { state: { from: folder } })
+    void navigate('/mail/compose', { state: { from: folder } })
   }, [navigate, folder])
 
   function selectMessage(nextUid: number) {
     if (!folder) return
     // A draft opens as an editor, not a reading pane — the row is the account's own unsent text.
     if (folderNode?.specialUse === 'drafts') { void openDraftInComposer(nextUid); return }
-    setResultFolder(null)
     setParams({ folder, uid: String(nextUid) })
   }
 
@@ -180,7 +189,7 @@ export default function MailLayout() {
         .then(list => list.identities, () => [])
       const seed = buildDraftSeed(
         opened, identities, { folderPath: folder!, uid: draftUid }, accountId)
-      navigate('/mail/compose', { state: { from: folder, seed } })
+      void navigate('/mail/compose', { state: { from: folder, seed } })
     } catch (error) {
       addToast(apiErrorMessage(error, t('layout.draftOpenFailed')), 'error')
     }
@@ -190,19 +199,17 @@ export default function MailLayout() {
     setSearch(criteria)
     if (criteria !== null) return
     // Clearing while a cross-folder result is open: its uid means nothing in the URL folder.
-    if (resultFolder !== null) setParams(previous => {
-      const path = previous.get('folder')
-      return path ? { folder: path } : previous
-    })
-    setResultFolder(null)
+    if (resultFolder === null) return
+    const path = paramsRef.current.get('folder')
+    if (path) setParams({ folder: path })
   }, [resultFolder, setParams])
 
   // A hit from another folder opens where it lives: the URL folder stays put, the reader reads
   // from resultFolder instead.
   const openResult = useCallback((nextUid: number, fromFolder: string) => {
     if (!folder) return
-    setResultFolder(fromFolder === folder ? null : fromFolder)
-    setParams({ folder, uid: String(nextUid) })
+    setParams({ folder, uid: String(nextUid) },
+      fromFolder === folder ? undefined : { state: { resultFolder: fromFolder } })
   }, [folder, setParams])
 
   const viewport = useViewport()
@@ -222,22 +229,25 @@ export default function MailLayout() {
   // and re-rendering the whole module on every list refresh would be a needless cost.
   const rowsRef = useRef<number[]>([])
   const keepRows = useCallback((uids: number[]) => { rowsRef.current = uids }, [])
+  // Set when a departure closes the reader. The URL lands a commit after the confirm that handed
+  // focus to the reader column, so the column may leave holding it: the list takes it back then.
+  const readerClosing = useRef(false)
 
   // The row is gone from the cache the instant the action fires, so the selection follows now
   // rather than after a refetch: the next message, or the reader closes.
   const departed = useCallback((open: number, batch: number[] = [open]) => {
-    setParams(previous => {
-      if (Number(previous.get('uid')) !== open) return previous
-      const path = previous.get('folder')
-      if (!path) return previous
+    const previous = paramsRef.current
+    if (Number(previous.get('uid')) !== open) return
+    const path = previous.get('folder')
+    if (!path) return
 
-      // A bulk action removes the whole batch: skip every member, not just the open row.
-      const next = nextUidOf(rowsRef.current, open, batch)
-      const params: Record<string, string> = { folder: path }
-      if (next !== null) params.uid = String(next)
-      return params
-    })
-  }, [setParams])
+    // A bulk action removes the whole batch: skip every member, not just the open row.
+    const next = nextUidOf(rowsRef.current, open, batch)
+    const params: Record<string, string> = { folder: path }
+    if (next !== null) params.uid = String(next)
+    readerClosing.current = next === null
+    setParams(params, { state: entryState })
+  }, [entryState, setParams])
 
   // A drop reuses the same optimistic move the toolbar fires; the payload already names its source
   // folder. If the open message is in the batch, the reader advances past it like any bulk action.
@@ -260,6 +270,11 @@ export default function MailLayout() {
   // and the reader leaves with the last one. Resolved when focus is handed back, not at render.
   const noSplitRegion = useMemo(
     () => ({ get current() { return readerRegion.current ?? listRegion.current } }), [])
+  useLayoutEffect(() => {
+    if (uid !== null || !readerClosing.current) return
+    readerClosing.current = false
+    if (!reachable(document.activeElement)) listRegion.current?.focus()
+  }, [uid])
 
   // One place for the column: its region ref and `tabIndex` would otherwise be written in three
   // branches and forgotten in one.

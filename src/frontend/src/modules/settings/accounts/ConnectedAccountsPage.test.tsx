@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router'
 import ConnectedAccountsPage from './ConnectedAccountsPage'
 import { leaveTo } from './useConnectedAccounts'
 
@@ -38,7 +38,7 @@ const WORK = {
   authMode: 'Password',
 }
 const SHARED = {
-  id: 'b2', email: 'shared@weesky.net', displayName: '', domainId: null, domainName: null,
+  id: 'b2', email: 'shared@weesky.net', displayName: '',
   sieveSupported: true, credentialsValid: false, creationDate: '2026-05-20T10:00:00Z',
   authMode: 'Password',
 }

@@ -16,7 +16,7 @@ export interface ResizeState {
 
 export interface ResizeEventOptions {
   enabled: boolean
-  onResize(o: Occurrence, newDurationMinutes: number): void
+  onResize: (o: Occurrence, newDurationMinutes: number) => void
 }
 
 /**

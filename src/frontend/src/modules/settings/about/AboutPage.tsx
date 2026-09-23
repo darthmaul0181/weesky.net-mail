@@ -15,18 +15,12 @@ const LICENCES = '/third-party-licenses.html'
     rather than configured, so a fork edits it instead of forgetting it. */
 const SOURCE = 'https://github.com/darthmaul0181/weesky.net-mail'
 
-interface ServerVersion {
-  version: string
-  /** Optional, not just nullable: the API omits a null field entirely. */
-  commit?: string | null
-}
-
 export default function AboutPage() {
   const { t, i18n } = useTranslation('settings')
   // Instance-wide rather than account-scoped, and it only moves on a deploy.
   const { data: server, isError } = useQuery({
     queryKey: ['version'],
-    queryFn: ({ signal }) => api.getVersion({ signal }) as Promise<ServerVersion>,
+    queryFn: ({ signal }) => api.getVersion({ signal }),
     staleTime: 5 * 60 * 1000,
   })
 

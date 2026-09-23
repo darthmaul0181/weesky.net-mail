@@ -1,4 +1,4 @@
-import { Outlet, useMatch, useSearchParams } from 'react-router-dom'
+import { Outlet, useMatch, useSearchParams } from 'react-router'
 import { useMailNotifications } from '../modules/mail/notify/useMailNotifications'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useFaviconBadge } from '../hooks/useFaviconBadge'

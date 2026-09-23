@@ -38,11 +38,11 @@ export interface EventEditorProps {
   /** The Title box, which the editor opens on. The surface around it — a `Modal` on the desktop,
       a layer on the phone — is what moves the focus there. */
   titleRef?: RefObject<HTMLInputElement>
-  onSave(form: EventFormState, scope: EditScope | null): void
-  onDelete(scope: EditScope | null): void
+  onSave: (form: EventFormState, scope: EditScope | null) => void
+  onDelete: (scope: EditScope | null) => void
   /** Carries whether anything was typed: the layout owns the discard question, and only the form
       knows what it holds. */
-  onClose(dirty: boolean): void
+  onClose: (dirty: boolean) => void
   /** Reported upward because the backdrop and Escape are the surface's, and the same question has
       to be asked whichever way out was taken. */
   onDirtyChange?: (dirty: boolean) => void

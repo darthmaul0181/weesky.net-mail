@@ -1,23 +1,38 @@
 import type { MailFolderPage, MailMessageSummary, MailThread } from '../api/mailTypes'
 
+/** A list with at least one element, typed rather than merely asserted: `messages[0]` reads as
+    `MailMessageSummary`, never `| undefined`, everywhere a `ThreadGroup` is read. */
+export type NonEmpty<T> = [T, ...T[]]
+
 /** One list row: a conversation, or a single message wrapped as one. */
 export interface ThreadGroup {
   /** The oldest member's uid — the newest changes on every arrival, so it cannot be the key. */
   key: number
   /** Newest first, as the backend sends them. */
-  messages: MailMessageSummary[]
+  messages: NonEmpty<MailMessageSummary>
 }
 
-export function threadKeyOf(messages: MailMessageSummary[]): number {
-  return messages[messages.length - 1].uid
+export function threadKeyOf(messages: NonEmpty<MailMessageSummary>): number {
+  // The last message, read by walking rather than by a computed index: the tuple's rest part
+  // has no fixed length, so TS cannot type an index into it as anything but T | undefined.
+  const [first, ...rest] = messages
+  let oldest = first
+  for (const message of rest) oldest = message
+  return oldest.uid
 }
 
-const toGroup = (thread: MailThread): ThreadGroup =>
+const toGroup = (thread: MailThread & { messages: NonEmpty<MailMessageSummary> }): ThreadGroup =>
   ({ key: threadKeyOf(thread.messages), messages: thread.messages })
+
+/** Narrows a thread's `messages` from the wire's plain array to `NonEmpty` — the one place that
+    invariant is actually established, by checking it. */
+function hasMessages(t: MailThread): t is MailThread & { messages: NonEmpty<MailMessageSummary> } {
+  return t.messages.length > 0
+}
 
 /** A grouped page speaks through `threads`; a flat one is its messages, one group each. */
 export function groupsOf(page: MailFolderPage): ThreadGroup[] {
-  if (page.threads) return page.threads.filter(t => t.messages.length > 0).map(toGroup)
+  if (page.threads) return page.threads.filter(hasMessages).map(toGroup)
   return page.messages.map(message => ({ key: message.uid, messages: [message] }))
 }
 
@@ -37,7 +52,8 @@ export function dedupeThreads(pages: MailFolderPage[]): ThreadGroup[] {
       seenThreads.add(group.key)
       const fresh = group.messages.filter(message => !seenUids.has(message.uid))
       fresh.forEach(message => seenUids.add(message.uid))
-      if (fresh.length > 0) groups.push({ key: group.key, messages: fresh })
+      // filter() loses the tuple type; the length check here is what the cast restores it on.
+      if (fresh.length > 0) groups.push({ key: group.key, messages: fresh as NonEmpty<MailMessageSummary> })
     }
   }
 

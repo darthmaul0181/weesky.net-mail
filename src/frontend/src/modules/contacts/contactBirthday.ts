@@ -17,13 +17,15 @@ export function formatBirthday(raw: string | null | undefined, locale?: string):
 
   const yearLess = YearLess.exec(value)
   if (yearLess) {
-    // Any leap-safe year: it is never formatted, it only carries the month and day to Intl.
-    return format(2000, +yearLess[1], +yearLess[2], { day: 'numeric', month: 'long' }, locale) ?? value
+    // Both groups are mandatory in the pattern (no `?`), so always captured on a match.
+    return format(2000, +yearLess[1]!, +yearLess[2]!, { day: 'numeric', month: 'long' }, locale)
+      ?? value
   }
 
   const dated = Dated.exec(value)
   if (dated) {
-    return format(+dated[1], +dated[2], +dated[3],
+    // All three groups are mandatory in the pattern, so always captured on a match.
+    return format(+dated[1]!, +dated[2]!, +dated[3]!,
       { day: 'numeric', month: 'long', year: 'numeric' }, locale) ?? value
   }
 
@@ -98,8 +100,9 @@ export function inputToBirthday(text: string): string {
   const typed = Typed.exec(value)
   if (!typed) return value
 
-  const day = +typed[1]
-  const month = +typed[2]
+  // Groups 1 and 2 are mandatory in the pattern (no `?`), so always captured on a match.
+  const day = +typed[1]!
+  const month = +typed[2]!
   if (typed[3] === undefined) {
     // Any leap-safe year: it is never stored, it only proves 29 February is a day.
     return real(2000, month, day) ? `--${pad(month)}${pad(day)}` : value

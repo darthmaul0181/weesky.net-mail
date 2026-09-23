@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { useBlocker, useLocation, useNavigate } from 'react-router-dom'
+import { useBlocker, useLocation, useNavigate } from 'react-router'
 import { useAuth } from '../../../contexts/AuthContext'
+import type { Toast, ToastAction } from '../../../hooks/useToasts'
 import { useViewport } from '../../../hooks/useViewport'
 import { useContactGroups, useContacts } from '../../contacts/queries'
 import { groupOptionsOf } from '../../contacts/contactSearch'
@@ -66,8 +67,7 @@ function backTargetOf(state: ComposeState): string {
 }
 
 interface Props {
-  onNotify: (
-    message: string, kind?: string, action?: { label: string; onClick: () => void }) => void
+  onNotify: (message: string, kind?: Toast['type'], action?: ToastAction) => void
 }
 
 /**
@@ -92,7 +92,7 @@ export default function ComposeView(props: Props) {
       <button type="button" className="btn btn-primary" onClick={() => void refetch()}>
         {t('list.retry', { ns: 'mail' })}
       </button>
-      <button type="button" className="btn btn-ghost" onClick={() => navigate(backTargetOf(location.state as ComposeState))}>
+      <button type="button" className="btn btn-ghost" onClick={() => void navigate(backTargetOf(location.state as ComposeState))}>
         {t('actions.close', { ns: 'common' })}
       </button>
     </div>
@@ -362,7 +362,7 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
 
   const leave = useCallback(() => {
     leavingRef.current = true
-    navigate(backTarget)
+    void navigate(backTarget)
   }, [navigate, backTarget])
 
   // The dialog serves two callers, so its buttons answer whichever one opened it: the blocker
@@ -374,7 +374,7 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
 
   function leaveBehind() {
     leavingRef.current = true
-    if (leaveAsk) { setLeaveAsk(null); leaveAsk(true); navigate(backTarget); return }
+    if (leaveAsk) { setLeaveAsk(null); leaveAsk(true); void navigate(backTarget); return }
     blocker.proceed?.()
   }
 
@@ -457,7 +457,7 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
     void capture.create(candidates).then(created => {
       if (created.length === 0) return
       const message = created.length === 1
-        ? t('toast.captured', { name: displayNameOf(created[0]) })
+        ? t('toast.captured', { name: displayNameOf(created[0]!) })
         : t('toast.capturedMany', { count: created.length })
       onNotify(message, 'success', {
         label: t('toast.undo'),
@@ -501,7 +501,7 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
     // draft open re-staged copies of them, so nothing here is the only copy of anything.
     if (!dirty) { attachments.discardAll(); leave(); return }
     // Dirty: navigate anyway — the blocker turns it into the save-or-discard question.
-    navigate(backTarget)
+    void navigate(backTarget)
   }
 
   return (

@@ -25,6 +25,16 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
 
   const all = flatten(sortFolders(folders))
 
+  async function create() {
+    try {
+      await createFolder.mutateAsync({ parentPath: parent, name: name.trim() })
+      onNotify(t('folders.create.created', { name: name.trim() }))
+      onClose()
+    } catch (error) {
+      onNotify(apiErrorMessage(error, t('folders.create.failed')), 'error')
+    }
+  }
+
   return (
     <Modal
       icon={<FolderPlusIcon />}
@@ -34,15 +44,9 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
     >
       {/* A form, so Enter submits the way it does in the admin dialogs. */}
       <form
-        onSubmit={async event => {
+        onSubmit={event => {
           event.preventDefault()
-          try {
-            await createFolder.mutateAsync({ parentPath: parent, name: name.trim() })
-            onNotify(t('folders.create.created', { name: name.trim() }))
-            onClose()
-          } catch (error) {
-            onNotify(apiErrorMessage(error, t('folders.create.failed')), 'error')
-          }
+          void create()
         }}
       >
         <div className="field-h">

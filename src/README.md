@@ -34,10 +34,10 @@ See [`scotty.microservice/DESIGN.md`](scotty.microservice/DESIGN.md) for archite
 
 React SPA (Vite) webmail shell — Mail/Calendar/Contacts modules (Mail/Calendar/Contacts are placeholder pages today) plus a settings area (account, appearance, aliases, mail rules, admin). Talks to the backend named by `VITE_API_BASE`.
 
-- `react-router-dom` routing (`AppShell` + `SettingsLayout`), route guards for auth (`RequireAuth`) and admin (`RequireAdmin`).
+- `react-router` routing (`AppShell` + `SettingsLayout`), route guards for auth (`RequireAuth`) and admin (`RequireAdmin`).
 - Cookie-based session (`HttpOnly` cookie set by the backend); `AuthContext` tracks login/account state, prepared for multi-account (sub-project 2).
 - Token-based theming (`src/styles/`) with two palettes (night/classic) × two modes (light/dark), toggled from `/settings/appearance`.
-- Centralized API client in `src/api.js` (`request()` helper, `setUnauthorizedHandler` to fall back to the login screen on 401).
+- Centralized API client in `src/api.ts` (`request()` helper, `setUnauthorizedHandler` to fall back to the login screen on 401).
 - Sieve rules manager (`RulesPage`, at `/settings/rules`) with a step-by-step rule editor and an Extended-rules toggle (Weesky vs Rainloop/Snappymail interop).
 - Tested with Vitest + Testing Library (`npm run test`); linted with ESLint (`npm run lint`); typechecked with `npm run typecheck`.
 

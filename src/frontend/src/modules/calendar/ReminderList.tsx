@@ -10,7 +10,7 @@ export interface ReminderListProps {
   /** The alarms the bell cannot draw — an e-mail alarm a phone wrote. Kept through a save, so
       they are printed rather than hidden: a list that said nothing would read as a loss. */
   foreignAlarms: string[]
-  onChange(reminders: number[]): void
+  onChange: (reminders: number[]) => void
 }
 
 /** The ladder, plus whatever the event actually carries: a value a phone wrote that no preset

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import { ApiError } from '../../api.js'
@@ -68,8 +68,8 @@ const rowOf = (cell: HTMLElement) => cell.closest('.message-row') as HTMLElement
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
-    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+    path: 'X', name: 'X', selectable: true, subscribed: true,
+    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
   }
 }
 
@@ -92,9 +92,10 @@ function Where() {
       <span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
       {/* Stands in for the composer's own exit, which goes back to the folder it was opened
           from. ComposeView is mocked here, so the layout has no ✕ of its own to click. */}
-      <button data-testid="leave-compose" onClick={() => navigate('/mail?folder=Projects')}>
+      <button data-testid="leave-compose" onClick={() => void navigate('/mail?folder=Projects')}>
         leave
       </button>
+      <button data-testid="go-back" onClick={() => { void navigate(-1) }}>back</button>
     </>
   )
 }
@@ -451,7 +452,7 @@ describe('a message departing the folder', () => {
   })
 
   it('closes the reader when the last remaining message departs', async () => {
-    openFolder([summaries[0]], 7)
+    openFolder([summaries[0]!], 7)
 
     const row = rowOf(await screen.findByRole('gridcell', { name: /first/i }))
     fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
@@ -467,6 +468,40 @@ describe('a message departing the folder', () => {
 
     await settle()
     expect(screen.getByTestId('search')).toHaveTextContent('uid=8')
+  })
+
+  // The URL does not change for this departure (uid 7 is not the open uid 8), so it must not
+  // push a history entry either — one Back should leave the mail view entirely.
+  it('pushes no history entry when the departing row is not the one open', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      uid: 8, folderPath: 'INBOX', uidValidity: 1, subject: 'open', fromName: '', fromAddress: 'a@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    })
+    mocks.getMailFolders.mockResolvedValue(folders)
+    mocks.getMailMessages.mockResolvedValue({
+      folderPath: 'INBOX', uidValidity: 1, total: summaries.length, page: 0, pageSize: 30, messages: summaries,
+    })
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': 'right' })
+    mocks.getIdentities.mockReturnValue(Promise.resolve({ identities: [] }))
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<MailLayout />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={['/mail?folder=Projects', '/mail?folder=INBOX&uid=8']} initialIndex={1}>
+            {children}<Where />
+          </MemoryRouter>
+        </QueryClientProvider>
+      ),
+    })
+
+    const row = rowOf(await screen.findByRole('gridcell', { name: /first/i }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
+    await settle()
+
+    fireEvent.click(screen.getByTestId('go-back'))
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects'))
   })
 
   // A bulk action departs the whole selection: the reader must skip every member it removed, not
@@ -701,13 +736,33 @@ describe('focus after the reader expunges a message', () => {
 
   // The same delete with nothing left to open: the reader column goes and the list comes back.
   it('hands it to the list column when the reader closes with the last message', async () => {
-    const { container } = openTrash([trash[0]], 'none')
+    const { container } = openTrash([trash[0]!], 'none')
     await screen.findByText('open')
 
     await expunge(container)
 
     await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
     expect(container.querySelector('.mail-list')).toHaveFocus()
+  })
+
+  // The fallback only rescues a focus the closing reader took with it: one resting elsewhere stays.
+  it('leaves the focus alone when the reader closes without holding it', async () => {
+    const { container } = openTrash([trash[0]!], 'none')
+    await screen.findByText('open')
+    const elsewhere = screen.getByTestId('leave-compose')
+    elsewhere.focus()
+
+    const tree = document.querySelector('nav[aria-label="Folders"]') as HTMLElement
+    fireEvent.drop(within(tree).getByRole('button', { name: 'Archive' }).closest('.folder-line') as HTMLElement, {
+      dataTransfer: {
+        types: [DRAG_MIME], dropEffect: 'none',
+        getData: () => serializeDrag({ sourcePath: 'Corbeille', uids: [7] }),
+      },
+    })
+
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+    expect(container.querySelector('.mail-reader')).toBeNull()
+    expect(elsewhere).toHaveFocus()
   })
 
   // The phone tier draws the reader's actions as `.actionbar` across the foot of the screen, so the
@@ -729,7 +784,7 @@ describe('focus after the reader expunges a message', () => {
   // The split arrangements keep the list on screen throughout, and it is the real column that has
   // to carry the ref — the component tests hand their own region in.
   it('hands it to the list column beside the reader in the split arrangement', async () => {
-    const { container } = openTrash([trash[0]], 'right')
+    const { container } = openTrash([trash[0]!], 'right')
     await screen.findByText('open')
 
     await expunge(container)
@@ -822,8 +877,8 @@ describe('opening a draft from the drafts folder', () => {
 
   it('opens the composer instead of the reader when a draft row is clicked', async () => {
     mocks.openDraft.mockResolvedValue({
-      to: ['bob@x.example'], cc: [], bcc: [], subject: 'unsent', fromAddress: null,
-      htmlBody: '<p>hi</p>', attachments: [], inReplyTo: null, references: [],
+      to: ['bob@x.example'], cc: [], bcc: [], subject: 'unsent',
+      htmlBody: '<p>hi</p>', attachments: [], references: [],
     })
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
 
@@ -836,11 +891,11 @@ describe('opening a draft from the drafts folder', () => {
 
     // The navigation is only right if the seed it carries actually came from this draft: proves
     // the openDraft → buildDraftSeed → navigate chain, not just that some navigation happened.
-    const state = JSON.parse(screen.getByTestId('state').textContent || 'null')
-    expect(state.from).toBe('Drafts')
-    expect(state.seed.action).toBe('draft')
-    expect(state.seed.draftRef).toEqual({ folderPath: 'Drafts', uid: 9 })
-    expect(state.seed.to).toEqual(['bob@x.example'])
+    const state: unknown = JSON.parse(screen.getByTestId('state').textContent || 'null')
+    expect(state).toHaveProperty('from', 'Drafts')
+    expect(state).toHaveProperty('seed.action', 'draft')
+    expect(state).toHaveProperty('seed.draftRef', { folderPath: 'Drafts', uid: 9 })
+    expect(state).toHaveProperty('seed.to', ['bob@x.example'])
   })
 
   // An unresolved identities query is not "no identities": seeding from [] rewrites the draft's
@@ -850,7 +905,7 @@ describe('opening a draft from the drafts folder', () => {
     const identities = new Promise<object>(resolve => { release = resolve })
     mocks.openDraft.mockResolvedValue({
       to: ['bob@x.example'], cc: [], bcc: [], subject: 'unsent', fromAddress: 'michel@weesky.be',
-      htmlBody: '<p>hi</p>', attachments: [], inReplyTo: null, references: [],
+      htmlBody: '<p>hi</p>', attachments: [], references: [],
     })
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow], identities)
 
@@ -863,8 +918,8 @@ describe('opening a draft from the drafts folder', () => {
     await settle()
 
     await waitFor(() => expect(screen.getByTestId('path')).toHaveTextContent('/mail/compose'))
-    const state = JSON.parse(screen.getByTestId('state').textContent || 'null')
-    expect(state.seed.fromAddress).toBe('michel@weesky.be')
+    const state: unknown = JSON.parse(screen.getByTestId('state').textContent || 'null')
+    expect(state).toHaveProperty('seed.fromAddress', 'michel@weesky.be')
   })
 
   // Two Open calls stage the draft's parts twice; the losing set is left to the TTL sweeper.
@@ -970,6 +1025,51 @@ describe('searching from the layout', () => {
 
     await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
     expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX')
+  })
+
+  // 3b) Back to a hit after Clear: the search is gone, so the entry's folder no longer applies. The
+  //     reader reads the URL folder, and a delete walks the list it actually shows.
+  it('ignores a cross-folder entry once its search is cleared', async () => {
+    searchYields([result({ folderPath: 'Archives', subject: 'elsewhere' })])
+    readerYields(20, 'Archives')
+    const inbox = [20, 21].map(uid => result({ uid, subject: `inbox ${uid}` }))
+    renderAt('/mail?folder=INBOX', folders, 'right', inbox)
+
+    await runAdvancedAllFolders()
+    fireEvent.click(await screen.findByRole('gridcell', { name: /elsewhere/i }))
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=20'))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+
+    fireEvent.click(screen.getByTestId('go-back'))
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=20'))
+    await waitFor(() => expect(mocks.getMailMessage).toHaveBeenLastCalledWith('INBOX', 20, expect.anything()))
+    const reader = within(document.querySelector('.mail-reader') as HTMLElement)
+    fireEvent.click(await reader.findByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=21'))
+    await waitFor(() => expect(mocks.getMailMessage).toHaveBeenLastCalledWith('INBOX', 21, expect.anything()))
+    expect(mocks.getMailMessage).not.toHaveBeenCalledWith('Archives', 21, expect.anything())
+  })
+
+  // 3c) The last hit deleted closes the reader: the entry left behind shows no message, so Clear
+  //     has nothing to wind back and must not push a duplicate of it — one Back reaches the hit.
+  it('pushes no entry when Clear follows a cross-folder hit deleted to an empty reader', async () => {
+    searchYields([result({ folderPath: 'Archives', subject: 'elsewhere' })])
+    readerYields(20, 'Archives')
+    renderAt('/mail?folder=INBOX')
+
+    await runAdvancedAllFolders()
+    fireEvent.click(await screen.findByRole('gridcell', { name: /elsewhere/i }))
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=20'))
+    const reader = within(document.querySelector('.mail-reader') as HTMLElement)
+    fireEvent.click(await reader.findByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.getByTestId('search')).not.toHaveTextContent('uid'))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await settle()
+
+    fireEvent.click(screen.getByTestId('go-back'))
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=20'))
   })
 
   // 4) Changer de dossier dans l'arbre pendant une recherche : la liste redevient le dossier,

@@ -13,7 +13,7 @@ describe('LoadMoreSentinel', () => {
     const onReach = vi.fn()
     render(<LoadMoreSentinel onReach={onReach} />)
 
-    FakeIntersectionObserver.instances[0].trigger(true)
+    FakeIntersectionObserver.instances[0]!.trigger(true)
 
     expect(onReach).toHaveBeenCalledTimes(1)
   })
@@ -22,7 +22,7 @@ describe('LoadMoreSentinel', () => {
     const onReach = vi.fn()
     render(<LoadMoreSentinel onReach={onReach} />)
 
-    FakeIntersectionObserver.instances[0].trigger(false)
+    FakeIntersectionObserver.instances[0]!.trigger(false)
 
     expect(onReach).not.toHaveBeenCalled()
   })
@@ -39,7 +39,7 @@ describe('LoadMoreSentinel', () => {
     expect(FakeIntersectionObserver.instances).toHaveLength(1)
     expect(FakeIntersectionObserver.instances[0]).toBe(observer)
 
-    FakeIntersectionObserver.instances[0].trigger(true)
+    FakeIntersectionObserver.instances[0]!.trigger(true)
     expect(first).not.toHaveBeenCalled()
     expect(second).toHaveBeenCalledTimes(1)
   })

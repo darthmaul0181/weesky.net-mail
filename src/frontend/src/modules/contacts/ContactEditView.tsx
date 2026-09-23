@@ -2,14 +2,14 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'r
 import { useTranslation } from 'react-i18next'
 import DropdownMenu from '../../components/DropdownMenu'
 import CheckIcon from '../../icons/CheckIcon'
-import PencilIcon from '../../icons/PencilIcon.jsx'
+import PencilIcon from '../../icons/PencilIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
 import MailIcon from '../../icons/MailIcon'
 import MapPinIcon from '../../icons/MapPinIcon'
-import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
+import PersonPlusIcon from '../../icons/PersonPlusIcon'
 import PhoneIcon from '../../icons/PhoneIcon'
 import StarIcon from '../../icons/StarIcon'
-import TrashIcon from '../../icons/TrashIcon.jsx'
+import TrashIcon from '../../icons/TrashIcon'
 import { birthdayToInput, inputToBirthday } from './contactBirthday'
 import { PHOTO_TOO_LARGE, PHOTO_UNREADABLE, reducePhoto, type PhotoErrorKey } from './contactPhoto'
 import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeLabel, typeOptions } from './contactLineTypes'
@@ -347,7 +347,7 @@ export default function ContactEditView({
               )}
             </button>
             <input ref={fileInput} type="file" hidden data-testid="editor-photo-input"
-              accept="image/jpeg,image/png,image/gif,image/webp" onChange={pickPhoto} />
+              accept="image/jpeg,image/png,image/gif,image/webp" onChange={event => void pickPhoto(event)} />
             {removable && (
               <button type="button" className="contact-editor-photo-remove" onClick={removePhoto}>
                 {t('editor.removePhoto')}

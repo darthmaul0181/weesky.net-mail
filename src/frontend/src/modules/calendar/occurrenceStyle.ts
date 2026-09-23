@@ -29,5 +29,6 @@ export function occurrenceKey(o: Pick<Occurrence, 'eventId' | 'instanceId'>): st
 export function colorOf(
   o: Pick<Occurrence, 'calendarId'>, calendars: Map<string, Calendar>,
 ): string {
-  return calendars.get(o.calendarId)?.color || CALENDAR_COLORS[0]
+  // CALENDAR_COLORS is a fixed, non-empty literal list (see its own declaration).
+  return calendars.get(o.calendarId)?.color || CALENDAR_COLORS[0]!
 }

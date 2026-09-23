@@ -19,6 +19,8 @@
     "title": "Accounts ({{total}})",
     "titleFiltered": "Accounts ({{shown}} / {{total}})",
     "loadFailed": "Failed to load accounts",
+    "domainsFailed": "Failed to load the domain list",
+    "loadFailedBody": "Could not load the accounts.",
     "deleted": "{{account}} deleted",
     "deleteFailed": "Failed to delete user",
     "created": "Account created",
@@ -45,6 +47,7 @@
   "domains": {
     "title": "Domains ({{total}})",
     "loadFailed": "Failed to load domains",
+    "loadFailedBody": "Could not load the domains.",
     "deleted": "Domain {{name}} deleted",
     "deleteFailed": "Failed to delete domain",
     "created": "Domain created",
@@ -61,6 +64,8 @@
   "virtual": {
     "title": "Virtual alias domains ({{total}})",
     "loadFailed": "Failed to load virtual domains",
+    "usersFailed": "Failed to load the account list",
+    "loadFailedBody": "Could not load the virtual domains.",
     "setOwnerFailed": "Failed to set owner",
     "removeOwnerFailed": "Failed to remove owner",
     "empty": "No virtual alias domains",

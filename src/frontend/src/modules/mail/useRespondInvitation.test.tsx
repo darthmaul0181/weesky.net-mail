@@ -29,8 +29,8 @@ const pageOf = (messages: MailMessageSummary[]): MailFolderPage =>
   ({ folderPath: 'INBOX', uidValidity: 1, total: 20, page: 0, pageSize: 50, messages })
 
 const node = (path: string, total: number, unread: number): MailFolderNode => ({
-  path, name: path, specialUse: null, selectable: true, subscribed: true,
-  total, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children: [],
+  path, name: path, selectable: true, subscribed: true,
+  total, unread, uidValidity: 1, uidNext: 100, children: [],
 })
 
 const pagesKey = mailKeys.messages('primary', 'INBOX', 0, 50)
@@ -57,7 +57,7 @@ function seed() {
 
 const page = () => client.getQueryData<MailFolderPage>(pagesKey)!
 const stream = () => client.getQueryData<InfiniteData<MailFolderPage>>(streamKey)!
-const inbox = () => client.getQueryData<MailFolderNode[]>(foldersKey)![0]
+const inbox = () => client.getQueryData<MailFolderNode[]>(foldersKey)![0]!
 
 describe('useRespondInvitation', () => {
   beforeEach(() => {
@@ -75,7 +75,7 @@ describe('useRespondInvitation', () => {
     await act(() => result.current.mutateAsync(args))
 
     await waitFor(() => expect(page().messages.map(m => m.uid)).toEqual([8]))
-    expect(stream().pages[0].messages.map(m => m.uid)).toEqual([9])
+    expect(stream().pages[0]!.messages.map(m => m.uid)).toEqual([9])
     // Counted once across the two caches: one row left the folder, and it was unread.
     expect(inbox().total).toBe(19)
     expect(inbox().unread).toBe(4)
@@ -89,7 +89,7 @@ describe('useRespondInvitation', () => {
     await act(() => result.current.mutateAsync(args))
 
     expect(page().messages.map(m => m.uid)).toEqual([7, 8])
-    expect(stream().pages[0].messages.map(m => m.uid)).toEqual([7, 9])
+    expect(stream().pages[0]!.messages.map(m => m.uid)).toEqual([7, 9])
     expect(inbox().total).toBe(20)
     expect(inbox().unread).toBe(5)
   })

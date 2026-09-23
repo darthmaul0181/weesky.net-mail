@@ -1,6 +1,7 @@
 import type { MailFolderNode } from '../api/mailTypes'
 
-/** What the poll compares between two ticks. All change signals, nothing else. */
+/** What the poll compares between two ticks. All change signals, nothing else. A counter the
+    API omitted is `null` here, so that "not reported" reads the same whatever the wire did. */
 export interface FolderSnapshot {
   uidNext: number | null
   total: number | null
@@ -11,10 +12,10 @@ export interface FolderSnapshot {
 
 export function snapshotOf(node: MailFolderNode): FolderSnapshot {
   return {
-    uidNext: node.uidNext,
-    total: node.total,
-    unread: node.unread,
-    highestModSeq: node.highestModSeq,
+    uidNext: node.uidNext ?? null,
+    total: node.total ?? null,
+    unread: node.unread ?? null,
+    highestModSeq: node.highestModSeq ?? null,
     uidValidity: node.uidValidity,
   }
 }

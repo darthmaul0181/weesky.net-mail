@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRouteError } from 'react-router-dom'
+import { useRouteError } from 'react-router'
 
 const RELOADED_AT = 'chunkReloadAt'
 
 /** A stale chunk is a deploy that shipped while this tab sat open: the hashed filename the old
     bundle asks for is gone. Chrome, Firefox and Safari each word the failure differently. */
 export function isChunkLoadError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? '')
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
   return /dynamically imported module|Importing a module script failed/i.test(message)
 }
 

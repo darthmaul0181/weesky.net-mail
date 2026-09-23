@@ -49,7 +49,7 @@ describe('SyncPage', () => {
   })
 
   it('says a deployment with no sync address does not offer it, rather than blaming the load', async () => {
-    vi.mocked(api.getDavCredentials).mockRejectedValue(new ApiError('Not served', 404))
+    vi.mocked(api.getDavCredentials).mockRejectedValue(new ApiError('Not served', 404, null))
     render(<SyncPage />)
 
     expect(await screen.findByText('This server does not offer synchronisation.')).toBeInTheDocument()
@@ -57,7 +57,7 @@ describe('SyncPage', () => {
   })
 
   it('still blames the load on a failure that is not a 404', async () => {
-    vi.mocked(api.getDavCredentials).mockRejectedValue(new ApiError('Boom', 500))
+    vi.mocked(api.getDavCredentials).mockRejectedValue(new ApiError('Boom', 500, null))
     render(<SyncPage />)
 
     expect(await screen.findByText('Could not load the sync settings')).toBeInTheDocument()

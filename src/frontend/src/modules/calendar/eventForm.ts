@@ -7,7 +7,7 @@ import {
   addDays, clockOf, daysBetween, isoWeekdayOf, isPlainDate, MINUTES_PER_DAY, minutesIntoDay,
   type PlainDate, plainDateOf, utcOfLocalTime,
 } from './plainDate'
-import { WEEKDAY_TOKENS } from './calendarLocale'
+import { weekdayTokenAt } from './calendarLocale'
 import { isTentative } from './occurrenceStyle'
 
 /** What the repeat picker can say. Anything richer a phone wrote comes back as `custom`, rule
@@ -97,7 +97,7 @@ export function ruleOf(choice: RepeatChoice): RecurrenceWrite | undefined {
     default, and the one rule nobody has to correct before saving. */
 export function defaultRule(startDate: PlainDate): RecurrenceWrite {
   return {
-    frequency: 'WEEKLY', interval: 1, byDay: [WEEKDAY_TOKENS[isoWeekdayOf(startDate) - 1]],
+    frequency: 'WEEKLY', interval: 1, byDay: [weekdayTokenAt(isoWeekdayOf(startDate) - 1)],
     end: 'Never',
   }
 }

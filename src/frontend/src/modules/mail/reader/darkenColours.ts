@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Recolours a message for dark mode by inverting each colour's *lightness* and leaving its hue
  * alone — the approach Dark Reader takes — under two bounds: a background is never lightened and
  * a text colour never darkened, and a saturated background is damped. Every pair therefore
@@ -84,11 +84,13 @@ export function darkenColours(html: string): string {
   for (const element of document.body.querySelectorAll<HTMLElement>('[style]')) {
     const style = element.getAttribute('style')!
     element.setAttribute('style', style
-      .replace(COLOUR_PROPERTIES, (whole, lead, property, _side, value) => {
+      .replace(COLOUR_PROPERTIES, (
+        whole: string, lead: string, property: string, _side: string | undefined, value: string,
+      ) => {
         const dark = toDarkColour(value, roleOf(property))
         return dark ? `${lead}${property}: ${dark}` : whole
       })
-      .replace(IMAGE_PROPERTY, (_whole, lead, property, value) =>
+      .replace(IMAGE_PROPERTY, (_whole, lead: string, property: string, value: string) =>
         `${lead}${property}: ${darkenImageColours(value)}`))
   }
 
@@ -142,7 +144,9 @@ function parse(value: string): [number, number, number, number] | null {
   const named = NAMED[value.toLowerCase()]
   const hex = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(named ?? value)
   if (hex) {
-    const digits = hex[1].length === 3 ? [...hex[1]].map(d => d + d) : hex[1].match(/../g)!
+    // The one group is mandatory in the pattern (no `?`), so always captured on a match.
+    const captured = hex[1]!
+    const digits = captured.length === 3 ? [...captured].map(d => d + d) : captured.match(/../g)!
     return [...digits.map(d => parseInt(d, 16)), 1] as [number, number, number, number]
   }
 

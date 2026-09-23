@@ -57,8 +57,8 @@ export function silentBatch(
 }
 
 export function notifyBody(messages: MailMessageSummary[], count: number): string {
-  if (count === 1 && messages.length === 1) {
-    const [message] = messages
+  const [message] = messages
+  if (count === 1 && messages.length === 1 && message) {
     const subject = message.subject || i18next.t('mail:list.noSubject')
     return `${message.fromName || message.fromAddress} — ${subject}`
   }

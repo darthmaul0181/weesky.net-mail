@@ -10,7 +10,7 @@ const instance = {
   getHTML: vi.fn(() => '<div>hi</div>'),
   setHTML: vi.fn(),
   moveCursorToStart: vi.fn(),
-  addEventListener: vi.fn(),
+  addEventListener: vi.fn<(type: string, handler: () => void) => void>(),
   destroy: vi.fn(),
   focus: vi.fn(),
   undo: vi.fn(), redo: vi.fn(),
@@ -68,7 +68,7 @@ describe('SquireEditor', () => {
 
     instance.hasFormat.mockImplementation((tag: string) => tag === 'b')
     const pathChange = instance.addEventListener.mock.calls.find(call => call[0] === 'pathChange')!
-    ;(pathChange[1] as () => void)()
+    pathChange[1]()
 
     expect(onFormatChange).toHaveBeenLastCalledWith(expect.objectContaining({ bold: true, italic: false }))
   })
@@ -133,7 +133,7 @@ describe('SquireEditor', () => {
 
   it('hands Squire a sanitiser, since it would otherwise reach for a global DOMPurify', () => {
     setup()
-    const config = vi.mocked(Squire).mock.calls[0][1]!
+    const config = vi.mocked(Squire).mock.calls[0]![1]!
     const fragment = config.sanitizeToDOMFragment!('<p>hi</p><script>alert(1)</script>', {} as Squire)
     const holder = document.createElement('div')
     holder.appendChild(fragment)
@@ -142,7 +142,7 @@ describe('SquireEditor', () => {
 
   it('strips a style element, since a surviving one would apply document-wide to the chrome', () => {
     setup()
-    const config = vi.mocked(Squire).mock.calls[0][1]!
+    const config = vi.mocked(Squire).mock.calls[0]![1]!
     const fragment = config.sanitizeToDOMFragment!('<p>hi</p><style>.mail-list{display:none}</style>', {} as Squire)
     const holder = document.createElement('div')
     holder.appendChild(fragment)
@@ -151,7 +151,7 @@ describe('SquireEditor', () => {
 
   it('strips a form element, the same policy the reader applies', () => {
     setup()
-    const config = vi.mocked(Squire).mock.calls[0][1]!
+    const config = vi.mocked(Squire).mock.calls[0]![1]!
     const fragment = config.sanitizeToDOMFragment!(
       '<form action="https://evil.example"><input type="password" name="p"></form>', {} as Squire,
     )

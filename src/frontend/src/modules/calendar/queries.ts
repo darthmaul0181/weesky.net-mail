@@ -1,13 +1,11 @@
 import {
-  keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient,
+  keepPreviousData, skipToken, useMutation, useQuery, useQueryClient, type QueryClient,
 } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { api, ApiError } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import type {
-  Calendar, CalendarImportOutcome, CalendarImportReport, CalendarListResponse, CalendarWrite,
-  CreatedId, EditScope, EventDetail, EventUpdateBody, EventUpdated, EventWrite, Occurrence,
-  OccurrenceListResponse,
+  Calendar, CalendarWrite, EditScope, EventUpdateBody, EventWrite, Occurrence, OccurrenceListResponse,
 } from './calendarTypes'
 import type { Window } from './windowOf'
 
@@ -35,7 +33,7 @@ export function useCalendars(tz: string) {
 
   return useQuery({
     queryKey: calendarKeys.calendars(accountId),
-    queryFn: () => api.getCalendars(tz) as Promise<CalendarListResponse>,
+    queryFn: () => api.getCalendars(tz),
     staleTime: 5 * 60_000,
     select: (data): Calendar[] => data.calendars,
   })
@@ -53,8 +51,7 @@ export function useWindow(
 
   return useQuery({
     queryKey: calendarKeys.window(accountId, window.from, window.to, tz),
-    queryFn: () => api.getOccurrences(window.from, window.to, tz) as
-      Promise<OccurrenceListResponse>,
+    queryFn: () => api.getOccurrences(window.from, window.to, tz),
     enabled: options.enabled ?? true,
     staleTime: 60_000,
     placeholderData: options.keepPrevious === false ? undefined : keepPreviousData,
@@ -67,8 +64,7 @@ export function useEvent(id: string | null) {
 
   return useQuery({
     queryKey: calendarKeys.event(accountId, id ?? ''),
-    queryFn: () => api.getEvent(id) as Promise<EventDetail>,
-    enabled: id != null,
+    queryFn: id === null ? skipToken : () => api.getEvent(id),
     staleTime: 60_000,
   })
 }
@@ -81,7 +77,7 @@ export function useSearch(q: string) {
 
   return useQuery({
     queryKey: calendarKeys.search(accountId, query),
-    queryFn: () => api.searchEvents(query) as Promise<OccurrenceListResponse>,
+    queryFn: () => api.searchEvents(query),
     enabled: query.length > 0,
     staleTime: 60_000,
     select: (data): Occurrence[] => data.occurrences,
@@ -104,7 +100,7 @@ function useCalendarMutation<TArgs, TResult = unknown>(
 }
 
 function invalidateAll(queryClient: QueryClient, accountId: string) {
-  queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
+  void queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
 }
 
 /** The language the server writes the invitation mails in: the screen's, never a guess. */
@@ -113,11 +109,11 @@ export function mailLanguage(): 'fr' | 'en' {
 }
 
 const updateEvent = (id: string, body: EventUpdateBody) =>
-  api.updateEvent(id, { ...body, language: mailLanguage() }) as Promise<EventUpdated>
+  api.updateEvent(id, { ...body, language: mailLanguage() })
 
 export function useCreateEvent() {
   return useCalendarMutation((event: EventWrite) =>
-    api.createEvent({ ...event, language: mailLanguage() }) as Promise<CreatedId>)
+    api.createEvent({ ...event, language: mailLanguage() }))
 }
 
 export function useUpdateEvent() {
@@ -134,7 +130,7 @@ export function useDeleteEvent() {
 export function useCreateCalendar() {
   return useCalendarMutation(
     ({ calendar, tz }: { calendar: CalendarWrite; tz: string }) =>
-      api.createCalendar(calendar, tz) as Promise<Calendar>)
+      api.createCalendar(calendar, tz))
 }
 
 export function useUpdateCalendar() {
@@ -154,14 +150,14 @@ export function useDeleteCalendar() {
 
 export function useImportCalendar() {
   return useCalendarMutation(({ id, file }: { id: string; file: File }) =>
-    api.importCalendar(id, file) as Promise<CalendarImportReport>)
+    api.importCalendar(id, file))
 }
 
 export function useImportCalendarAsNew() {
   return useCalendarMutation(
     ({ file, displayName, color, tz }:
       { file: File; displayName: string; color: string; tz: string }) =>
-      api.importCalendarAsNew(file, displayName, color, tz) as Promise<CalendarImportOutcome>)
+      api.importCalendarAsNew(file, displayName, color, tz))
 }
 
 interface MoveVariables {

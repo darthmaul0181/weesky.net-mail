@@ -171,8 +171,8 @@ describe('useMessageList', () => {
     const { result } = renderHook(() => useMessageList('INBOX'), { wrapper })
 
     await waitFor(() => expect(result.current.groups).toHaveLength(1))
-    expect(result.current.groups[0].key).toBe(10)
-    expect(result.current.groups[0].messages.map(m => m.uid)).toEqual([30, 10])
+    expect(result.current.groups[0]!.key).toBe(10)
+    expect(result.current.groups[0]!.messages.map(m => m.uid)).toEqual([30, 10])
     expect(result.current.messages.map(m => m.uid)).toEqual([30, 10])
     expect(result.current.paging?.lastPage).toBe(2)
     // The heading still counts messages: only the pager moved to threads.
@@ -215,7 +215,7 @@ describe('useMessageList', () => {
     act(() => { result.current.streaming?.loadMore() })
 
     await waitFor(() => expect(result.current.groups).toHaveLength(101))
-    expect(result.current.groups[100].messages.map(m => m.uid)).toEqual([200, 101])
+    expect(result.current.groups[100]!.messages.map(m => m.uid)).toEqual([200, 101])
     expect(result.current.messages.map(m => m.uid).filter(uid => uid === 100)).toHaveLength(1)
   })
 

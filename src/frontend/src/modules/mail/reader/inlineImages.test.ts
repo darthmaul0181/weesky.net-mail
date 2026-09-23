@@ -159,9 +159,9 @@ describe('substituteInlineImages', () => {
     )
     const divs = new DOMParser().parseFromString(html, 'text/html').querySelectorAll('div')
 
-    expect(divs[0].style.backgroundImage).toBe('url("cid:constructor")')
-    expect(divs[1].style.backgroundImage).toBe('url("cid:__proto__")')
-    expect(divs[2].style.backgroundImage).toBe(`url("${uri}")`)
+    expect(divs[0]!.style.backgroundImage).toBe('url("cid:constructor")')
+    expect(divs[1]!.style.backgroundImage).toBe('url("cid:__proto__")')
+    expect(divs[2]!.style.backgroundImage).toBe(`url("${uri}")`)
   })
 
   // A quote or backslash in the data URI must not break out of the CSS url("...") string —

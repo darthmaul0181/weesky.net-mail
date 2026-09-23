@@ -107,7 +107,7 @@ describe('SelectionToolbar', () => {
 
   it('sets the checkbox DOM indeterminate property', () => {
     render(<SelectionToolbar {...props({ count: 5, indeterminate: true })} />)
-    const master = screen.getByRole('checkbox', { name: 'Select all' }) as HTMLInputElement
+    const master = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Select all' })
     expect(master.indeterminate).toBe(true)
   })
 

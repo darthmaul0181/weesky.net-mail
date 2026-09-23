@@ -1,8 +1,8 @@
 import type {
-  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchResult,
+  MailFlagName, MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchResult,
 } from '../api/mailTypes'
 
-export type MailFlagName = 'seen' | 'flagged'
+export type { MailFlagName }
 
 export interface SummaryPatch {
   messages: MailMessageSummary[]
@@ -192,8 +192,8 @@ export function patchFolderCounts(
 
   return tree.map(node => {
     if (node.path === folderPath) {
-      const unread = node.unread === null ? null : Math.max(0, node.unread + deltas.unread)
-      const total = node.total === null ? null : Math.max(0, node.total + deltas.total)
+      const unread = node.unread === undefined ? undefined : Math.max(0, node.unread + deltas.unread)
+      const total = node.total === undefined ? undefined : Math.max(0, node.total + deltas.total)
       return { ...node, unread, total }
     }
     return node.children.length

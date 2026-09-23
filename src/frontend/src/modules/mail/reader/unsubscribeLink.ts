@@ -3,6 +3,6 @@
  * webmail does not have yet, so it stays in the details grid rather than leaving for the OS
  * mail client. The scheme is case-insensitive on the wire, whatever the backend normalised.
  */
-export function isWebUnsubscribe(url: string | null): boolean {
+export function isWebUnsubscribe(url: string | undefined): boolean {
   return !!url && /^https?:\/\//i.test(url)
 }

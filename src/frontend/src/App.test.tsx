@@ -3,7 +3,7 @@ import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   hasSession: vi.fn(),
   clearSession: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
-  setIsAdmin: vi.fn(),
   login: vi.fn(),
   markLoggedIn: vi.fn(),
   getMailFolders: vi.fn(),
@@ -34,7 +33,6 @@ vi.mock('./api.js', () => ({
   clearSession: mocks.clearSession,
   markLoggedIn: mocks.markLoggedIn,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
-  setIsAdmin: mocks.setIsAdmin,
 }))
 
 function renderAt(path: string) {

@@ -35,7 +35,7 @@ const queryKey = ['preferences'] as const
 export function usePreferences({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey,
-    queryFn: ({ signal }) => api.getPreferences({ signal }) as Promise<Preferences>,
+    queryFn: ({ signal }) => api.getPreferences({ signal }),
     staleTime: 5 * 60 * 1000,
     enabled,
   })
@@ -60,10 +60,10 @@ export function useSetPreference() {
       if (context?.previous) client.setQueryData(queryKey, context.previous)
     },
     onSuccess: () => {
-      client.invalidateQueries({ queryKey })
+      void client.invalidateQueries({ queryKey })
       // The page size is part of what a message page *is*, so every cached page was computed
       // under the old value and has to go.
-      client.invalidateQueries({ queryKey: ['mail'] })
+      void client.invalidateQueries({ queryKey: ['mail'] })
     },
   })
 }
@@ -85,7 +85,9 @@ export const PAGE_SIZES = ['10', '20', '30', '50', '100'] as const
 export function requestSizeOf(preferences: Preferences): number {
   const stored = preferences[PREFERENCE_KEYS.pageSize]
   if (stored === ALL) return BLOCK_SIZE
-  return (PAGE_SIZES as readonly string[]).includes(stored) ? Number(stored) : BLOCK_SIZE
+  return stored !== undefined && (PAGE_SIZES as readonly string[]).includes(stored)
+    ? Number(stored)
+    : BLOCK_SIZE
 }
 
 /** The only reader of the raw "all", so a NaN cannot be born anywhere else. */

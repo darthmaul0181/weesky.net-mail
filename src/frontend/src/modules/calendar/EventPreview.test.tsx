@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
-import DeleteConfirmModal from '../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import EventPreview from './EventPreview'
 import type { EventDetail, Occurrence } from './calendarTypes'
 
@@ -58,7 +58,7 @@ function anchorAt(left: number, right: number): HTMLElement {
   element.getBoundingClientRect = () => ({
     left, right, top: 100, bottom: 130, width: right - left, height: 30, x: left, y: 100,
     toJSON: () => ({}),
-  }) as DOMRect
+  })
   return element
 }
 

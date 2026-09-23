@@ -1,11 +1,12 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryRouter, RouterProvider } from 'react-router'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import CalendarLayout from './CalendarLayout'
 import { calendarKeys } from './queries'
-import type { Calendar } from './calendarTypes'
+import type { Calendar, EventUpdated, OccurrenceListResponse } from './calendarTypes'
+import type { api as realApi } from '../../api'
 import {
   fireEscape, firePointer, installPointerEvents, mockViewport, pressBackdrop, resetViewport, settle,
 } from '../../test-utils'
@@ -37,17 +38,20 @@ vi.mock('../../lib/downloadBlob', () => ({ downloadBlob: vi.fn() }))
 const { api } = await import('../../api.js') as unknown as {
   api: Record<'getCalendars' | 'createCalendar' | 'updateCalendar' | 'setCalendarVisible'
     | 'deleteCalendar' | 'exportCalendar' | 'importCalendar' | 'importCalendarAsNew'
-    | 'getOccurrences' | 'searchEvents' | 'getEvent' | 'createEvent' | 'updateEvent'
-    | 'deleteEvent' | 'getContacts', ReturnType<typeof vi.fn>>
+    | 'searchEvents' | 'getEvent' | 'createEvent' | 'deleteEvent' | 'getContacts',
+    Mock<(...args: unknown[]) => unknown>>
+    & { getOccurrences: Mock<typeof realApi.getOccurrences>; updateEvent: Mock<typeof realApi.updateEvent> }
 }
 const { ApiError } = await import('../../api.js') as unknown as {
   ApiError: new (message: string, status: number) => Error
 }
 const { downloadBlob } = await import('../../lib/downloadBlob') as unknown as {
-  downloadBlob: ReturnType<typeof vi.fn>
+  downloadBlob: Mock<(...args: unknown[]) => unknown>
 }
 
 const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+/** A save that mailed nobody: what every write here answers unless a case says otherwise. */
+const UPDATED: EventUpdated = { scheduling: { sent: 0 } }
 
 function calendar(id: string, displayName: string, isDefault = false): Calendar {
   return {
@@ -292,7 +296,7 @@ describe('CalendarLayout', () => {
       occurrences: [floating('e1', 'Dentist', '2026-09-16T09:00:00')],
     })
     api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
-    api.updateEvent.mockResolvedValue(null)
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16&instance=2026-09-16T09:00:00')
 
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
@@ -328,7 +332,7 @@ describe('CalendarLayout', () => {
   it('saves a repeat just added to a lone event without asking anything', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
     api.getEvent.mockResolvedValue(detail())
-    api.updateEvent.mockResolvedValue(null)
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
 
     await userEvent.click(await screen.findByLabelText('Repeats'))
@@ -337,14 +341,14 @@ describe('CalendarLayout', () => {
 
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalledWith('e1',
       expect.objectContaining({ scope: 'All' })))
-    expect(api.updateEvent.mock.calls[0][1].repeat).toMatchObject({ frequency: 'MONTHLY' })
+    expect(api.updateEvent.mock.calls[0]![1].repeat).toMatchObject({ frequency: 'MONTHLY' })
     expect(screen.queryByText('Save a recurring event')).toBeNull()
   })
 
   it('saves a plain event without asking anything, and remembers its calendar', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
     api.getEvent.mockResolvedValue(detail())
-    api.updateEvent.mockResolvedValue(null)
+    api.updateEvent.mockResolvedValue(UPDATED)
     const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
 
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
@@ -449,7 +453,7 @@ describe('CalendarLayout', () => {
     const fresh = detail({ summary: 'Dentiste' })
     api.getEvent.mockResolvedValue({ ...fresh, icsHash: 'h2' })
     await waitFor(() => expect(api.getEvent.mock.calls.length).toBeGreaterThan(1))
-    api.updateEvent.mockResolvedValue(null)
+    api.updateEvent.mockResolvedValue(UPDATED)
     await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
     await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue('Dentiste'))
 
@@ -466,7 +470,7 @@ describe('CalendarLayout', () => {
     api.getEvent.mockResolvedValueOnce(detail())
     api.getEvent.mockResolvedValue({ ...detail(), icsHash: 'h2' })
     api.updateEvent.mockRejectedValueOnce(new ApiError('conflict', 409))
-    api.updateEvent.mockResolvedValue(null)
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
 
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
@@ -502,7 +506,7 @@ describe('CalendarLayout', () => {
   // An event answers faster than a whole window, so without the wait the form is sown once from
   // the master's hours and never corrected — and a narrow save then leaves with no instance.
   it('waits for the window rather than sowing from the master', async () => {
-    let release: (value: { occurrences: unknown[] }) => void = () => {}
+    let release: (value: OccurrenceListResponse) => void = () => {}
     api.getOccurrences.mockReturnValue(new Promise(resolve => { release = resolve }))
     api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16&instance=2026-09-16T09:00:00')
@@ -540,7 +544,7 @@ describe('CalendarLayout', () => {
     api.searchEvents.mockResolvedValue({ occurrences: [one] })
     api.getOccurrences.mockResolvedValue({ occurrences: [one] })
     api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
-    api.updateEvent.mockResolvedValue(null)
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar?view=week&date=2026-09-16')
 
     await userEvent.type(
@@ -562,7 +566,7 @@ describe('CalendarLayout', () => {
     renderAt('/calendar/e1/edit?view=month&date=2026-09-16&instance=2026-09-16T09:00:00')
 
     await waitFor(() => expect(api.getOccurrences.mock.calls.length).toBeGreaterThan(1))
-    const last = api.getOccurrences.mock.calls[api.getOccurrences.mock.calls.length - 1]
+    const last = api.getOccurrences.mock.calls[api.getOccurrences.mock.calls.length - 1]!
     // A month spans six weeks; the fallback spans a day plus its two beats.
     expect(Date.parse(last[1]) - Date.parse(last[0])).toBeLessThan(4 * 24 * 3600_000)
   })
@@ -572,14 +576,14 @@ describe('CalendarLayout', () => {
   // instance it has not got.
   it('saves the whole series when nothing resolved the instance', async () => {
     api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
-    api.updateEvent.mockResolvedValue(null)
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16&instance=2026-09-16T09:00:00')
 
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalledWith('e1',
       expect.objectContaining({ scope: 'All' })))
-    expect(api.updateEvent.mock.calls[0][1].instanceId).toBeUndefined()
+    expect(api.updateEvent.mock.calls[0]![1].instanceId).toBeUndefined()
     expect(screen.queryByText('Save a recurring event')).toBeNull()
   })
 
@@ -840,7 +844,7 @@ describe('CalendarLayout', () => {
     let land = () => {}
     api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
     api.getEvent.mockResolvedValue(detail())
-    api.updateEvent.mockImplementation(() => new Promise(resolve => { land = () => resolve(null) }))
+    api.updateEvent.mockImplementation(() => new Promise(resolve => { land = () => resolve(UPDATED) }))
     const router = renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
 
     await userEvent.type(await screen.findByLabelText('Title'), '!')
@@ -894,8 +898,9 @@ describe('CalendarLayout', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New calendar' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Trips')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const hexColour: unknown = expect.stringMatching(/^#[0-9a-f]{6}$/i)
     await waitFor(() => expect(api.createCalendar).toHaveBeenCalledWith(
-      { displayName: 'Trips', color: expect.stringMatching(/^#[0-9a-f]{6}$/i) }, BROWSER_TZ))
+      { displayName: 'Trips', color: hexColour }, BROWSER_TZ))
   })
 
   it('renames a calendar from its own row', async () => {
@@ -1022,7 +1027,7 @@ describe('CalendarLayout', () => {
     expect(stops).toHaveLength(1)
     expect(stops[0]).toHaveAttribute('aria-selected', 'true')
     expect(stops[0]).not.toHaveClass('is-outside')
-    expect(stops[0].querySelector('.month-day-number')).toHaveTextContent('16')
+    expect(stops[0]!.querySelector('.month-day-number')).toHaveTextContent('16')
   })
 
   // The other door onto the anchor, and the one a month key would have missed: picking a day in the
@@ -1037,7 +1042,7 @@ describe('CalendarLayout', () => {
 
     const stops = document.querySelectorAll('.month-view [tabindex="0"]')
     expect(stops).toHaveLength(1)
-    expect(stops[0].querySelector('.month-day-number')).toHaveTextContent('24')
+    expect(stops[0]!.querySelector('.month-day-number')).toHaveTextContent('24')
   })
 
   it('draws the view the parameters name', async () => {
@@ -1159,7 +1164,7 @@ describe('CalendarLayout', () => {
     renderAt('/calendar?view=week&date=2026-09-16')
     // The sidebar's, the first of the two: the floating + carries the same name, drawn at every
     // width and hidden by CSS.
-    const opener = (await screen.findAllByRole('button', { name: 'New event' }))[0]
+    const opener = (await screen.findAllByRole('button', { name: 'New event' }))[0]!
     await userEvent.click(opener)
     await screen.findByLabelText('Title')
 
@@ -1253,13 +1258,13 @@ describe('CalendarLayout — the grid gestures', () => {
   it('moves a lone event without asking anything', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Stand-up')] })
     api.getEvent.mockResolvedValue(detail())
-    api.updateEvent.mockResolvedValue({})
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar?view=week&date=2026-09-16')
 
     await dragChip(/Stand-up/, 56)
 
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalled())
-    const [id, body] = api.updateEvent.mock.calls[0]
+    const [id, body] = api.updateEvent.mock.calls[0]!
     expect(id).toBe('e1')
     expect(body).toMatchObject({
       scope: 'All', ifHash: 'h1', start: '2026-09-16T10:00:00', end: '2026-09-16T11:00:00',
@@ -1272,7 +1277,7 @@ describe('CalendarLayout — the grid gestures', () => {
     const one = floating('e1', 'Dentist', '2026-09-16T09:00:00')
     api.getOccurrences.mockResolvedValue({ occurrences: [one] })
     api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
-    api.updateEvent.mockResolvedValue({})
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar?view=week&date=2026-09-16')
 
     await dragChip(/Dentist/, 56)
@@ -1285,7 +1290,7 @@ describe('CalendarLayout — the grid gestures', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'This occurrence only' }))
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalled())
-    expect(api.updateEvent.mock.calls[0][1]).toMatchObject({
+    expect(api.updateEvent.mock.calls[0]![1]).toMatchObject({
       scope: 'This', instanceId: '2026-09-16T09:00:00', start: '2026-09-16T10:00:00',
     })
   })
@@ -1296,7 +1301,7 @@ describe('CalendarLayout — the grid gestures', () => {
     const one = floating('e1', 'Dentist', '2026-09-16T09:00:00')
     api.getOccurrences.mockResolvedValue({ occurrences: [one] })
     api.getEvent.mockResolvedValue({ ...detail({ repeat: REPEAT }), repeatIsExact: false })
-    api.updateEvent.mockResolvedValue({})
+    api.updateEvent.mockResolvedValue(UPDATED)
     renderAt('/calendar?view=week&date=2026-09-16')
 
     await dragChip(/Dentist/, 56)
@@ -1362,8 +1367,8 @@ describe('CalendarLayout — the grid gestures', () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Stand-up')] })
     api.getEvent.mockImplementation(() => Promise.resolve({ ...detail(), icsHash: hash }))
     api.updateEvent.mockImplementationOnce(() => new Promise(resolve => {
-      land = () => { hash = 'h2'; resolve({}) }
-    })).mockResolvedValue({})
+      land = () => { hash = 'h2'; resolve(UPDATED) }
+    })).mockResolvedValue(UPDATED)
     renderAt('/calendar?view=week&date=2026-09-16')
 
     await dragChip(/Stand-up/, 56)
@@ -1374,7 +1379,7 @@ describe('CalendarLayout — the grid gestures', () => {
 
     land()
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalledTimes(2))
-    expect(api.updateEvent.mock.calls[1][1]).toMatchObject({
+    expect(api.updateEvent.mock.calls[1]![1]).toMatchObject({
       ifHash: 'h2', start: '2026-09-16T10:15:00',
     })
   })
@@ -1419,7 +1424,7 @@ describe('CalendarLayout — the grid gestures', () => {
     const router = renderAt('/calendar?view=week&date=2026-09-16')
     await waitFor(() => expect(document.querySelector('.day-column')).not.toBeNull())
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'New event' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'New event' })[0]!)
     await screen.findByLabelText('Start date')
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByLabelText('Start date')).toBeNull())

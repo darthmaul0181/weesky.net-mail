@@ -14,9 +14,9 @@ export interface GridGestures {
   drag: DragState | null
   resize: ResizeState | null
   ghost: GhostState | null
-  onChipDown(o: Occurrence, event: PointerEvent): void
-  onResizeDown(o: Occurrence, event: PointerEvent): void
-  onEmptyDown(day: PlainDate, event: PointerEvent): void
+  onChipDown: (o: Occurrence, event: PointerEvent) => void
+  onResizeDown: (o: Occurrence, event: PointerEvent) => void
+  onEmptyDown: (day: PlainDate, event: PointerEvent) => void
 }
 
 /** The band moves by days and never resizes, so it is handed the half of that it can use. */

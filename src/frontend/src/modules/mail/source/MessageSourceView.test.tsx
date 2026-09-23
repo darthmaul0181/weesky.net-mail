@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import MessageSourceView from './MessageSourceView'
 
 const useMessageSource = vi.fn()
-vi.mock('../queries', () => ({ useMessageSource: (...a: unknown[]) => useMessageSource(...a) }))
+vi.mock('../queries', () => ({ useMessageSource: (...a: unknown[]): unknown => useMessageSource(...a) }))
 
 const payload = {
   subject: 'Mount ZFS on rescue system',
@@ -47,7 +47,7 @@ describe('MessageSourceView', () => {
 
   it('omits a row whose datum is missing', () => {
     useMessageSource.mockReturnValue({
-      data: { ...payload, messageId: null, authentication: null },
+      data: { ...payload, messageId: undefined, authentication: undefined },
       isLoading: false, error: null, refetch: vi.fn(),
     })
     renderAt('?folder=INBOX&uid=42')
@@ -58,7 +58,7 @@ describe('MessageSourceView', () => {
 
   it('omits the verdict row when the header reported no verdict at all', () => {
     useMessageSource.mockReturnValue({
-      data: { ...payload, authentication: { spf: null, dkim: null, dmarc: null, raw: 'mx.google.com' } },
+      data: { ...payload, authentication: { raw: 'mx.google.com' } },
       isLoading: false, error: null, refetch: vi.fn(),
     })
     renderAt('?folder=INBOX&uid=42')
@@ -69,7 +69,7 @@ describe('MessageSourceView', () => {
 
   it('dashes only the verdicts the header left out', () => {
     useMessageSource.mockReturnValue({
-      data: { ...payload, authentication: { spf: 'pass', dkim: null, dmarc: null, raw: 'mx.google.com' } },
+      data: { ...payload, authentication: { spf: 'pass', raw: 'mx.google.com' } },
       isLoading: false, error: null, refetch: vi.fn(),
     })
     renderAt('?folder=INBOX&uid=42')

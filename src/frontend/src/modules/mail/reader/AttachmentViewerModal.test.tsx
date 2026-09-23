@@ -26,7 +26,7 @@ function renderModal(props: Partial<React.ComponentProps<typeof AttachmentViewer
   const onClose = props.onClose ?? vi.fn()
   const view = render(
     <AttachmentViewerModal
-      images={props.images ?? [IMAGES[0]]}
+      images={props.images ?? [IMAGES[0]!]}
       initialIndex={props.initialIndex ?? 0}
       onDownload={onDownload}
       onClose={onClose}
@@ -123,7 +123,7 @@ describe('AttachmentViewerModal', () => {
         <div>
           <button type="button">View</button>
           {open && (
-            <AttachmentViewerModal images={[IMAGES[0]]} initialIndex={0}
+            <AttachmentViewerModal images={[IMAGES[0]!]} initialIndex={0}
               onDownload={vi.fn()} onClose={vi.fn()} />
           )}
         </div>

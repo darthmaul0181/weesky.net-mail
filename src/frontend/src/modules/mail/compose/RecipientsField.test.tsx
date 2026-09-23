@@ -7,7 +7,7 @@ import type { Contact } from '../../contacts/contactTypes'
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
-    firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+    isFavorite: false, addresses: [], ...fields,
   }
 }
 
@@ -51,7 +51,7 @@ describe('RecipientsField', () => {
   it('marks an invalid token and removes on its ✕', () => {
     const { onChange } = setup(['bad-token', 'ok@x.co'])
     expect(screen.getByText('bad-token').closest('.recipient-token')).toHaveClass('is-invalid')
-    fireEvent.click(screen.getAllByRole('button', { name: /^Remove / })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /^Remove / })[0]!)
     expect(onChange).toHaveBeenCalledWith(['ok@x.co'])
   })
 
@@ -238,7 +238,7 @@ describe('RecipientsField — contact suggestions', () => {
     const rows = screen.getAllByRole('option')
     expect(rows).toHaveLength(3)
     expect(rows[2]).toHaveClass('is-active')
-    expect(input).toHaveAttribute('aria-activedescendant', rows[2].id)
+    expect(input).toHaveAttribute('aria-activedescendant', rows[2]!.id)
 
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -263,7 +263,7 @@ describe('RecipientsField — contact suggestions', () => {
 
     const rows = screen.getAllByRole('option')
     expect(rows[1]).toHaveClass('is-active')
-    expect(input).toHaveAttribute('aria-activedescendant', rows[1].id)
+    expect(input).toHaveAttribute('aria-activedescendant', rows[1]!.id)
   })
 })
 
@@ -408,7 +408,7 @@ describe('RecipientsField — group rows', () => {
 
     await userEvent.keyboard('{ArrowDown}')
 
-    const row = screen.getAllByRole('option')[0]
+    const row = screen.getAllByRole('option')[0]!
     expect(row).toHaveClass('is-active')
     expect(input).toHaveAttribute('aria-activedescendant', row.id)
 
@@ -425,7 +425,7 @@ describe('RecipientsField — group rows', () => {
     const { input } = show([' ALICE@X.BE '], [team], { onChange })
     await userEvent.type(input, 'te')
 
-    await userEvent.click(screen.getAllByRole('option')[0])
+    await userEvent.click(screen.getAllByRole('option')[0]!)
 
     expect(onChange).toHaveBeenCalledWith([' ALICE@X.BE ', 'bruno@x.be'])
   })

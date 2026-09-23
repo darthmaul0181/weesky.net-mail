@@ -1,14 +1,14 @@
 /** One contact as `GET /api/Contacts` answers it. The API sends neither the vCard UID nor the raw
-    card: no screen reads either. */
+    card: no screen reads either. A name the card lacks is omitted, not `null` — the API omits a
+    null field — so the four names are `?:`. */
 export interface Contact {
   id: string
-  firstName: string | null
-  lastName: string | null
-  nickname: string | null
+  firstName?: string
+  lastName?: string
+  nickname?: string
   /** The card's FN, and only when it says something the components do not: `VCardProjector`
       drops one it could have derived from them, so this is the name the user chose rather than
-      the one a writer computed. Optional like `ContactDetail`'s fields and for the same reason —
-      the API omits a null. */
+      the one a writer computed. */
   displayName?: string
   isFavorite: boolean
   /** Ordered; `[0]` is the primary address. There is no separate flag to keep in step with it. */
@@ -31,13 +31,13 @@ export interface ContactDetailPhone extends Omit<ContactDetailEmail, 'address'> 
 }
 
 export interface ContactDetailPostal extends Omit<ContactDetailEmail, 'address'> {
-  poBox: string | null
-  extended: string | null
-  street: string | null
-  locality: string | null
-  region: string | null
-  postalCode: string | null
-  country: string | null
+  poBox?: string
+  extended?: string
+  street?: string
+  locality?: string
+  region?: string
+  postalCode?: string
+  country?: string
 }
 
 /** The whole card, which `GET /api/Contacts` does not carry: the list holds what a tile needs,
@@ -93,16 +93,18 @@ export interface ContactDraftPhone {
   type: string
 }
 
+/** A part is absent when the card's line had none and the editor left it untouched: the server
+    reads absent and `null` alike on a line. */
 export interface ContactDraftPostal {
   position: number | null
   type: string
-  poBox: string | null
-  extended: string | null
-  street: string | null
-  locality: string | null
-  region: string | null
-  postalCode: string | null
-  country: string | null
+  poBox?: string | null
+  extended?: string | null
+  street?: string | null
+  locality?: string | null
+  region?: string | null
+  postalCode?: string | null
+  country?: string | null
 }
 
 /** What the editor submits: the whole card, minus the id the API assigns. A scalar `null` clears

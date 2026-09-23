@@ -51,6 +51,20 @@ describe('ImportDialog', () => {
     expect(screen.getByLabelText('Hex code')).toHaveValue('#15803d')
   })
 
+  // A head the browser cannot read (the file moved or lost its permission since the pick) says
+  // nothing: the file's own name still names the calendar, so Save is not left inert and unexplained.
+  it('names the new calendar after the file when its head cannot be read', async () => {
+    open()
+    const file = icsFile('Team events.ics')
+    const head = new Blob([ICS])
+    vi.spyOn(head, 'text').mockRejectedValue(new DOMException('unreadable', 'NotReadableError'))
+    vi.spyOn(file, 'slice').mockReturnValue(head)
+    await userEvent.upload(screen.getByLabelText('File'), file)
+    await userEvent.click(screen.getByRole('radio', { name: 'A new calendar' }))
+    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Team events'))
+    expect(submit()).toBeEnabled()
+  })
+
   it('pours into the chosen calendar', async () => {
     const { onImport } = open()
     expect(submit()).toBeDisabled()
@@ -76,7 +90,7 @@ describe('ImportDialog', () => {
   // a header cleared by hand could never be re-read from the file that wrote it.
   it('clears the box so the same file can be picked twice', async () => {
     open()
-    const input = screen.getByLabelText('File') as HTMLInputElement
+    const input = screen.getByLabelText<HTMLInputElement>('File')
     await userEvent.upload(input, icsFile())
     await waitFor(() => expect(input).toHaveValue(''))
 

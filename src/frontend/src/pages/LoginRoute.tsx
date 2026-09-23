@@ -1,5 +1,5 @@
-import { Navigate, useNavigate } from 'react-router-dom'
-import LoginPage from './LoginPage.jsx'
+import { Navigate, useNavigate } from 'react-router'
+import LoginPage from './LoginPage'
 import { useAuth } from '../contexts/AuthContext'
 import { useTabTitle } from '../hooks/useTabTitle'
 
@@ -13,7 +13,7 @@ export default function LoginRoute() {
     <LoginPage
       onLogin={() => {
         syncFromSession()
-        navigate('/', { replace: true })
+        void navigate('/', { replace: true })
       }}
     />
   )

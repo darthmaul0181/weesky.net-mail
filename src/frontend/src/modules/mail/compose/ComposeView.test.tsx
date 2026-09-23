@@ -2,7 +2,7 @@ import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Profiler } from 'react'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { mockViewport, resetViewport } from '../../../test-utils'
 import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
@@ -10,12 +10,13 @@ import type { ComposeSeed } from './composeSeed'
 import type { EditorHandle } from './SquireEditor'
 import { fireEscape, settle } from '../../../test-utils'
 import { confirmLeave } from '../../../lib/leaveGuard'
+import type { api as realApi } from '../../../api'
 
 const mocks = vi.hoisted(() => ({
-  sendMessage: vi.fn(),
+  sendMessage: vi.fn<(...args: Parameters<typeof realApi.sendMessage>) => Promise<unknown>>(),
   deleteAttachment: vi.fn(),
   uploadAttachment: vi.fn(),
-  saveDraft: vi.fn(),
+  saveDraft: vi.fn<(...args: Parameters<typeof realApi.saveDraft>) => Promise<unknown>>(),
   deleteMessages: vi.fn(),
   getContacts: vi.fn(),
   getContactGroups: vi.fn(),
@@ -135,7 +136,7 @@ function fileDragData(files: File[] = []) {
 }
 
 const bruno = {
-  id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: null, isFavorite: false,
+  id: 'b', firstName: 'Bruno', lastName: 'Mertens', isFavorite: false,
   addresses: ['bruno@x.be'],
 }
 
@@ -638,7 +639,7 @@ describe('a seeded ComposeView', () => {
     fromAddress: null,
     attachments: [
       { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
-      { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
+      { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf' },
     ],
     inReplyTo: 'm@x', references: ['m@x'],
     draftRef: null, nameHints: {}, priority: 'normal',
@@ -685,8 +686,9 @@ describe('a seeded ComposeView', () => {
 
     fireEvent.click(sendButton())
 
+    const bothParts: unknown = expect.arrayContaining(['i1', 'a1'])
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      inReplyTo: 'm@x', references: ['m@x'], attachmentIds: expect.arrayContaining(['i1', 'a1']),
+      inReplyTo: 'm@x', references: ['m@x'], attachmentIds: bothParts,
     }), { accountId: 'primary' }))
   })
 
@@ -701,7 +703,7 @@ describe('a seeded ComposeView', () => {
     fireEvent.click(sendButton())
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
-    const { htmlBody } = mocks.sendMessage.mock.calls[0][0]
+    const { htmlBody } = mocks.sendMessage.mock.calls[0]![0]
     expect(htmlBody).toContain('src="/api/Mail/Attachments/i1/content"')
     expect(htmlBody).not.toContain(mocks.apiBase)
   })
@@ -771,7 +773,7 @@ describe('leaving a dirty composer', () => {
     const { router } = renderCompose()
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'draft' } })
-    router.navigate(-1)
+    void router.navigate(-1)
 
     expect(await discardModal()).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/mail/compose')
@@ -807,7 +809,7 @@ describe('leaving a dirty composer', () => {
     const { router } = renderCompose()
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'draft' } })
-    act(() => { router.navigate('/mail') })
+    act(() => { void router.navigate('/mail') })
 
     const blocked = [...router.state.blockers.values()].some(blocker => blocker.state === 'blocked')
     expect(blocked).toBe(true)
@@ -911,7 +913,7 @@ describe('drafts in the composer', () => {
     ...draftSeed,
     attachments: [
       { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
-      { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
+      { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf' },
     ],
   }
   // Nothing else on this seed is content the composer could add: the subject is all there is.
@@ -925,14 +927,14 @@ describe('drafts in the composer', () => {
     fireEvent.click(headerSave())
 
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Draft saved'))
-    expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ subject: 'Notes' })
-    expect(mocks.saveDraft.mock.calls[0][0].replaceUid).toBeUndefined()
+    expect(mocks.saveDraft.mock.calls[0]![0]).toMatchObject({ subject: 'Notes' })
+    expect(mocks.saveDraft.mock.calls[0]![0].replaceUid).toBeUndefined()
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes and more' } })
     fireEvent.click(headerSave())
 
     await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(2))
-    expect(mocks.saveDraft.mock.calls[1][0]).toMatchObject({ subject: 'Notes and more', replaceUid: 7 })
+    expect(mocks.saveDraft.mock.calls[1]![0]).toMatchObject({ subject: 'Notes and more', replaceUid: 7 })
   })
 
   // The old rule was "the form is non-empty", which a resumed draft satisfies without a single
@@ -1119,13 +1121,13 @@ describe('drafts in the composer', () => {
     fireEvent.click(headerSave())
 
     await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalled())
-    expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ replaceUid: 41 })
+    expect(mocks.saveDraft.mock.calls[0]![0]).toMatchObject({ replaceUid: 41 })
   })
 })
 
 describe('capturing new recipients', () => {
   const created = {
-    id: 'c1', firstName: 'Alice', lastName: 'Dupont', nickname: null,
+    id: 'c1', firstName: 'Alice', lastName: 'Dupont',
     isFavorite: false, addresses: ['alice@x.be'],
   }
   const hintedSeed: ComposeSeed = {
@@ -1215,7 +1217,7 @@ describe('capturing new recipients', () => {
   type Notify = ReturnType<typeof renderCompose>['onNotify']
   const undoAction = (onNotify: Notify) => {
     const calls = onNotify.mock.calls
-    return calls[calls.length - 1][2] as { onClick: () => void }
+    return calls[calls.length - 1]![2] as { onClick: () => void }
   }
   const undoOffered = (onNotify: Notify) => waitFor(() => expect(onNotify).toHaveBeenCalledWith(
     expect.any(String), 'success', expect.objectContaining({ label: 'Undo' })))
@@ -1301,7 +1303,7 @@ describe('capturing new recipients', () => {
 
 describe('plain text in the composer', () => {
   const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
-  const textArea = () => screen.getByTestId('compose-text-editor') as HTMLTextAreaElement
+  const textArea = () => screen.getByTestId<HTMLTextAreaElement>('compose-text-editor')
 
   const draftSeed: ComposeSeed = {
     action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
@@ -1332,7 +1334,7 @@ describe('plain text in the composer', () => {
     fireEvent.click(sendButton())
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
-    const payload = mocks.sendMessage.mock.calls[0][0]
+    const payload = mocks.sendMessage.mock.calls[0]![0]
     expect(payload.textBody).toBe('just text')
     expect(payload.htmlBody).toBe('')
   })
@@ -1364,13 +1366,13 @@ describe('plain text in the composer', () => {
     fireEvent.click(sendButton())
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
-    expect(mocks.sendMessage.mock.calls[0][0].textBody).toBeUndefined()
+    expect(mocks.sendMessage.mock.calls[0]![0].textBody).toBeUndefined()
   })
 })
 
 describe('what a plain-text switch costs', () => {
   const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
-  const textArea = () => screen.getByTestId('compose-text-editor') as HTMLTextAreaElement
+  const textArea = () => screen.getByTestId<HTMLTextAreaElement>('compose-text-editor')
 
   const draftSeed: ComposeSeed = {
     action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
@@ -1468,7 +1470,7 @@ describe('what a plain-text switch costs', () => {
     fireEvent.click(sendButton())
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
-    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toEqual(['i1'])
+    expect(mocks.sendMessage.mock.calls[0]![0].attachmentIds).toEqual(['i1'])
   })
 })
 
@@ -1548,7 +1550,7 @@ describe('inline images', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
-    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toContain('i3')
+    expect(mocks.sendMessage.mock.calls[0]![0].attachmentIds).toContain('i3')
   })
 
   it('moves an inserted image to the tray when the composer switches to plain text', async () => {
@@ -1593,7 +1595,7 @@ describe('inline images, staged-id lifetime', () => {
 
     fireEvent.click(sendButton())
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalled())
-    expect(mocks.sendMessage.mock.calls[0][0].attachmentIds).toContain('round-trip')
+    expect(mocks.sendMessage.mock.calls[0]![0].attachmentIds).toContain('round-trip')
   })
 
   // Squire's _onPaste never reads defaultPrevented: it bails only on an image with no text/plain
@@ -1783,7 +1785,7 @@ describe('the composer header on a phone', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Save draft' }))
 
     await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledOnce())
-    expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ subject: 'Notes' })
+    expect(mocks.saveDraft.mock.calls[0]![0]).toMatchObject({ subject: 'Notes' })
   })
 })
 

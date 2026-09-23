@@ -72,6 +72,7 @@ export function resizePreviewMinutes(
 function clamp(from: PlainDate, to: PlainDate, visible: PlainDate[]): Placement {
   const first = visible[0]
   const last = visible[visible.length - 1]
+  if (first === undefined || last === undefined) return { kind: 'slices', slices: [] }
   if (to < first || from > last) return { kind: 'slices', slices: [] }
   return { kind: 'band', from: from < first ? first : from, to: to > last ? last : to }
 }
@@ -81,7 +82,9 @@ function clamp(from: PlainDate, to: PlainDate, visible: PlainDate[]): Placement 
     for it, and a slice with nowhere to land would be positioned off the screen. */
 export function placeOccurrence(o: Occurrence, tz: string, visible: PlainDate[]): Placement {
   if (o.isAllDay) {
-    const from = o.startDate ?? visible[0]
+    // visible[0] is only a fallback when visible is empty too, and clamp() then returns no
+    // placement regardless of `from`.
+    const from = o.startDate ?? visible[0] ?? ''
     return clamp(from, addDays(o.endDateExclusive ?? addDays(from, 1), -1), visible)
   }
 

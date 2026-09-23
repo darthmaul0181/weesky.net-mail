@@ -9,7 +9,7 @@ const NAMES: Record<string, string> = {
 
 const mount = (value: string) => render(
   <ColourGrid className="test-swatches" label="Colour" rows={ROWS} value={value}
-    nameOf={colour => NAMES[colour]} onPick={vi.fn()} />)
+    nameOf={colour => NAMES[colour]!} onPick={vi.fn()} />)
 
 const pressed = () => screen.getAllByRole('button')
   .filter(button => button.getAttribute('aria-pressed') === 'true')

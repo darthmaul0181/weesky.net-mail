@@ -11,8 +11,9 @@ const NONE: Record<string, string> = {}
 function readAsDataUri(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the inline image'))
+    const unreadable = () => reject(reader.error ?? new Error('Could not read the inline image'))
+    reader.onload = () => { if (typeof reader.result === 'string') resolve(reader.result); else unreadable() }
+    reader.onerror = unreadable
     reader.readAsDataURL(blob)
   })
 }

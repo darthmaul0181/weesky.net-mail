@@ -24,7 +24,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 function inbox(overrides: Partial<MailFolderNode> = {}): MailFolderNode {
   return {
-    path: 'INBOX', name: 'INBOX', specialUse: null, selectable: true, subscribed: true,
+    path: 'INBOX', name: 'INBOX', selectable: true, subscribed: true,
     total: 5, unread: 2, uidValidity: 100, uidNext: 10, highestModSeq: 40, children: [],
     ...overrides,
   }
@@ -75,7 +75,7 @@ async function renderWithBaseline(pageSize: string, first: MailFolderNode, group
   return {
     ...rendered,
     tick: (next: MailFolderNode) =>
-      act(() => { client.setQueryData(mailKeys.folders('primary'), [next]) }),
+      act(async () => { client.setQueryData(mailKeys.folders('primary'), [next]) }),
   }
 }
 
@@ -135,8 +135,8 @@ describe('useListRefresh', () => {
     const data = client.getQueryData<InfiniteData<MailFolderPage>>(key)!
     expect(data.pages).toHaveLength(3)
     // Block 0 is merged, not replaced: fresh [31, 30] then the pushed-out survivor 29.
-    expect(data.pages[0].messages.map(m => m.uid)).toEqual([31, 30, 29])
-    expect(data.pages[1].messages.map(m => m.uid)).toEqual([28, 27])
+    expect(data.pages[0]!.messages.map(m => m.uid)).toEqual([31, 30, 29])
+    expect(data.pages[1]!.messages.map(m => m.uid)).toEqual([28, 27])
     // The decisive one: nothing lost, nothing duplicated across the whole visible stream.
     expect(dedupeByUid(data.pages).map(m => m.uid)).toEqual([31, 30, 29, 28, 27, 26, 25])
   })
@@ -164,9 +164,9 @@ describe('useListRefresh', () => {
     await waitFor(() => {
       const merged = client.getQueryData<InfiniteData<MailFolderPage>>(key)!
       expect(merged.pages).toHaveLength(2)
-      expect(merged.pages[0].threads!.map(t => t.messages.map(m => m.uid)))
+      expect(merged.pages[0]!.threads!.map(t => t.messages.map(m => m.uid)))
         .toEqual([[40, 30, 10], [20], [5]])
-      expect(merged.pages[1].threads!.map(t => t.messages.map(m => m.uid))).toEqual([[3, 1]])
+      expect(merged.pages[1]!.threads!.map(t => t.messages.map(m => m.uid))).toEqual([[3, 1]])
     })
   })
 
@@ -203,9 +203,8 @@ describe('useListRefresh', () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '10', 'mail.showPreview': 'true' })
     mocks.getMailFolders.mockResolvedValue([inbox(), inbox({ path: 'Archive', name: 'Archive', uidNext: 50 })])
 
-    const { rerender } = renderHook(({ path }) => useListRefresh(path), {
-      wrapper, initialProps: { path: 'INBOX' as string | null },
-    })
+    const initialProps: { path: string | null } = { path: 'INBOX' }
+    const { rerender } = renderHook(({ path }) => useListRefresh(path), { wrapper, initialProps })
     await waitFor(() =>
       expect(client.getQueryData(mailKeys.folders('primary'))).toBeDefined())
 
@@ -234,7 +233,7 @@ describe('useListRefresh', () => {
     })
 
     // The optimistic patch bumped the tree to unread 3, re-running the effect.
-    expect(client.getQueryData<MailFolderNode[]>(mailKeys.folders('primary'))![0].unread).toBe(3)
+    expect(client.getQueryData<MailFolderNode[]>(mailKeys.folders('primary'))![0]!.unread).toBe(3)
     // Load-bearing: the query cache notifies its observers on a macrotask, so an assertion of
     // silence made before it drains holds against any implementation at all.
     await settle()
@@ -256,7 +255,7 @@ describe('useListRefresh', () => {
     })
 
     // The optimistic patch took the tree to total 4, re-running the effect.
-    expect(client.getQueryData<MailFolderNode[]>(mailKeys.folders('primary'))![0].total).toBe(4)
+    expect(client.getQueryData<MailFolderNode[]>(mailKeys.folders('primary'))![0]!.total).toBe(4)
     await settle()
     expect(spy).not.toHaveBeenCalled()
   })

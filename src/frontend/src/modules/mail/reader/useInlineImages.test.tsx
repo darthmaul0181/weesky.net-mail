@@ -51,7 +51,10 @@ function Host({ folder = 'INBOX', uid = 2, attachments, html = '' }: HostProps) 
   return <pre data-testid="inline">{JSON.stringify(inline)}</pre>
 }
 
-const inlined = () => JSON.parse(screen.getByTestId('inline').textContent || '{}')
+function inlined(): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(screen.getByTestId('inline').textContent || '{}')
+  return typeof parsed === 'object' && parsed !== null ? { ...parsed } : {}
+}
 
 describe('useInlineImages', () => {
   beforeEach(() => {

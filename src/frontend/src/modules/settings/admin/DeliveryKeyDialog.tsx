@@ -1,10 +1,11 @@
 import { useRef, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '../../../components/Modal'
+import type { AddToast } from '../../../hooks/useToasts'
 
 interface Props {
   keyValue: string
-  addToast: (message: string, kind?: string) => void
+  addToast: AddToast
   onClose: () => void
   /** Takes the focus back on close when the button that opened the dialog is gone — the generate
       button unmounts once the key refetches configured, and the regenerate confirmation's own

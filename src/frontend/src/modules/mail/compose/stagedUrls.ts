@@ -22,6 +22,6 @@ export function absolutizeStagedUrls(html: string, ids: string[], accountId: str
  * API in the recipient's copy.
  */
 export function relativizeStagedUrls(html: string): string {
-  // Read per call, not hoisted: a module-level read breaks every partial api.js test mock on import.
+  // Read per call, not hoisted: a module-level read breaks every partial api.ts test mock on import.
   return swap(html, `${API_BASE}${RELATIVE}`, RELATIVE)
 }

@@ -3,7 +3,7 @@ import { PALETTE_IDS } from '../contexts/ThemeContext'
 import html from '../../index.html?raw'
 import mainSource from '../main.tsx?raw'
 
-const modules = import.meta.glob('./theme-*.css', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+const modules = import.meta.glob('./theme-*.css', { query: '?raw', import: 'default', eager: true })
 const files = Object.keys(modules).map(path => path.replace('./', ''))
 const idOf = (file: string) => file.slice('theme-'.length, -'.css'.length)
 
@@ -13,11 +13,11 @@ function tokensIn(css: string, selector: string): string[] {
   if (at < 0) return []
   const body = css.slice(at, css.indexOf('}', at)).replace(/\/\*[\s\S]*?\*\//g, '')
 
-  return [...body.matchAll(/(--[\w-]+)\s*:/g)].map(m => m[1]).sort()
+  return [...body.matchAll(/(--[\w-]+)\s*:/g)].map(m => m[1]!).sort()
 }
 
 function blocks(file: string) {
-  const css = modules[`./${file}`]
+  const css = modules[`./${file}`]!
   const id = idOf(file)
 
   return {
@@ -66,7 +66,7 @@ describe('the pre-paint script in index.html', () => {
     const list = html.match(/\[([^\]]*)\]\.indexOf\(p\)/)
 
     expect(list, 'no palette list found in the pre-paint script').not.toBeNull()
-    const names = [...list![1].matchAll(/'([^']+)'/g)].map(m => m[1])
+    const names = [...list![1]!.matchAll(/'([^']+)'/g)].map(m => m[1])
     expect(names.sort()).toEqual([...PALETTE_IDS].sort())
   })
 })

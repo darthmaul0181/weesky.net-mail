@@ -97,11 +97,11 @@ describe('MonthView', () => {
 
   // A month cell names a day and no hour: a click on its empty part opens nine to ten there.
   it('opens an hour at nine on a click on an empty cell', async () => {
-    const createAt = vi.fn()
+    const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
     month([], { createAt })
     await userEvent.click(cellOf16())
     expect(createAt).toHaveBeenCalledTimes(1)
-    const [start, end, allDay] = createAt.mock.calls[0]
+    const [start, end, allDay] = createAt.mock.calls[0]!
     expect(hourOf(start.toISOString())).toBe(7)   // 09:00 in Europe/Brussels, UTC+2
     expect(end.getTime() - start.getTime()).toBe(3_600_000)
     expect(allDay).toBe(false)
@@ -109,19 +109,19 @@ describe('MonthView', () => {
 
   // The chips are stacked in order, so where the click lands among them is the one hint there is.
   it('reads the hour off the chip the click landed under or over', async () => {
-    const createAt = vi.fn()
+    const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
     month([dated('e1', 'Stand-up', 10)], { createAt })
     const cell = cellOf16()
     pin(cell.querySelector('.event-chip')!, 40, 60)
 
     fireEvent.click(cell, { clientY: 80 })
-    expect(hourOf(createAt.mock.calls[0][0].toISOString())).toBe(9)   // 11:00, after 10-11
+    expect(hourOf(createAt.mock.calls[0]![0].toISOString())).toBe(9)   // 11:00, after 10-11
     fireEvent.click(cell, { clientY: 20 })
-    expect(hourOf(createAt.mock.calls[1][0].toISOString())).toBe(7)   // 09:00, ending at 10
+    expect(hourOf(createAt.mock.calls[1]![0].toISOString())).toBe(7)   // 09:00, ending at 10
   })
 
   it('leaves a click on a chip to the chip, and spends one on an empty cell closing a bubble', async () => {
-    const createAt = vi.fn()
+    const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
     const onOpen = vi.fn()
     renderInCalendar(
       <MonthView onOpen={onOpen} onOpenEditor={noop} previewOpen />,
@@ -140,9 +140,9 @@ describe('MonthView', () => {
       const rows = within(grid()).getAllByRole('row')
 
       expect(rows).toHaveLength(6)
-      expect(within(rows[0]).getByRole('rowheader')).toHaveTextContent('36')
-      expect(within(rows[2]).getByRole('rowheader')).toHaveTextContent('38')
-      expect(within(rows[2]).getAllByRole('gridcell')).toHaveLength(7)
+      expect(within(rows[0]!).getByRole('rowheader')).toHaveTextContent('36')
+      expect(within(rows[2]!).getByRole('rowheader')).toHaveTextContent('38')
+      expect(within(rows[2]!).getAllByRole('gridcell')).toHaveLength(7)
     })
 
     // The day a cell stands for is carried by its position on screen and by nothing else.
@@ -233,14 +233,14 @@ describe('MonthView', () => {
        to mean the same thing on an empty day as on a full one. F2 is the documented way in. The
        hour is the click path's own rule, which invents nothing a key cannot supply. */
     it('creates an event on the focused day with Enter, at nine on an empty one', () => {
-      const createAt = vi.fn()
+      const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
       month([dated('a', 'One', 9)], { createAt })
       cell('17 September 2026').focus()
 
       press('Enter')
 
       expect(createAt).toHaveBeenCalledTimes(1)
-      const [start, end, allDay] = createAt.mock.calls[0]
+      const [start, end, allDay] = createAt.mock.calls[0]!
       expect(start.toISOString()).toBe('2026-09-17T07:00:00.000Z')   // 09:00 in Brussels
       expect(end.getTime() - start.getTime()).toBe(3_600_000)
       expect(allDay).toBe(false)
@@ -248,19 +248,19 @@ describe('MonthView', () => {
 
     // The same rule a click below the last chip lands on: after it, rounded up to the quarter.
     it("creates after the day's last chip when it holds one", () => {
-      const createAt = vi.fn()
+      const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
       month([dated('a', 'One', 9), dated('b', 'Two', 10)], { createAt })
       cellOf16().focus()
 
       press('Enter')
 
-      expect(createAt.mock.calls[0][0].toISOString()).toBe('2026-09-16T09:00:00.000Z')  // 11:00
+      expect(createAt.mock.calls[0]![0].toISOString()).toBe('2026-09-16T09:00:00.000Z')  // 11:00
     })
 
     /* The click's own rule, which Enter has to keep: the bubble holds no trap, so Shift+Tab
        comes back to the grid with it still standing, and Enter drew a draft on top of it. */
     it('refuses Enter while a bubble stands rather than creating under it', () => {
-      const createAt = vi.fn()
+      const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
       month([dated('a', 'One', 9)], { createAt }, { previewOpen: true })
       cell('17 September 2026').focus()
 
@@ -271,7 +271,7 @@ describe('MonthView', () => {
 
     // Enter on a chip is the chip's: without the guard it opens the bubble AND a draft.
     it('leaves Enter on a chip inside the cell to the chip', () => {
-      const createAt = vi.fn()
+      const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
       month([dated('a', 'One', 9)], { createAt })
       cellOf16().focus()
       press('F2')

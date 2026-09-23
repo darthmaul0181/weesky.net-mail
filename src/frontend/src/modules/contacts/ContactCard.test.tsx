@@ -19,7 +19,7 @@ const { api } = await import('../../api.js') as unknown as {
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
-    firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+    isFavorite: false, addresses: [], ...fields,
   }
 }
 
@@ -195,9 +195,8 @@ describe('ContactCard', () => {
     expect(onWrite).toHaveBeenCalledWith('bruno@x.be')
   })
 
-  const postalOf = (fields: Record<string, string | null>) => ({
-    position: 0, type: 'HOME', pref: 101, params: '', groupName: '', poBox: null, extended: null,
-    street: null, locality: null, region: null, postalCode: null, country: null, ...fields,
+  const postalOf = (fields: Record<string, string>) => ({
+    position: 0, type: 'HOME', pref: 101, params: '', groupName: '', ...fields,
   })
 
   it('offers directions on the phone, where geo: has a handler', async () => {
@@ -237,8 +236,8 @@ describe('ContactCard', () => {
   it('shows the postal address on one line per component that exists', async () => {
     api.getContact.mockResolvedValue(detail({
       postalAddresses: [{
-        position: 0, type: 'HOME', pref: 101, params: '', groupName: '', poBox: null,
-        extended: null, street: 'Rue Haute 1', locality: 'Bruxelles', region: null,
+        position: 0, type: 'HOME', pref: 101, params: '', groupName: '',
+        street: 'Rue Haute 1', locality: 'Bruxelles',
         postalCode: '1000', country: 'Belgique',
       }],
     }))
@@ -388,7 +387,7 @@ describe('ContactCard', () => {
     setup({ onWrite })
 
     const addresses = await screen.findAllByTestId('card-address')
-    expect(addresses[0].querySelector('a[href^="mailto:"]')).toBeNull()
+    expect(addresses[0]!.querySelector('a[href^="mailto:"]')).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'bruno@x.be' }))
 

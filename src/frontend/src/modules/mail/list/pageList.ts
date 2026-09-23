@@ -29,8 +29,9 @@ export function buildPageList(current: number, lastPage: number): PageItem[] {
   sorted.forEach((page, index) => {
     // A gap earns its place only when it hides more than one page; hiding exactly one and
     // showing "…" in its stead costs the same width and takes away a click.
+    // sorted[-1] at index 0 is undefined, which the condition itself excludes.
     const previous = sorted[index - 1]
-    if (index > 0 && page - previous > 1) {
+    if (previous !== undefined && page - previous > 1) {
       items.push(page - previous === 2 ? page - 1 : 'gap')
     }
     items.push(page)

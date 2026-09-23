@@ -22,8 +22,8 @@ describe('MiniMonth', () => {
     const { container } = renderMonth()
     const weeks = container.querySelectorAll('.mini-month-week')
     expect(weeks).toHaveLength(6)
-    expect(weeks[0].querySelector('.mini-week-number')?.textContent).toBe('36')
-    expect(weeks[5].querySelector('.mini-week-number')?.textContent).toBe('41')
+    expect(weeks[0]!.querySelector('.mini-week-number')?.textContent).toBe('36')
+    expect(weeks[5]!.querySelector('.mini-week-number')?.textContent).toBe('41')
   })
 
   it('hands the picked day back whole', async () => {

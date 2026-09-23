@@ -4,9 +4,9 @@ import type { MailFolderNode } from '../modules/mail/api/mailTypes'
 
 function node(over: Partial<MailFolderNode> = {}): MailFolderNode {
   return {
-    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
+    path: 'X', name: 'X', selectable: true, subscribed: true,
     total: 0, unread: 0, uidValidity: 1, uidNext: 2, children: [], ...over,
-  } as MailFolderNode
+  }
 }
 
 describe('inboxIsUnread', () => {

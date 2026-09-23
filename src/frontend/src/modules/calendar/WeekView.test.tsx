@@ -69,7 +69,7 @@ describe('WeekView', () => {
 
   it('lights the same pair when one of them is hovered', () => {
     week([PARTY])
-    fireEvent.pointerOver(screen.getAllByRole('button', { name: /Party/ })[0])
+    fireEvent.pointerOver(screen.getAllByRole('button', { name: /Party/ })[0]!)
 
     expect(document.querySelectorAll('.event-chip.is-hovered')).toHaveLength(2)
   })

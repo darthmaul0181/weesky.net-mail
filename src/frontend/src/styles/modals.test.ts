@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 // ?raw on a .tsx source is the same mechanism palettes.test.ts uses on main.tsx.
 const sources = import.meta.glob('../**/*.{jsx,tsx}', {
   query: '?raw', import: 'default', eager: true,
-}) as Record<string, string>
+})
 
 /** The line each `<Modal …>` opening tag carrying a width starts on. A caller's tag spans
     several lines, so the line-by-line scan below cannot see a style prop sitting on one of
@@ -18,7 +18,7 @@ function modalTagWidths(src: string): number[] {
     let quote = ''
     for (let i = start; i < src.length; i++) {
       if (quote) { if (src[i] === quote) quote = '' }
-      else if (src[i] === '"' || src[i] === "'") quote = src[i]
+      else if (src[i] === '"' || src[i] === "'") quote = src[i]!
       else if (src[i] === '{') depth++
       else if (src[i] === '}') depth--
       else if (src[i] === '>' && depth === 0) {
@@ -76,7 +76,7 @@ describe('modal roots', () => {
 
 const modalCss = (import.meta.glob('./modal.css', {
   query: '?raw', import: 'default', eager: true,
-}) as Record<string, string>)['./modal.css']
+}))['./modal.css'] as string
 
 // The same brace-depth extractor responsive.test.ts uses, for the same reason: a plain
 // indexOf-to-next-'}' stops at the first rule inside the block, not at the block's own end.

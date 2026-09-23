@@ -204,7 +204,7 @@ describe('SchedulingAccountSection — delete', () => {
     expect(mocks.adminDeleteSchedulingAccount).not.toHaveBeenCalled()
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
 
     await waitFor(() => expect(mocks.adminDeleteSchedulingAccount).toHaveBeenCalled())
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The sending account was deleted.'))
@@ -225,7 +225,7 @@ describe('SchedulingAccountSection — delete', () => {
     await screen.findByText('agenda@weesky.net')
     await userEvent.click(screen.getByTitle('Delete'))
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
   }
 
   it('closes the confirmation on a 409, so it never stands over a login that was reloaded', async () => {
@@ -250,7 +250,7 @@ describe('SchedulingAccountSection — delete', () => {
     await screen.findByText('agenda@weesky.net')
     await userEvent.click(screen.getByTitle('Delete'))
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(mocks.adminDeleteSchedulingAccount).toHaveBeenCalled())
   })
 })
@@ -292,7 +292,7 @@ describe('SchedulingAccountSection — dialog prefill', () => {
 })
 
 describe('SchedulingAccountSection — security choices', () => {
-  const choices = () => Array.from((screen.getByLabelText('SMTP security') as HTMLSelectElement).options, o => o.value)
+  const choices = () => Array.from(screen.getByLabelText<HTMLSelectElement>('SMTP security').options, o => o.value)
 
   it('offers no « None » where the server refuses an unencrypted endpoint', async () => {
     await openEditDialog()
@@ -473,9 +473,10 @@ describe('SchedulingAccountSection — save', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
+    const signal: unknown = expect.any(AbortSignal)
     await waitFor(() => expect(mocks.adminSaveSchedulingAccount).toHaveBeenCalledWith({
       host: 'smtp.weesky.be', port: 587, security: 'StartTls', login: 'agenda@weesky.net',
-    }, { signal: expect.any(AbortSignal) }))
+    }, { signal }))
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The sending account was saved.'))
   })
 

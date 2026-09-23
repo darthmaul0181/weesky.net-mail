@@ -1,4 +1,5 @@
-/** Shapes returned by the backend's /api/Mail endpoints. */
+/** Shapes returned by the backend's /api/Mail endpoints. The API omits a null field rather than
+    sending it, so every field the server may leave empty is `?:`, never `| null`. */
 
 export type SpecialUse = 'inbox' | 'sent' | 'drafts' | 'trash' | 'junk' | 'archive'
 
@@ -9,16 +10,17 @@ export interface MailFolderNode {
   /** Full IMAP path. Opaque — never parsed or built client-side: the separator is the server's. */
   path: string
   name: string
-  specialUse: SpecialUse | null
+  specialUse?: SpecialUse
   selectable: boolean
   subscribed: boolean
-  total: number | null
-  unread: number | null
+  /** Absent when the server gave no STATUS for the folder — a container, or a failed read. */
+  total?: number
+  unread?: number
   uidValidity: number
-  /** Rises on every arrival — the poll's signal for new mail. Null when not selectable. */
-  uidNext: number | null
-  /** Rises on every flag change (RFC 7162). Null without CONDSTORE or when not selectable. */
-  highestModSeq: number | null
+  /** Rises on every arrival — the poll's signal for new mail. Absent when not selectable. */
+  uidNext?: number
+  /** Rises on every flag change (RFC 7162). Absent without CONDSTORE or when not selectable. */
+  highestModSeq?: number
   children: MailFolderNode[]
 }
 
@@ -80,8 +82,8 @@ export interface MailAttachmentInfo {
   size: number
   /** True for a part the body references by cid:; the UI hides these. */
   isInline: boolean
-  /** Bare Content-ID the body references as cid:; the reader's key to inline it. Null when none. */
-  contentId: string | null
+  /** Bare Content-ID the body references as cid:; the reader's key to inline it. Absent when none. */
+  contentId?: string
 }
 
 export interface MailAddressInfo {
@@ -91,9 +93,9 @@ export interface MailAddressInfo {
 
 /** SPF/DKIM/DMARC as the receiving server reported them, plus the raw header behind them. */
 export interface MailAuthentication {
-  spf: string | null
-  dkim: string | null
-  dmarc: string | null
+  spf?: string
+  dkim?: string
+  dmarc?: string
   raw: string
 }
 
@@ -222,22 +224,22 @@ export interface MailMessageDetail {
   to: MailAddressInfo[]
   cc: MailAddressInfo[]
   date: string
-  /** RFC 5322 message id, bare (no angle brackets). Null when the original carries none. */
-  messageId: string | null
+  /** RFC 5322 message id, bare (no angle brackets). Absent when the original carries none. */
+  messageId?: string
   /** References chain, oldest first, bare ids. Empty when absent. */
   references: string[]
-  inReplyTo: string | null
+  inReplyTo?: string
   replyTo: MailAddressInfo[]
   /** Kept on a Sent copy; empty on received mail. Feeds Edit-as-new. */
   bcc: MailAddressInfo[]
-  authentication: MailAuthentication | null
-  spamScore: MailSpamScore | null
-  /** Expanded-header details — each null when the message carries no such header. */
-  mailingList: string | null
-  sentBy: string | null
-  signedBy: string | null
-  unsubscribeUrl: string | null
-  tlsReceived: boolean | null
+  authentication?: MailAuthentication
+  spamScore?: MailSpamScore
+  /** Expanded-header details — each absent when the message carries no such header. */
+  mailingList?: string
+  sentBy?: string
+  signedBy?: string
+  unsubscribeUrl?: string
+  tlsReceived?: boolean
   priority: MailPriority
   /** Already sanitised by the backend. Still only ever rendered in a sandboxed iframe. */
   htmlBody: string
@@ -265,10 +267,10 @@ export interface FolderRoleStaleOverride {
 /** One assignable role: what it resolves to today, and why. */
 export interface FolderRoleEntry {
   role: string
-  folderPath: string | null
-  provenance: 'override' | 'specialUse' | 'name' | null
+  folderPath?: string
+  provenance?: 'override' | 'specialUse' | 'name'
   /** The user's stored choice no longer matches a live folder — kept and signalled. */
-  staleOverride: FolderRoleStaleOverride | null
+  staleOverride?: FolderRoleStaleOverride
 }
 
 /** One entry of the curated From list: a stored row merged with what the account actually owns. */
@@ -284,6 +286,9 @@ export interface SendingIdentity {
 
 export interface IdentityListResponse { identities: SendingIdentity[] }
 
+/** One row of `PUT /api/Identities`: what the user curates, the rest being the server's to derive. */
+export type IdentityWrite = Pick<SendingIdentity, 'address' | 'displayName' | 'isDefault'>
+
 export interface AliasInfo { name: string; domain: string }
 
 /** One staged outgoing file, as the backend answers it. */
@@ -292,11 +297,35 @@ export interface StagedAttachmentInfo {
   fileName: string
   size: number
   contentType: string
-  /** Non-null marks an inline body resource (cid part) — hidden from the attachment tray. */
-  contentId: string | null
+  /** Present marks an inline body resource (cid part) — hidden from the attachment tray. */
+  contentId?: string
 }
 
 export type QuotePurpose = 'reply' | 'forward' | 'editAsNew'
+
+/** The two flags a reader sets. */
+export type MailFlagName = 'seen' | 'flagged'
+
+export interface SendMessageArgs {
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  htmlBody: string
+  /** Present sends the message as text/plain alone; htmlBody rides along empty. */
+  textBody?: string
+  attachmentIds: string[]
+  priority: MailPriority
+  /** Omitted picks the account's own address server-side; the display label is always server-resolved. */
+  fromAddress?: string
+  /** Threading of a reply/forward: the original's id and its extended references chain. */
+  inReplyTo?: string
+  references?: string[]
+}
+
+export interface SendMessageResult { appendedToSent: boolean }
+
+export type SaveDraftArgs = SendMessageArgs & { replaceUid?: number }
 
 /** What PrepareQuote answers: the outbound-sanitised original, cid images rewritten to staged URLs. */
 export interface PreparedQuote {
@@ -312,14 +341,13 @@ export interface OpenedDraft {
   cc: string[]
   bcc: string[]
   subject: string
-  fromAddress: string | null
+  fromAddress?: string
   htmlBody: string
-  /** A string when the stored draft was written as text: the composer reopens in text mode.
-      Optional rather than nullable because the API omits a null field, so an HTML draft carries
-      no `textBody` at all — read as `undefined` it would open an empty plain-text composer. */
-  textBody?: string | null
+  /** Present when the stored draft was written as text: the composer reopens in text mode. An
+      HTML draft carries no `textBody` at all. */
+  textBody?: string
   attachments: StagedAttachmentInfo[]
-  inReplyTo: string | null
+  inReplyTo?: string
   references: string[]
   priority: MailPriority
 }
@@ -327,12 +355,12 @@ export interface OpenedDraft {
 /** A message as it arrived. `source` is capped; `totalBytes` is what the whole message weighs. */
 export interface MailMessageSource {
   subject: string
-  messageId: string | null
+  messageId?: string
   date: string
   fromName: string
   fromAddress: string
   to: MailAddressInfo[]
-  authentication: MailAuthentication | null
+  authentication?: MailAuthentication
   source: string
   totalBytes: number
   truncated: boolean

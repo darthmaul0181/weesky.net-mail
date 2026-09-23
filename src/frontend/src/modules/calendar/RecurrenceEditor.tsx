@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useCalendar } from './calendarContext'
-import { dateLocaleOf, WEEKDAY_TOKENS, weekdayNameOf } from './calendarLocale'
+import { dateLocaleOf, WEEKDAY_TOKENS, weekdayNameOf, weekdayTokenAt } from './calendarLocale'
 import type { RecurrenceWrite } from './calendarTypes'
 import { isoWeekdayOf, type PlainDate } from './plainDate'
 
@@ -8,7 +8,7 @@ export interface RecurrenceEditorProps {
   value: RecurrenceWrite
   /** The event's own start: the weekday a rule falls back on when it names none. */
   startDate: PlainDate
-  onChange(rule: RecurrenceWrite): void
+  onChange: (rule: RecurrenceWrite) => void
 }
 
 const DEFAULT_COUNT = 10
@@ -20,7 +20,7 @@ export default function RecurrenceEditor({ value, startDate, onChange }: Recurre
 
   const frequency = value.frequency.toUpperCase()
   const daily = frequency === 'DAILY'
-  const startDay = WEEKDAY_TOKENS[isoWeekdayOf(startDate) - 1]
+  const startDay = weekdayTokenAt(isoWeekdayOf(startDate) - 1)
 
   const unit: Record<string, string> = {
     DAILY: t('repeat.unitDay', { count: value.interval }),
@@ -68,12 +68,12 @@ export default function RecurrenceEditor({ value, startDate, onChange }: Recurre
         <div className="recurrence-days">
           {Array.from({ length: 7 }, (_, index) => (rules.firstDay - 1 + index) % 7)
             .map(offset => (
-              <label key={WEEKDAY_TOKENS[offset]}>
+              <label key={weekdayTokenAt(offset)}>
                 {/* The whole name is the box's own; one letter is what is drawn. */}
                 <input type="checkbox" aria-label={weekdayNameOf(offset, 'long', locale)}
                   disabled={daily}
-                  checked={daily || value.byDay.includes(WEEKDAY_TOKENS[offset])}
-                  onChange={() => toggleDay(WEEKDAY_TOKENS[offset])} />
+                  checked={daily || value.byDay.includes(weekdayTokenAt(offset))}
+                  onChange={() => toggleDay(weekdayTokenAt(offset))} />
                 <span className="recurrence-day">{weekdayNameOf(offset, 'narrow', locale)}</span>
               </label>
             ))}

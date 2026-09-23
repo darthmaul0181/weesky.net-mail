@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 
 describe('sanitizeBody', () => {

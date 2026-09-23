@@ -18,8 +18,8 @@ import { useResizeEvent } from './useResizeEvent'
 export interface WeekViewProps {
   /** One day is the day view: the same grid, one column wide, rather than a second component. */
   days: PlainDate[]
-  onOpen(o: Occurrence, anchor: HTMLElement): void
-  onOpenEditor(o: Occurrence): void
+  onOpen: (o: Occurrence, anchor: HTMLElement) => void
+  onOpenEditor: (o: Occurrence) => void
   /** Off below 640px: a 360px column has no room to drag a block through. */
   gestures: boolean
   selectedKey?: string
@@ -64,7 +64,9 @@ export default function WeekView({
   // The gutter is a token rather than a number here: the phone narrows it, and a width written
   // in JS could not be narrowed by a media query at all.
   const template = `var(--cal-gutter) repeat(${days.length}, minmax(0, 1fr))`
-  const week = weekNumberOf(days[0], rules)
+  // days is always at least the one day the window spans; today is the fallback for the
+  // otherwise-empty case, the same way AllDayBand falls back to the band's own entry.
+  const week = weekNumberOf(days[0] ?? today, rules)
   const placements = useMemo(() => placeAll(visible, tz, days), [visible, tz, days])
 
   const body = useRef<HTMLDivElement>(null)

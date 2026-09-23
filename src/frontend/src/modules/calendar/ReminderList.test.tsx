@@ -49,13 +49,13 @@ describe('ReminderList', () => {
 
   it('removes the one whose ✕ was pressed', async () => {
     const onChange = draw([15, 60, 1440])
-    await userEvent.click(screen.getAllByRole('button', { name: 'Remove this reminder' })[1])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Remove this reminder' })[1]!)
     expect(onChange).toHaveBeenCalledWith([15, 1440])
   })
 
   it('changes one without touching its neighbours', async () => {
     const onChange = draw([15, 60])
-    await userEvent.selectOptions(screen.getAllByRole('combobox')[0], '30')
+    await userEvent.selectOptions(screen.getAllByRole('combobox')[0]!, '30')
     expect(onChange).toHaveBeenCalledWith([30, 60])
   })
 

@@ -3,7 +3,7 @@
  *
  * The composer already guards every *navigation* through the router's blocker, but switching
  * mailbox is a state change rather than a navigation, so nothing in the router sees it. This is
- * the seam for that case, registered the way `api.js` registers its unauthorized handler: a
+ * the seam for that case, registered the way `api.ts` registers its unauthorized handler: a
  * module-level slot rather than a context, since the two call sites sit on opposite sides of the
  * tree and neither renders the other.
  */

@@ -3,17 +3,21 @@ import { render, screen } from '@testing-library/react'
 import ReaderDetails from './ReaderDetails'
 import type { MailMessageDetail } from '../api/mailTypes'
 
-const message: MailMessageDetail = {
+/** A message carrying none of the expanded headers: the API omits each one it did not find. */
+const bare: MailMessageDetail = {
   uid: 1, folderPath: 'INBOX', uidValidity: 1,
   subject: 'News', fromName: 'Weesky News', fromAddress: 'news@weesky.net',
   to: [{ name: '', address: 'mick@weesky.be' }],
   cc: [{ name: 'Bob', address: 'bob@x.be' }],
   date: '2026-07-02T10:03:00Z',
-  messageId: null, references: [], inReplyTo: null, replyTo: [], bcc: [],
-  authentication: null, spamScore: null,
+  references: [], replyTo: [], bcc: [],
+  htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false, attachments: [], priority: 'normal',
+}
+
+const message: MailMessageDetail = {
+  ...bare,
   mailingList: '<news.weesky.net>', sentBy: 'a547955.bnc3.mailjet.com', signedBy: 'weesky.net',
   unsubscribeUrl: 'https://news.weesky.net/unsub', tlsReceived: true,
-  htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false, attachments: [], priority: 'normal',
 }
 
 describe('ReaderDetails', () => {
@@ -32,10 +36,7 @@ describe('ReaderDetails', () => {
   })
 
   it('drops the rows whose datum is absent, leaving no empty labels', () => {
-    render(<ReaderDetails message={{
-      ...message, cc: [], mailingList: null, sentBy: null, signedBy: null,
-      unsubscribeUrl: null, tlsReceived: null,
-    }} />)
+    render(<ReaderDetails message={{ ...bare, cc: [] }} />)
 
     expect(screen.queryByText('Cc:')).not.toBeInTheDocument()
     expect(screen.queryByText('Mailing list:')).not.toBeInTheDocument()

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { api } from '../../../api.js'
 import {
   notifiesOf, notifyDesktopOf, notifySoundOf, requestSizeOf, usePreferences,
@@ -38,7 +38,7 @@ async function describeArrivals(
     const arrivals = newSince(page.messages, sinceUid)
     return {
       body: notifyBody(arrivals, count),
-      uid: count === 1 && arrivals.length === 1 ? arrivals[0].uid : null,
+      uid: count === 1 && arrivals.length === 1 ? arrivals[0]!.uid : null,
       silent: silentBatch(arrivals, count, unreadDelta),
     }
   } catch {
@@ -104,7 +104,7 @@ export function useMailNotifications(): void {
       && !uidValidityBroke(last.snapshot, snapshot)
 
     const decision = notifyDecision(
-      comparable ? last.snapshot.uidNext : null, inbox.uidNext, { sound, desktop })
+      comparable ? last.snapshot.uidNext : null, snapshot.uidNext, { sound, desktop })
     if (!decision) return
 
     const unreadDelta = comparable ? unreadDeltaOf(last.snapshot, snapshot) : null
@@ -136,7 +136,7 @@ export function useMailNotifications(): void {
         // away since, they name nothing here — that uid is another mailbox's message — so the
         // click only raises the window rather than opening the wrong mail under the live account.
         if (uid !== null && accountId === liveAccountId.current) {
-          navigate(`/mail?folder=${encodeURIComponent(inbox.path)}&uid=${uid}`)
+          void navigate(`/mail?folder=${encodeURIComponent(inbox.path)}&uid=${uid}`)
         }
       })
     })

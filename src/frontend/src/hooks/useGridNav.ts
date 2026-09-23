@@ -47,8 +47,8 @@ function rowsIn(grid: HTMLElement, stops: Stops): HTMLElement[][] {
 }
 
 function cellOf(rows: HTMLElement[][], widget: Element | null): Cell | null {
-  for (let row = 0; row < rows.length; row += 1) {
-    const col = rows[row].indexOf(widget as HTMLElement)
+  for (const [row, cols] of rows.entries()) {
+    const col = cols.indexOf(widget as HTMLElement)
     if (col !== -1) return { row, col }
   }
   return null
@@ -57,8 +57,9 @@ function cellOf(rows: HTMLElement[][], widget: Element | null): Cell | null {
 /** Both axes clamped in one place: the grid pattern has no wrap, and a shorter row is entered at
     its own last widget rather than skipped past. */
 function widgetAt(rows: HTMLElement[][], to: Cell): HTMLElement {
-  const row = rows[Math.min(Math.max(to.row, 0), last(rows))]
-  return row[Math.min(Math.max(to.col, 0), last(row))]
+  // Clamped into [0, last(rows)] / [0, last(row)], so both indices are always in bounds.
+  const row = rows[Math.min(Math.max(to.row, 0), last(rows))]!
+  return row[Math.min(Math.max(to.col, 0), last(row))]!
 }
 
 /** The one place the key list lives, so nothing spends a key this does not answer. The widgets
@@ -213,7 +214,7 @@ export function useGridNav({ ref, cellEntry }: GridNavOptions): void {
       if (!held || !held.isConnected || held.getClientRects().length > 0) return
       const row = held.closest(ROW)
       const widgets = row ? widgetsOf(row as HTMLElement) : []
-      if (widgets.length > 0) point(widgets[0])
+      if (widgets.length > 0) point(widgets[0]!)
     }
 
     // The stop's recovery is an attribute; the focus the removal took with it is not, and nothing

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 // ?raw on a .ts source is the mechanism styles/modals.test.ts uses on the .tsx tree.
 const source = (import.meta.glob('./queries.ts', {
   query: '?raw', import: 'default', eager: true,
-}) as Record<string, string>)['./queries.ts']
+}))['./queries.ts'] as string
 
 /**
  * A source-text guard, because the cost is invisible to a behavioural test: TanStack structurally

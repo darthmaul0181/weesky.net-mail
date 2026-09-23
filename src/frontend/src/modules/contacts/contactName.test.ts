@@ -4,7 +4,7 @@ import type { Contact } from './contactTypes'
 
 function contact(fields: Partial<Contact> = {}): Contact {
   return {
-    id: 'c1', firstName: null, lastName: null, nickname: null,
+    id: 'c1',
     isFavorite: false, addresses: [], ...fields,
   }
 }

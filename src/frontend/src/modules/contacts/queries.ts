@@ -1,10 +1,8 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { skipToken, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import { compareContacts } from './contactSearch'
-import type {
-  Contact, ContactDetail, ContactDraft, ContactImportReport, ContactListResponse,
-} from './contactTypes'
+import type { Contact, ContactDraft, ContactListResponse } from './contactTypes'
 import type { ContactGroup, ContactGroupsResponse } from './contactGroupTypes'
 
 /** Scoped by account from the outset, like the mail keys: linking a second account later isolates
@@ -26,8 +24,8 @@ export const contactGroupKeys = {
 /** Shared by the three contact mutations that change group membership by construction — delete
     drops a member, import can create one — and by every group mutation itself. */
 function invalidateBook(queryClient: QueryClient, accountId: string) {
-  queryClient.invalidateQueries({ queryKey: contactKeys.all(accountId) })
-  queryClient.invalidateQueries({ queryKey: contactGroupKeys.all(accountId) })
+  void queryClient.invalidateQueries({ queryKey: contactKeys.all(accountId) })
+  void queryClient.invalidateQueries({ queryKey: contactGroupKeys.all(accountId) })
 }
 
 /** Declared once, outside the hook, and so is `groupsOf` below: TanStack re-runs `select` whenever
@@ -50,7 +48,7 @@ export function useContacts(enabled = true) {
 
   return useQuery({
     queryKey: contactKeys.all(accountId),
-    queryFn: () => api.getContacts() as Promise<ContactListResponse>,
+    queryFn: () => api.getContacts(),
     staleTime: 5 * 60_000,
     select: sortBook,
     enabled,
@@ -67,8 +65,7 @@ export function useContact(id: string | null) {
 
   return useQuery({
     queryKey: contactKeys.detail(accountId, id ?? ''),
-    queryFn: () => api.getContact(id) as Promise<ContactDetail>,
-    enabled: id != null,
+    queryFn: id === null ? skipToken : () => api.getContact(id),
     staleTime: 5 * 60_000,
   })
 }
@@ -79,8 +76,8 @@ export function useContactPhoto(id: string | null, hasPhoto: boolean, cardHash: 
 
   return useQuery({
     queryKey: contactKeys.photo(accountId, id ?? '', cardHash ?? ''),
-    queryFn: () => api.getContactPhoto(id) as Promise<Blob>,
-    enabled: hasPhoto && id != null,
+    queryFn: id === null ? skipToken : () => api.getContactPhoto(id),
+    enabled: hasPhoto,
     staleTime: 5 * 60_000,
   })
 }
@@ -135,7 +132,7 @@ export function useSetContactsFavorite() {
 
 export function useImportContacts() {
   return useContactMutation(
-    (file: File) => api.importContacts(file) as Promise<ContactImportReport>, true)
+    (file: File) => api.importContacts(file), true)
 }
 
 /**
@@ -147,7 +144,7 @@ export function useContactGroups(enabled = true) {
 
   return useQuery({
     queryKey: contactGroupKeys.all(accountId),
-    queryFn: () => api.getContactGroups() as Promise<ContactGroupsResponse>,
+    queryFn: () => api.getContactGroups(),
     staleTime: 5 * 60_000,
     select: groupsOf,
     enabled,
@@ -170,7 +167,7 @@ function useContactGroupMutation<TArgs, TResult = unknown>(
 
 export function useCreateContactGroup() {
   return useContactGroupMutation(
-    (name: string) => api.createContactGroup(name) as Promise<ContactGroup>)
+    (name: string) => api.createContactGroup(name))
 }
 
 export function useRenameContactGroup() {

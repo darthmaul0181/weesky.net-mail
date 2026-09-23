@@ -43,7 +43,7 @@ function rect(left: number, width: number): DOMRect {
   return {
     left, width, top: 0, height: 1344, right: left + width, bottom: 1344, x: left, y: 0,
     toJSON: () => ({}),
-  } as DOMRect
+  }
 }
 
 function dragging(onDrop = vi.fn(), enabled = true) {

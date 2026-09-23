@@ -33,7 +33,7 @@ function detailOf(overrides: Partial<EventDetail> = {}): EventDetail {
 }
 
 function draw(props: Partial<EventEditorProps> = {}) {
-  const onSave = vi.fn()
+  const onSave = vi.fn<EventEditorProps['onSave']>()
   const onDelete = vi.fn()
   const onClose = vi.fn()
   renderInCalendar(
@@ -56,7 +56,7 @@ describe('EventEditor', () => {
   })
 
   it('withholds the calendar row when there is only one calendar to choose from', () => {
-    draw({ calendars: [CALENDARS[0]] })
+    draw({ calendars: [CALENDARS[0]!] })
     expect(screen.queryByLabelText('Calendar')).toBeNull()
     expect(screen.getByLabelText('Title')).toBeInTheDocument()
   })
@@ -260,7 +260,7 @@ describe('EventEditor', () => {
   it('hands the guests to onSave', async () => {
     const { onSave } = draw({ initial: form({ attendees: [{ email: 'marc@example.org' }], canInvite: true }) })
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(onSave.mock.calls[0][0].attendees).toEqual([{ email: 'marc@example.org' }])
+    expect(onSave.mock.calls[0]![0].attendees).toEqual([{ email: 'marc@example.org' }])
   })
 
   // Render faithfully: the file lists Marc twice, the screen says so twice.
@@ -290,7 +290,7 @@ describe('EventEditor', () => {
     expect(chipOf(room)).not.toHaveClass('is-invalid')
     expect(chipOf(jose)).not.toHaveClass('is-invalid')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(onSave.mock.calls[0][0].attendees).toEqual([{ email: room, name: 'Salle Mercure' }, { email: jose }])
+    expect(onSave.mock.calls[0]![0].attendees).toEqual([{ email: room, name: 'Salle Mercure' }, { email: jose }])
 
     await userEvent.type(screen.getByLabelText('Attendees'), 'marc{Enter}100%@example.org{Enter}')
     expect(chipOf('marc')).toHaveClass('is-invalid')

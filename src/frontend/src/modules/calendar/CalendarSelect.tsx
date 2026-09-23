@@ -7,7 +7,7 @@ export interface CalendarSelectProps {
   label: string
   calendars: Calendar[]
   value: string
-  onChange(id: string): void
+  onChange: (id: string) => void
 }
 
 const swatch = (color: string | undefined) => (

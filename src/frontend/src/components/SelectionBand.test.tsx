@@ -47,6 +47,6 @@ describe('SelectionBand', () => {
         <button>Supprimer</button>
       </SelectionBand>)
 
-    expect((screen.getByLabelText('Tout sélectionner') as HTMLInputElement).indeterminate).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>('Tout sélectionner').indeterminate).toBe(true)
   })
 })

@@ -1,20 +1,21 @@
 import { Fragment, useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import LoadingBlock from '../../../components/LoadingBlock'
 import RefreshIcon from '../../../icons/RefreshIcon'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
-import TrashIcon from '../../../icons/TrashIcon.jsx'
+import TrashIcon from '../../../icons/TrashIcon'
 import { dateFormat } from '../../../lib/intl'
 import DeliveryKeyDialog from './DeliveryKeyDialog'
 import { deliveryErrorMessage } from './deliveryReplyKeyErrors'
 import {
   useDeleteDeliveryKey, useDeliveryReplyKey, useGenerateDeliveryKey, useSetDeliveryReplies,
 } from './useDeliveryReplyKey'
+import type { AddToast } from '../../../hooks/useToasts'
 
 interface Props {
-  addToast: (message: string, kind?: string) => void
+  addToast: AddToast
 }
 
 const day = () => dateFormat({ day: 'numeric', month: 'short' })

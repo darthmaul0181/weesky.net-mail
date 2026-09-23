@@ -1,4 +1,4 @@
-﻿import DOMPurify from 'dompurify'
+import DOMPurify from 'dompurify'
 import { FORBID_TAGS, FORBID_ATTR } from '../sanitizePolicy'
 
 /**

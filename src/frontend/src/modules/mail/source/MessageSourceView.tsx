@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router'
 import LoadingBlock from '../../../components/LoadingBlock'
 import { formatReaderDate } from '../reader/formatReaderDate'
 import { formatSize } from '../reader/formatSize'
@@ -54,7 +54,7 @@ export default function MessageSourceView() {
   const checks = data.authentication
     ? [data.authentication.spf, data.authentication.dkim, data.authentication.dmarc]
     : []
-  const verdicts = checks.some(v => v !== null) && checks.map(v => v ?? '—').join(' · ')
+  const verdicts = checks.some(v => v !== undefined) && checks.map(v => v ?? '—').join(' · ')
 
   return (
     <div className="source-page">

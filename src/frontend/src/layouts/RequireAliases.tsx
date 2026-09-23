@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router'
 import { useAuth } from '../contexts/AuthContext'
 
 // Nested inside RequirePrimary in routes.tsx, so a connected account never reaches here — this

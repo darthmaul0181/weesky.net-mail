@@ -7,9 +7,9 @@ import type { AttendeeWrite } from './calendarTypes'
 
 interface Props {
   value: AttendeeWrite[]
-  onChange(next: AttendeeWrite[]): void
+  onChange: (next: AttendeeWrite[]) => void
   /** Which chips are drawn as a mistake; the composer's own check when not given. */
-  isValid?(email: string): boolean
+  isValid?: (email: string) => boolean
 }
 
 /** The composer's recipients field, on the guest list: chips, the book's suggestions, and the

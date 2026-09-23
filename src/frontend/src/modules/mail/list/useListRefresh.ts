@@ -20,25 +20,29 @@ async function refreshFirstBlock(
   try {
     const fresh: MailFolderPage =
       await api.getMailMessages(folder, 0, BLOCK_SIZE, { accountId, grouped })
-    client.setQueryData<InfiniteData<MailFolderPage>>(key, old =>
-      old
-        ? {
-            ...old,
-            // Merged, not replaced: arrivals push old block-0 rows out of the fresh window,
-            // and the frozen later blocks do not hold them — a replace would drop them.
-            // Grouped, the unit is the thread: a reply joins its own rather than opening a row.
-            pages: [
-              grouped
-                ? {
-                    ...fresh,
-                    threads: dedupeThreads([fresh, old.pages[0]])
-                      .map(group => ({ messages: group.messages })),
-                  }
-                : { ...fresh, messages: dedupeByUid([fresh, old.pages[0]]) },
-              ...old.pages.slice(1),
-            ],
-          }
-        : old)
+    client.setQueryData<InfiniteData<MailFolderPage>>(key, old => {
+      if (!old) return old
+      // A cached InfiniteData always holds the block it was seeded with; fresh stands in for a
+      // head that somehow isn't there rather than asserting one.
+      const [head, ...rest] = old.pages
+      const previousHead = head ?? fresh
+      return {
+        ...old,
+        // Merged, not replaced: arrivals push old block-0 rows out of the fresh window,
+        // and the frozen later blocks do not hold them — a replace would drop them.
+        // Grouped, the unit is the thread: a reply joins its own rather than opening a row.
+        pages: [
+          grouped
+            ? {
+                ...fresh,
+                threads: dedupeThreads([fresh, previousHead])
+                  .map(group => ({ messages: group.messages })),
+              }
+            : { ...fresh, messages: dedupeByUid([fresh, previousHead]) },
+          ...rest,
+        ],
+      }
+    })
   } catch {
     // A poll-driven refresh fails in silence; the next tick tries again.
   }
@@ -74,7 +78,7 @@ export function useListRefresh(folderPath: string | null, enabled = true): void 
     if (uidValidityBroke(last.snapshot, snapshot)) {
       // Every cached UID is a lie. resetQueries refetches only what is on screen, from
       // scratch — an invalidate would replay every loaded stream block.
-      client.resetQueries({
+      void client.resetQueries({
         predicate: query =>
           query.queryKey[0] === 'mail' && query.queryKey[1] === accountId
           && query.queryKey[3] === folderPath,
@@ -85,9 +89,9 @@ export function useListRefresh(folderPath: string | null, enabled = true): void 
     if (!folderChanged(last.snapshot, snapshot)) return
 
     if (isStreaming(preferences)) {
-      refreshFirstBlock(client, accountId, folderPath, groupConversationsOf(preferences))
+      void refreshFirstBlock(client, accountId, folderPath, groupConversationsOf(preferences))
     } else {
-      client.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, folderPath) })
+      void client.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, folderPath) })
     }
   }, [folders, folderPath, preferences, accountId, client])
 }

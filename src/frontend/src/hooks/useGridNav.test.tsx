@@ -295,7 +295,7 @@ describe('useGridNav', () => {
      widget added or removed, and a control gone disabled. These two prove both halves of that
      invalidation; without it the arrow would walk a grid that no longer exists. */
   it('walks the rows a mutation rebuilt, not the ones it had', async () => {
-    const { rerender } = render(<Grid rows={[THREE[0], THREE[1]]} />)
+    const { rerender } = render(<Grid rows={[THREE[0]!, THREE[1]!]} />)
     widget('A2').focus()
     press('ArrowDown')
     expect(widget('B2')).toHaveFocus()
@@ -464,7 +464,7 @@ describe('useGridNav', () => {
     widget('B2').focus()
     expect(stops()).toEqual(['-1', '-1', '-1', '-1', '0', '-1', '-1', '-1', '-1'])
 
-    rerender(<Grid rows={[THREE[0], THREE[2]]} />)
+    rerender(<Grid rows={[THREE[0]!, THREE[2]!]} />)
 
     await waitFor(() => expect(stops()).toEqual(['-1', '-1', '-1', '-1', '0', '-1']))
     expect(widget('C2')).toHaveAttribute('tabindex', '0')
@@ -474,7 +474,7 @@ describe('useGridNav', () => {
     const { rerender } = render(<Grid rows={THREE} />)
     widget('C3').focus()
 
-    rerender(<Grid rows={[THREE[0], THREE[1]]} />)
+    rerender(<Grid rows={[THREE[0]!, THREE[1]!]} />)
 
     await waitFor(() => expect(widget('B3')).toHaveAttribute('tabindex', '0'))
     expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '0'])
@@ -529,7 +529,7 @@ describe('useGridNav', () => {
     const { rerender } = render(<Grid rows={THREE} />)
     widget('B2').focus()
 
-    rerender(<Grid rows={[THREE[0], THREE[2]]} />)
+    rerender(<Grid rows={[THREE[0]!, THREE[2]!]} />)
 
     await waitFor(() => expect(widget('C2')).toHaveFocus())
   })
@@ -543,7 +543,7 @@ describe('useGridNav', () => {
     widget('B2').focus()
     widget('After').focus()
 
-    rerender(<Grid rows={[THREE[0], THREE[2]]} />)
+    rerender(<Grid rows={[THREE[0]!, THREE[2]!]} />)
 
     await waitFor(() => expect(widget('C2')).toHaveAttribute('tabindex', '0'))
     expect(widget('After')).toHaveFocus()
@@ -581,7 +581,7 @@ describe('useGridNav', () => {
     const { rerender } = render(<Grid rows={THREE} />)
     widget('B2').focus()
 
-    rerender(<Grid rows={[THREE[0], THREE[1], [...THREE[2], 'C4']]} unrow="B1" />)
+    rerender(<Grid rows={[THREE[0]!, THREE[1]!, [...THREE[2]!, 'C4']]} unrow="B1" />)
 
     await waitFor(() => expect(widget('A1')).toHaveAttribute('tabindex', '0'))
     expect(widget('B2')).not.toHaveAttribute('tabindex', '0')

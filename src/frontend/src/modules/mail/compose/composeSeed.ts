@@ -165,7 +165,7 @@ export function buildDraftSeed(
     text: opened.textBody ?? null,
     fromAddress: owned?.address ?? null,
     attachments: opened.attachments,
-    inReplyTo: opened.inReplyTo,
+    inReplyTo: opened.inReplyTo ?? null,
     references: opened.references,
     priority: opened.priority,
     draftRef: ref,
@@ -192,6 +192,6 @@ export function applyComposeFormat(
     ...seed,
     html: '',
     text: htmlToText(seed.html),
-    attachments: seed.attachments.map(a => ({ ...a, contentId: null })),
+    attachments: seed.attachments.map(a => ({ ...a, contentId: undefined })),
   }
 }

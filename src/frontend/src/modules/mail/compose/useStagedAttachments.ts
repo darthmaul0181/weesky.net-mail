@@ -79,7 +79,7 @@ export function useStagedAttachments(
       const index = previous.findIndex(item => item.key === key)
       if (index === -1) return previous
       const next = previous.slice()
-      next[index] = { ...next[index], ...change }
+      next[index] = { ...next[index]!, ...change }
       return next
     })
   }, [apply])

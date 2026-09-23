@@ -22,8 +22,8 @@ export interface ScopeModalProps {
   title: string
   sentence: string
   allowed: EditScope[]
-  onPick(scope: EditScope): void
-  onClose(): void
+  onPick: (scope: EditScope) => void
+  onClose: () => void
 }
 
 /**

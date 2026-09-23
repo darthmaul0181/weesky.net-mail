@@ -15,7 +15,7 @@ function leaf(bundle: unknown, path: string): unknown {
  * reader cannot tell apart.
  */
 export function namesInBothLanguages<T extends string>(
-  colours: readonly T[], keyOf: (colour: T) => string, bundle: keyof typeof en & keyof typeof fr,
+  colours: readonly T[], keyOf: (colour: T) => string, bundle: Extract<keyof typeof en, keyof typeof fr>,
 ): void {
   const nameIn = (catalogue: typeof en | typeof fr, colour: T) =>
     leaf(catalogue[bundle], keyOf(colour))

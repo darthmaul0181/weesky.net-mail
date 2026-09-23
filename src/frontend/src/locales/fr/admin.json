@@ -19,6 +19,8 @@
     "title": "Comptes ({{total}})",
     "titleFiltered": "Comptes ({{shown}} / {{total}})",
     "loadFailed": "Échec du chargement des comptes",
+    "domainsFailed": "Échec du chargement de la liste des domaines",
+    "loadFailedBody": "Impossible de charger les comptes.",
     "deleted": "{{account}} supprimé",
     "deleteFailed": "Échec de la suppression de l’utilisateur",
     "created": "Compte créé",
@@ -45,6 +47,7 @@
   "domains": {
     "title": "Domaines ({{total}})",
     "loadFailed": "Échec du chargement des domaines",
+    "loadFailedBody": "Impossible de charger les domaines.",
     "deleted": "Domaine {{name}} supprimé",
     "deleteFailed": "Échec de la suppression du domaine",
     "created": "Domaine créé",
@@ -61,6 +64,8 @@
   "virtual": {
     "title": "Domaines d’alias virtuels ({{total}})",
     "loadFailed": "Échec du chargement des domaines virtuels",
+    "usersFailed": "Échec du chargement de la liste des comptes",
+    "loadFailedBody": "Impossible de charger les domaines virtuels.",
     "setOwnerFailed": "Échec de l’attribution du propriétaire",
     "removeOwnerFailed": "Échec du retrait du propriétaire",
     "empty": "Aucun domaine d’alias virtuel",
