@@ -4,13 +4,13 @@ import AuthBadge from './AuthBadge'
 import type { MailAuthentication } from '../api/mailTypes'
 
 const passed: MailAuthentication = {
-  spf: 'pass', dkim: 'pass', dmarc: null,
+  spf: 'pass', dkim: 'pass',
   raw: 'Authentication-Results: mx.example.com; spf=pass; dkim=pass',
 }
 
 describe('AuthBadge', () => {
   it('renders nothing without a recognised verdict', () => {
-    const { container } = render(<AuthBadge authentication={null} />)
+    const { container } = render(<AuthBadge />)
 
     expect(container.textContent).toBe('')
   })
@@ -28,7 +28,7 @@ describe('AuthBadge', () => {
   })
 
   it('names a failing verdict distinctly', () => {
-    render(<AuthBadge authentication={{ spf: 'fail', dkim: 'pass', dmarc: null, raw: 'x' }} />)
+    render(<AuthBadge authentication={{ spf: 'fail', dkim: 'pass', raw: 'x' }} />)
 
     expect(screen.getByRole('button', { name: 'Failed SPF or DKIM' })).toBeInTheDocument()
   })

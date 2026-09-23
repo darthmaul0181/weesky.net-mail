@@ -26,7 +26,7 @@ function column() {
   node.getBoundingClientRect = () => ({
     left: 200, width: 100, top: 0, height: 1344, right: 300, bottom: 1344, x: 200, y: 0,
     toJSON: () => ({}),
-  } as DOMRect)
+  })
   document.body.append(node)
   return node
 }

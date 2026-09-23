@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import i18next from 'i18next'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../../contexts/AuthContext'
@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   hasSession: vi.fn(() => true),
   clearSession: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
-  setIsAdmin: vi.fn(),
 }))
 
 vi.mock('../../../api.js', () => ({
@@ -32,7 +31,6 @@ vi.mock('../../../api.js', () => ({
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
-  setIsAdmin: mocks.setIsAdmin,
 }))
 
 function renderPage() {

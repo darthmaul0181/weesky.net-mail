@@ -39,7 +39,7 @@ export interface SchedulingAccountTestResult {
 
 const SCHEDULING_ACCOUNT_KEY = ['adminSchedulingAccount'] as const
 
-// api.js sets no timeout of its own, and the dialog blocks every way out while a save is pending.
+// api.ts sets no timeout of its own, and the dialog blocks every way out while a save is pending.
 const SAVE_TIMEOUT_MS = 30_000
 
 // Their variables carry the typed password: gone from the cache as soon as no dialog observes them.
@@ -55,7 +55,7 @@ export function useSchedulingAccount() {
 // onSettled, not onSuccess: a refused write must leave the screen on server state rather than
 // on an optimistic lie.
 function refreshAccount(client: QueryClient) {
-  return () => { client.invalidateQueries({ queryKey: SCHEDULING_ACCOUNT_KEY }) }
+  return () => { void client.invalidateQueries({ queryKey: SCHEDULING_ACCOUNT_KEY }) }
 }
 
 export function useSaveSchedulingAccount() {
@@ -84,7 +84,7 @@ export function useTestSchedulingAccount() {
   return useMutation({
     ...FORGET_PASSWORD,
     mutationFn: (account?: SchedulingAccountPayload) =>
-      api.adminTestSchedulingAccount(account) as Promise<SchedulingAccountTestResult>,
+      api.adminTestSchedulingAccount(account),
     onSettled: (_data, _error, account) => { if (!account) refreshAccount(client)() },
   })
 }

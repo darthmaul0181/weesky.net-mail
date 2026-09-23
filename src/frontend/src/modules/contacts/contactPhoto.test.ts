@@ -36,7 +36,7 @@ describe('reducePhoto', () => {
     await reducePhoto(new File([], 'p.jpg'))
 
     // sx, sy, sw, sh : la moitié du débord à gauche, rien en haut, le côté court des deux côtés.
-    expect(drawn[0].slice(0, 4)).toEqual([100, 0, 200, 200])
+    expect(drawn[0]!.slice(0, 4)).toEqual([100, 0, 200, 200])
   })
 
   it('crops a portrait to a centred square', async () => {
@@ -44,7 +44,7 @@ describe('reducePhoto', () => {
 
     await reducePhoto(new File([], 'p.jpg'))
 
-    expect(drawn[0].slice(0, 4)).toEqual([0, 100, 200, 200])
+    expect(drawn[0]!.slice(0, 4)).toEqual([0, 100, 200, 200])
   })
 
   it('never enlarges a small image', async () => {
@@ -92,7 +92,7 @@ describe('reducePhoto', () => {
 
   it('refuses rather than sending something bound for a 400', async () => {
     mockBitmap(2000, 2000)
-    blobSizes = Array(6).fill(MAX + 1)
+    blobSizes = Array<number>(6).fill(MAX + 1)
 
     await expect(reducePhoto(new File([], 'p.jpg'))).rejects.toThrow(PHOTO_TOO_LARGE)
   })

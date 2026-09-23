@@ -22,7 +22,7 @@ const queryKey = ['appSettings'] as const
 export function useAppSettings() {
   return useQuery({
     queryKey,
-    queryFn: ({ signal }) => api.getAppSettings({ signal }) as Promise<AppSettings>,
+    queryFn: ({ signal }) => api.getAppSettings({ signal }),
     staleTime: 5 * 60 * 1000,
   })
 }

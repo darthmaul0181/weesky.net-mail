@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import Modal from '../../../components/Modal'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
-import TrashIcon from '../../../icons/TrashIcon.jsx'
+import PencilIcon from '../../../icons/PencilIcon'
+import TrashIcon from '../../../icons/TrashIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { useDeleteFolder, useRenameFolder, useSetFolderSubscription } from '../queries'
 import { roleLabel } from '../roleLabel'
@@ -44,6 +44,25 @@ export default function FolderManager({ folders, onNotify }: Props) {
     }
   }
 
+  async function rename(folder: MailFolderNode) {
+    const ok = await run(
+      () => renameFolder.mutateAsync({
+        path: folder.path,
+        newParentPath: parentOf(folder),
+        newName: renameValue.trim(),
+      }),
+      t('folders.manage.renamed'), t('folders.manage.renameFailed'))
+    if (ok) setRenaming(null)
+  }
+
+  async function remove(folder: MailFolderNode) {
+    const ok = await run(
+      () => deleteFolder.mutateAsync({ path: folder.path }),
+      t('folders.manage.deleted', { name: folder.name }),
+      t('folders.manage.deleteFailed'))
+    if (ok) setPendingDelete(null)
+  }
+
   return (
     <>
       <ul className="admin-list folder-list" ref={listRegion} tabIndex={-1}>
@@ -72,7 +91,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
                   checked={isSystem ? true : node.subscribed}
                   disabled={isSystem}
                   aria-label={t('folders.manage.show', { name: node.name })}
-                  onChange={e => run(
+                  onChange={e => void run(
                     () => setSubscription.mutateAsync({ path: node.path, subscribed: e.target.checked }),
                     t(e.target.checked ? 'folders.manage.nowVisible' : 'folders.manage.nowHidden',
                       { name: node.name }),
@@ -130,16 +149,9 @@ export default function FolderManager({ folders, onNotify }: Props) {
           initialFocusRef={renameRef}
         >
           <form
-            onSubmit={async event => {
+            onSubmit={event => {
               event.preventDefault()
-              const ok = await run(
-                () => renameFolder.mutateAsync({
-                  path: renaming.path,
-                  newParentPath: parentOf(renaming),
-                  newName: renameValue.trim(),
-                }),
-                t('folders.manage.renamed'), t('folders.manage.renameFailed'))
-              if (ok) setRenaming(null)
+              void rename(renaming)
             }}
           >
             <div className="field-h">
@@ -171,13 +183,7 @@ export default function FolderManager({ folders, onNotify }: Props) {
           loading={deleteFolder.isPending}
           returnFocusRef={listRegion}
           onClose={() => setPendingDelete(null)}
-          onConfirm={async () => {
-            const ok = await run(
-              () => deleteFolder.mutateAsync({ path: pendingDelete.path }),
-              t('folders.manage.deleted', { name: pendingDelete.name }),
-              t('folders.manage.deleteFailed'))
-            if (ok) setPendingDelete(null)
-          }}
+          onConfirm={() => void remove(pendingDelete)}
         />
       )}
     </>

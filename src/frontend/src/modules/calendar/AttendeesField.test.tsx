@@ -5,8 +5,8 @@ import type { Contact } from '../contacts/contactTypes'
 import AttendeesField from './AttendeesField'
 
 const contacts: Contact[] = [
-  { id: 'c1', firstName: 'Marc', lastName: null, nickname: null, isFavorite: false, addresses: ['marc@example.org'] },
-  { id: 'c2', firstName: 'Julie', lastName: 'Martin', nickname: null, isFavorite: false, addresses: ['julie@example.net'] },
+  { id: 'c1', firstName: 'Marc', isFavorite: false, addresses: ['marc@example.org'] },
+  { id: 'c2', firstName: 'Julie', lastName: 'Martin', isFavorite: false, addresses: ['julie@example.net'] },
 ]
 vi.mock('../contacts/queries', () => ({ useContacts: () => ({ data: contacts }) }))
 

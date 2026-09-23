@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // A render-time throw anywhere under the auth guard, standing in for a real one (a stale chunk,

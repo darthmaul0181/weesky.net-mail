@@ -46,7 +46,7 @@ export default function ChangePasswordSection({ onDone }: ChangePasswordSectionP
   }
 
   return (
-    <form className="change-password-form" onSubmit={handleSubmit}>
+    <form className="change-password-form" onSubmit={e => void handleSubmit(e)}>
       <p className="setting-hint">{t('account.passwordResetsSync')}</p>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       <div className="field">

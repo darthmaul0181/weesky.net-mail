@@ -3,8 +3,8 @@ import type { MailFolderNode } from '../api/mailTypes'
 import { DRAG_MIME, dragUids, serializeDrag, parseDrag, canDropInto } from './dragMessages'
 
 const node = (partial: Partial<MailFolderNode>): MailFolderNode => ({
-  path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-  total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+  path: 'X', name: 'X', selectable: true, subscribed: true,
+  total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
 })
 
 describe('dragUids', () => {

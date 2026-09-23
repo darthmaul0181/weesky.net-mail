@@ -19,10 +19,10 @@ const result = (uid: number, folderPath: string, seen = true): MailSearchResult 
   ({ ...summary(uid, { seen }), folderPath, uidValidity: 1 })
 
 const node = (
-  path: string, unread: number | null, children: MailFolderNode[] = [], total: number | null = 10,
+  path: string, unread: number | undefined, children: MailFolderNode[] = [], total = 10,
 ): MailFolderNode => ({
-  path, name: path, specialUse: null, selectable: true, subscribed: true,
-  total, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children,
+  path, name: path, selectable: true, subscribed: true,
+  total, unread, uidValidity: 1, uidNext: 100, children,
 })
 
 const flatPage = (messages: MailMessageSummary[]): MailFolderPage => ({
@@ -41,8 +41,8 @@ const threadUids = (page: MailFolderPage) => page.threads!.map(t => t.messages.m
 describe('patchSummaries', () => {
   it('rewrites only the targeted uids', () => {
     const { messages } = patchSummaries([summary(1), summary(2)], [2], 'seen', true)
-    expect(messages[0].seen).toBe(false)
-    expect(messages[1].seen).toBe(true)
+    expect(messages[0]!.seen).toBe(false)
+    expect(messages[1]!.seen).toBe(true)
   })
 
   it('counts the unread delta only for real transitions', () => {
@@ -60,13 +60,13 @@ describe('patchSummaries', () => {
   it('flagged never moves the unread delta', () => {
     const { unreadDelta, messages } = patchSummaries([summary(1)], [1], 'flagged', true)
     expect(unreadDelta).toBe(0)
-    expect(messages[0].flagged).toBe(true)
+    expect(messages[0]!.flagged).toBe(true)
   })
 
   it('reports zero found when no target is present', () => {
     const { found, messages } = patchSummaries([summary(1)], [99], 'seen', true)
     expect(found).toBe(0)
-    expect(messages[0].seen).toBe(false)
+    expect(messages[0]!.seen).toBe(false)
   })
 })
 
@@ -74,18 +74,18 @@ describe('patchFolderUnread', () => {
   it('adjusts the one folder, deep in the tree', () => {
     const tree = [node('INBOX', 5, [node('INBOX/Sub', 3)])]
     const patched = patchFolderUnread(tree, 'INBOX/Sub', -1)
-    expect(patched[0].unread).toBe(5)
-    expect(patched[0].children[0].unread).toBe(2)
+    expect(patched[0]!.unread).toBe(5)
+    expect(patched[0]!.children[0]!.unread).toBe(2)
   })
 
   it('never goes below zero', () => {
     const patched = patchFolderUnread([node('INBOX', 0)], 'INBOX', -3)
-    expect(patched[0].unread).toBe(0)
+    expect(patched[0]!.unread).toBe(0)
   })
 
-  it('leaves a null count null', () => {
-    const patched = patchFolderUnread([node('INBOX', null)], 'INBOX', -1)
-    expect(patched[0].unread).toBeNull()
+  it('leaves an absent count absent', () => {
+    const patched = patchFolderUnread([node('INBOX', undefined)], 'INBOX', -1)
+    expect(patched[0]!.unread).toBeUndefined()
   })
 
   it('returns the tree untouched on a zero delta', () => {
@@ -126,26 +126,27 @@ describe('patchFolderCounts', () => {
   it('adjusts both counters on the one folder, deep in the tree', () => {
     const tree = [node('INBOX', 5, [node('INBOX/Sub', 3)])]
     const patched = patchFolderCounts(tree, 'INBOX/Sub', { total: -1, unread: -1 })
-    expect(patched[0].unread).toBe(5)
-    expect(patched[0].children[0].unread).toBe(2)
-    expect(patched[0].children[0].total).toBe(9)
+    expect(patched[0]!.unread).toBe(5)
+    expect(patched[0]!.children[0]!.unread).toBe(2)
+    expect(patched[0]!.children[0]!.total).toBe(9)
   })
 
   it('never goes below zero on either counter', () => {
     const patched = patchFolderCounts([node('INBOX', 0)], 'INBOX', { total: -20, unread: -3 })
-    expect(patched[0].unread).toBe(0)
-    expect(patched[0].total).toBe(0)
+    expect(patched[0]!.unread).toBe(0)
+    expect(patched[0]!.total).toBe(0)
   })
 
-  it('leaves a null unread count null', () => {
-    const patched = patchFolderCounts([node('INBOX', null)], 'INBOX', { total: -1, unread: -1 })
-    expect(patched[0].unread).toBeNull()
+  it('leaves an absent unread count absent', () => {
+    const patched = patchFolderCounts([node('INBOX', undefined)], 'INBOX', { total: -1, unread: -1 })
+    expect(patched[0]!.unread).toBeUndefined()
   })
 
-  it('leaves a null total count null while unread still moves', () => {
-    const patched = patchFolderCounts([node('INBOX', 5, [], null)], 'INBOX', { total: -1, unread: -1 })
-    expect(patched[0].total).toBeNull()
-    expect(patched[0].unread).toBe(4)
+  it('leaves an absent total count absent while unread still moves', () => {
+    const patched = patchFolderCounts(
+      [{ ...node('INBOX', 5), total: undefined }], 'INBOX', { total: -1, unread: -1 })
+    expect(patched[0]!.total).toBeUndefined()
+    expect(patched[0]!.unread).toBe(4)
   })
 
   it('returns the tree untouched when both deltas are zero', () => {
@@ -166,22 +167,22 @@ describe('patchSearchResults', () => {
     const patch = patchSearchResults(rows, 'INBOX', [1], 'seen', true)
     expect(patch.found).toBe(1)
     expect(patch.unreadDelta).toBe(-1)
-    expect(patch.results[0].seen).toBe(true)
-    expect(patch.results[1].seen).toBe(false)
+    expect(patch.results[0]!.seen).toBe(true)
+    expect(patch.results[1]!.seen).toBe(false)
   })
 
   it('moves the flag without touching the unread delta', () => {
     const rows = [result(1, 'INBOX')]
     const patch = patchSearchResults(rows, 'INBOX', [1], 'flagged', true)
     expect(patch.unreadDelta).toBe(0)
-    expect(patch.results[0].flagged).toBe(true)
+    expect(patch.results[0]!.flagged).toBe(true)
   })
 
   it('reports zero found when no row of that folder holds the uid', () => {
     const rows = [result(1, 'Archive', false)]
     const patch = patchSearchResults(rows, 'INBOX', [1], 'seen', true)
     expect(patch.found).toBe(0)
-    expect(patch.results[0].seen).toBe(false)
+    expect(patch.results[0]!.seen).toBe(false)
   })
 })
 
@@ -249,8 +250,8 @@ describe('patchPage', () => {
     const patch = patchPage(groupedPage([[3, 2], [1]]), [2], 'seen', true)
 
     expect(patch.found).toBe(1)
-    expect(patch.page.threads![0].messages.map(m => m.seen)).toEqual([false, true])
-    expect(patch.page.threads![1].messages[0].seen).toBe(false)
+    expect(patch.page.threads![0]!.messages.map(m => m.seen)).toEqual([false, true])
+    expect(patch.page.threads![1]!.messages[0]!.seen).toBe(false)
   })
 
   it('reports zero found when no thread holds the uid', () => {

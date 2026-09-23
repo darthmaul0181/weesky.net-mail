@@ -1,40 +1,22 @@
 # frontend
 
-A React SPA for managing email aliases on the weesky.net mail service. It talks to the backend named by `VITE_API_BASE`.
+Scotty webmail's React SPA: mail, calendar, contacts and settings for the weesky.net mail service. It talks to the backend named by `VITE_API_BASE`. `CLAUDE.md` and `docs/` hold the architecture.
 
 ## Stack
 
-- React 18 + Vite
-- Plain `fetch` through a thin API client — no data-fetching library
-- No React Router; navigation is state-driven
+- React 18 + Vite, TypeScript throughout (`strict`, `noUncheckedIndexedAccess`, `allowJs: false`)
+- React Router 7 for routing, TanStack Query for server state
+- A thin `fetch` client in `src/api.ts`; the session rides on an `HttpOnly` cookie
 
 ## Commands
 
 ```bash
 npm run dev        # start the Vite dev server on port 5173
-npm run build      # production build → dist/
+npm run build      # typecheck, then production build → dist/
 npm run preview    # preview the production build locally
-npm run test       # run the Vitest suite once (--watch for watch mode)
-npm run lint       # ESLint (eslint-plugin-react + react-hooks)
-npm run ship       # build + deploy to production via SSH
+npm run typecheck  # tsc --noEmit
+npm test           # run the Vitest suite once (--watch for watch mode)
+npm run lint       # ESLint, with typescript-eslint's type-checked rules
 ```
 
-Tests use Vitest + jsdom + `@testing-library/react` and live next to the code as `*.test.js`/`*.test.jsx`.
-
-## Project layout
-
-```
-src/
-  api.js          # backend client + auth token handling
-  api.test.js     # api client tests
-  App.jsx         # top-level LoginPage / AliasesPage switch
-  main.jsx        # React entry point
-  index.css
-  pages/          # LoginPage, AliasesPage, RulesPage and their sub-components (+ *.test.jsx)
-```
-
-## Auth
-
-Authentication state lives as module-level state in `src/api.js`, not in React context. The bearer token is kept in `localStorage` together with an expiry timestamp; on module load `api.js` restores it if still valid, or discards it otherwise.
-
-`setUnauthorizedHandler(fn)` lets `App.jsx` register a callback that is invoked on any 401, sending the user back to the login screen without individual pages having to know about auth.
+Tests use Vitest + jsdom + `@testing-library/react` and sit next to the code they test as `*.test.ts`/`*.test.tsx`. Building this for an installation: see `../../install/README.md` step 1.2, which sets `VITE_API_BASE` — `npm run build` fails without it.

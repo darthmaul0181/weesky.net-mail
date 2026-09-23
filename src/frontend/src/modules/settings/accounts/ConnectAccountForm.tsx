@@ -74,7 +74,7 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
           onClick={onCancel}>✕</button>
       </div>
 
-      <form onSubmit={submit}>
+      <form onSubmit={event => void submit(event)}>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
 
         {/* .field-h puts the label beside its control: without the htmlFor/id pair the control
@@ -109,14 +109,14 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
 
         <p className="settings-note">
           {isOAuth
-            ? t('accounts.oauthNote', { provider: selected!.name })
+            ? t('accounts.oauthNote', { provider: selected.name })
             : t('accounts.verifyNote')}
         </p>
 
         {isOAuth
           ? (
             <button type="submit" className="btn btn-primary btn-auto" disabled={leaving}>
-              {leaving ? <span className="spinner" /> : t('accounts.signInWith', { provider: selected!.name })}
+              {leaving ? <span className="spinner" /> : t('accounts.signInWith', { provider: selected.name })}
             </button>
           )
           : (

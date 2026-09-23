@@ -33,6 +33,10 @@ export default [
     },
   },
   {
+    files: ['*.config.js'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     files: ['**/*.{jsx,tsx}'],
     plugins: {
       'jsx-a11y': jsxA11y,
@@ -49,8 +53,27 @@ export default [
       'jsx-a11y/no-autofocus': ['error', { ignoreNonDOM: true }],
     },
   },
-  ...tseslint.configs.recommended.map(cfg => ({
+  ...tseslint.configs.recommendedTypeChecked.map(cfg => ({
     ...cfg,
     files: ['**/*.{ts,tsx}'],
   })),
+  {
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['**/*.test.{ts,tsx}', 'src/test-utils.ts'],
+    rules: {
+      // `expect(obj.method)` hands the method over unbound on purpose: the rule's known false positive.
+      '@typescript-eslint/unbound-method': 'off',
+      // `act(async () => { … })` is async so that act drains the work it scheduled, and an async mock
+      // keeps a thrown error a rejection like the function it stands in for: neither needs an await.
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
 ]

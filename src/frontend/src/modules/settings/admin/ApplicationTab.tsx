@@ -7,9 +7,10 @@ import {
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import DeliveryRepliesSection from './DeliveryRepliesSection'
 import SchedulingAccountSection from './SchedulingAccountSection'
+import type { AddToast } from '../../../hooks/useToasts'
 
 interface Props {
-  addToast: (message: string, kind?: string) => void
+  addToast: AddToast
 }
 
 /**
@@ -98,7 +99,7 @@ export default function ApplicationTab({ addToast }: Props) {
             checked={enabled}
             disabled={setSetting.isPending}
             aria-label={t('application.installable')}
-            onChange={event => save(
+            onChange={event => void save(
               APP_SETTING_KEYS.installable, String(event.target.checked),
               t(event.target.checked
                 ? 'application.installableOn'
@@ -138,7 +139,7 @@ export default function ApplicationTab({ addToast }: Props) {
         type="button"
         className="btn btn-primary btn-auto"
         disabled={!enabled || setSetting.isPending}
-        onClick={saveNames}
+        onClick={() => void saveNames()}
       >
         {setSetting.isPending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
       </button>

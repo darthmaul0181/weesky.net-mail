@@ -40,7 +40,7 @@ const SUNDAY_REGIONS = new Set(
  * A browser naming no region leaves English on `en-GB`, the day-first English this product reads.
  */
 export function dateLocaleOf(lang: string, navigatorLanguage: string): string {
-  const language = lang.split('-')[0]
+  const language = lang.split('-')[0] ?? lang
   let region: string | undefined
   try {
     region = new Intl.Locale(navigatorLanguage).region
@@ -103,12 +103,16 @@ export function weekNumberOf(day: PlainDate, rules: WeekRules): number {
   return 1
 }
 
+type WeekRow = [PlainDate, PlainDate, PlainDate, PlainDate, PlainDate, PlainDate, PlainDate]
+export type MonthGrid = [WeekRow, WeekRow, WeekRow, WeekRow, WeekRow, WeekRow]
+
 /** Always six rows: a month grid that changed height between September and October would move
     every row under the cursor. A view that wants five drops the last row itself. */
-export function monthGrid(year: number, month: number, rules: WeekRules): PlainDate[][] {
+export function monthGrid(year: number, month: number, rules: WeekRules): MonthGrid {
   const first = startOfWeek(`${year}-${String(month).padStart(2, '0')}-01`, rules)
+  // The outer Array.from's length: 6 and the inner's length: 7 are exactly MonthGrid's shape.
   return Array.from({ length: 6 }, (_, row) =>
-    Array.from({ length: 7 }, (_, column) => addDays(first, row * 7 + column)))
+    Array.from({ length: 7 }, (_, column) => addDays(first, row * 7 + column))) as MonthGrid
 }
 
 const longDayFormat = (locale: string, withYear: boolean) => dateFormat({
@@ -161,8 +165,17 @@ export function formatTime(
 }
 
 /** iCalendar's two-letter weekdays, in the order `weekdayNameOf` counts its offsets: the custom
-    rule's checkboxes and the sentence a rule is read as are indexed by this one list. */
-export const WEEKDAY_TOKENS = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
+    rule's checkboxes and the sentence a rule is read as are indexed by this one list. Always
+    seven entries, so an index built from `% 7` or `isoWeekdayOf(…) - 1` is always in bounds. */
+export const WEEKDAY_TOKENS = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] as const
+export type WeekdayToken = typeof WEEKDAY_TOKENS[number]
+
+/** The token at `offset` days after Monday, wrapped into range. Every caller computes `offset`
+    as `n % 7` or `isoWeekdayOf(…) - 1`, always in `[0, 6]`; the `% 7` here is what makes that
+    true of a negative offset too, rather than trusting each call site to have gotten there. */
+export function weekdayTokenAt(offset: number): WeekdayToken {
+  return WEEKDAY_TOKENS[((offset % 7) + 7) % 7]!
+}
 
 /** The name of the weekday `offset` days after `MONDAY_UTC_MS`, the module's single anchor. */
 export function weekdayNameOf(

@@ -269,6 +269,7 @@
     "scriptEntity": "script",
     "ruleEntity": "rule \"{{name}}\"",
     "loadFailed": "Failed to load rules",
+    "loadFailedBody": "Could not load the rules.",
     "saved": "Rules saved",
     "saveFailed": "Failed to save rules",
     "scriptDeleted": "Script deleted",

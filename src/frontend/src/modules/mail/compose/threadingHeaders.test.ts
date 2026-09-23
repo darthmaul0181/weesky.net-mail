@@ -13,7 +13,7 @@ describe('threadingHeaders', () => {
   })
 
   it('leaves the chain alone when the original has no id', () => {
-    expect(threadingHeaders({ messageId: null, references: ['a@x'] }))
+    expect(threadingHeaders({ references: ['a@x'] }))
       .toEqual({ inReplyTo: null, references: ['a@x'] })
   })
 })

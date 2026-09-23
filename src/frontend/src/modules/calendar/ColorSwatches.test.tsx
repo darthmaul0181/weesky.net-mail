@@ -8,7 +8,7 @@ import { expectNoAxeViolations } from '../../a11y-test'
 const NAMES = ['Blue', 'Lavender', 'Emerald', 'Coral', 'Gold', 'Orange',
   'Teal', 'Raspberry', 'Slate', 'Violet', 'Forest', 'Bronze']
 
-function mount(value = CALENDAR_COLORS[0]) {
+function mount(value = CALENDAR_COLORS[0]!) {
   const onPick = vi.fn()
   return { onPick, ...render(<ColorSwatches value={value} onPick={onPick} />) }
 }

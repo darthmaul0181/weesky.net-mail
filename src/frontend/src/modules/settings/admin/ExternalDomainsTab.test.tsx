@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { holdNextCall, settle } from '../../../test-utils'
 import ExternalDomainsTab from './ExternalDomainsTab'
 import type { ExternalDomain } from './useExternalDomains'
 
@@ -23,10 +24,6 @@ const addToast = vi.fn()
 
 const NO_OAUTH = {
   authMode: 'Password' as const,
-  oauthAuthorizationUrl: null,
-  oauthTokenUrl: null,
-  oauthScopes: null,
-  oauthClientId: null,
   oauthClientSecretSet: false,
 }
 
@@ -39,31 +36,31 @@ const GMAIL: ExternalDomain = {
   smtpHost: 'smtp.gmail.com',
   smtpPort: 587,
   smtpSecurity: 'StartTls',
-  sieveHost: null,
-  sievePort: null,
   ...NO_OAUTH,
 }
 
-const OUTLOOK: ExternalDomain = {
-  id: '22222222-2222-2222-2222-222222222222',
-  name: 'Outlook',
+const OUTLOOK_SERVERS = {
   imapHost: 'outlook.office365.com',
   imapPort: 993,
   imapSecurity: 'SslOnConnect',
   smtpHost: 'smtp.office365.com',
   smtpPort: 587,
   smtpSecurity: 'StartTls',
+}
+
+const OUTLOOK: ExternalDomain = {
+  id: '22222222-2222-2222-2222-222222222222',
+  name: 'Outlook',
+  ...OUTLOOK_SERVERS,
   sieveHost: 'sieve.office365.com',
   sievePort: 4190,
   ...NO_OAUTH,
 }
 
 const OUTLOOK_OAUTH: ExternalDomain = {
-  ...OUTLOOK,
+  ...OUTLOOK_SERVERS,
   id: '33333333-3333-3333-3333-333333333333',
   name: 'Outlook (OAuth)',
-  sieveHost: null,
-  sievePort: null,
   authMode: 'OAuth2',
   oauthAuthorizationUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
   oauthTokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -102,6 +99,26 @@ describe('ExternalDomainsTab — list', () => {
     mocks.adminGetExternalDomains.mockRejectedValue(new Error('Server error'))
     render(<ExternalDomainsTab addToast={addToast} />, { wrapper })
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load external domains', 'error'))
+  })
+
+  // A refetch of a list holding no data puts it back to pending: that is not a first load, so the
+  // tab keeps its failure text rather than a spinner, and the failure is not news a second time.
+  it('draws no spinner and no second toast when the failed list is refetched', async () => {
+    mocks.adminGetExternalDomains.mockRejectedValue(new Error('Server error'))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={client}><ExternalDomainsTab addToast={addToast} /></QueryClientProvider>)
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load external domains', 'error'))
+    const refetch = holdNextCall(mocks.adminGetExternalDomains)
+
+    act(() => { void client.invalidateQueries({ queryKey: ['adminExternalDomains'] }) })
+    await settle()
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
+    expect(screen.getByText('Could not load the external domains.')).toBeInTheDocument()
+    await act(async () => { refetch.fail() })
+    await settle()
+
+    expect(mocks.adminGetExternalDomains).toHaveBeenCalledTimes(2)
+    expect(addToast).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -211,7 +228,7 @@ describe('ExternalDomainsTab — edit', () => {
     renderTab()
     await screen.findByText('Outlook')
     const editButtons = screen.getAllByTitle('Edit')
-    await userEvent.click(editButtons[1])
+    await userEvent.click(editButtons[1]!)
 
     expect(screen.getByLabelText('Display name')).toHaveValue('Outlook')
     expect(screen.getByLabelText('IMAP host')).toHaveValue('outlook.office365.com')
@@ -227,10 +244,10 @@ describe('ExternalDomainsTab — edit', () => {
   it('labels the security options None / STARTTLS / SSL/TLS while sending the exact literals', async () => {
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Edit')[0])
+    await userEvent.click(screen.getAllByTitle('Edit')[0]!)
 
     const select = screen.getByLabelText('IMAP security')
-    const options = Array.from(select.querySelectorAll('option')) as HTMLOptionElement[]
+    const options = Array.from(select.querySelectorAll('option'))
     expect(options.map(o => [o.value, o.textContent])).toEqual([
       ['None', 'None'],
       ['StartTls', 'STARTTLS'],
@@ -242,7 +259,7 @@ describe('ExternalDomainsTab — edit', () => {
     mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Edit')[0])
+    await userEvent.click(screen.getAllByTitle('Edit')[0]!)
     await userEvent.clear(screen.getByLabelText('Display name'))
     await userEvent.type(screen.getByLabelText('Display name'), 'Gmail (personal)')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -256,7 +273,7 @@ describe('ExternalDomainsTab — edit', () => {
     mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Edit')[0])
+    await userEvent.click(screen.getAllByTitle('Edit')[0]!)
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('External domain updated'))
   })
@@ -420,13 +437,13 @@ describe('ExternalDomainsTab — delete', () => {
     mocks.adminDeleteExternalDomain.mockResolvedValue(undefined)
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
 
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
     expect(mocks.adminDeleteExternalDomain).not.toHaveBeenCalled()
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(mocks.adminDeleteExternalDomain).toHaveBeenCalledWith(GMAIL.id))
   })
 
@@ -446,10 +463,10 @@ describe('ExternalDomainsTab — delete', () => {
       render(<ExternalDomainsTab addToast={addToast} returnFocusRef={{ current: region }} />,
         { wrapper })
       await screen.findByText('Gmail')
-      await userEvent.click(screen.getAllByTitle('Delete')[0])
+      await userEvent.click(screen.getAllByTitle('Delete')[0]!)
 
       const buttons = screen.getAllByRole('button', { name: 'Delete' })
-      await userEvent.click(buttons[buttons.length - 1])
+      await userEvent.click(buttons[buttons.length - 1]!)
 
       await waitFor(() => expect(screen.queryByText('Gmail')).toBeNull())
       expect(region).toHaveFocus()
@@ -472,10 +489,10 @@ describe('ExternalDomainsTab — delete', () => {
       render(<ExternalDomainsTab addToast={addToast} returnFocusRef={{ current: region }} />,
         { wrapper })
       await screen.findByText('Gmail')
-      await userEvent.click(screen.getAllByTitle('Delete')[0])
+      await userEvent.click(screen.getAllByTitle('Delete')[0]!)
 
       const buttons = screen.getAllByRole('button', { name: 'Delete' })
-      await userEvent.click(buttons[buttons.length - 1])
+      await userEvent.click(buttons[buttons.length - 1]!)
 
       await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
       await waitFor(() => expect(screen.queryByText('Gmail')).toBeNull())
@@ -486,7 +503,7 @@ describe('ExternalDomainsTab — delete', () => {
   it('closing the confirm modal does not delete', async () => {
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(mocks.adminDeleteExternalDomain).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
@@ -499,9 +516,9 @@ describe('ExternalDomainsTab — delete', () => {
       Object.assign(new Error('domain_in_use'), { code: 'domain_in_use' }))
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Delete')[0])
+    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(addToast)
       .toHaveBeenCalledWith('Accounts are still connected to this domain.', 'error'))
   })

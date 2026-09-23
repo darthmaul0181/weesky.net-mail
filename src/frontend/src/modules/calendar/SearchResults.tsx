@@ -12,9 +12,9 @@ export interface SearchResultsProps {
   failed: boolean
   /** Under two characters nothing was asked of the server, and "0 events found" would be a lie. */
   tooShort: boolean
-  onClear(): void
-  onOpen(o: Occurrence, anchor: HTMLElement): void
-  onOpenEditor(o: Occurrence): void
+  onClear: () => void
+  onOpen: (o: Occurrence, anchor: HTMLElement) => void
+  onOpenEditor: (o: Occurrence) => void
   selectedKey?: string
 }
 

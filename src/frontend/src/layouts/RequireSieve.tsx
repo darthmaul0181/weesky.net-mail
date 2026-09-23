@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router'
 import { useAuth } from '../contexts/AuthContext'
 
 // Same `!== false` shape as RequirePrimary, and for the same reason: activeAccount is null

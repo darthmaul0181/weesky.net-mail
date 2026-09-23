@@ -2,17 +2,13 @@ import { useEffect, useState, type JSX } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../api.js'
-import QuotaBlock from '../../../components/QuotaBlock.jsx'
-import { useToasts } from '../../../hooks/useToasts.js'
-import Toasts from '../../../components/Toasts.jsx'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
+import QuotaBlock from '../../../components/QuotaBlock'
+import { useToasts } from '../../../hooks/useToasts'
+import Toasts from '../../../components/Toasts'
+import PencilIcon from '../../../icons/PencilIcon'
 import UserIcon from '../../../icons/UserIcon'
 import ChangePasswordSection from './ChangePasswordSection'
-
-interface Quota {
-  storageBytesUsed: number
-  storageBytesLimit: number
-}
+import type { Quota } from '../../../types/account'
 
 function CheckIcon(): JSX.Element {
   return (
@@ -89,7 +85,7 @@ export default function AccountPage() {
               className="panel-fullname-input"
               value={nameValue}
               onChange={e => setNameValue(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') saveName() }}
+              onKeyDown={e => { if (e.key === 'Enter') void saveName() }}
               maxLength={255}
               disabled={saving}
               // eslint-disable-next-line jsx-a11y/no-autofocus -- an inline rename field, not a dialog Modal: opening it autofocuses the box the way SearchBar's does
@@ -97,7 +93,7 @@ export default function AccountPage() {
             />
             <button
               className="panel-fullname-btn panel-fullname-confirm"
-              onClick={saveName}
+              onClick={() => void saveName()}
               disabled={saving}
               aria-label={t('actions.save', { ns: 'common' })}
               title={t('actions.save', { ns: 'common' })}

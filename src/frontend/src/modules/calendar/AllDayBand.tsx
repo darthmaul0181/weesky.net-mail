@@ -10,11 +10,11 @@ import { daysBetween, type PlainDate } from './plainDate'
 export interface AllDayBandProps {
   days: PlainDate[]
   entries: BandEntry[]
-  onOpen(o: Occurrence, anchor: HTMLElement): void
-  onOpenEditor(o: Occurrence): void
+  onOpen: (o: Occurrence, anchor: HTMLElement) => void
+  onOpenEditor: (o: Occurrence) => void
   selectedKey?: string
   hoverKey?: string | null
-  onHover?(key: string | null): void
+  onHover?: (key: string | null) => void
   gestures?: BandGestures
 }
 
@@ -49,7 +49,8 @@ export default function AllDayBand({
       <div className="allday-label">{t('views.allDay')}</div>
       <div className="allday-days" style={{ height: rows * ROW_PX }}>
         {packed.map(({ entry, row }) => {
-          const offset = Math.max(0, daysBetween(days[0], entry.from))
+          // days[0] ?? entry.from: an empty days list has no column to offset against anyway.
+          const offset = Math.max(0, daysBetween(days[0] ?? entry.from, entry.from))
           const span = daysBetween(entry.from, entry.to) + 1
           const key = occurrenceKey(entry.occurrence)
           const drag = gestures?.drag?.key === key ? gestures.drag : null

@@ -8,7 +8,7 @@ import {
 } from '../../../hooks/usePreferences'
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import { hasOpenLayer } from '../../../lib/layerStack'
 import { rolePathsOf } from '../folders/folderNodes'
 import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSearchMessages, useSetFlags } from '../queries'
@@ -24,6 +24,7 @@ import { buildDragPill } from './dragImage'
 import MessageRow, { rowUidsOf } from './MessageRow'
 import type { CheckGesture, RowCallbacks } from './MessageRow'
 import { memberUids } from './threading'
+import type { ThreadGroup } from './threading'
 import LoadMoreSentinel from './LoadMoreSentinel'
 import { sentinelIndexOf } from './messageStream'
 import Pagination from './Pagination'
@@ -135,7 +136,7 @@ export default function MessageList(
     const found = searchQuery.data?.total ?? 0
     return {
       // Search hits are never threaded: each result is its own one-member group.
-      groups: results.map(result => ({ key: result.uid, messages: [result] })),
+      groups: results.map((result): ThreadGroup => ({ key: result.uid, messages: [result] })),
       messages: results,
       total: found,
       isLoading: searchQuery.isLoading,
@@ -283,9 +284,11 @@ export default function MessageList(
   // A single row reports itself; a thread hands the whole batch over, led by the open member
   // when it holds one — the layout only advances the reader off the uid that is actually open.
   function reportDeparted(uids: number[]) {
-    if (uids.length === 1) { onDeparted?.(uids[0]); return }
+    const [first] = uids
+    if (first === undefined) return
+    if (uids.length === 1) { onDeparted?.(first); return }
     if (selectedUid !== null && uids.includes(selectedUid)) onDeparted?.(selectedUid, uids)
-    else onDeparted?.(uids[0], uids)
+    else onDeparted?.(first, uids)
   }
 
   // The reader is told at the click and the list takes its time: only the rows are animating, and
@@ -376,7 +379,7 @@ export default function MessageList(
   function checkRow(uids: number[], index: number, { was, whole, shift }: CheckGesture) {
     if (whole) selection.setMany(uids, !was)
     else if (shift) selection.toggleRange(loadedUids, index)
-    else selection.toggle(uids[0], index)
+    else if (uids[0] !== undefined) selection.toggle(uids[0], index)
   }
 
   function removeRow(uids: number[], label: string) {

@@ -24,19 +24,26 @@ const PARTS_OPTIONS: Intl.DateTimeFormatOptions = {
   hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
 }
 
+interface DateParts {
+  year: number; month: number; day: number; hour: number; minute: number; second: number
+}
+
 const partFormats = new Map<string, Intl.DateTimeFormat>()
 
-function partsOf(instant: Date, tz: string): Record<string, number> {
+function partsOf(instant: Date, tz: string): DateParts {
   let formatter = partFormats.get(tz)
   if (!formatter) {
     formatter = new Intl.DateTimeFormat('en-US', { ...PARTS_OPTIONS, timeZone: tz })
     partFormats.set(tz, formatter)
   }
-  const parts: Record<string, number> = {}
+  const parts: Partial<DateParts> = {}
   for (const { type, value } of formatter.formatToParts(instant)) {
-    if (type !== 'literal') parts[type] = Number(value)
+    // PARTS_OPTIONS requests exactly year/month/day/hour/minute/second, so a non-literal part
+    // here is always one of DateParts' own keys.
+    if (type !== 'literal') parts[type as keyof DateParts] = Number(value)
   }
-  return parts
+  // ...and formatToParts answers every field that was requested.
+  return parts as DateParts
 }
 
 const pad = (value: number, width = 2) => String(value).padStart(width, '0')
@@ -50,9 +57,19 @@ export function todayIn(tz: string): PlainDate {
   return plainDateOf(new Date(), tz)
 }
 
+export interface PlainDateParts { year: number; month: number; date: number }
+
+/** A PlainDate's year/month(1-12)/date, each NaN when the string is malformed rather than
+    thrown — a stale or hand-edited value then propagates as an Invalid Date instead of
+    crashing. Shared by `utcMsOf` below and by `CalendarLayout`'s `addMonths`. */
+export function splitPlainDate(value: PlainDate): PlainDateParts {
+  const [year, month, date] = value.split('-').map(Number)
+  return { year: year ?? NaN, month: month ?? NaN, date: date ?? NaN }
+}
+
 /** The day as an instant in a zone that never shifts, so day arithmetic is plain milliseconds. */
 function utcMsOf(day: PlainDate): number {
-  const [year, month, date] = day.split('-').map(Number)
+  const { year, month, date } = splitPlainDate(day)
   return Date.UTC(year, month - 1, date)
 }
 

@@ -12,8 +12,8 @@ import { colorOf, occurrenceKey } from './occurrenceStyle'
 import { type PlainDate, utcOfLocalTime } from './plainDate'
 
 export interface MonthViewProps {
-  onOpen(o: Occurrence, anchor: HTMLElement): void
-  onOpenEditor(o: Occurrence): void
+  onOpen: (o: Occurrence, anchor: HTMLElement) => void
+  onOpenEditor: (o: Occurrence) => void
   selectedKey?: string
   /** A click on an empty cell is spent closing an open bubble; an Enter is refused for the same
       reason and the bubble stands, since the bubble has no trap and Shift+Tab comes back here. */
@@ -42,8 +42,11 @@ function startMinuteOf(cell: HTMLElement, clientY: number, timed: Occurrence[], 
   let above: number | null = null
   let below: number | null = null
   chips.forEach((chip, index) => {
+    // One '.event-chip.is-month' per entry of `timed`, in the same order (see the caller).
+    const o = timed[index]
+    if (!o) return
     const rect = chip.getBoundingClientRect()
-    const [start, end] = wallClockOf(timed[index], tz)
+    const [start, end] = wallClockOf(o, tz)
     if (rect.bottom <= clientY) above = end.minute
     else if (rect.top >= clientY && below === null) below = start.minute
   })

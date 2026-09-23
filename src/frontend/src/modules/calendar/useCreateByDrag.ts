@@ -15,7 +15,7 @@ export interface CreateByDragOptions {
   tz: string
   /** A bubble is open over the grid: the click that dismisses it is spent doing that alone. */
   previewOpen?: boolean
-  onCreate(start: Date, end: Date): void
+  onCreate: (start: Date, end: Date) => void
 }
 
 /** What a plain click opens: the half hour it fell in, and the hour after it. */

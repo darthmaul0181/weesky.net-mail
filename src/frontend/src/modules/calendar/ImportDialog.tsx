@@ -36,7 +36,8 @@ export default function ImportDialog({
   const [file, setFile] = useState<File | null>(null)
   const [id, setId] = useState(targetId)
   const [name, setName] = useState('')
-  const [color, setColor] = useState<string>(CALENDAR_COLORS[0])
+  // CALENDAR_COLORS is a fixed, non-empty literal list (see its own declaration).
+  const [color, setColor] = useState<string>(CALENDAR_COLORS[0]!)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function pick(event: ChangeEvent<HTMLInputElement>) {
@@ -47,8 +48,9 @@ export default function ImportDialog({
     setFile(chosen)
     if (!chosen) return
     // The first 64 KB, never the file: an export runs to tens of megabytes, and the header this
-    // reads is four lines of its head.
-    const header = calendarHeaderOf(await chosen.slice(0, HEADER_BYTES).text())
+    // reads is four lines of its head. A head the browser cannot read is a header saying nothing.
+    const header: ReturnType<typeof calendarHeaderOf> = await chosen.slice(0, HEADER_BYTES).text()
+      .then(calendarHeaderOf, () => ({}))
     // The file's name, else its own file name without the extension: a nameless import would
     // otherwise leave Save inert with nothing on screen explaining why.
     setName(header.name || chosen.name.replace(/\.[^.]+$/, ''))
@@ -71,7 +73,7 @@ export default function ImportDialog({
         <div className="field-h">
           <label htmlFor="calendar-import-file">{t('import.file')}</label>
           <input id="calendar-import-file" type="file" accept=".ics,text/calendar"
-            ref={fileRef} onChange={pick} />
+            ref={fileRef} onChange={event => void pick(event)} />
         </div>
 
         <div className="field-h">

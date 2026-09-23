@@ -67,7 +67,7 @@ export default function ContactsTransfer({ contacts, onError, triggerClassName }
 
   return (
     <>
-      <input ref={input} type="file" accept=".csv,.vcf,.vcard,text/csv,text/vcard,text/x-vcard" hidden onChange={pick}
+      <input ref={input} type="file" accept=".csv,.vcf,.vcard,text/csv,text/vcard,text/x-vcard" hidden onChange={event => void pick(event)}
         data-testid="contacts-import-input" />
 
       <DropdownMenu
@@ -84,7 +84,7 @@ export default function ContactsTransfer({ contacts, onError, triggerClassName }
             label: t('transfer.export'), icon: <DownloadIcon size={15} />,
             // The reason a shut door is shut, where the two buttons carried it in a tooltip.
             title: t(empty ? 'transfer.nothingToExport' : 'transfer.exportHint'),
-            disabled: empty || exporting, onSelect: download,
+            disabled: empty || exporting, onSelect: () => void download(),
           },
         ]}
       />

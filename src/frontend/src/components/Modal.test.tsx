@@ -6,7 +6,7 @@ import Modal from './Modal'
 import { fireEscape } from '../test-utils'
 
 function backdrop(index = 0) {
-  return screen.getAllByRole('presentation')[index]
+  return screen.getAllByRole('presentation')[index]!
 }
 
 function openModal(props: Partial<Parameters<typeof Modal>[0]> = {}, children: ReactNode = <p>body</p>) {

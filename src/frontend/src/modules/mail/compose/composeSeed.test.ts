@@ -7,9 +7,8 @@ const detail = (overrides: Partial<MailMessageDetail> = {}): MailMessageDetail =
   uid: 1, folderPath: 'INBOX', uidValidity: 1, subject: 'Hello',
   fromName: 'Alice', fromAddress: 'alice@ext.example',
   to: [{ name: '', address: 'me@weesky.be' }], cc: [], date: '2026-07-25T10:00:00Z',
-  authentication: null, spamScore: null, mailingList: null, sentBy: null, signedBy: null,
-  unsubscribeUrl: null, tlsReceived: null, htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false,
-  attachments: [], messageId: 'm@x', references: [], inReplyTo: null, replyTo: [], bcc: [],
+  htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false,
+  attachments: [], messageId: 'm@x', references: [], replyTo: [], bcc: [],
   priority: 'normal',
   ...overrides,
 })
@@ -23,7 +22,7 @@ const prepared = {
   quotableHtml: '<p>original</p>',
   attachments: [
     { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
-    { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
+    { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf' },
   ],
 }
 const identities = [identity('me@weesky.be', { isDefault: true })]
@@ -42,10 +41,10 @@ describe('staged inline images in a seed', () => {
 
   it('names the active account in a draft seed', () => {
     const opened: OpenedDraft = {
-      to: [], cc: [], bcc: [], subject: 's', fromAddress: null,
+      to: [], cc: [], bcc: [], subject: 's',
       htmlBody: '<img src="/api/Mail/Attachments/i1/content">',
       attachments: [{ id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' }],
-      inReplyTo: null, references: [], priority: 'normal', textBody: null,
+      references: [], priority: 'normal',
     }
 
     const seed = buildDraftSeed(opened, [], { folderPath: 'Drafts', uid: 9 }, 'linked-1')
@@ -165,10 +164,10 @@ describe('buildDraftSeed', () => {
     htmlBody: '<p>hello <img src="/api/Mail/Attachments/a1/content"></p>',
     attachments: [
       { id: 'a1', fileName: 'logo.png', size: 5, contentType: 'image/png', contentId: 'logo@mail' },
-      { id: 'a2', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf', contentId: null },
+      { id: 'a2', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf' },
     ],
     inReplyTo: 'msg1@ext.example', references: ['msg0@ext.example', 'msg1@ext.example'],
-    priority: 'normal', textBody: null,
+    priority: 'normal',
   }
   const ref = { folderPath: 'Drafts', uid: 41 }
 
@@ -249,11 +248,11 @@ describe('applyComposeFormat', () => {
   })
 
   // The one field that moves an inline image into the tray: ComposeView splits on it already.
-  it('nulls every contentId so an inline image becomes an attachment', () => {
+  it('clears every contentId so an inline image becomes an attachment', () => {
     const out = applyComposeFormat(seedOf({
       attachments: [{ id: 'a', fileName: 'logo.png', size: 1, contentType: 'image/png', contentId: 'cid1' }],
     }), 'text')!
-    expect(out.attachments[0].contentId).toBeNull()
+    expect(out.attachments[0]!.contentId).toBeUndefined()
   })
 
   // Two carve-out assertions, because they fail on different mistakes. The HTML draft is the one a

@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import i18next from 'i18next'
 import { Trans, useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import { useSearchParams } from 'react-router'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Modal from '../../../components/Modal'
-import Toasts from '../../../components/Toasts.jsx'
+import Toasts from '../../../components/Toasts'
 import { useAuth } from '../../../contexts/AuthContext'
-import { useToasts } from '../../../hooks/useToasts.js'
+import { useToasts } from '../../../hooks/useToasts'
 import KeyIcon from '../../../icons/KeyIcon'
-import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
-import TrashIcon from '../../../icons/TrashIcon.jsx'
+import PersonPlusIcon from '../../../icons/PersonPlusIcon'
+import TrashIcon from '../../../icons/TrashIcon'
 import { dateFormat } from '../../../lib/intl'
 import ConnectAccountForm from './ConnectAccountForm'
 import {
@@ -217,7 +217,7 @@ export default function ConnectedAccountsPage() {
                       <button type="button" className="btn btn-ghost" title={t('accounts.signInAgain')}
                         aria-label={t('accounts.reconnectAria', { email: account.email })}
                         disabled={reconnecting === account.id}
-                        onClick={() => reconnect(account)}>
+                        onClick={() => void reconnect(account)}>
                         {reconnecting === account.id ? <span className="spinner" /> : t('accounts.reconnect')}
                       </button>
                     )
@@ -245,7 +245,7 @@ export default function ConnectedAccountsPage() {
           email={reentering.email}
           pending={updatePassword.isPending}
           error={dialogError}
-          onSubmit={savePassword}
+          onSubmit={password => void savePassword(password)}
           onClose={() => setReentering(null)}
         />
       )}
@@ -258,7 +258,7 @@ export default function ConnectedAccountsPage() {
             {/* The session falls back on its own, but silently: say so before it happens. */}
             {deleting.id === activeAccountId && <>{' '}{t('accounts.disconnectActive')}</>}
           </>}
-          onConfirm={confirmDisconnect}
+          onConfirm={() => void confirmDisconnect()}
           onClose={() => setDeleting(null)}
           returnFocusRef={headingRef}
         />

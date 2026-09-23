@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
+import PencilIcon from '../../../icons/PencilIcon'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
 import { ApiError } from '../../../api.js'
@@ -12,6 +12,7 @@ import {
   useSaveSchedulingAccount, useTestSchedulingAccount,
   type SchedulingAccount, type SchedulingAccountPayload, type SchedulingSecurity,
 } from './useSchedulingAccount'
+import type { AddToast } from '../../../hooks/useToasts'
 
 const PASSWORD_MAX_BYTES = 512
 
@@ -21,7 +22,7 @@ function utf8Bytes(value: string): number {
 
 interface Props {
   account: SchedulingAccount
-  addToast: (message: string, kind?: string) => void
+  addToast: AddToast
   onSave: () => void
   onClose: () => void
   /** Takes the focus on close when the button that opened the dialog has been replaced. */

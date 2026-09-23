@@ -41,7 +41,7 @@ describe('AboutPage', () => {
   })
 
   it('omits the parentheses when the server build carried no commit', async () => {
-    vi.mocked(api.getVersion).mockResolvedValue({ version: '1.0.0', commit: null })
+    vi.mocked(api.getVersion).mockResolvedValue({ version: '1.0.0' })
     renderPage()
 
     expect(await screen.findByText('Server 1.0.0')).toBeInTheDocument()

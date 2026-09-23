@@ -321,7 +321,7 @@ describe('useMarkSeenOnOpen', () => {
     // The rejection is absorbed: the tree survives and the cache is back to unread, with no
     // error handler wired anywhere in the chain.
     expect(document.body.textContent).toBe('open')
-    expect(client.getQueryData<MailFolderPage>(pagesKey)!.messages[0].seen).toBe(false)
+    expect(client.getQueryData<MailFolderPage>(pagesKey)!.messages[0]!.seen).toBe(false)
   })
 
   it('does nothing without a folder, a uid or a loaded detail', async () => {

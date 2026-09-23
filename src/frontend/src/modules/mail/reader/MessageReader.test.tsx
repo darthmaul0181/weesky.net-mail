@@ -1,7 +1,7 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
+import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router'
 import { useRef, useState, type ReactNode } from 'react'
 import userEvent from '@testing-library/user-event'
 import { mockViewport, resetViewport, settle } from '../../../test-utils'
@@ -88,8 +88,8 @@ vi.mock('../../../contexts/ThemeContext', () => ({ useTheme: () => theme }))
 
 function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
-    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+    path: 'X', name: 'X', selectable: true, subscribed: true,
+    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
   }
 }
 
@@ -122,15 +122,13 @@ const detail = {
   uid: 2, folderPath: 'INBOX', uidValidity: 1,
   subject: 'Re: facture', fromName: 'Alice Martin', fromAddress: 'alice@x.be',
   to: [{ name: 'Mick', address: 'mick@weesky.be' }], cc: [],
-  date: '2026-07-18T09:00:00Z', authentication: null,
-  messageId: 'm@x.be', references: [], inReplyTo: null, replyTo: [], bcc: [],
-  spamScore: null,
-  mailingList: null, sentBy: null, signedBy: null, unsubscribeUrl: null, tlsReceived: null,
+  date: '2026-07-18T09:00:00Z',
+  messageId: 'm@x.be', references: [], replyTo: [], bcc: [],
   htmlBody: '<p>Bonjour</p>', textBody: 'Bonjour', blockedImageCount: 0, truncated: false,
   attachments: [
     {
       part: '2', fileName: 'report.pdf', contentType: 'application/pdf', size: 2048,
-      isInline: false, contentId: null,
+      isInline: false,
     },
   ],
 }
@@ -157,7 +155,7 @@ const invitation = {
 
 const icsPart = {
   part: '3', fileName: 'invite.ics', contentType: 'text/calendar', size: 512,
-  isInline: false, contentId: null,
+  isInline: false,
 }
 
 const invited = {
@@ -283,9 +281,9 @@ describe('MessageReader', () => {
   })
 
   describe('the authentication badge', () => {
-    const authenticated = (spf: string | null, dkim: string | null) => ({
+    const authenticated = (spf: string, dkim: string) => ({
       ...detail,
-      authentication: { spf, dkim, dmarc: null, raw: 'mx.weesky.net; spf=x; dkim=y' },
+      authentication: { spf, dkim, raw: 'mx.weesky.net; spf=x; dkim=y' },
     })
 
     it('vouches for a message that passed both checks', async () => {
@@ -340,7 +338,7 @@ describe('MessageReader', () => {
     it('says nothing when the header parsed but named neither method', async () => {
       mocks.getMailMessage.mockResolvedValue({
         ...detail,
-        authentication: { spf: null, dkim: null, dmarc: null, raw: 'mx.weesky.net; dmarc=pass' },
+        authentication: { raw: 'mx.weesky.net; dmarc=pass' },
       })
 
       const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
@@ -706,7 +704,7 @@ describe('MessageReader', () => {
       'You have reached the maximum of 1000 senders whose images always load'))
   })
 
-  // api.js has already cleared the session and sent them to /login; a toast on top of a
+  // api.ts has already cleared the session and sent them to /login; a toast on top of a
   // redirect is noise.
   it('stays silent on a 401, which the redirect already answers', async () => {
     const onNotify = vi.fn()
@@ -726,7 +724,7 @@ describe('MessageReader', () => {
     // Seeded uncanonical on purpose: the API answers canonical addresses, so the membership test
     // has to canonicalise what it reads rather than trust the cache to hold that form.
     const inBook: Contact[] = [{
-      id: 'c1', firstName: 'Alice', lastName: null, nickname: null,
+      id: 'c1', firstName: 'Alice',
       isFavorite: false, addresses: [detail.fromAddress.toUpperCase()],
     }]
 
@@ -846,7 +844,7 @@ describe('MessageReader', () => {
     const imageAttachment = {
       ...detail,
       attachments: [
-        { part: '4', fileName: 'photo.png', contentType: 'image/png', size: 2048, isInline: false, contentId: null },
+        { part: '4', fileName: 'photo.png', contentType: 'image/png', size: 2048, isInline: false },
       ],
     }
 
@@ -943,7 +941,7 @@ describe('MessageReader', () => {
       ...detail,
       attachments: [{
         part: '3', fileName: 'logo.png', contentType: 'image/png', size: 10,
-        isInline: true, contentId: null,
+        isInline: true,
       }],
     })
 
@@ -966,7 +964,7 @@ describe('MessageReader', () => {
         },
         {
           part: '4', fileName: 'joint.png', contentType: 'image/png', size: 10,
-          isInline: false, contentId: null,
+          isInline: false,
         },
       ],
     })
@@ -990,7 +988,7 @@ describe('MessageReader', () => {
         },
         {
           part: '4', fileName: 'joint.pdf', contentType: 'application/pdf', size: 10,
-          isInline: false, contentId: null,
+          isInline: false,
         },
       ],
     })
@@ -1308,9 +1306,11 @@ describe('MessageReader', () => {
       await screen.findByText('Re: facture')
       await settle()
 
-      act(() => client.setQueriesData<MailFolderPage>(
-        { queryKey: mailKeys.messagesIn('primary', 'INBOX') },
-        page => page && { ...page, messages: page.messages.map(m => ({ ...m, flagged: true })) }))
+      act(() => {
+        client.setQueriesData<MailFolderPage>(
+          { queryKey: mailKeys.messagesIn('primary', 'INBOX') },
+          page => page && { ...page, messages: page.messages.map(m => ({ ...m, flagged: true })) })
+      })
 
       fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
       expect(await screen.findByRole('menuitem', { name: 'Unstar' })).toBeInTheDocument()
@@ -1551,7 +1551,7 @@ describe('MessageReader', () => {
       const imageAttachment = {
         ...detail,
         attachments: [
-          { part: '4', fileName: 'photo.png', contentType: 'image/png', size: 2048, isInline: false, contentId: null },
+          { part: '4', fileName: 'photo.png', contentType: 'image/png', size: 2048, isInline: false },
         ],
       }
       mocks.getMailMessage.mockResolvedValue(imageAttachment)
@@ -1793,8 +1793,9 @@ describe('MessageReader', () => {
 
       await waitFor(() => expect(mocks.prepareQuote).toHaveBeenCalledWith('INBOX', 2, 'reply', { accountId: 'primary' }))
       const state = await screen.findByTestId('compose-state')
-      const parsed = JSON.parse(state.textContent ?? '{}')
-      expect(parsed.seed.subject).toMatch(/^Re:/)
+      const parsed: unknown = JSON.parse(state.textContent ?? '{}')
+      const reSubject: unknown = expect.stringMatching(/^Re:/)
+      expect(parsed).toHaveProperty('seed.subject', reSubject)
     })
 
     // "My addresses" is the active mailbox's *and* the primary's: on a connected account a
@@ -1817,9 +1818,9 @@ describe('MessageReader', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reply all' }))
 
       const state = await screen.findByTestId('compose-state')
-      const seed = JSON.parse(state.textContent ?? '{}').seed
-      expect(seed.to).toEqual(['alice@x.be', 'bob@x.be'])
-      expect(seed.cc).toEqual(['carol@x.be'])
+      const parsed: unknown = JSON.parse(state.textContent ?? '{}')
+      expect(parsed).toHaveProperty('seed.to', ['alice@x.be', 'bob@x.be'])
+      expect(parsed).toHaveProperty('seed.cc', ['carol@x.be'])
     })
 
     it('lets "Edit as new" live in the kebab', async () => {

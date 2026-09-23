@@ -49,7 +49,7 @@ export default function MoveMessagesModal(
 
   // The picked folder, or else the single row the query has left standing.
   function commit() {
-    const pick = target ?? (enabled.length === 1 ? enabled[0].node : null)
+    const pick = target ?? (enabled.length === 1 ? enabled[0]!.node : null)
     if (pick) onPick(pick.path)
   }
 

@@ -30,14 +30,14 @@ export function useDeliveryReplyKey() {
 
 // onSettled, not onSuccess: a refused write must leave the screen on server state.
 function refresh(client: QueryClient) {
-  return () => { client.invalidateQueries({ queryKey: DELIVERY_KEY }) }
+  return () => { void client.invalidateQueries({ queryKey: DELIVERY_KEY }) }
 }
 
 export function useGenerateDeliveryKey() {
   const client = useQueryClient()
   return useMutation({
     ...FORGET_KEY,
-    mutationFn: () => api.adminGenerateDeliveryReplyKey() as Promise<DeliveryReplyKeyGenerated>,
+    mutationFn: () => api.adminGenerateDeliveryReplyKey(),
     onSettled: refresh(client),
   })
 }

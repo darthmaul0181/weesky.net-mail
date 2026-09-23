@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router'
 import { ApiError } from '../../api.js'
 import { newMessageSeed } from '../mail/compose/composeSeed'
-import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import FloatingAction from '../../components/FloatingAction'
 import Modal from '../../components/Modal'
-import Toasts from '../../components/Toasts.jsx'
-import { useToasts } from '../../hooks/useToasts.js'
+import Toasts from '../../components/Toasts'
+import { useToasts } from '../../hooks/useToasts'
 import { useViewport } from '../../hooks/useViewport'
-import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
+import PersonPlusIcon from '../../icons/PersonPlusIcon'
 import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/ContextDrawer'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import PaneSplitter from '../mail/split/PaneSplitter'
@@ -63,7 +63,7 @@ export default function ContactsLayout() {
      seed — the shape a reply and a mailto: already arrive in. `backTo` sends the ✕ and the leave
      guard back to where the writing started — a fiche, or the group it was written to — instead of
      to a mailbox the reader never opened. */
-  const writeTo = (addresses: string | string[]) => navigate('/mail/compose', {
+  const writeTo = (addresses: string | string[]) => void navigate('/mail/compose', {
     state: {
       seed: newMessageSeed(Array.isArray(addresses) ? addresses : [addresses]),
       backTo: backToHere(),
@@ -99,13 +99,16 @@ export default function ContactsLayout() {
   const editing = useMatch('/contacts/:id/edit') != null
   const inEditor = creating || editing
 
-  const scope: ContactScope = scopeOf(params.get('scope'))
+  const urlScope = scopeOf(params.get('scope'))
   const selectedId = params.get('id')
-  const openGroupId = groupIdOf(scope)
+  const openGroupId = groupIdOf(urlScope)
   const openGroup = openGroupId ? groups.data?.find(one => one.id === openGroupId) ?? null : null
   // A refused list answers the question too — the scope cannot resolve — where waiting on `data`
   // alone would hold the column on its loading line for the rest of the session.
   const groupsSettled = groups.data != null || groups.isError
+  // A group nobody holds is the whole book from this render on: the URL follows a commit later,
+  // and the band must not go a frame without a highlighted scope over an unfiltered list.
+  const scope: ContactScope = openGroupId != null && groupsSettled && openGroup == null ? 'all' : urlScope
   // The list is filtered on nothing until the group resolves, and an unfiltered book under a group
   // scope would read as the group holding everybody.
   const groupPending = openGroupId != null && !groupsSettled
@@ -191,7 +194,7 @@ export default function ContactsLayout() {
     if (!missing) return
     addToast(t('layout.notFound'), 'error')
     // Replace: Back must leave the module, not bounce off the dead route.
-    navigate('/contacts', { replace: true })
+    void navigate('/contacts', { replace: true })
   }, [missing, addToast, navigate, t])
 
   // The scope falls back, the open card does not: a fiche is a selection of its own, and one that
@@ -238,7 +241,7 @@ export default function ContactsLayout() {
           id: edited.id, contact: seededHash ? { ...draft, cardHash: seededHash } : draft,
         })
       } else await createContact.mutateAsync(draft)
-      navigate('/contacts')
+      void navigate('/contacts')
       addToast(t('layout.saved'), 'success')
     } catch (error) {
       // Stay in the form carrying the reason: bouncing back to a list that kept nothing is how a
@@ -365,7 +368,7 @@ export default function ContactsLayout() {
     <div className="contacts-scopes-column" ref={scopesRegion} tabIndex={-1}>
       <div className="column-actions">
         <button type="button" className="btn btn-primary column-actions-main"
-          onClick={() => navigate('/contacts/new')}>
+          onClick={() => void navigate('/contacts/new')}>
           {t('layout.add')}
         </button>
         {!drawer.inDrawer && transfer('btn btn-primary column-actions-square')}
@@ -402,7 +405,7 @@ export default function ContactsLayout() {
                form rather than carrying the previous contact's values into it. */
             <ContactEditView key={editorKey} contact={detail ?? null} photo={editorPhoto} error={saveError}
               saving={createContact.isPending || updateContact.isPending}
-              onSave={save} onCancel={() => navigate('/contacts')} />
+              onSave={draft => void save(draft)} onCancel={() => void navigate('/contacts')} />
           )}
         </div>
       ) : (
@@ -426,7 +429,7 @@ export default function ContactsLayout() {
                 onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
                 onDeleteMany={deleteSelection}
                 onRemoveFromGroup={openGroup ? removeFromOpenGroup : undefined}
-                onEdit={id => navigate(`/contacts/${id}/edit`)} regionRef={listRegion} />
+                onEdit={id => void navigate(`/contacts/${id}/edit`)} regionRef={listRegion} />
             )}
           </div>
           {!phone && (
@@ -438,7 +441,7 @@ export default function ContactsLayout() {
               <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
                 onBack={phone ? backToList : undefined}
                 bottomActions={phone}
-                onDelete={setPendingDelete} onEdit={id => navigate(`/contacts/${id}/edit`)}
+                onDelete={setPendingDelete} onEdit={id => void navigate(`/contacts/${id}/edit`)}
                 onWrite={writeTo}
                 groups={selected ? groupsOf(selected.id) : undefined}
                 onRemoveFromGroup={removeFromGroup} />
@@ -454,7 +457,7 @@ export default function ContactsLayout() {
           onClose={() => setConflict(false)}>
           <p>{t('layout.conflictBody')}</p>
           <div className="modal-actions">
-            <button type="button" className="btn btn-primary" onClick={reloadEdited}>
+            <button type="button" className="btn btn-primary" onClick={() => void reloadEdited()}>
               {t('layout.conflictReload')}
             </button>
           </div>
@@ -464,7 +467,7 @@ export default function ContactsLayout() {
       {pendingDelete && (
         <DeleteConfirmModal entityLabel={displayNameOf(pendingDelete)}
           loading={deleteContact.isPending}
-          onConfirm={confirmDelete} onClose={() => setPendingDelete(null)}
+          onConfirm={() => void confirmDelete()} onClose={() => setPendingDelete(null)}
           returnFocusRef={listRegion} />
       )}
 
@@ -473,7 +476,7 @@ export default function ContactsLayout() {
           title={t(groupModal.mode === 'create' ? 'groups.createTitle' : 'groups.renameTitle')}
           initialName={groupModal.mode === 'rename' ? groupModal.group.name : ''}
           saving={createGroup.isPending || renameGroup.isPending}
-          onSubmit={submitGroupName} onClose={() => setGroupModal(null)} />
+          onSubmit={name => void submitGroupName(name)} onClose={() => setGroupModal(null)} />
       )}
 
       {/* The body says what the deletion leaves behind: a group is a view onto contacts, and
@@ -481,7 +484,7 @@ export default function ContactsLayout() {
       {pendingGroupDelete && (
         <DeleteConfirmModal message={t('groups.deleteBody', { name: pendingGroupDelete.name })}
           loading={deleteGroup.isPending}
-          onConfirm={confirmGroupDelete} onClose={() => setPendingGroupDelete(null)}
+          onConfirm={() => void confirmGroupDelete()} onClose={() => setPendingGroupDelete(null)}
           returnFocusRef={scopesRegion} />
       )}
 
@@ -490,7 +493,7 @@ export default function ContactsLayout() {
           card on a phone, where it is anchored 73px up from an edge the action band now owns —
           MailLayout drops it under the same condition for the same collision. */}
       {!inEditor && !(phone && selectedId) && (
-        <FloatingAction label={t('layout.add')} onClick={() => navigate('/contacts/new')}>
+        <FloatingAction label={t('layout.add')} onClick={() => void navigate('/contacts/new')}>
           <PersonPlusIcon size={22} />
         </FloatingAction>
       )}

@@ -242,7 +242,7 @@ describe('useMoveOccurrence', () => {
     const { result } = renderHook(() => useMoveOccurrence(WINDOW, TZ), { wrapper })
     result.current.mutate({ id: 'e1', body, moved })
 
-    await waitFor(() => expect(cached()?.occurrences[0].startUtc).toBe('2026-09-14T07:30:00Z'))
+    await waitFor(() => expect(cached()?.occurrences[0]!.startUtc).toBe('2026-09-14T07:30:00Z'))
     expect(cached()?.occurrences).toHaveLength(2)
     settle()
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
@@ -255,7 +255,7 @@ describe('useMoveOccurrence', () => {
     result.current.mutate({ id: 'e1', body, moved })
 
     await waitFor(() => expect(result.current.isError).toBe(true))
-    expect(cached()?.occurrences[0].startUtc).toBe('2026-09-14T06:00:00Z')
+    expect(cached()?.occurrences[0]!.startUtc).toBe('2026-09-14T06:00:00Z')
   })
 
   // A drag moves an event its guests were invited to: the update mails speak the screen's language.

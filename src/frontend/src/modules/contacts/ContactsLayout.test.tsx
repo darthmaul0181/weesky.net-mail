@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router'
+import { afterEach, describe, expect, it, vi, beforeEach, type Mock } from 'vitest'
 import ContactsLayout from './ContactsLayout'
 import type { Contact, ContactDetail } from './contactTypes'
 import type { ContactGroup } from './contactGroupTypes'
+import type { api as realApi } from '../../api'
 import { CONTACT_DRAG_MIME } from './dragContacts'
 import { fireEscape, mockViewport, pressBackdrop, resetViewport, settle } from '../../test-utils'
 
@@ -36,11 +37,12 @@ vi.mock('../../api.js', () => ({
 vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 
 const { api } = await import('../../api.js') as unknown as {
-  api: Record<'getContacts' | 'getContact' | 'createContact' | 'updateContact' | 'deleteContact'
+  api: Record<'getContacts' | 'createContact' | 'updateContact' | 'deleteContact'
     | 'setContactFavorite' | 'deleteContacts' | 'setContactsFavorite'
     | 'importContacts' | 'exportContacts'
     | 'getContactGroups' | 'createContactGroup' | 'renameContactGroup' | 'deleteContactGroup'
-    | 'addContactGroupMembers' | 'removeContactGroupMembers', ReturnType<typeof vi.fn>>
+    | 'addContactGroupMembers' | 'removeContactGroupMembers', Mock<(...args: unknown[]) => unknown>>
+    & { getContact: Mock<typeof realApi.getContact> }
 }
 const { ApiError } = await import('../../api.js') as unknown as {
   ApiError: new (message: string, status: number) => Error
@@ -48,7 +50,7 @@ const { ApiError } = await import('../../api.js') as unknown as {
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
-    firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+    isFavorite: false, addresses: [], ...fields,
   }
 }
 
@@ -481,7 +483,7 @@ describe('ContactsLayout', () => {
       await save()
 
       await waitFor(() => expect(api.updateContact).toHaveBeenCalled())
-      expect(api.updateContact.mock.calls[0][1]).not.toHaveProperty('cardHash')
+      expect(api.updateContact.mock.calls[0]![1]).not.toHaveProperty('cardHash')
     })
 
     // It interrupts the save to say the card moved under it, so it is named and it takes the
@@ -578,8 +580,8 @@ describe('ContactsLayout', () => {
       await save()
 
       await waitFor(() => expect(api.updateContact).toHaveBeenCalledTimes(2))
-      expect(api.updateContact.mock.calls[0][1]).toMatchObject({ cardHash: 'abc123' })
-      expect(api.updateContact.mock.calls[1][1]).toMatchObject({ cardHash: 'abc123' })
+      expect(api.updateContact.mock.calls[0]![1]).toMatchObject({ cardHash: 'abc123' })
+      expect(api.updateContact.mock.calls[1]![1]).toMatchObject({ cardHash: 'abc123' })
     })
   })
 })
@@ -916,11 +918,21 @@ describe('contact groups', () => {
   // lui seul : une fiche ouverte qui disparaît avec le groupe se lit comme le contact parti avec.
   it('falls back to the whole book when the scope names no known group, keeping the open card',
     async () => {
+      // Every committed frame, not just the one a waitFor happens to sample: the whole book on
+      // screen under no highlighted scope is the glitch, however briefly it stands.
+      let unhighlighted = 0
+      const observer = new MutationObserver(() => {
+        if (screen.queryByText('Carla') && !scopeButton(/all contacts/i).classList.contains('is-active'))
+          unhighlighted += 1
+      })
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true })
       const router = renderRouter('/contacts?scope=group:zzz&id=b')
 
       await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
       expect(scopeButton(/all contacts/i)).toHaveClass('is-active')
       await waitFor(() => expect(router.state.location.search).toBe('?id=b'))
+      observer.disconnect()
+      expect(unhighlighted).toBe(0)
     })
 
   // Une liste refusée répond elle aussi à la question — le scope ne résout pas — là où attendre

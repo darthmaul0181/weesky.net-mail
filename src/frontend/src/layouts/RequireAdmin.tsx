@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router'
 import { useAuth } from '../contexts/AuthContext'
 
 // capabilities reads `!== false` like every other gate: null while it is still loading (or on a

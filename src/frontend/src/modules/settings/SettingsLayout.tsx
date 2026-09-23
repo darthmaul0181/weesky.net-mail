@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
 import IdentityMenu from '../../layouts/IdentityMenu'
 import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/ContextDrawer'
@@ -8,13 +8,13 @@ import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/Con
 // Changing one without the other is what the rule exists to prevent.
 import UserIcon from '../../icons/UserIcon'
 import SlidersIcon from '../../icons/SlidersIcon'
-import PersonPlusIcon from '../../icons/PersonPlusIcon.jsx'
+import PersonPlusIcon from '../../icons/PersonPlusIcon'
 import DropletIcon from '../../icons/DropletIcon'
 import FolderIcon from '../../icons/FolderIcon'
 import AtSignIcon from '../../icons/AtSignIcon'
 import MailIcon from '../../icons/MailIcon'
 import FunnelIcon from '../../icons/FunnelIcon'
-import ShieldIcon from '../../icons/ShieldIcon.jsx'
+import ShieldIcon from '../../icons/ShieldIcon'
 import RefreshIcon from '../../icons/RefreshIcon'
 import InfoIcon from '../../icons/InfoIcon'
 

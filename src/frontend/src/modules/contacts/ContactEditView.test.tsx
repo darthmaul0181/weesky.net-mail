@@ -74,7 +74,7 @@ const withLines: ContactDetail = {
   ],
   postalAddresses: [{
     position: 0, type: 'HOME,POSTAL', pref: 101, params: '', groupName: '',
-    poBox: null, extended: null, street: 'Rue du Village 138',
+    street: 'Rue du Village 138',
     locality: 'Flémalle', region: 'Belgique', postalCode: '4400', country: 'Belgique',
   }],
 }
@@ -88,8 +88,8 @@ const messyTypes: ContactDetail = {
   ],
   postalAddresses: [{
     position: 0, type: 'Work Email', pref: 101, params: '', groupName: '',
-    poBox: null, extended: null, street: 'Rue Haute 1', locality: 'Liège',
-    region: null, postalCode: '4000', country: 'Belgique',
+    street: 'Rue Haute 1', locality: 'Liège',
+    postalCode: '4000', country: 'Belgique',
   }],
 }
 
@@ -196,7 +196,7 @@ describe('ContactEditView', () => {
     await userEvent.click(screen.getByRole('button', { name: /make this the primary/i }))
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    const sent = onSave.mock.calls[0][0].addresses
+    const sent = onSave.mock.calls[0]![0].addresses
     expect(sent.map((a: ContactDraftEmail) => a.address))
       .toEqual(['bruno@x.be', 'b.mertens@wk.be'])
     expect(sent.map((a: ContactDraftEmail) => a.pref)).toEqual([101, 1])
@@ -211,7 +211,7 @@ describe('ContactEditView', () => {
       .getByRole('button', { name: /make this the primary/i }))
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    const sent = onSave.mock.calls[0][0].addresses
+    const sent = onSave.mock.calls[0]![0].addresses
     expect(sent.map((a: ContactDraftEmail) => a.address)).toEqual(['a@x.be', 'b@x.be', 'c@x.be'])
     expect(sent.map((a: ContactDraftEmail) => a.pref)).toEqual([101, 101, 1])
     expect(within(screen.getByTestId('address-row-2')).getByText(/^primary$/i)).toBeInTheDocument()
@@ -229,7 +229,7 @@ describe('ContactEditView', () => {
 
     expect(within(screen.getByTestId('address-row-0')).getByText(/^primary$/i)).toBeInTheDocument()
     expect(within(screen.getByTestId('address-row-2')).queryByText(/^primary$/i)).not.toBeInTheDocument()
-    expect(onSave.mock.calls[0][0].addresses.map((a: ContactDraftEmail) => a.pref)).toEqual([1, 101])
+    expect(onSave.mock.calls[0]![0].addresses.map((a: ContactDraftEmail) => a.pref)).toEqual([1, 101])
   })
 
   it('offers no make-primary control on the row that already is the primary', () => {
@@ -248,7 +248,7 @@ describe('ContactEditView', () => {
     await userEvent.type(screen.getByLabelText(/address 3/i), 'troisieme@x.be')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].addresses).toEqual([
+    expect(onSave.mock.calls[0]![0].addresses).toEqual([
       { position: 0, address: 'bruno@x.be', type: 'INTERNET', pref: 1 },
       { position: 3, address: 'b.mertens@wk.be', type: 'WORK', pref: 101 },
       { position: null, address: 'troisieme@x.be', type: '', pref: 101 },
@@ -262,7 +262,7 @@ describe('ContactEditView', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].displayName).toBe('Dr. Bruno Mertens')
+    expect(onSave.mock.calls[0]![0].displayName).toBe('Dr. Bruno Mertens')
   })
 
   // The gate the backend also enforces. Refusing here is what keeps the user from a round trip
@@ -360,13 +360,13 @@ describe('ContactEditView', () => {
     const { onSave } = setup({ contact: withLines })
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].phones).toEqual([
+    expect(onSave.mock.calls[0]![0].phones).toEqual([
       { position: 0, number: '+32 493 82 44 15', type: 'CELL' },
       { position: 1, number: '+32 493 82 44 15', type: 'OTHER' },
     ])
     // The postal line in the very same save: its position, type and seven components must
     // survive a save that never touched it, exactly like the phone lines above.
-    expect(onSave.mock.calls[0][0].postalAddresses).toEqual([
+    expect(onSave.mock.calls[0]![0].postalAddresses).toEqual([
       {
         position: 0, type: 'HOME,POSTAL', poBox: null, extended: null,
         street: 'Rue du Village 138', locality: 'Flémalle', region: 'Belgique',
@@ -378,11 +378,11 @@ describe('ContactEditView', () => {
   it('vider une famille envoie une liste vide, pas une omission', async () => {
     const { onSave } = setup({ contact: withLines })
     const bin = screen.getAllByRole('button', { name: /remove phone/i })
-    await userEvent.click(bin[1])
-    await userEvent.click(screen.getAllByRole('button', { name: /remove phone/i })[0])
+    await userEvent.click(bin[1]!)
+    await userEvent.click(screen.getAllByRole('button', { name: /remove phone/i })[0]!)
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].phones).toEqual([])
+    expect(onSave.mock.calls[0]![0].phones).toEqual([])
   })
 
   it("une adresse postale sans aucune composante n'est pas envoyée, type ou pas", async () => {
@@ -391,7 +391,7 @@ describe('ContactEditView', () => {
     await userEvent.selectOptions(screen.getByLabelText(/postal address 1 type/i), 'WORK')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].postalAddresses).toEqual([])
+    expect(onSave.mock.calls[0]![0].postalAddresses).toEqual([])
   })
 
   it('au plafond, le bouton d’ajout de la famille disparaît', async () => {
@@ -421,9 +421,7 @@ describe('ContactEditView', () => {
     const many = {
       ...bruno,
       postalAddresses: Array.from({ length: 10 }, (_, i) => ({
-        position: i, type: 'HOME', pref: 101, params: '', groupName: '',
-        poBox: null, extended: null, street: `Rue ${i}`, locality: null,
-        region: null, postalCode: null, country: null,
+        position: i, type: 'HOME', pref: 101, params: '', groupName: '', street: `Rue ${i}`,
       })),
     }
     setup({ contact: many })
@@ -436,7 +434,7 @@ describe('ContactEditView', () => {
   it('strips PREF from a projected type before it ever reaches the phone dropdown', () => {
     setup({ contact: messyTypes })
 
-    const select = screen.getByLabelText(/phone 1 type/i) as HTMLSelectElement
+    const select = screen.getByLabelText<HTMLSelectElement>(/phone 1 type/i)
     expect(select.value).toBe('INTERNET,WORK')
     const optionTexts = Array.from(select.options).map(option => option.value)
     expect(optionTexts.some(value => value.toUpperCase().includes('PREF'))).toBe(false)
@@ -452,7 +450,7 @@ describe('ContactEditView', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].postalAddresses).toEqual([expect.objectContaining({ type: '' })])
+    expect(onSave.mock.calls[0]![0].postalAddresses).toEqual([expect.objectContaining({ type: '' })])
   })
 
   /* Le surnom suit la même règle que les huit autres depuis qu'il a quitté le héros : une carte
@@ -484,7 +482,7 @@ describe('ContactEditView', () => {
     await userEvent.type(screen.getByLabelText(/nickname/i), 'bru')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].nickname).toBe('bru')
+    expect(onSave.mock.calls[0]![0].nickname).toBe('bru')
   })
 
   /* Le surnom et le nom affiché ne sont pas des champs comme les huit autres : `Apply` remplace
@@ -495,14 +493,14 @@ describe('ContactEditView', () => {
     await userEvent.clear(screen.getByLabelText(/nickname/i))
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].nickname).toBeNull()
+    expect(onSave.mock.calls[0]![0].nickname).toBeNull()
   })
 
   it('un contact qui n’a que son surnom reste enregistrable', async () => {
     const { onSave } = setup({ contact: { ...solo, addresses: [], nickname: 'bru' } })
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].nickname).toBe('bru')
+    expect(onSave.mock.calls[0]![0].nickname).toBe('bru')
   })
 
   it('affiche d’office un champ que la carte remplit, et ne le propose pas au menu', async () => {
@@ -520,7 +518,7 @@ describe('ContactEditView', () => {
     await userEvent.type(screen.getByLabelText(/job title/i), 'Ingénieure')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].jobTitle).toBe('Ingénieure')
+    expect(onSave.mock.calls[0]![0].jobTitle).toBe('Ingénieure')
   })
 
   // Sur ces champs le serveur lit `null` comme « la requête ne nomme pas le champ » : envoyer
@@ -530,7 +528,7 @@ describe('ContactEditView', () => {
     await userEvent.clear(screen.getByLabelText(/organisation/i))
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].organization).toBe('')
+    expect(onSave.mock.calls[0]![0].organization).toBe('')
   })
 
   // L'autre moitié de la même convention : un champ intact n'est pas renvoyé du tout, ce qui
@@ -539,7 +537,7 @@ describe('ContactEditView', () => {
     const { onSave } = setup({ contact: { ...bruno, organization: 'Weesky' } })
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].organization).toBeNull()
+    expect(onSave.mock.calls[0]![0].organization).toBeNull()
   })
 
   it('un champ vidé reste affiché tant que le formulaire vit', async () => {
@@ -563,7 +561,7 @@ describe('ContactEditView', () => {
     await userEvent.type(screen.getByLabelText(/first name/i), 'x')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].birthday).toBeNull()
+    expect(onSave.mock.calls[0]![0].birthday).toBeNull()
   })
 
   it('un anniversaire tapé part dans l’orthographe du vCard', async () => {
@@ -571,7 +569,7 @@ describe('ContactEditView', () => {
     await userEvent.type(screen.getByLabelText(/birthday/i), '27/10/1979')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].birthday).toBe('1979-10-27')
+    expect(onSave.mock.calls[0]![0].birthday).toBe('1979-10-27')
   })
 
   it('l’anniversaire accepte une forme que nul calendrier n’exprime', async () => {
@@ -579,7 +577,7 @@ describe('ContactEditView', () => {
     await userEvent.type(screen.getByLabelText(/birthday/i), '--10-27')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0][0].birthday).toBe('--10-27')
+    expect(onSave.mock.calls[0]![0].birthday).toBe('--10-27')
   })
 
   // Le bandeau : la photo que la carte porte, jamais une porte pour la remplacer (décision 12).

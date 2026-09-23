@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import en from './en'
 
 /**
- * `tsconfig.json` sets `checkJs: false`, so the typed `t()` only guards the `.ts`/`.tsx` files —
- * a mistyped key in any of the module's `.jsx` pages compiles, and with no runtime `fallbackLng`
- * it renders as its own key on screen. This is that guard, read off the source text.
+ * The typed `t()` catches a mistyped literal at compile time; this is the second guard, read off
+ * the source text rather than the types. With no runtime `fallbackLng`, a key missing from the
+ * catalogue renders as its own name on screen.
  *
  * What it checks: every key written as a literal inside a `t(…)` call — including one arm of a
  * ternary, which is this codebase's idiom for a two-state label — and every `<Trans>` `i18nKey`.
@@ -22,7 +22,7 @@ type Node = string | { [key: string]: Node }
 
 const SOURCES = import.meta.glob('/src/**/*.{ts,tsx,jsx}', {
   query: '?raw', import: 'default', eager: true,
-}) as Record<string, string>
+})
 
 const catalogue = en as unknown as Record<string, Node>
 /** `I18N_OPTIONS.defaultNS`. A `<Trans>` with no `ns` resolves here, whatever the file bound. */
@@ -55,7 +55,8 @@ function scan(
   let depth = 0
   let quote = ''
   for (let i = from; i < text.length; i++) {
-    const char = text[i]
+    // i < text.length is the loop bound, so text[i] is always in bounds.
+    const char = text[i]!
     if (quote) {
       if (char === '\\') i++
       else if (char === quote) quote = ''
@@ -116,21 +117,23 @@ function usesIn(file: string, source: string): Use[] {
     const option = /ns:\s*'(\w+)'/.exec(options)?.[1]
     // Both arms of `t(cond ? 'a' : 'b')`, this codebase's two-state label idiom.
     for (const arm of keyArms(expression)) {
+      // Both groups are mandatory in their pattern (no `?`), so always captured on a match.
       for (const [, key] of arm.matchAll(/'([\w.:]+)'/g)) {
-        const [namespace, path] = qualify(key, option ?? bound)
+        const [namespace, path] = qualify(key!, option ?? bound)
         found.push({ file, namespace, key: path, dynamic: false })
       }
       for (const [, template] of arm.matchAll(/`([^`]*)`/g)) {
-        const [namespace, path] = qualify(template, option ?? bound)
-        found.push({ file, namespace, key: path, dynamic: template.includes('${') })
+        const [namespace, path] = qualify(template!, option ?? bound)
+        found.push({ file, namespace, key: path, dynamic: template!.includes('${') })
       }
     }
   }
 
   for (const [, attributes] of source.matchAll(TRANS)) {
-    const namespace = /\bns="(\w+)"/.exec(attributes)?.[1] ?? DEFAULT_NS
-    const literal = /i18nKey="([\w.:]+)"/.exec(attributes)?.[1]
-    const template = /i18nKey=\{`([^`]*)`\}/.exec(attributes)?.[1]
+    // The group is mandatory in TRANS's pattern (no `?`), so always captured on a match.
+    const namespace = /\bns="(\w+)"/.exec(attributes!)?.[1] ?? DEFAULT_NS
+    const literal = /i18nKey="([\w.:]+)"/.exec(attributes!)?.[1]
+    const template = /i18nKey=\{`([^`]*)`\}/.exec(attributes!)?.[1]
     // A <Trans> whose key this cannot read must be reported, never skipped: silence here is
     // exactly the hole `Desc` was.
     const raw = literal ?? template ?? '(unreadable i18nKey)'

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../contexts/AuthContext'
 import { LocaleProvider } from '../../contexts/LocaleContext'
@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   hasSession: vi.fn(() => true),
   clearSession: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
-  setIsAdmin: vi.fn(),
   adminGetUsers: vi.fn(),
   adminGetDomains: vi.fn(),
   getMailFolders: vi.fn(),
@@ -46,7 +45,6 @@ vi.mock('../../api.js', () => ({
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
-  setIsAdmin: mocks.setIsAdmin,
 }))
 
 function renderAt(path: string) {
@@ -120,7 +118,8 @@ describe('settings section', () => {
     expect(nav.getByText('Sync')).toBeInTheDocument()
     expect(nav.getByText('Rules')).toBeInTheDocument()
     expect(nav.getByText('About')).toBeInTheDocument()
-    await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(false))
+    // The address is drawn once the account has landed: only then is the gate final.
+    expect(await screen.findAllByText('mick@weesky.be')).not.toHaveLength(0)
     expect(nav.queryByText('Administration')).not.toBeInTheDocument()
   })
 
@@ -210,11 +209,10 @@ describe('settings section', () => {
     mocks.getConnectedAccounts.mockReturnValue(new Promise(() => {}))
     renderAt('/settings/general')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
-    await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(true))
+    expect(await nav.findByText('Administration')).toBeInTheDocument()
     expect(nav.getByText('Account')).toBeInTheDocument()
     expect(nav.getByText('Aliases')).toBeInTheDocument()
     expect(nav.getByText('Rules')).toBeInTheDocument()
-    expect(nav.getByText('Administration')).toBeInTheDocument()
   })
 
   it('deep-links to /settings/account under a connected account and redirects to General', async () => {
@@ -250,7 +248,7 @@ describe('settings section', () => {
       mocks.getCapabilities.mockResolvedValue({ admin: false })
       renderAt('/settings/account')
       const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
-      await waitFor(() => expect(mocks.setIsAdmin).toHaveBeenCalledWith(true))
+      expect(await screen.findAllByText('mick@weesky.be')).not.toHaveLength(0)
       await waitFor(() => expect(nav.queryByText('Administration')).not.toBeInTheDocument())
     })
 

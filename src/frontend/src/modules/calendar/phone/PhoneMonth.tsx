@@ -10,7 +10,7 @@ export interface PhoneMonthProps {
   selected: PlainDate
   /** The colours of the day's first events. */
   dotsByDay: Map<PlainDate, string[]>
-  onPick(day: PlainDate): void
+  onPick: (day: PlainDate) => void
 }
 
 /** Three is what a 48px cell holds beside its number; a fourth is drawn outside it. */

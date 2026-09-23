@@ -12,7 +12,8 @@ const FREQUENCY_KEYS: Record<string, string> = {
 const NAMED_POSITIONS = ['first', 'second', 'third', 'fourth', 'fifth'] as const
 
 function dayName(token: string, locale: string): string {
-  const index = WEEKDAY_TOKENS.indexOf(token)
+  // token comes off the wire and is not guaranteed to be one of the seven known codes.
+  const index = (WEEKDAY_TOKENS as readonly string[]).indexOf(token)
   return index === -1 ? token : weekdayNameOf(index, 'long', locale)
 }
 

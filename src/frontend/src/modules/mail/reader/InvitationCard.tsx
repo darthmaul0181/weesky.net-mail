@@ -146,7 +146,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       type="button"
       className={primary ? 'btn btn-primary btn-auto' : 'btn btn-ghost'}
       disabled={busy}
-      onClick={() => answer(value)}
+      onClick={() => void answer(value)}
       aria-pressed={state === 'updated' && invitation.savedPartStat === partStat ? true : undefined}
     >
       {label}
@@ -157,7 +157,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
   const decline = () => answerButton('Declined', t('reader.invitation.decline'), 'DECLINED')
   const three = <>{accept()}{tentative()}{decline()}</>
   const addOnlyButton = (
-    <button type="button" className="btn btn-primary btn-auto" disabled={busy} onClick={() => answer('AddOnly')}>
+    <button type="button" className="btn btn-primary btn-auto" disabled={busy} onClick={() => void answer('AddOnly')}>
       {t('reader.invitation.addOnly')}
     </button>
   )
@@ -262,7 +262,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
             {t('reader.invitation.answered.added', { calendar: calendarName(invitation.calendarId) })}
           </span>
           <span className="invitation-card-others">
-            <button type="button" className="btn btn-danger" disabled={busy} onClick={() => answer('Remove')}>
+            <button type="button" className="btn btn-danger" disabled={busy} onClick={() => void answer('Remove')}>
               {t('reader.invitation.remove')}
             </button>
           </span>
@@ -321,7 +321,7 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       {unsent && !unanswerable && (
         <p className="invitation-card-error" role="alert">
           {t(unsent.declined ? 'reader.invitation.replyFailed' : 'reader.invitation.addedReplyFailed')}
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => answer(unsent.answer)}>
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void answer(unsent.answer)}>
             {t('reader.invitation.resend')}
           </button>
         </p>

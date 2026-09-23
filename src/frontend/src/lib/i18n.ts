@@ -10,7 +10,7 @@ async function bundleOf(locale: Locale) {
     : (await import('../locales/en')).default
 }
 
-/** Shared with test-setup.js's synchronous init, so the two configurations cannot drift apart —
+/** Shared with test-setup.ts's synchronous init, so the two configurations cannot drift apart —
     written twice, a production-only change to escaping or the fallback would leave the suite
     silently validating semantics the app no longer runs under. */
 export const I18N_OPTIONS = {

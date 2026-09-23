@@ -6,7 +6,7 @@ import { authVerdict } from './authVerdict'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 
-export default function AuthBadge({ authentication }: { authentication: MailAuthentication | null }) {
+export default function AuthBadge({ authentication }: { authentication?: MailAuthentication }) {
   const { t } = useTranslation('mail')
   const bubbleId = useId()
   const verdict = authVerdict(authentication)

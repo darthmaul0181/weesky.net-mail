@@ -106,7 +106,7 @@ describe('usePullToRefresh', () => {
     const ref = createRef<HTMLElement>()
     // @ts-expect-error assigning a ref in a test
     ref.current = element
-    const onRefresh = vi.fn()
+    const onRefresh = vi.fn<() => void>()
     renderHook(() => usePullToRefresh(ref, () => onRefresh()))
     await act(async () => { fire(element, 'touchstart', 0) })
     await act(async () => { fire(element, 'touchmove', 30) }) // re-renders via setPull

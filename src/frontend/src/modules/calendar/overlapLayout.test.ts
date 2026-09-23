@@ -34,14 +34,14 @@ describe('layoutColumn', () => {
   })
 
   it('places the top at the start minute and floors the height', () => {
-    const [placed] = layout([at('a', 540, 550)])
+    const placed = layout([at('a', 540, 550)])[0]!
 
     expect(placed.top).toBe(minutesToPx(540))
     expect(placed.height).toBe(20)
   })
 
   it('measures a long event by its own duration', () => {
-    const [placed] = layout([at('a', 540, 660)])
+    const placed = layout([at('a', 540, 660)])[0]!
 
     expect(placed.height).toBe(HOUR_PX * 2)
   })

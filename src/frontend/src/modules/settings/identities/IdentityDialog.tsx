@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useAliases } from '../../mail/queries'
 import { MAX_DISPLAY_NAME_LENGTH } from './identityRows'
 import Modal from '../../../components/Modal'
-import PersonPlusIcon from '../../../icons/PersonPlusIcon.jsx'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
+import PersonPlusIcon from '../../../icons/PersonPlusIcon'
+import PencilIcon from '../../../icons/PencilIcon'
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -50,7 +50,7 @@ export default function IdentityDialog({
     ? (EMAIL_SHAPE.test(needle) && !takenSet.has(needle) ? needle : null)
     : selected
   const canSubmit = address !== null && name.trim() !== ''
-  function submit() { if (canSubmit) onSubmit(address!, name.trim()) }
+  function submit() { if (canSubmit) onSubmit(address, name.trim()) }
 
   return (
     <Modal

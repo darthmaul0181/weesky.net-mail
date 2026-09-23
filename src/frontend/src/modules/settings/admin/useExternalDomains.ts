@@ -4,7 +4,8 @@ import { api } from '../../../api.js'
 /**
  * The admin-curated external mail providers users may attach a connected account from — the
  * only source of external hosts in the product, which is what `ExternalDomainDialog`'s
- * client-side validation exists to guard.
+ * client-side validation exists to guard. The API omits a null field, so a domain without Sieve
+ * or without OAuth2 simply lacks those fields.
  */
 export interface ExternalDomain {
   id: string
@@ -15,21 +16,28 @@ export interface ExternalDomain {
   smtpHost: string
   smtpPort: number
   smtpSecurity: string
-  sieveHost: string | null
-  sievePort: number | null
+  sieveHost?: string
+  sievePort?: number
   authMode: 'Password' | 'OAuth2'
-  oauthAuthorizationUrl: string | null
-  oauthTokenUrl: string | null
-  oauthScopes: string | null
-  oauthClientId: string | null
+  oauthAuthorizationUrl?: string
+  oauthTokenUrl?: string
+  oauthScopes?: string
+  oauthClientId?: string
   /** The secret itself never leaves the backend: this flag is all a reader learns. */
   oauthClientSecretSet: boolean
 }
 
-export type ExternalDomainPayload = Omit<ExternalDomain, 'id' | 'oauthClientSecretSet'> & {
-  /** Write-only: null on an edit keeps the stored secret. */
-  oauthClientSecret: string | null
-}
+type OptionalOnTheWire =
+  'sieveHost' | 'sievePort' | 'oauthAuthorizationUrl' | 'oauthTokenUrl' | 'oauthScopes' | 'oauthClientId'
+
+/** The dialog sends every field, null where the domain has none. */
+export type ExternalDomainPayload =
+  Omit<ExternalDomain, 'id' | 'oauthClientSecretSet' | OptionalOnTheWire>
+  & { [K in OptionalOnTheWire]-?: NonNullable<ExternalDomain[K]> | null }
+  & {
+    /** Write-only: null on an edit keeps the stored secret. */
+    oauthClientSecret: string | null
+  }
 
 const EXTERNAL_DOMAINS_KEY = ['adminExternalDomains'] as const
 
@@ -43,7 +51,7 @@ export function useExternalDomains() {
 // onSettled, not onSuccess: a refused write must leave the screen on server state rather than
 // on an optimistic lie.
 function refreshList(client: QueryClient) {
-  return () => { client.invalidateQueries({ queryKey: EXTERNAL_DOMAINS_KEY }) }
+  return () => { void client.invalidateQueries({ queryKey: EXTERNAL_DOMAINS_KEY }) }
 }
 
 export function useCreateExternalDomain() {

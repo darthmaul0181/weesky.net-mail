@@ -18,7 +18,9 @@ export function useForwarders<T extends Record<string, (...args: never[]) => unk
   return useMemo(() => {
     const forwarders: Record<string, (...args: never[]) => unknown> = {}
     for (const key of Object.keys(handlers)) {
-      forwarders[key] = (...args) => latest.current[key](...args)
+      // key comes from Object.keys(handlers), so it is present in latest.current, which
+      // always holds the same fixed key set (see the hook's own contract above).
+      forwarders[key] = (...args) => latest.current[key]!(...args)
     }
     return forwarders as T
     // Built once: a dependency on the handlers is the very rebuild this hook exists to avoid.

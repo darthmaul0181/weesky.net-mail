@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import license from 'rollup-plugin-license'
-import { versionStamp } from './src/lib/versionStamp.js'
+import { versionStamp } from './src/lib/versionStamp.ts'
 
 // One product version for the web app and the API, read from the repository's VERSION file.
 const PRODUCT_VERSION = readFileSync(new URL('../../VERSION', import.meta.url), 'utf8').trim()
@@ -184,7 +184,7 @@ export default defineConfig(({ command, mode }) => {
       // spans the whole styles directory, so a narrower list silently blinds it to whichever file
       // falls outside the pattern.
       css: { include: [/src\/.*\.css/] },
-      setupFiles: ['./src/test-setup.js'],
+      setupFiles: ['./src/test-setup.ts'],
       // Reserved .test host; tests assert against the exported API_BASE, never this literal.
       env: { VITE_API_BASE: 'https://api.example.test' },
       coverage: {

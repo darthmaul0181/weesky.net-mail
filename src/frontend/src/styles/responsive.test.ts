@@ -3,10 +3,10 @@ import { describe, it, expect } from 'vitest'
 // ?raw on the stylesheets, the mechanism modals.test.ts uses on the components.
 const sheets = import.meta.glob('./*.css', {
   query: '?raw', import: 'default', eager: true,
-}) as Record<string, string>
+})
 const root = import.meta.glob('../index.css', {
   query: '?raw', import: 'default', eager: true,
-}) as Record<string, string>
+})
 const all = { ...sheets, ...root }
 
 function widthsUsedBy(query: RegExp): string[] {
@@ -77,8 +77,8 @@ describe('responsive contract', () => {
   // cluster away from every mouse. Nothing else can catch it — jsdom computes no layout and no
   // probe can emulate `hover` — so the guard is on the text, the way the whitelist above is.
   it('keeps hover rules out of the column query', () => {
-    const mail = all['./mail.css']
-    const band = all['./selection.css']
+    const mail = all['./mail.css']!
+    const band = all['./selection.css']!
     // The .not.toMatch below passes vacuously on an empty string, so the count is pinned first:
     // a named container, a lost space or a re-spelled width would empty the slice silently and
     // this file would go on reporting green over a block nothing is reading. Two blocks, one per
@@ -90,7 +90,7 @@ describe('responsive contract', () => {
     expect(mediaBlocks(mail, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
     expect(mediaBlocks(band, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
     expect(mediaBlocks(mail, '@media (hover: none)')).toMatch(/\.message-row:hover \.message-row-cluster/)
-    expect(mediaBlocks(all['../index.css'], '@media (hover: none)'))
+    expect(mediaBlocks(all['../index.css']!, '@media (hover: none)'))
       .toMatch(/\.contact-tile:hover \.contact-tile-actions/)
   })
 
@@ -107,7 +107,7 @@ describe('responsive contract', () => {
     // selection.css rather than mail.css: the band is shared by both list columns now, and its
     // rules moved with it. The scan follows the rules — a guard left pointing at the file they
     // used to be in is a guard over nothing.
-    const mail = all['./selection.css']
+    const mail = all['./selection.css']!
     // Every @container body in the file, not the 480 one alone: what is forbidden is the master
     // answering to a column measurement at all, and a new block is exactly how that comes back.
     // The trailing `(` is what keeps the prose out — four comments in mail.css name `@container`
@@ -135,7 +135,7 @@ describe('responsive contract', () => {
   })
 
   it('declares the touch floor once, in the phone block', () => {
-    const shell = all['./shell.css']
+    const shell = all['./shell.css']!
     expect([...shell.matchAll(/--touch:/g)]).toHaveLength(1)
     expect(mediaBlocks(shell, '@media (max-width: 639px)')).toMatch(/--touch:/)
   })

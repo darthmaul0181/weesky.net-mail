@@ -78,6 +78,8 @@ export function relativeFromNow(iso: string, now: Date = new Date()): string {
   const seconds = Math.round((then - now.getTime()) / 1000)
   if (seconds > -5) return relativeFormat().format(0, 'second')
 
-  const [unit, size] = RELATIVE_UNITS.find(([, s]) => Math.abs(seconds) >= s) ?? RELATIVE_UNITS[5]
+  // Guaranteed to match: seconds > -5 already returned above, so abs(seconds) >= 5, and the
+  // last unit's threshold is 1 — find reaches it at the latest.
+  const [unit, size] = RELATIVE_UNITS.find(([, s]) => Math.abs(seconds) >= s)!
   return relativeFormat().format(Math.round(seconds / size), unit)
 }

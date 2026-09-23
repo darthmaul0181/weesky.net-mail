@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Routes, Route, createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, createMemoryRouter, RouterProvider } from 'react-router'
 import { expectNoAxeViolations } from './a11y-test'
 import { resetViewport } from './test-utils'
-import LoginPage from './pages/LoginPage.jsx'
+import LoginPage from './pages/LoginPage'
 import MailLayout from './modules/mail/MailLayout'
 import type { MailFolderNode } from './modules/mail/api/mailTypes'
 import ContactsLayout from './modules/contacts/ContactsLayout'
@@ -17,9 +17,9 @@ import {
   calendarOf, occurrenceOf, renderInCalendar, TZ,
 } from './modules/calendar/calendarTestHarness'
 import Modal from './components/Modal'
-import AdminPage from './modules/settings/admin/AdminPage.jsx'
+import AdminPage from './modules/settings/admin/AdminPage'
 import GeneralPage from './modules/settings/general/GeneralPage'
-import DeleteConfirmModal from './components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from './components/DeleteConfirmModal'
 
 // Every surface's own test file mocks the API at the network layer; vi.mock('./api.js', ...) can
 // only be declared once per file, so this is the union of what all eight need.
@@ -53,7 +53,6 @@ vi.mock('./api.js', async () => ({
   api: mocks,
   markLoggedIn: mocks.markLoggedIn,
   clearSession: vi.fn(),
-  setIsAdmin: vi.fn(),
   requestBlob: vi.fn(),
   mailAttachmentUrl: vi.fn(),
 }))
@@ -77,7 +76,7 @@ vi.mock('./modules/mail/notify/channels', () => ({
 
 afterEach(resetViewport)
 // What keeps the surfaces independent is that every `it` sets each mock value it reads before
-// rendering; clearAllMocks only drops call history. resetAllMocks would also wipe test-setup.js's
+// rendering; clearAllMocks only drops call history. resetAllMocks would also wipe test-setup.ts's
 // window.matchMedia stub, armed once per file, breaking every surface that reads the viewport.
 beforeEach(() => vi.clearAllMocks())
 
@@ -96,8 +95,8 @@ describe('accessibility sweep', () => {
   it('MailLayout — list and reader both on screen', async () => {
     function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
       return {
-        path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-        total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [],
+        path: 'X', name: 'X', selectable: true, subscribed: true,
+        total: 0, unread: 0, uidValidity: 1, children: [],
         ...partial,
       }
     }
@@ -138,7 +137,7 @@ describe('accessibility sweep', () => {
   it('ContactsLayout', async () => {
     function contactOf(fields: Partial<Contact> & { id: string }): Contact {
       return {
-        firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+        isFavorite: false, addresses: [], ...fields,
       }
     }
     function detailOf(row: Contact): ContactDetail {

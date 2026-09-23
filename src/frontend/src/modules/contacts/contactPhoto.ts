@@ -77,8 +77,9 @@ function toBase64(blob: Blob): Promise<string> {
     const reader = new FileReader()
     reader.onerror = () => reject(new Error(PHOTO_UNREADABLE))
     reader.onload = () => {
-      const result = String(reader.result)
-      resolve(result.slice(result.indexOf(',') + 1))
+      const result = reader.result
+      if (typeof result === 'string') resolve(result.slice(result.indexOf(',') + 1))
+      else reject(new Error(PHOTO_UNREADABLE))
     }
     reader.readAsDataURL(blob)
   })

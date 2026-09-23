@@ -79,7 +79,7 @@ describe('layerStack', () => {
 
   it('hears Escape before any listener the app registers later', () => {
     const onEscape = vi.fn()
-    const after = vi.fn()
+    const after = vi.fn<(prevented: boolean) => void>()
     // A menu's own document listener, registered long after this module loaded.
     const later = (event: Event) => after(event.defaultPrevented)
     document.addEventListener('keydown', later)
@@ -93,7 +93,7 @@ describe('layerStack', () => {
   })
 
   it('swallows Escape for a layer that declares no handler', () => {
-    const seen = vi.fn()
+    const seen = vi.fn<(prevented: boolean) => void>()
     const spy = (event: Event) => seen(event.defaultPrevented)
     window.addEventListener('keydown', spy)
     push({})

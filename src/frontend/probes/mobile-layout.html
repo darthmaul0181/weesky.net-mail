@@ -1094,7 +1094,7 @@
     }
 
     // A dialog whose content is genuinely narrow: does width:100% stretch a two-line confirm
-    // across the whole screen? Markup mirrors DeleteConfirmModal.jsx exactly — its own single
+    // across the whole screen? Markup mirrors DeleteConfirmModal.tsx exactly — its own single
     // action button is a touch target too.
     CASES.push({
       name: 'modal-confirm-360',
@@ -1888,7 +1888,7 @@
 
     // ── Login (Task 14) ────────────────────────────────────────────────────────────────────────
     // The one surface reached without a session, and the only user of `.page-center` and `.card`.
-    // Markup is LoginPage.jsx's, and two details of it are load-bearing rather than incidental:
+    // Markup is LoginPage.tsx's, and two details of it are load-bearing rather than incidental:
     // the fields carry NO <label> — the real form labels its inputs by placeholder alone, so a
     // fixture with labels measures a taller card the app never draws — and the error alert is
     // present because that is the card's tallest real state, the only one whose content can

@@ -165,8 +165,8 @@ describe('icons', () => {
 
 // Every icon file, not the curated sample above — a new icon that forgets the two attributes
 // must fail here even before anything imports it into a button.
-const modules = import.meta.glob(['./*.{tsx,jsx}', '!./icons.test.tsx'], { eager: true }) as
-  Record<string, { default: ComponentType<Record<string, never>> }>
+const modules = import.meta.glob<{ default: ComponentType<Record<string, never>> }>(
+  ['./*.{tsx,jsx}', '!./icons.test.tsx'], { eager: true })
 const allIcons = Object.entries(modules).map(([path, mod]) => ({
   name: path.replace('./', ''),
   Icon: mod.default,

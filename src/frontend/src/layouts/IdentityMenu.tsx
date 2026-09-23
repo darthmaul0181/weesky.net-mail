@@ -1,12 +1,12 @@
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useAuth, type ActiveAccount } from '../contexts/AuthContext'
 import { useDismiss } from '../hooks/useDismiss'
 import { useRovingFocus } from '../hooks/useRovingFocus'
 import { confirmLeave } from '../lib/leaveGuard'
 import ChevronRightIcon from '../icons/ChevronRightIcon'
-import PersonPlusIcon from '../icons/PersonPlusIcon.jsx'
+import PersonPlusIcon from '../icons/PersonPlusIcon'
 import SignOutIcon from '../icons/SignOutIcon'
 
 const LINKED_ACCOUNTS = '/settings/accounts'
@@ -14,7 +14,7 @@ const LINKED_ACCOUNTS = '/settings/accounts'
 /** First letters of the label's first two words, an address counting as name + domain. */
 function initialsOf(label: string): string {
   return label.split(/[\s.@_-]+/).filter(Boolean).slice(0, 2)
-    .map(part => part[0].toUpperCase()).join('')
+    .map(part => part.charAt(0).toUpperCase()).join('')
 }
 
 function labelOf(acc: ActiveAccount): string {
@@ -46,12 +46,12 @@ export default function IdentityMenu() {
 
   async function handleSignOut() {
     await logout()
-    navigate('/login', { replace: true })
+    void navigate('/login', { replace: true })
   }
 
   function goToLinkedAccounts() {
     setOpen(false)
-    navigate(LINKED_ACCOUNTS)
+    void navigate(LINKED_ACCOUNTS)
   }
 
   // switchAccount refuses a target whose password no longer decrypts, so that row leads to the
@@ -108,7 +108,7 @@ export default function IdentityMenu() {
                 role="menuitem"
                 className={isActive ? 'identity-account is-active' : 'identity-account'}
                 aria-current={isActive || undefined}
-                onClick={() => pickAccount(acc)}
+                onClick={() => void pickAccount(acc)}
               >
                 {/* The dot is the only thing saying "you are here" to anything not reading the
                     fill, so the inactive rows hold its width rather than closing the gap. */}
@@ -134,7 +134,7 @@ export default function IdentityMenu() {
             onClick={goToLinkedAccounts}>
             <PersonPlusIcon /> {t('identity.connectedAccounts')}
           </button>
-          <button type="button" role="menuitem" className="identity-action" onClick={handleSignOut}>
+          <button type="button" role="menuitem" className="identity-action" onClick={() => void handleSignOut()}>
             <SignOutIcon size={15} /> {t('identity.signOut')}
           </button>
         </div>

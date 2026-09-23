@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, render, renderHook, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLayoutEffect } from 'react'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router'
 import ContextDrawer, { useContextDrawer } from './ContextDrawer'
-import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../components/DeleteConfirmModal'
 import { changeViewport, mockViewport, resetViewport } from '../test-utils'
 
 afterEach(resetViewport)
@@ -29,7 +29,7 @@ function DrawerWithNav({ open, onClose }: { open: boolean; onClose: () => void }
       <ContextDrawer open={open} onClose={onClose}>
         <button type="button">Inbox</button>
       </ContextDrawer>
-      <button type="button" onClick={() => navigate('/mail?folder=Sent')}>Navigate</button>
+      <button type="button" onClick={() => void navigate('/mail?folder=Sent')}>Navigate</button>
     </>
   )
 }

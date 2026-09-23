@@ -66,6 +66,7 @@ export function useRovingFocus({ active, containerRef }: Options) {
       : at === -1 ? (step > 0 ? 0 : last)
         : (at + step + items.length) % items.length
     event.preventDefault()
-    items[to].focus()
+    // `to` is 0, `last`, or a value modulo items.length, and items.length > 0 (checked above).
+    items[to]!.focus()
   }
 }

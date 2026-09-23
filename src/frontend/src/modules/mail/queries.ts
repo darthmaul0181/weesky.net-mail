@@ -1,5 +1,5 @@
 import {
-  useInfiniteQuery, useIsFetching, useMutation, useQuery, useQueryClient,
+  skipToken, useInfiniteQuery, useIsFetching, useMutation, useQuery, useQueryClient,
   type InfiniteData, type Query, type QueryClient, type QueryKey,
 } from '@tanstack/react-query'
 import i18next from 'i18next'
@@ -10,9 +10,9 @@ import { calendarKeys } from '../calendar/queries'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type {
   MailFolderNode, MailFolderPage, MailMessageDetail, MailMessageSource, MailMessageSummary,
-  MailSearchPage, FolderRoleEntry, AliasInfo, IdentityListResponse, SendingIdentity, PreparedQuote,
-  QuotePurpose, SavedDraft, OpenedDraft, MailPriority, InvitationResponse, RespondInvitationArgs,
-  ApplyReplyArgs, ApplyReplyResponse,
+  MailSearchPage, FolderRoleEntry, SendingIdentity, QuotePurpose, InvitationResponse,
+  RespondInvitationArgs, ApplyReplyArgs, ApplyReplyResponse, IdentityWrite, SaveDraftArgs,
+  SendMessageArgs, SendMessageResult,
 } from './api/mailTypes'
 import { flatten } from './folders/folderNodes'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -120,9 +120,9 @@ export function useMessages(
 
   return useQuery<MailFolderPage>({
     queryKey: mailKeys.messages(accountId, folderPath ?? '', page, pageSize, grouped),
-    queryFn: ({ signal }) =>
+    queryFn: folderPath === null ? skipToken : ({ signal }) =>
       api.getMailMessages(folderPath, page, pageSize, { signal, accountId, grouped }),
-    enabled: enabled && folderPath !== null,
+    enabled,
     // Keeps the current page on screen while the next one loads, instead of flashing empty — but
     // only between pages of one folder in one mailbox. Held across either, it shows somebody
     // else's mail under this heading, which is the one wrong state a reader cannot tell from a
@@ -131,7 +131,7 @@ export function useMessages(
     // paces the pager on the message count, so the reader gets ten page buttons that collapse to
     // two when the real answer lands. A brief loading state beats a pager that lies.
     placeholderData: (previous, previousQuery) => {
-      const key = previousQuery?.queryKey as readonly unknown[] | undefined
+      const key = previousQuery?.queryKey
       return key?.[1] === accountId && key?.[3] === (folderPath ?? '') && key?.[6] === grouped
         ? previous
         : undefined
@@ -146,13 +146,12 @@ export function useMessageStream(
 
   return useInfiniteQuery({
     queryKey: mailKeys.messageStream(accountId, folderPath ?? '', requestSize, grouped),
-    queryFn: ({ pageParam, signal }) =>
-      api.getMailMessages(folderPath, pageParam, requestSize,
-        { signal, accountId, grouped }) as Promise<MailFolderPage>,
+    queryFn: folderPath === null ? skipToken : ({ pageParam, signal }) =>
+      api.getMailMessages(folderPath, pageParam, requestSize, { signal, accountId, grouped }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       nextBlockIndex(lastPage, allPages.length, requestSize),
-    enabled: enabled && folderPath !== null && requestSize > 0,
+    enabled: enabled && requestSize > 0,
     // TanStack refetches *every* loaded block on focus. Forty blocks is forty IMAP
     // connections and forty full folder sorts, so this stays off.
     refetchOnWindowFocus: false,
@@ -164,8 +163,9 @@ export function useMessage(folderPath: string | null, uid: number | null) {
 
   return useQuery<MailMessageDetail>({
     queryKey: mailKeys.message(accountId, folderPath ?? '', uid ?? 0),
-    queryFn: ({ signal }) => api.getMailMessage(folderPath, uid, { signal, accountId }),
-    enabled: folderPath !== null && uid !== null,
+    queryFn: folderPath === null || uid === null
+      ? skipToken
+      : ({ signal }) => api.getMailMessage(folderPath, uid, { signal, accountId }),
   })
 }
 
@@ -183,17 +183,17 @@ export function useRespondInvitation() {
 
   return useMutation<InvitationResponse, ApiError, RespondInvitationArgs>({
     mutationKey: mailKeys.writes(accountId),
-    mutationFn: args => api.respondInvitation(args, { accountId }) as Promise<InvitationResponse>,
+    mutationFn: args => api.respondInvitation(args, { accountId }),
     onSuccess: (answer, args) => {
-      queryClient.invalidateQueries({ queryKey: mailKeys.message(accountId, args.folder, args.uid) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.message(accountId, args.folder, args.uid) })
       // The calendar changed under the mail: its root key reaches the grid, the open event and
       // any search, which would otherwise keep the answer before this one.
-      queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
+      void queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
       if (!answer.trashed) return
       const source = removeFromFolderCaches(queryClient, accountId, args.folder, [args.uid])
       patchTreeCounts(queryClient, accountId,
         [[args.folder, { total: -source.removed, unread: -source.removedUnread }]])
-      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
     },
   })
 }
@@ -209,11 +209,11 @@ export function useApplyInvitationReply() {
 
   return useMutation<ApplyReplyResponse, ApiError, ApplyReplyArgs>({
     mutationKey: mailKeys.writes(accountId),
-    mutationFn: args => api.applyInvitationReply(args, { accountId }) as Promise<ApplyReplyResponse>,
+    mutationFn: args => api.applyInvitationReply(args, { accountId }),
     onSuccess: (result, args) => {
       queryClient.setQueryData<MailMessageDetail>(mailKeys.message(accountId, args.folder, args.uid),
         detail => detail && { ...detail, invitation: result.invitation })
-      queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
+      void queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
     },
   })
 }
@@ -225,8 +225,9 @@ export function useMessageSource(folderPath: string | null, uid: number | null) 
 
   return useQuery<MailMessageSource>({
     queryKey: mailKeys.messageSource(accountId, folderPath ?? '', uid ?? 0),
-    queryFn: ({ signal }) => api.getMessageSource(folderPath, uid, { signal, accountId }),
-    enabled: folderPath !== null && uid !== null,
+    queryFn: folderPath === null || uid === null
+      ? skipToken
+      : ({ signal }) => api.getMessageSource(folderPath, uid, { signal, accountId }),
     // The bytes of a given (folder, uid) never change; a stale reload is the user's own call.
     staleTime: Infinity,
   })
@@ -243,15 +244,17 @@ export function useSearchMessages(criteria: SearchCriteria | null, page: number,
     queryKey: criteria
       ? mailKeys.search(accountId, criteria, page, pageSize)
       : [...mailKeys.searchIn(accountId), 'idle'],
-    queryFn: ({ signal }) => api.searchMessages(criteria, page, pageSize, { signal, accountId }),
-    enabled: criteria !== null && pageSize > 0,
+    queryFn: criteria === null
+      ? skipToken
+      : ({ signal }) => api.searchMessages(criteria, page, pageSize, { signal, accountId }),
+    enabled: pageSize > 0,
     refetchOnWindowFocus: false,
     // Held across a mailbox change, this shows the previous account's hits under the new
     // account's heading — the same wrong state useMessages guards against. Only the account is
     // checked: keeping the previous page while another page, or another search, loads is the
     // point of having a placeholder at all.
     placeholderData: (previous, previousQuery) => {
-      const key = previousQuery?.queryKey as readonly unknown[] | undefined
+      const key = previousQuery?.queryKey
       return key?.[1] === accountId ? previous : undefined
     },
   })
@@ -271,7 +274,7 @@ export function useFolderRoles() {
     `select` stays on the hook, since `ensureQueryData` answers the raw response either way. */
 export const identitiesQueryOptions = (accountId: string) => ({
   queryKey: mailKeys.identities(accountId),
-  queryFn: () => api.getIdentities({ accountId }) as Promise<IdentityListResponse>,
+  queryFn: () => api.getIdentities({ accountId }),
   staleTime: 5 * 60_000,
 })
 
@@ -292,8 +295,7 @@ export function useReplaceIdentities() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (identities: { address: string; displayName: string; isDefault: boolean }[]) =>
-      api.putIdentities(identities, { accountId }) as Promise<void>,
+    mutationFn: (identities: IdentityWrite[]) => api.putIdentities(identities, { accountId }),
     // Settled, not success: after a refused PUT the page must fall back to the server's state.
     onSettled: () => queryClient.invalidateQueries({ queryKey: mailKeys.identities(accountId) }),
   })
@@ -307,7 +309,7 @@ export function useTrustedSenders() {
 
   return useQuery({
     queryKey: mailKeys.trustedSenders(accountId),
-    queryFn: () => api.getTrustedSenders() as Promise<string[]>,
+    queryFn: () => api.getTrustedSenders(),
     staleTime: 5 * 60_000,
     select: (addresses): Set<string> => new Set(addresses),
   })
@@ -320,11 +322,11 @@ export function useTrustSender(onError?: (message: string) => void) {
 
   return useMutation({
     mutationFn: ({ address, trusted }: { address: string; trusted: boolean }) =>
-      (trusted ? api.trustSender(address) : api.untrustSender(address)) as Promise<void>,
+      trusted ? api.trustSender(address) : api.untrustSender(address),
     // A 400 is the server refusing on purpose, in words meant to be read — the account is at its
     // ceiling, or the header carried no readable address. Anything else is infrastructure, whose
     // statusText ("Internal Server Error") tells the reader nothing, so it gets the generic.
-    // A 401 says nothing at all: api.js has already cleared the session and sent them to /login,
+    // A 401 says nothing at all: api.ts has already cleared the session and sent them to /login,
     // and a toast on top of a redirect is noise.
     onError: (error, { trusted }) => {
       if (error instanceof ApiError && error.status === 401) return
@@ -337,14 +339,15 @@ export function useTrustSender(onError?: (message: string) => void) {
   })
 }
 
-export function useAliases(enabled = true) {
+/** Five minutes for the readers; a screen managing the list passes its own `staleTime`. */
+export function useAliases(enabled = true, { staleTime = 5 * 60_000 }: { staleTime?: number } = {}) {
   const accountId = useAccountId()
 
   return useQuery({
     queryKey: mailKeys.aliases(accountId),
-    queryFn: () => api.getAliases() as Promise<AliasInfo[]>,
+    queryFn: () => api.getAliases(),
     enabled,
-    staleTime: 5 * 60_000,
+    staleTime,
   })
 }
 
@@ -361,8 +364,8 @@ function useRoleMutation<TArgs>(
   return useMutation({
     mutationFn: (args: TArgs) => mutationFn(args, { accountId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: mailKeys.folderRoles(accountId) })
-      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.folderRoles(accountId) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
     },
   })
 }
@@ -741,7 +744,7 @@ export function useMoveMessages(onError?: (message: string) => void) {
     // touches search — so reconcile the mounted search against the server, which re-windows it.
     // A copy leaves the source intact: nothing to reconcile.
     onSettled: (_data, _error, { copy }) => {
-      if (!copy) queryClient.invalidateQueries({ queryKey: mailKeys.searchIn(accountId) })
+      if (!copy) void queryClient.invalidateQueries({ queryKey: mailKeys.searchIn(accountId) })
     },
   })
 }
@@ -792,24 +795,7 @@ export function useDeleteMessages(onError?: (message: string) => void, pinnedAcc
   })
 }
 
-export interface SendMessageArgs {
-  to: string[]
-  cc: string[]
-  bcc: string[]
-  subject: string
-  htmlBody: string
-  /** Present sends the message as text/plain alone; htmlBody rides along empty. */
-  textBody?: string
-  attachmentIds: string[]
-  priority: MailPriority
-  /** Omitted picks the account's own address server-side; the display label is always server-resolved. */
-  fromAddress?: string
-  /** Threading of a reply/forward: the original's id and its extended references chain. */
-  inReplyTo?: string
-  references?: string[]
-}
-
-export interface SendMessageResult { appendedToSent: boolean }
+export type { SaveDraftArgs, SendMessageArgs, SendMessageResult }
 
 /**
  * Sends a composed message. On success invalidates the folder tree (the Sent copy changes its
@@ -823,14 +809,14 @@ export function useSendMessage(pinnedAccountId?: string) {
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
     mutationFn: (args: SendMessageArgs) =>
-      api.sendMessage(args, { accountId }) as Promise<SendMessageResult>,
+      api.sendMessage(args, { accountId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
       const folders = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
       const sent = folders ? flatten(folders).find(entry => entry.node.specialUse === 'sent') : undefined
       if (sent) {
-        queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, sent.node.path) })
-        queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, sent.node.path) })
+        void queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, sent.node.path) })
+        void queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, sent.node.path) })
       }
     },
   })
@@ -845,11 +831,9 @@ export function usePrepareQuote() {
 
   return useMutation({
     mutationFn: (args: { folder: string; uid: number; purpose: QuotePurpose }) =>
-      api.prepareQuote(args.folder, args.uid, args.purpose, { accountId }) as Promise<PreparedQuote>,
+      api.prepareQuote(args.folder, args.uid, args.purpose, { accountId }),
   })
 }
-
-export type SaveDraftArgs = SendMessageArgs & { replaceUid?: number }
 
 /** Files the draft under the drafts role; each success replaces the version before it. */
 export function useSaveDraft(pinnedAccountId?: string) {
@@ -859,11 +843,11 @@ export function useSaveDraft(pinnedAccountId?: string) {
 
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
-    mutationFn: (args: SaveDraftArgs) => api.saveDraft(args, { accountId }) as Promise<SavedDraft>,
+    mutationFn: (args: SaveDraftArgs) => api.saveDraft(args, { accountId }),
     onSuccess: (saved) => {
-      queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
-      queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, saved.folderPath) })
-      queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, saved.folderPath) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, saved.folderPath) })
+      void queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, saved.folderPath) })
     },
   })
 }
@@ -877,7 +861,7 @@ export function useOpenDraft() {
 
   return useMutation({
     mutationFn: (args: { folder: string; uid: number }) =>
-      api.openDraft(args.folder, args.uid, { accountId }) as Promise<OpenedDraft>,
+      api.openDraft(args.folder, args.uid, { accountId }),
   })
 }
 
@@ -919,9 +903,9 @@ export function useEmptyFolder(onError?: (message: string) => void) {
 
       const move = !!targetFolderPath
       if (move) {
-        await cancelListQueries(queryClient, accountId, targetFolderPath!)
-        snapshots.push(...dropFolderCaches(queryClient, accountId, targetFolderPath!))
-        patches.push([targetFolderPath!, { total: source.total, unread: source.unread }])
+        await cancelListQueries(queryClient, accountId, targetFolderPath)
+        snapshots.push(...dropFolderCaches(queryClient, accountId, targetFolderPath))
+        patches.push([targetFolderPath, { total: source.total, unread: source.unread }])
       }
 
       snapshots.push(...patchTreeCounts(queryClient, accountId, patches))

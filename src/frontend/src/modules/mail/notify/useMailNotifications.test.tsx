@@ -23,7 +23,7 @@ vi.mock('./channels', () => ({
   showDesktopNotification: mocks.showDesktopNotification,
   claimNotification: mocks.claimNotification,
 }))
-vi.mock('react-router-dom', () => ({ useNavigate: () => mocks.navigate }))
+vi.mock('react-router', () => ({ useNavigate: () => mocks.navigate }))
 
 let client: QueryClient
 function wrapper({ children }: { children: ReactNode }) {
@@ -74,7 +74,7 @@ async function renderWithBaseline(
   return {
     ...rendered,
     tick: (...next: MailFolderNode[]) =>
-      act(() => { client.setQueryData(mailKeys.folders('primary'), next) }),
+      act(async () => { client.setQueryData(mailKeys.folders('primary'), next) }),
   }
 }
 
@@ -122,6 +122,21 @@ describe('useMailNotifications', () => {
     const { tick } = await renderWithBaseline(bothOn)
 
     await tick(inbox({ uidNext: 11, total: 6 }))
+    await settle()
+
+    expect(mocks.playNewMailSound).not.toHaveBeenCalled()
+    expect(mocks.showDesktopNotification).not.toHaveBeenCalled()
+  })
+
+  // An inbox whose STATUS failed comes without its counters: there is no uidNext to compare.
+  it('stays silent when the inbox arrives without a uidNext', async () => {
+    const { tick } = await renderWithBaseline(bothOn)
+    const statusless: MailFolderNode = {
+      path: 'INBOX', name: 'INBOX', specialUse: 'inbox', selectable: true, subscribed: true,
+      uidValidity: 100, children: [],
+    }
+
+    await tick(statusless)
     await settle()
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
@@ -258,11 +273,11 @@ describe('useMailNotifications', () => {
   // The folder named INBOX is a decoy: the role sits on another one, and mail landing in the
   // decoy is somebody else's folder filling up.
   it('watches the inbox by role, not by name', async () => {
-    const decoy = inbox({ path: 'INBOX', name: 'INBOX', specialUse: null })
+    const decoy = inbox({ path: 'INBOX', name: 'INBOX' })
     const real = inbox({ path: 'Courrier', name: 'Courrier', specialUse: 'inbox' })
     const { tick } = await renderWithBaseline(bothOn, [decoy, real])
 
-    await tick(inbox({ path: 'INBOX', name: 'INBOX', specialUse: null, uidNext: 40 }), real)
+    await tick(inbox({ path: 'INBOX', name: 'INBOX', uidNext: 40 }), real)
     await settle()
 
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
@@ -313,7 +328,7 @@ describe('useMailNotifications', () => {
     await tick(inbox({ uidNext: 11 }))
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalled())
 
-    const onClick = mocks.showDesktopNotification.mock.calls[0][2] as () => void
+    const onClick = mocks.showDesktopNotification.mock.calls[0]![2] as () => void
     onClick()
 
     expect(mocks.navigate).toHaveBeenCalledWith('/mail?folder=INBOX&uid=11')
@@ -326,7 +341,7 @@ describe('useMailNotifications', () => {
 
     await tick(inbox({ uidNext: 11 }))
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalled())
-    const onClick = mocks.showDesktopNotification.mock.calls[0][2] as () => void
+    const onClick = mocks.showDesktopNotification.mock.calls[0]![2] as () => void
 
     auth.activeAccountId = 'linked-1'
     rerender()
@@ -342,7 +357,7 @@ describe('useMailNotifications', () => {
     await tick(inbox({ uidNext: 12 }))
     await waitFor(() => expect(mocks.showDesktopNotification).toHaveBeenCalled())
 
-    ;(mocks.showDesktopNotification.mock.calls[0][2] as () => void)()
+    ;(mocks.showDesktopNotification.mock.calls[0]![2] as () => void)()
 
     expect(mocks.navigate).not.toHaveBeenCalled()
   })
@@ -407,12 +422,12 @@ describe('useMailNotifications', () => {
   // back hours later is a backlog, and announcing it would also claim it for every tab.
   it('re-baselines in silence when notifications are turned back on', async () => {
     const { tick } = await renderWithBaseline(bothOn)
-    const setPreferences = (preferences: Record<string, string>) => act(() => {
+    const setPreferences = (preferences: Record<string, string>) => act(async () => {
       client.setQueryData(['preferences'], { 'mail.pageSize': '30', ...preferences })
     })
 
     await setPreferences(bothOff)
-    await act(() => { client.removeQueries({ queryKey: mailKeys.folders('primary') }) })
+    await act(async () => { client.removeQueries({ queryKey: mailKeys.folders('primary') }) })
     await settle()
     await setPreferences(bothOn)
     await tick(inbox({ uidNext: 500, total: 495 }))

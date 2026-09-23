@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import AdvancedSearchModal from './AdvancedSearchModal'
+import type { AdvancedForm } from './searchCriteria'
 import { fireEscape } from '../../../test-utils'
 
 function setup(initialSubject = '') {
-  const onSearch = vi.fn(); const onClose = vi.fn()
+  const onSearch = vi.fn<(form: AdvancedForm) => void>(); const onClose = vi.fn()
   render(<AdvancedSearchModal folderTitle="Inbox" initialSubject={initialSubject}
     onSearch={onSearch} onClose={onClose} />)
   return { onSearch, onClose }
@@ -35,7 +36,7 @@ describe('AdvancedSearchModal', () => {
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'x' } })
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: 'year' } })
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
-    const form = onSearch.mock.calls[0][0]
+    const form = onSearch.mock.calls[0]![0]
     expect(form.sinceDays).toBeGreaterThanOrEqual(1)
     expect(form.sinceDays).toBeLessThanOrEqual(366)
   })

@@ -5,10 +5,10 @@ import { useTranslation } from 'react-i18next'
 import BellIcon from '../../icons/BellIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
 import MapPinIcon from '../../icons/MapPinIcon'
-import PencilIcon from '../../icons/PencilIcon.jsx'
+import PencilIcon from '../../icons/PencilIcon'
 import PeopleIcon from '../../icons/PeopleIcon'
 import RepeatIcon from '../../icons/RepeatIcon'
-import TrashIcon from '../../icons/TrashIcon.jsx'
+import TrashIcon from '../../icons/TrashIcon'
 import UserIcon from '../../icons/UserIcon'
 import { useCalendar } from './calendarContext'
 import AttendeeStatusList from './AttendeeStatusList'
@@ -35,9 +35,9 @@ export interface EventPreviewProps {
   /** Where focus goes when the chip is gone — detached with the results it was clicked in, or
       deleted with the event itself. `CalendarLayout` hands its `.calendar-main`. */
   returnFocusRef?: RefObject<HTMLElement | null>
-  onClose(): void
-  onEdit(): void
-  onDelete(): void
+  onClose: () => void
+  onEdit: () => void
+  onDelete: () => void
 }
 
 /**

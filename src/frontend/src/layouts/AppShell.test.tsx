@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 // The three ambient hooks are the shell's own business and none of them touches the tab bar.

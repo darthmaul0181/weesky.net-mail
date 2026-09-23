@@ -9,7 +9,7 @@ function open(props: Partial<Parameters<typeof CalendarDialog>[0]> = {}) {
   const onSubmit = vi.fn()
   const onClose = vi.fn()
   const view = render(
-    <CalendarDialog title="New calendar" initialName="" initialColor={CALENDAR_COLORS[0]}
+    <CalendarDialog title="New calendar" initialName="" initialColor={CALENDAR_COLORS[0]!}
       focus="name" saving={false} onSubmit={onSubmit} onClose={onClose} {...props} />,
   )
   return { onSubmit, onClose, ...view }

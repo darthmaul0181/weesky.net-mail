@@ -5,8 +5,8 @@ import type { DavCredentials } from '../../../types/dav'
 import ToggleRow from '../../../components/ToggleRow'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Modal from '../../../components/Modal'
-import Toasts from '../../../components/Toasts.jsx'
-import { useToasts } from '../../../hooks/useToasts.js'
+import Toasts from '../../../components/Toasts'
+import { useToasts } from '../../../hooks/useToasts'
 import { relativeFromNow } from '../../../lib/intl'
 import CopyIcon from '../../../icons/CopyIcon'
 import RefreshIcon from '../../../icons/RefreshIcon'
@@ -107,7 +107,7 @@ export default function SyncPage() {
             hint={t('sync.carddavHint')}
             checked={pending?.key === 'carddav' ? pending.value : state.cardDavEnabled}
             disabled={busy}
-            onChange={on => write(() => api.setDavCardDav(on), { key: 'carddav', value: on })}
+            onChange={on => void write(() => api.setDavCardDav(on), { key: 'carddav', value: on })}
           />
 
           <ToggleRow
@@ -116,7 +116,7 @@ export default function SyncPage() {
             hint={t('sync.caldavHint')}
             checked={pending?.key === 'caldav' ? pending.value : state.calDavEnabled}
             disabled={busy}
-            onChange={on => write(
+            onChange={on => void write(
               () => api.setDavCalDav(on, Intl.DateTimeFormat().resolvedOptions().timeZone),
               { key: 'caldav', value: on })}
           />
@@ -160,7 +160,7 @@ export default function SyncPage() {
           <p>{t('sync.regenerateWarning')}</p>
           <div className="modal-actions">
             <button type="button" className="btn btn-primary" aria-label={t('sync.regenerateTitle')}
-              onClick={() => { setConfirming(false); write(() => api.regenerateDavSecret()) }}>
+              onClick={() => { setConfirming(false); void write(() => api.regenerateDavSecret()) }}>
               {t('sync.regenerate')}
             </button>
           </div>

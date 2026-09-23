@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useMatch, useNavigate, useSearchParams } from 'react-router-dom'
+import { useMatch, useNavigate, useSearchParams } from 'react-router'
 import type { TFunction } from 'i18next'
 import { api } from '../../api.js'
-import { DeleteConfirmModal } from '../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import FloatingAction from '../../components/FloatingAction'
 import LoadingBlock from '../../components/LoadingBlock'
 import Modal from '../../components/Modal'
-import Toasts from '../../components/Toasts.jsx'
+import Toasts from '../../components/Toasts'
 import { useAccountId } from '../../hooks/useAccountId'
 import { useLayer } from '../../hooks/useLayer'
-import { useToasts } from '../../hooks/useToasts.js'
+import { useToasts } from '../../hooks/useToasts'
 import { useViewport } from '../../hooks/useViewport'
 import PlusIcon from '../../icons/PlusIcon'
 import ContextDrawer, { useContextDrawer } from '../../layouts/ContextDrawer'
@@ -40,7 +40,7 @@ import { colorOf, occurrenceKey } from './occurrenceStyle'
 import DayStrip from './phone/DayStrip'
 import PhoneMonth from './phone/PhoneMonth'
 import {
-  addDays, daysBetween, isPlainDate, MINUTES_PER_DAY, todayIn, type PlainDate,
+  addDays, daysBetween, isPlainDate, MINUTES_PER_DAY, splitPlainDate, todayIn, type PlainDate,
 } from './plainDate'
 import {
   calendarKeys, isConflict, useCalendars, useCreateCalendar, useCreateEvent, useDeleteCalendar,
@@ -124,7 +124,7 @@ function parseDraftDate(value: string | null): Date | null {
 
 /** Same day of the month, clamped: 31 January plus a month is the last day of February. */
 function addMonths(day: PlainDate, delta: number): PlainDate {
-  const [year, month, date] = day.split('-').map(Number)
+  const { year, month, date } = splitPlainDate(day)
   const index = (year * 12 + month - 1) + delta
   const target = new Date(Date.UTC(Math.floor(index / 12), index % 12, 1))
   const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
@@ -300,17 +300,17 @@ export default function CalendarLayout() {
   }, [setParams])
 
   const openNewEvent = useCallback(() => {
-    navigate(`/calendar/new${searchWith()}`)
+    void navigate(`/calendar/new${searchWith()}`)
   }, [navigate, searchWith])
 
   const openEditor = useCallback((id: string, instanceId?: string) => {
-    navigate(`/calendar/${id}/edit${searchWith(instanceId ? { instance: instanceId } : {})}`)
+    void navigate(`/calendar/${id}/edit${searchWith(instanceId ? { instance: instanceId } : {})}`)
   }, [navigate, searchWith])
 
   // Search params rather than router state: a reload has to reopen the same draft, and state
   // does not survive one.
   const createAt = useCallback((start: Date, end: Date, allDay: boolean) => {
-    navigate(`/calendar/new${searchWith({
+    void navigate(`/calendar/new${searchWith({
       start: start.toISOString(), end: end.toISOString(), allDay: allDay ? '1' : '0',
     })}`)
   }, [navigate, searchWith])
@@ -391,7 +391,7 @@ export default function CalendarLayout() {
     try {
       return await queryClient.fetchQuery({
         queryKey: calendarKeys.event(accountId, id),
-        queryFn: () => api.getEvent(id) as Promise<EventDetail>,
+        queryFn: () => api.getEvent(id),
         staleTime: refresh ? 0 : 60_000,
       })
     } catch (error) {
@@ -570,7 +570,7 @@ export default function CalendarLayout() {
   useEffect(() => {
     if (!eventError) return
     addToast(eventErrorOf(eventError, t), 'error')
-    navigate('/calendar', { replace: true })
+    void navigate('/calendar', { replace: true })
   }, [eventError, addToast, navigate, t])
 
   async function saveCalendar({ displayName, color }: CalendarValues) {
@@ -628,7 +628,7 @@ export default function CalendarLayout() {
     }
   }
 
-  const backToGrid = () => navigate(`/calendar${searchWith()}`, { replace: true })
+  const backToGrid = () => { void navigate(`/calendar${searchWith()}`, { replace: true }) }
   /** The editor's one way out, whichever of the four was taken — the ✕, Escape, a press on the
       backdrop, or the phone screen's own Escape. */
   const closeEditor = (dirty: boolean) => (dirty ? setDiscarding(true) : backToGrid())
@@ -776,7 +776,7 @@ export default function CalendarLayout() {
       onNewCalendar={() => setEditing({ mode: 'create' })}
       onRename={calendar => setEditing({ mode: 'rename', calendar })}
       onRecolour={calendar => setEditing({ mode: 'colour', calendar })}
-      onImport={setImporting} onExport={exportOne} onDelete={setPendingDelete}
+      onImport={setImporting} onExport={calendar => void exportOne(calendar)} onDelete={setPendingDelete}
       onToggleVisible={toggleVisible} />
   )
 
@@ -786,7 +786,7 @@ export default function CalendarLayout() {
     <EventEditor key={seed.key} detail={detail} occurrence={occurrence} initial={seed.form}
       calendars={calendars} saving={savingEvent}
       error={saveError} onReload={conflict ? () => void reloadEvent() : null} fullScreen={phone}
-      titleRef={editorTitleRef} onSave={saveEvent} onDelete={deleteEdited}
+      titleRef={editorTitleRef} onSave={(form, scope) => void saveEvent(form, scope)} onDelete={deleteEdited}
       onClose={closeEditor} onDirtyChange={setEditorDirty} />
   ) : (
     <>
@@ -935,16 +935,17 @@ export default function CalendarLayout() {
           <CalendarDialog
             title={t(editing.mode === 'create' ? 'dialogs.newCalendar' : 'dialogs.editCalendar')}
             initialName={editing.mode === 'create' ? '' : editing.calendar.displayName}
-            initialColor={editing.mode === 'create' ? CALENDAR_COLORS[0] : editing.calendar.color}
+            // CALENDAR_COLORS is a fixed, non-empty literal list (see its own declaration).
+            initialColor={editing.mode === 'create' ? CALENDAR_COLORS[0]! : editing.calendar.color}
             focus={editing.mode === 'colour' ? 'colour' : 'name'}
             saving={createCalendar.isPending || updateCalendar.isPending}
-            onSubmit={saveCalendar} onClose={() => setEditing(null)} />
+            onSubmit={values => void saveCalendar(values)} onClose={() => setEditing(null)} />
         )}
 
         {importing && (
           <ImportDialog calendars={calendars} targetId={importing.id}
             saving={importInto.isPending || importAsNew.isPending}
-            onImport={runImport} onClose={() => setImporting(null)} />
+            onImport={choice => void runImport(choice)} onClose={() => setImporting(null)} />
         )}
 
         {report && <CalendarImportReportModal report={report} onClose={() => setReport(null)} />}
@@ -953,7 +954,7 @@ export default function CalendarLayout() {
           <DeleteConfirmModal
             message={t('dialogs.deleteCalendarMessage', { name: pendingDelete.displayName })}
             loading={deleteCalendar.isPending}
-            onConfirm={confirmDelete} onClose={() => setPendingDelete(null)}
+            onConfirm={() => void confirmDelete()} onClose={() => setPendingDelete(null)}
             returnFocusRef={mainRef} />
         )}
 

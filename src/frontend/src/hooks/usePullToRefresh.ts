@@ -33,12 +33,15 @@ export function usePullToRefresh(ref: RefObject<HTMLElement | null>, onRefresh: 
 
     function start(event: TouchEvent) {
       // Only from the very top. A downward drag anywhere else is a scroll.
-      origin = element!.scrollTop === 0 ? event.touches[0].clientY : null
+      const touch = event.touches[0]
+      origin = touch && element!.scrollTop === 0 ? touch.clientY : null
       travelled = 0
     }
     function move(event: TouchEvent) {
       if (origin === null) return
-      const travel = event.touches[0].clientY - origin
+      const touch = event.touches[0]
+      if (!touch) return
+      const travel = touch.clientY - origin
       // Negative travel is the list scrolling up under the finger; nulling origin ends the
       // gesture rather than leaving it to resume from the original start point, which would let
       // a later downward drag over the same touch read as a pull past a list that already moved.

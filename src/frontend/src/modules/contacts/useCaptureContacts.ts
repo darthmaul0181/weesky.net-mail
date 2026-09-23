@@ -5,8 +5,6 @@ import type { CaptureCandidate } from './captureModel'
 import { contactKeys } from './queries'
 import type { Contact, ContactDraft } from './contactTypes'
 
-/** Annotated rather than inferred: `api.js` carries no types, so without this the compiler would
-    never see a change to `ContactDraft` reach the one other screen that writes a contact. */
 function draftFor(candidate: CaptureCandidate): ContactDraft {
   return {
     firstName: candidate.firstName, lastName: candidate.lastName, nickname: null,
@@ -37,7 +35,7 @@ export function useCaptureContacts() {
       user's problem. */
   async function create(candidates: CaptureCandidate[]): Promise<Contact[]> {
     const results = await Promise.allSettled(candidates.map(candidate =>
-      api.createContact(draftFor(candidate)) as Promise<Contact>))
+      api.createContact(draftFor(candidate))))
 
     const created = results.flatMap(r => r.status === 'fulfilled' ? [r.value] : [])
     if (created.length > 0) await invalidate()

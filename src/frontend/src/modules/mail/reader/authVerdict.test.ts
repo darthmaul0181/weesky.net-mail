@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { authVerdict } from './authVerdict'
+import type { MailAuthentication } from '../api/mailTypes'
 
-const auth = (spf: string | null, dkim: string | null) =>
-  ({ spf, dkim, dmarc: null, raw: 'mx.weesky.net; …' })
+const auth = (spf?: string, dkim?: string): MailAuthentication =>
+  ({ spf, dkim, raw: 'mx.weesky.net; …' })
 
 describe('authVerdict', () => {
   it('passes only when both methods passed', () => {
@@ -24,8 +25,8 @@ describe('authVerdict', () => {
   })
 
   it('says nothing when a method is missing', () => {
-    expect(authVerdict(auth('pass', null))).toBeNull()
-    expect(authVerdict(auth(null, null))).toBeNull()
+    expect(authVerdict(auth('pass'))).toBeNull()
+    expect(authVerdict(auth())).toBeNull()
   })
 
   it('says nothing when the message carries no authentication at all', () => {

@@ -10,9 +10,9 @@ export interface ConnectedAccount {
   id: string
   email: string
   displayName: string
-  /** null for a local shared mailbox. */
-  domainId: string | null
-  domainName: string | null
+  /** Absent for a local shared mailbox. */
+  domainId?: string
+  domainName?: string
   sieveSupported: boolean
   credentialsValid: boolean
   creationDate: string
@@ -83,7 +83,7 @@ export function useConnectableDomains() {
 // onSettled, not onSuccess: a refused write must leave the screen on server state rather than
 // on an optimistic lie.
 function refreshList(client: QueryClient) {
-  return () => { client.invalidateQueries({ queryKey: CONNECTED_ACCOUNTS_KEY }) }
+  return () => { void client.invalidateQueries({ queryKey: CONNECTED_ACCOUNTS_KEY }) }
 }
 
 export function useConnectAccount() {

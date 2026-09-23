@@ -8,9 +8,8 @@ const detail = (overrides: Partial<MailMessageDetail> = {}): MailMessageDetail =
   uid: 1, folderPath: 'INBOX', uidValidity: 1, subject: 'Hello',
   fromName: 'Alice', fromAddress: 'alice@ext.example',
   to: [{ name: '', address: 'me@weesky.be' }], cc: [], date: '2026-07-25T10:00:00Z',
-  authentication: null, spamScore: null, mailingList: null, sentBy: null, signedBy: null,
-  unsubscribeUrl: null, tlsReceived: null, htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false,
-  attachments: [], messageId: 'm@x', references: [], inReplyTo: null, replyTo: [], bcc: [],
+  htmlBody: '', textBody: '', blockedImageCount: 0, truncated: false,
+  attachments: [], messageId: 'm@x', references: [], replyTo: [], bcc: [],
   priority: 'normal',
   ...overrides,
 })

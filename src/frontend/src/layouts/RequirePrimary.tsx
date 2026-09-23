@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router'
 import { useAuth } from '../contexts/AuthContext'
 
 // `!== false`, not `=== true`: activeAccount is null while the account list loads, and the

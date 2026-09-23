@@ -7,7 +7,7 @@ import type { Contact } from './contactTypes'
 
 function contact(fields: Partial<Contact> & { id: string }): Contact {
   return {
-    firstName: null, lastName: null, nickname: null, isFavorite: false, addresses: [], ...fields,
+    isFavorite: false, addresses: [], ...fields,
   }
 }
 
@@ -43,7 +43,7 @@ function watched(base: Contact) {
   const { isFavorite } = base
   const seen = { reads: 0 }
   Object.defineProperty(one, 'isFavorite', { get() { seen.reads += 1; return isFavorite } })
-  return { contact: one as Contact, seen }
+  return { contact: one, seen }
 }
 
 describe('ContactList', () => {
@@ -183,8 +183,8 @@ describe('ContactList', () => {
     setup()
 
     const [select, content, flag, actions] =
-      Array.from(screen.getByTestId('contact-tile-a').children)
-    const [line, address] = Array.from(content.children)
+      Array.from(screen.getByTestId('contact-tile-a').children) as [Element, Element, Element, Element]
+    const [line, address] = Array.from(content.children) as [Element, Element]
 
     expect(select.firstElementChild).toHaveClass('contact-tile-check')
     expect(line.firstElementChild).toHaveClass('contact-tile-name')
@@ -334,12 +334,12 @@ describe('ContactList', () => {
     setup()
     fireEvent.click(screen.getByLabelText('Select Alice Dupont'))
     fireEvent.click(screen.getByLabelText('Select Bruno Mertens'))
-    const setData = vi.fn()
+    const setData = vi.fn<(format: string, data: string) => void>()
 
     fireEvent.dragStart(screen.getByTestId('contact-tile-a'),
       { dataTransfer: { setData, setDragImage: vi.fn() } })
 
-    expect(JSON.parse(setData.mock.calls[0][1])).toEqual({ ids: ['a', 'b'] })
+    expect(JSON.parse(setData.mock.calls[0]![1])).toEqual({ ids: ['a', 'b'] })
   })
 
   // The pill is built once, at the start of the drag, and setDragImage never learns which row it
@@ -352,7 +352,7 @@ describe('ContactList', () => {
     fireEvent.dragStart(screen.getByTestId('contact-tile-a'),
       { dataTransfer: { setData: vi.fn(), setDragImage } })
 
-    const pill = setDragImage.mock.calls[0][0] as HTMLElement
+    const pill = setDragImage.mock.calls[0]![0] as HTMLElement
     expect(pill.textContent).toContain('Drag to a list')
     expect(pill.textContent).not.toMatch(/favourites/i)
   })
@@ -362,12 +362,12 @@ describe('ContactList', () => {
   it('drags an unchecked tile alone', () => {
     setup()
     fireEvent.click(screen.getByLabelText('Select Alice Dupont'))
-    const setData = vi.fn()
+    const setData = vi.fn<(format: string, data: string) => void>()
 
     fireEvent.dragStart(screen.getByTestId('contact-tile-b'),
       { dataTransfer: { setData, setDragImage: vi.fn() } })
 
-    expect(JSON.parse(setData.mock.calls[0][1])).toEqual({ ids: ['b'] })
+    expect(JSON.parse(setData.mock.calls[0]![1])).toEqual({ ids: ['b'] })
   })
 
   // Le parent a besoin de la sélection pour le glisser-déposer, et il la reçoit dans l'ordre de
@@ -568,12 +568,12 @@ describe('the list as a grid', () => {
 
   it('keeps the drag handlers on the tile', () => {
     setup()
-    const setData = vi.fn()
+    const setData = vi.fn<(format: string, data: string) => void>()
 
     expect(rowOf('a')).toHaveAttribute('draggable', 'true')
     fireEvent.dragStart(rowOf('a'), { dataTransfer: { setData, setDragImage: vi.fn() } })
 
-    expect(JSON.parse(setData.mock.calls[0][1])).toEqual({ ids: ['a'] })
+    expect(JSON.parse(setData.mock.calls[0]![1])).toEqual({ ids: ['a'] })
   })
 
   /* The filter is what makes this grid change length under the user's hands — `shown` is
@@ -587,7 +587,7 @@ describe('the list as a grid', () => {
 
     expect(screen.queryByTestId('contact-tile-b')).toBeNull()
     expect(stopsIn(grid())).toHaveLength(1)
-    expect(rowOf('a')).toContainElement(stopsIn(grid())[0])
+    expect(rowOf('a')).toContainElement(stopsIn(grid())[0]!)
   })
 
   // No pager and every contact drawn, so a count here would be a lie about a list that is complete.

@@ -18,7 +18,8 @@ const bodyOf = (html: string) =>
 /** Reversed, so the stack pops the children back in document order. */
 function pushChildren(stack: Item[], node: Node, quote: number) {
   const children = node.childNodes
-  for (let i = children.length - 1; i >= 0; i--) stack.push({ node: children[i], quote })
+  // i ranges over [0, children.length - 1], so children[i] is always in bounds.
+  for (let i = children.length - 1; i >= 0; i--) stack.push({ node: children[i]!, quote })
 }
 
 /**

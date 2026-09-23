@@ -27,7 +27,7 @@ export function resolveLocale(
   preferred: readonly string[],
 ): Locale {
   const fromBrowser = preferred
-    .map(tag => asLocale(String(tag).split('-')[0].toLowerCase()))
+    .map(tag => asLocale(String(tag).split('-')[0]?.toLowerCase()))
     .find(Boolean)
 
   return asLocale(stored) ?? asLocale(mirrored) ?? fromBrowser ?? 'en'

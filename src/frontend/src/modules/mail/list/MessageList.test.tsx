@@ -135,8 +135,8 @@ const stopsIn = tabbablesIn
 
 function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
-    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+    path: 'X', name: 'X', selectable: true, subscribed: true,
+    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
   }
 }
 
@@ -996,7 +996,7 @@ describe('MessageList streaming', () => {
     const { container } = renderList()
 
     const band = container.querySelector('.mail-list-scroll')
-    expect(IntersectionObserver.instances[0].options.root).toBe(band)
+    expect(IntersectionObserver.instances[0]!.options.root).toBe(band)
   })
 
   it('asks for the next block when the sentinel comes into view', () => {
@@ -1004,7 +1004,7 @@ describe('MessageList streaming', () => {
     mocks.useMessageList.mockReturnValue(streamingState({ loadMore }))
     renderList()
 
-    IntersectionObserver.instances[0].trigger(true)
+    IntersectionObserver.instances[0]!.trigger(true)
 
     expect(loadMore).toHaveBeenCalledTimes(1)
   })
@@ -1266,8 +1266,8 @@ describe('multi-select', () => {
   it('a shift-click selects the range', () => {
     renderWithRoles()
     const boxes = screen.getAllByRole('checkbox', { name: /select message from/i })
-    fireEvent.click(boxes[0])
-    fireEvent.click(boxes[1], { shiftKey: true })
+    fireEvent.click(boxes[0]!)
+    fireEvent.click(boxes[1]!, { shiftKey: true })
     expect(screen.getByText('2 selected')).toBeInTheDocument()
   })
 
@@ -1456,7 +1456,8 @@ describe('multi-select', () => {
       renderWithRoles() // INBOX
       fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
       fireEvent.click(screen.getByRole('menuitem', { name: 'Empty folder' }))
-      expect(mocks.empty).toHaveBeenCalledWith({ folderPath: 'INBOX', targetFolderPath: expect.any(String) })
+      const someFolder: unknown = expect.any(String)
+      expect(mocks.empty).toHaveBeenCalledWith({ folderPath: 'INBOX', targetFolderPath: someFolder })
     })
 
     it('disables Empty folder when the folder is empty', () => {
@@ -1682,7 +1683,7 @@ describe('MessageList searching', () => {
     mocks.useSearchMessages.mockReturnValue(page({ total: 2, page: 0, pageSize: 50, results }))
     const { rerender } = renderList({ search: criteria })
 
-    fireEvent.click(screen.getAllByRole('checkbox', { name: /select message from/i })[0])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select message from/i })[0]!)
     expect(screen.getByText('1 selected')).toBeInTheDocument()
 
     rerender(<MessageList {...defaultListProps()} search={{ ...criteria, quick: 'y' }} />)
@@ -1989,7 +1990,7 @@ describe('conversation rows', () => {
     expect(screen.getByLabelText('Collapse conversation'))
       .toHaveAttribute('aria-expanded', 'true')
 
-    fireEvent.click(members[1])
+    fireEvent.click(members[1]!)
     expect(onSelect).toHaveBeenCalledWith(10)
   })
 
@@ -2295,8 +2296,8 @@ describe('the list as a grid', () => {
     await settle()
     const boxes = screen.getAllByRole('checkbox', { name: /select message from/i })
 
-    fireEvent.click(boxes[0])
-    fireEvent.click(boxes[2], { shiftKey: true })
+    fireEvent.click(boxes[0]!)
+    fireEvent.click(boxes[2]!, { shiftKey: true })
 
     expect(screen.getByText('3 selected')).toBeInTheDocument()
   })
@@ -2354,8 +2355,8 @@ describe('the list as a grid', () => {
   it('does not re-render the other rows when one checkbox changes', async () => {
     const messages = three.map(message => ({ ...message }))
     let drawn = 0
-    const { subject } = messages[2]
-    Object.defineProperty(messages[2], 'subject',
+    const { subject } = messages[2]!
+    Object.defineProperty(messages[2]!, 'subject',
       { get() { drawn += 1; return subject } })
     mocks.useMessageList.mockReturnValue(
       pagedState({}, { messages, total: 3, rowTotal: 3 }))
@@ -2367,7 +2368,7 @@ describe('the list as a grid', () => {
     const drawnAtRest = drawn
     expect(drawnAtRest).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getAllByRole('checkbox', { name: /select message from/i })[0])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: /select message from/i })[0]!)
 
     expect(screen.getByText('1 selected')).toBeInTheDocument()
     expect(drawn).toBe(drawnAtRest)

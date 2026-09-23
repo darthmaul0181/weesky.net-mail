@@ -43,17 +43,19 @@ const CHEVRON = 15
 const TEXT_COLOUR_ID = 'compose-text-colour'
 const HIGHLIGHT_COLOUR_ID = 'compose-highlight-colour'
 const FONTS = ['Arial', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Courier New']
-const SIZES: { key: string; value: string }[] = [
+// Fixed four-entry lists, indexed by literal position below (`SIZES[1]`, `ALIGNMENTS[0]`) for
+// the default choice — `as const` keeps those indices typed without `undefined`.
+const SIZES = [
   { key: 'small', value: '12px' }, { key: 'normal', value: '14px' },
   { key: 'large', value: '18px' }, { key: 'huge', value: '24px' },
-]
+] as const
 type Alignment = 'left' | 'center' | 'right' | 'justify'
-const ALIGNMENTS: { value: Alignment; Icon: typeof AlignLeftIcon }[] = [
+const ALIGNMENTS = [
   { value: 'left', Icon: AlignLeftIcon },
   { value: 'center', Icon: AlignCentreIcon },
   { value: 'right', Icon: AlignRightIcon },
   { value: 'justify', Icon: AlignJustifyIcon },
-]
+] as const
 
 /** Both labels are written out rather than held on the rows: a key that reaches `t()` only as a
     variable is invisible to `src/locales/keys.test.ts`. */
@@ -98,8 +100,8 @@ export default function EditorToolbar(
   // The editor reports no font, size or colour at the caret, so these are the last choice made
   // here — the same thing the <select>s' defaultValue used to show.
   const [font, setFont] = useState(FONTS[0])
-  const [size, setSize] = useState(SIZES[1])
-  const [alignment, setAlignment] = useState(ALIGNMENTS[0])
+  const [size, setSize] = useState<(typeof SIZES)[number]>(SIZES[1])
+  const [alignment, setAlignment] = useState<(typeof ALIGNMENTS)[number]>(ALIGNMENTS[0])
   const [textColour, setTextColour] = useState('currentColor')
   const [highlight, setHighlight] = useState('#f8e71c')
   const container = useRef<HTMLDivElement>(null)

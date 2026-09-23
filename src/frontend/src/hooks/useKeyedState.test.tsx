@@ -37,7 +37,7 @@ describe('useKeyedState', () => {
     const committed: Array<() => string> = []
     const { rerender } = render(<FnProbe k="a" committed={committed} />)
     rerender(<FnProbe k="b" committed={committed} />)
-    const last = committed[committed.length - 1]
+    const last = committed[committed.length - 1]!
     expect(typeof last).toBe('function')
     expect(last()).toBe('a')
   })

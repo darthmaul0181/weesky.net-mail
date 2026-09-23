@@ -101,7 +101,7 @@ describe('DayColumn resize preview', () => {
     // nothing left and is not drawn at all.
     const chips = screen.getAllByText('Overnight')
     expect(chips).toHaveLength(1)
-    expect(chips[0].closest('button')).toHaveStyle({ height: `${minutesToPx(90)}px` })
+    expect(chips[0]!.closest('button')).toHaveStyle({ height: `${minutesToPx(90)}px` })
   })
 
   it('caps a lone visible head at its own midnight when the drag grows the event', () => {

@@ -129,7 +129,7 @@ describe('useFolders', () => {
     const { result } = renderHook(() => useFolders(), { wrapper })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data?.[0].path).toBe('INBOX')
+    expect(result.current.data?.[0]!.path).toBe('INBOX')
   })
 
   it('surfaces a failure', async () => {
@@ -487,7 +487,7 @@ describe('useMessageStream', () => {
 
     const { result } = renderHook(() => useMessageStream('INBOX', 2, true), { wrapper })
     await waitFor(() => expect(result.current.hasNextPage).toBe(true))
-    result.current.fetchNextPage()
+    void result.current.fetchNextPage()
 
     await waitFor(() =>
       expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 2, expect.anything()))
@@ -573,7 +573,7 @@ describe('useSendMessage', () => {
     const tree: MailFolderNode[] = [
       {
         path: 'Sent', name: 'Sent', specialUse: 'sent', selectable: true, subscribed: true,
-        total: 1, unread: 0, uidValidity: 1, uidNext: 2, highestModSeq: null, children: [],
+        total: 1, unread: 0, uidValidity: 1, uidNext: 2, children: [],
       },
     ]
     client.setQueryData(mailKeys.folders('primary'), tree)
@@ -593,7 +593,7 @@ describe('useSendMessage', () => {
     const tree: MailFolderNode[] = [
       {
         path: 'INBOX', name: 'INBOX', specialUse: 'inbox', selectable: true, subscribed: true,
-        total: 1, unread: 0, uidValidity: 1, uidNext: 2, highestModSeq: null, children: [],
+        total: 1, unread: 0, uidValidity: 1, uidNext: 2, children: [],
       },
     ]
     client.setQueryData(mailKeys.folders('primary'), tree)
@@ -638,7 +638,7 @@ describe('useApplyInvitationReply', () => {
     mocks.applyInvitationReply.mockResolvedValue({ invitation: applied, applied: true })
     const { client, wrapper } = createWrapper()
     const messageKey = mailKeys.message('primary', 'INBOX', 7)
-    client.setQueryData(messageKey, { uid: 7, invitation: block } as MailMessageDetail)
+    client.setQueryData(messageKey, { uid: 7, invitation: block })
     const invalidate = vi.spyOn(client, 'invalidateQueries')
     const args = { folder: 'INBOX', uid: 7, part: '2' }
 

@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next'
 import type { InvitationReply, MailInvitation } from '../api/mailTypes'
 import { dateLocaleOf, formatLongDay, formatLongDayRange, formatTime } from '../../calendar/calendarLocale'
-import { addDays, plainDateOf, type PlainDate } from '../../calendar/plainDate'
+import { addDays, plainDateOf } from '../../calendar/plainDate'
 
 /** What the card is for, in the reader's own terms: a date to answer, one already answered, one
     that is not the user's to answer, a revision, a cancellation, a dead end, a guest's answer, or
@@ -62,8 +62,8 @@ export function whenOf(
 ): string {
   const locale = dateLocaleOf(lang, region)
   if (i.isAllDay && i.startDate) {
-    const first = i.startDate as PlainDate
-    const last = i.endDateExclusive ? addDays(i.endDateExclusive as PlainDate, -1) : first
+    const first = i.startDate
+    const last = i.endDateExclusive ? addDays(i.endDateExclusive, -1) : first
     return first === last
       ? `${formatLongDay(first, locale, true)} · ${t('reader.invitation.allDay', { ns: 'mail' })}`
       : formatLongDayRange(first, last, locale, true)

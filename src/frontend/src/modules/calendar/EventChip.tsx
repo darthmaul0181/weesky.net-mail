@@ -16,18 +16,18 @@ export interface EventChipProps {
   style?: CSSProperties
   /** A search result names its own day; an upcoming row sits under a heading that already did. */
   showDate?: boolean
-  onOpen(o: Occurrence, anchor: HTMLElement): void
-  onOpenEditor(o: Occurrence): void
+  onOpen: (o: Occurrence, anchor: HTMLElement) => void
+  onOpenEditor: (o: Occurrence) => void
   selected?: boolean
   /** Lit by the view rather than by `:hover`: the two slices of an evening crossing midnight
       carry one key and light together (decision 3). */
   hovered?: boolean
-  onHover?(key: string | null): void
+  onHover?: (key: string | null) => void
   /** The gesture belongs to the view: a chip only says it is under the pointer, and offers the
       grip a resize is taken by. */
   dragging?: boolean
-  onPointerDown?(o: Occurrence, event: PointerEvent): void
-  onResizeStart?(o: Occurrence, event: PointerEvent): void
+  onPointerDown?: (o: Occurrence, event: PointerEvent) => void
+  onResizeStart?: (o: Occurrence, event: PointerEvent) => void
 }
 
 /** The heights the second and the third line become legible at, read off the mockup. */

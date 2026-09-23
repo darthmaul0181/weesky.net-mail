@@ -24,10 +24,12 @@ export function serializeContactDrag(payload: ContactDragPayload): string {
 /** Null for anything that is not our shape: a foreign drag, a truncated string, no ids. */
 export function parseContactDrag(raw: string): ContactDragPayload | null {
   try {
-    const value = JSON.parse(raw)
-    if (!Array.isArray(value?.ids) || value.ids.length === 0) return null
-    if (!value.ids.every((id: unknown) => typeof id === 'string')) return null
-    return { ids: value.ids }
+    const value: unknown = JSON.parse(raw)
+    if (typeof value !== 'object' || value === null || !('ids' in value)) return null
+    const ids: unknown = value.ids
+    if (!Array.isArray(ids) || ids.length === 0) return null
+    if (!ids.every((id): id is string => typeof id === 'string')) return null
+    return { ids }
   } catch {
     return null
   }

@@ -5,7 +5,7 @@ const COLOUR_PROPERTIES = ['X-APPLE-CALENDAR-COLOR', 'COLOR']
 const HEX = /^#[0-9a-f]{6}$/i
 
 function unescapeText(value: string): string {
-  return value.replace(/\\([\\,;nN])/g, (_, char) =>
+  return value.replace(/\\([\\,;nN])/g, (_, char: string) =>
     (char === 'n' || char === 'N' ? '\n' : char))
 }
 
@@ -29,7 +29,7 @@ export function calendarHeaderOf(text: string): { name?: string; color?: string 
     const colon = line.indexOf(':')
     if (colon === -1) continue
 
-    const property = line.slice(0, colon).split(';')[0].trim().toUpperCase()
+    const property = (line.slice(0, colon).split(';')[0] ?? '').trim().toUpperCase()
     const value = line.slice(colon + 1)
 
     if (header.name === undefined && NAME_PROPERTIES.includes(property)) {

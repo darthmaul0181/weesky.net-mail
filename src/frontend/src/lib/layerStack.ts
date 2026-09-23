@@ -44,7 +44,8 @@ function keepTab(event: KeyboardEvent, container: HTMLElement) {
   const last = items.length - 1
   // -1: focus is on the trigger, on <body>, or on a button disabled under it; Tab would walk out.
   const target = at === -1 ? 0 : event.shiftKey && at === 0 ? last : !event.shiftKey && at === last ? 0 : null
-  if (target !== null) { event.preventDefault(); items[target].focus() }
+  // target is always 0 or last, and items.length > 0 was checked above.
+  if (target !== null) { event.preventDefault(); items[target]!.focus() }
 }
 
 function onKeyDown(event: KeyboardEvent) {
@@ -59,7 +60,8 @@ function onKeyDown(event: KeyboardEvent) {
     // Tab belongs to the innermost trap still standing, not to the top layer alone: a menu or a
     // popover holds none of its own and does not suspend the modality of what it was opened from.
     for (let at = stack.length - 1; at >= 0; at -= 1) {
-      const trap = stack[at].layer.trap
+      // at ranges over [0, stack.length - 1], so stack[at] is always in bounds.
+      const trap = stack[at]!.layer.trap
       if (trap) { keepTab(event, trap); return }
     }
   }
@@ -118,7 +120,8 @@ export function coveredByTrap(handle: LayerHandle) {
   const at = stack.findIndex(entry => entry.handle === handle)
   if (at === -1) return false
   for (let above = at + 1; above < stack.length; above += 1) {
-    if (stack[above].layer.trap) return true
+    // above ranges over [at + 1, stack.length - 1], so stack[above] is always in bounds.
+    if (stack[above]!.layer.trap) return true
   }
   return false
 }

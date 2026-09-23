@@ -24,13 +24,13 @@ function wrapper({ children }: { children: ReactNode }) {
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
-    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+    path: 'X', name: 'X', selectable: true, subscribed: true,
+    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
   }
 }
 
 function entry(partial: Partial<FolderRoleEntry> & { role: string }): FolderRoleEntry {
-  return { folderPath: null, provenance: null, staleOverride: null, ...partial }
+  return partial
 }
 
 const folders = [
@@ -162,7 +162,7 @@ describe('SystemFoldersModal', () => {
     mocks.getFolderRoles.mockResolvedValue([
       ...roles.filter(r => r.role !== 'trash'),
       entry({
-        role: 'trash', folderPath: null, provenance: null,
+        role: 'trash',
         staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
       }),
     ])
@@ -214,7 +214,7 @@ describe('SystemFoldersModal', () => {
     mocks.getFolderRoles.mockResolvedValue([
       ...roles.filter(r => r.role !== 'junk'),
       entry({
-        role: 'junk', folderPath: null, provenance: null,
+        role: 'junk',
         staleOverride: { folderPath: 'Corbeille', reason: 'folderTaken' },
       }),
     ])

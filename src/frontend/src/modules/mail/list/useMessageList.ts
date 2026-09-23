@@ -77,9 +77,9 @@ export function useMessageList(folderPath: string | null): MessageListState {
     return {
       groups: streamedGroups,
       messages: streamedMessages,
-      total: blocks.length ? blocks[blocks.length - 1].total : 0,
+      total: blocks[blocks.length - 1]?.total ?? 0,
       // A stream is loaded in blocks of messages, so nothing here counts a folder's conversations.
-      rowTotal: grouped ? -1 : (blocks.length ? blocks[blocks.length - 1].total : 0),
+      rowTotal: grouped ? -1 : blocks[blocks.length - 1]?.total ?? 0,
       isLoading: stream.isLoading,
       isError: stream.isError && blocks.length === 0,
       paging: null,
@@ -89,7 +89,7 @@ export function useMessageList(folderPath: string | null): MessageListState {
         // A block that failed after others succeeded: the list stays, Retry is offered.
         loadMoreFailed: stream.isError && blocks.length > 0,
         loadMore: () => {
-          if (stream.hasNextPage && !stream.isFetchingNextPage) stream.fetchNextPage()
+          if (stream.hasNextPage && !stream.isFetchingNextPage) void stream.fetchNextPage()
         },
       },
     }

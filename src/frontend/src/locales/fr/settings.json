@@ -269,6 +269,7 @@
     "scriptEntity": "le script",
     "ruleEntity": "la règle « {{name}} »",
     "loadFailed": "Échec du chargement des règles",
+    "loadFailedBody": "Impossible de charger les règles.",
     "saved": "Règles enregistrées",
     "saveFailed": "Échec de l’enregistrement des règles",
     "scriptDeleted": "Script supprimé",

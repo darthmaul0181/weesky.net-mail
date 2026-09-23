@@ -1,17 +1,20 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import LoadingBlock from '../../../components/LoadingBlock'
-import GlobeIcon from '../../../icons/GlobeIcon.jsx'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
-import TrashIcon from '../../../icons/TrashIcon.jsx'
+import GlobeIcon from '../../../icons/GlobeIcon'
+import PencilIcon from '../../../icons/PencilIcon'
+import TrashIcon from '../../../icons/TrashIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import ExternalDomainDialog from './ExternalDomainDialog'
+import ListLoadFailed from '../../../components/ListLoadFailed'
+import { useListLoad } from './useAdminLists'
 import { useDeleteExternalDomain, useExternalDomains, type ExternalDomain } from './useExternalDomains'
+import type { AddToast } from '../../../hooks/useToasts'
 
 interface Props {
-  addToast: (message: string, kind?: string) => void
+  addToast: AddToast
   /** The tab content, where focus goes when a confirmed delete takes the row's own button. */
   returnFocusRef?: RefObject<HTMLElement | null>
 }
@@ -23,20 +26,17 @@ interface Props {
  */
 export default function ExternalDomainsTab({ addToast, returnFocusRef }: Props) {
   const { t } = useTranslation('admin')
-  const { data: domains, isLoading, isError } = useExternalDomains()
+  const domainsQuery = useExternalDomains()
+  const domains = domainsQuery.data
   const deleteDomain = useDeleteExternalDomain()
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<ExternalDomain | null>(null)
   const [deleting, setDeleting] = useState<ExternalDomain | null>(null)
 
-  // An effect, not a call during render: isError stays true across every re-render the failed
-  // query causes, and a render-time call would toast again on each of them.
-  useEffect(() => {
-    if (isError) addToast(i18next.t('admin:external.loadFailed'), 'error')
-  }, [isError, addToast])
+  const firstLoad = useListLoad(domainsQuery, addToast, i18next.t('admin:external.loadFailed'))
 
-  if (isLoading) return <LoadingBlock />
-  if (isError || !domains) return <p>{t('external.loadFailedBody')}</p>
+  if (firstLoad) return <LoadingBlock />
+  if (!domains) return <ListLoadFailed>{t('external.loadFailedBody')}</ListLoadFailed>
 
   async function confirmDelete() {
     if (!deleting) return
@@ -98,7 +98,7 @@ export default function ExternalDomainsTab({ addToast, returnFocusRef }: Props) 
       )}
       {deleting && (
         <DeleteConfirmModal entityLabel={deleting.name} loading={deleteDomain.isPending}
-          onConfirm={confirmDelete} onClose={() => setDeleting(null)}
+          onConfirm={() => void confirmDelete()} onClose={() => setDeleting(null)}
           returnFocusRef={returnFocusRef} />
       )}
     </div>

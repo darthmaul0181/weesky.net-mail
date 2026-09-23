@@ -36,9 +36,9 @@ const groupedPageOf = (groups: MailMessageSummary[][]): MailFolderPage => ({
   threads: groups.map(messages => ({ messages })), totalThreads: groups.length,
 })
 
-const node = (path: string, unread: number | null, children: MailFolderNode[] = []): MailFolderNode => ({
-  path, name: path, specialUse: null, selectable: true, subscribed: true,
-  total: 10, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children,
+const node = (path: string, unread: number | undefined, children: MailFolderNode[] = []): MailFolderNode => ({
+  path, name: path, selectable: true, subscribed: true,
+  total: 10, unread, uidValidity: 1, uidNext: 100, children,
 })
 
 const searchCriteria = { folderPath: '', allFolders: true, quick: 'x' }
@@ -97,17 +97,17 @@ describe('useSetFlags', () => {
     })
 
     // Patched while the request is still in flight — that is what "optimistic" means.
-    expect(pageIn()!.messages[0].seen).toBe(true)
-    expect(streamIn()!.pages[0].messages[0].seen).toBe(true)
-    expect(treeIn()![0].unread).toBe(4)
+    expect(pageIn()!.messages[0]!.seen).toBe(true)
+    expect(streamIn()!.pages[0]!.messages[0]!.seen).toBe(true)
+    expect(treeIn()![0]!.unread).toBe(4)
     expect(mocks.setMessageFlags).toHaveBeenCalledWith('INBOX', [1], 'seen', true, { accountId: 'primary' })
     // Copied, never mutated in place: the snapshot is the rollback.
-    expect(seeded.page.messages[0].seen).toBe(false)
+    expect(seeded.page.messages[0]!.seen).toBe(false)
 
     await act(async () => { pending.resolve() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(pageIn()!.messages[0].seen).toBe(true)
-    expect(treeIn()![0].unread).toBe(4)
+    expect(pageIn()!.messages[0]!.seen).toBe(true)
+    expect(treeIn()![0]!.unread).toBe(4)
   })
 
   it('rolls all three caches back when the request fails', async () => {
@@ -122,9 +122,9 @@ describe('useSetFlags', () => {
     })
 
     // Patched first, so the restoration below is a real round trip and not a no-op.
-    expect(pageIn()!.messages[0].seen).toBe(true)
-    expect(streamIn()!.pages[0].messages[0].seen).toBe(true)
-    expect(treeIn()![0].unread).toBe(4)
+    expect(pageIn()!.messages[0]!.seen).toBe(true)
+    expect(streamIn()!.pages[0]!.messages[0]!.seen).toBe(true)
+    expect(treeIn()![0]!.unread).toBe(4)
 
     await act(async () => { pending.reject(new Error('boom')) })
     await waitFor(() => expect(result.current.isError).toBe(true))
@@ -146,9 +146,9 @@ describe('useSetFlags', () => {
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(pageIn()!.messages[0].flagged).toBe(true)
-    expect(streamIn()!.pages[0].messages[0].flagged).toBe(true)
-    expect(treeIn()![0].unread).toBe(5)
+    expect(pageIn()!.messages[0]!.flagged).toBe(true)
+    expect(streamIn()!.pages[0]!.messages[0]!.flagged).toBe(true)
+    expect(treeIn()![0]!.unread).toBe(5)
   })
 
   it('leaves the folder count alone when no cache holds the uid', async () => {
@@ -164,7 +164,7 @@ describe('useSetFlags', () => {
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(treeIn()![0].unread).toBe(5)
+    expect(treeIn()![0]!.unread).toBe(5)
     expect(writes).not.toHaveBeenCalled()
   })
 
@@ -181,9 +181,9 @@ describe('useSetFlags', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     // Both copies patched, but the badge moves by one.
-    expect(streamIn()!.pages[0].messages[0].seen).toBe(true)
-    expect(streamIn()!.pages[1].messages[0].seen).toBe(true)
-    expect(treeIn()![0].unread).toBe(4)
+    expect(streamIn()!.pages[0]!.messages[0]!.seen).toBe(true)
+    expect(streamIn()!.pages[1]!.messages[0]!.seen).toBe(true)
+    expect(treeIn()![0]!.unread).toBe(4)
   })
 
   it('counts every uid of a batch, even split across two page caches', async () => {
@@ -200,7 +200,7 @@ describe('useSetFlags', () => {
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(treeIn()![0].unread).toBe(3)
+    expect(treeIn()![0]!.unread).toBe(3)
   })
 
   it('takes the delta from the cache that actually holds the message', async () => {
@@ -214,8 +214,8 @@ describe('useSetFlags', () => {
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(streamIn()!.pages[0].messages[0].seen).toBe(true)
-    expect(treeIn()![0].unread).toBe(4)
+    expect(streamIn()!.pages[0]!.messages[0]!.seen).toBe(true)
+    expect(treeIn()![0]!.unread).toBe(4)
   })
 
   it('patches the cached search results of the mutated folder', async () => {
@@ -231,8 +231,8 @@ describe('useSetFlags', () => {
     })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(searchIn()!.results[0].seen).toBe(true)
-    expect(searchIn()!.results[1].seen).toBe(false)
+    expect(searchIn()!.results[0]!.seen).toBe(true)
+    expect(searchIn()!.results[1]!.seen).toBe(false)
   })
 
   it('rolls the search cache back when the request fails', async () => {
@@ -248,7 +248,7 @@ describe('useSetFlags', () => {
     })
 
     // Patched first, so the restoration below is a real round trip and not a no-op.
-    expect(searchIn()!.results[0].seen).toBe(true)
+    expect(searchIn()!.results[0]!.seen).toBe(true)
 
     await act(async () => { pending.reject(new Error('boom')) })
     await waitFor(() => expect(result.current.isError).toBe(true))
@@ -298,9 +298,9 @@ describe('useSetFlags', () => {
     const patched = client.getQueryData<MailFolderPage>(groupedPagesKey)!
     expect(patched.threads!.map(t => t.messages.map(m => m.seen))).toEqual([[false, true], [false]])
     const stream = client.getQueryData<InfiniteData<MailFolderPage>>(groupedStreamKey)!
-    expect(stream.pages[0].threads![0].messages[1].seen).toBe(true)
+    expect(stream.pages[0]!.threads![0]!.messages[1]!.seen).toBe(true)
     // One badge move for the two caches, counted off the thread members themselves.
-    expect(treeIn()![0].unread).toBe(4)
+    expect(treeIn()![0]!.unread).toBe(4)
   })
 
   it('never invalidates the stream key', async () => {

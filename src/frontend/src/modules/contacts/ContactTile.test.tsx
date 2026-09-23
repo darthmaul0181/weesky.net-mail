@@ -11,7 +11,7 @@ import type { Contact } from './contactTypes'
  */
 
 const contact = (over: Partial<Contact> = {}): Contact => ({
-  id: 'a', firstName: 'Alice', lastName: 'Dupont', nickname: null, isFavorite: false,
+  id: 'a', firstName: 'Alice', lastName: 'Dupont', isFavorite: false,
   addresses: ['alice@x.be'], ...over,
 })
 

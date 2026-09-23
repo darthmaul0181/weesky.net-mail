@@ -14,8 +14,7 @@ const mocks = vi.hoisted(() => ({
   getConnectedAccounts: vi.fn(),
   hasSession: vi.fn(),
   clearSession: vi.fn(),
-  setUnauthorizedHandler: vi.fn(),
-  setIsAdmin: vi.fn(),
+  setUnauthorizedHandler: vi.fn<(handler: (() => void) | null) => void>(),
 }))
 
 vi.mock('../api.js', () => ({
@@ -26,7 +25,6 @@ vi.mock('../api.js', () => ({
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
-  setIsAdmin: mocks.setIsAdmin,
 }))
 
 function Probe() {
@@ -47,7 +45,7 @@ function Probe() {
         {accounts.map(a => `${a.id}:${a.email}:${a.displayName}`).join('|')}
       </span>
       <span data-testid="capabilities">{capabilities ? JSON.stringify(capabilities) : ''}</span>
-      <button onClick={() => logout()}>out</button>
+      <button onClick={() => void logout()}>out</button>
       <button onClick={() => switchAccount('acct-1')}>go-1</button>
       <button onClick={() => switchAccount('acct-2')}>go-2</button>
       <button onClick={() => switchAccount('ghost')}>go-ghost</button>
@@ -125,7 +123,6 @@ describe('AuthContext', () => {
     await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
     expect(screen.getByTestId('admin')).toHaveTextContent('true')
     expect(screen.getByTestId('email')).toHaveTextContent('mick@weesky.be')
-    expect(mocks.setIsAdmin).toHaveBeenCalledWith(true)
   })
 
   it('does not load the account without a session', () => {
@@ -139,10 +136,10 @@ describe('AuthContext', () => {
     mocks.hasSession.mockReturnValue(true)
     renderProbe()
     await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
-    const handler = mocks.setUnauthorizedHandler.mock.calls[0][0]
+    const handler = mocks.setUnauthorizedHandler.mock.calls[0]![0]
     expect(typeof handler).toBe('function')
 
-    act(() => { handler() })
+    act(() => { handler?.() })
 
     await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
     expect(screen.getByTestId('loaded')).toHaveTextContent('false')
@@ -239,9 +236,9 @@ describe('AuthContext', () => {
     renderProbe()
     await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
     client.setQueryData(['mail', 'primary', 'folders'], [{ path: 'INBOX' }])
-    const handler = mocks.setUnauthorizedHandler.mock.calls[0][0]
+    const handler = mocks.setUnauthorizedHandler.mock.calls[0]![0]
 
-    act(() => { handler() })
+    act(() => { handler?.() })
 
     await waitFor(() => expect(client.getQueryData(['mail', 'primary', 'folders'])).toBeUndefined())
   })
@@ -474,7 +471,6 @@ describe('AuthContext', () => {
       expect(screen.getByTestId('loaded')).toHaveTextContent('false')
       expect(screen.getByTestId('admin')).toHaveTextContent('false')
       expect(screen.getByTestId('capabilities')).toBeEmptyDOMElement()
-      expect(mocks.setIsAdmin).not.toHaveBeenCalledWith(true)
     })
   })
 })

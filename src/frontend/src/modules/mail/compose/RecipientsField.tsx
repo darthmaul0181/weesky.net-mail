@@ -127,7 +127,8 @@ export default function RecipientsField({
       if (open) { event.preventDefault(); setClosed(true) }
     } else if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
       event.preventDefault()
-      if (open && activeIndex >= 0) commitSuggestion(suggestions[activeIndex])
+      // activeIndex is clamped to [-1, suggestions.length - 1]; >= 0 puts it in range.
+      if (open && activeIndex >= 0) commitSuggestion(suggestions[activeIndex]!)
       else if (draft.trim()) commit(draft)
     } else if (event.key === 'Backspace' && draft === '' && tokens.length > 0) {
       onChange(tokens.slice(0, -1))

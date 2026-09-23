@@ -44,8 +44,8 @@ const groupedPageOf = (folderPath: string, groups: MailMessageSummary[][]): Mail
 })
 
 const node = (path: string, total: number, unread: number): MailFolderNode => ({
-  path, name: path, specialUse: null, selectable: true, subscribed: true,
-  total, unread, uidValidity: 1, uidNext: 100, highestModSeq: null, children: [],
+  path, name: path, selectable: true, subscribed: true,
+  total, unread, uidValidity: 1, uidNext: 100, children: [],
 })
 
 const searchCriteria = { folderPath: '', allFolders: true, quick: 'x' }
@@ -119,8 +119,8 @@ describe('useMoveMessages', () => {
 
     // Patched while the request is still in flight — that is what "optimistic" means.
     expect(uidsOf(sourcePage()!.messages)).toEqual([3])
-    expect(uidsOf(sourceStream()!.pages[0].messages)).toEqual([4])
-    expect(uidsOf(sourceStream()!.pages[1].messages)).toEqual([5])
+    expect(uidsOf(sourceStream()!.pages[0]!.messages)).toEqual([4])
+    expect(uidsOf(sourceStream()!.pages[1]!.messages)).toEqual([5])
     // uid 1 unseen, uid 2 seen: two off the total, one off the badge.
     expect(folder('INBOX').total).toBe(18)
     expect(folder('INBOX').unread).toBe(4)
@@ -176,7 +176,7 @@ describe('useMoveMessages', () => {
 
     // Both copies gone, but the counters move by one, not two.
     expect(uidsOf(sourcePage()!.messages)).toEqual([2, 3])
-    expect(uidsOf(sourceStream()!.pages[0].messages)).toEqual([4])
+    expect(uidsOf(sourceStream()!.pages[0]!.messages)).toEqual([4])
     expect(folder('INBOX').total).toBe(19)
     expect(folder('INBOX').unread).toBe(4)
     expect(folder('Archive').total).toBe(4)
@@ -203,7 +203,7 @@ describe('useMoveMessages', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(uidsOf(sourcePage()!.messages)).toEqual([3])
-    expect(uidsOf(sourceStream()!.pages[1].messages)).toEqual([])
+    expect(uidsOf(sourceStream()!.pages[1]!.messages)).toEqual([])
     // uid 1 unread, uid 2 already seen: two off the total, one off the badge.
     expect(folder('INBOX').total).toBe(18)
     expect(folder('INBOX').unread).toBe(4)
@@ -303,7 +303,7 @@ describe('useMoveMessages', () => {
 
     // Row of the mutated folder gone, total decremented, the other folder's row kept.
     expect(uidsOf(searchIn()!.results)).toEqual([1])
-    expect(searchIn()!.results[0].folderPath).toBe('Archive')
+    expect(searchIn()!.results[0]!.folderPath).toBe('Archive')
     expect(searchIn()!.total).toBe(1)
 
     await act(async () => { pending.reject(new Error('boom')) })
@@ -465,7 +465,7 @@ describe('useDeleteMessages', () => {
     await settle()
 
     expect(uidsOf(sourcePage()!.messages)).toEqual([3])
-    expect(uidsOf(sourceStream()!.pages[0].messages)).toEqual([4])
+    expect(uidsOf(sourceStream()!.pages[0]!.messages)).toEqual([4])
     expect(folder('INBOX').total).toBe(18)
     expect(folder('INBOX').unread).toBe(4)
     // No target exists for a delete: the other folder's caches and counters stay as seeded.

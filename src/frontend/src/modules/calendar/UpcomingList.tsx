@@ -10,8 +10,8 @@ import { addDays, type PlainDate } from './plainDate'
 
 export interface UpcomingListProps {
   days: PlainDate[]
-  onOpen(o: Occurrence, anchor: HTMLElement): void
-  onOpenEditor(o: Occurrence): void
+  onOpen: (o: Occurrence, anchor: HTMLElement) => void
+  onOpenEditor: (o: Occurrence) => void
   selectedKey?: string
   /** What an empty stretch says. The month ahead by default; the phone's month hands its own
       sentence in, since one day holding nothing is not the same news. */

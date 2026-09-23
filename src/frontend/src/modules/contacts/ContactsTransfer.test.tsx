@@ -23,7 +23,7 @@ const { ApiError } = await import('../../api.js') as unknown as {
 }
 
 const book: Contact[] = [
-  { id: '1', firstName: 'Bruno', lastName: null, nickname: null, isFavorite: false, addresses: [] },
+  { id: '1', firstName: 'Bruno', isFavorite: false, addresses: [] },
 ]
 
 function renderTransfer(contacts: Contact[] | undefined, onError = vi.fn()) {
@@ -45,7 +45,7 @@ async function openMenu() {
 // The input is hidden, so userEvent.upload cannot reach it; the change event is what the component
 // actually listens to.
 function choose(file: File) {
-  const input = screen.getByTestId('contacts-import-input') as HTMLInputElement
+  const input = screen.getByTestId<HTMLInputElement>('contacts-import-input')
   fireEvent.change(input, { target: { files: [file] } })
   return input
 }

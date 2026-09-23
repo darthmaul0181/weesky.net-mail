@@ -23,7 +23,7 @@ export function useLongPress(onLongPress: () => void, ms = 500) {
   useEffect(() => cancel, [cancel])
 
   return {
-    onPointerDown(event: PointerEvent) {
+    onPointerDown: (event: PointerEvent) => {
       // Cancel before the guard, not after: any second pointer ends the press it interrupts, so a
       // mouse click or a pinch's second finger stops a running timer rather than riding it out.
       cancel()
@@ -33,7 +33,7 @@ export function useLongPress(onLongPress: () => void, ms = 500) {
       origin.current = { x: event.clientX, y: event.clientY }
       timer.current = setTimeout(() => { timer.current = null; onLongPress() }, ms)
     },
-    onPointerMove(event: PointerEvent) {
+    onPointerMove: (event: PointerEvent) => {
       const { x, y } = origin.current
       if (Math.hypot(event.clientX - x, event.clientY - y) > GESTURE_TRAVEL_PX) cancel()
     },

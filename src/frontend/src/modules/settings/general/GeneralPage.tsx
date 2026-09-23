@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
 import ToggleRow from '../../../components/ToggleRow'
-import Toasts from '../../../components/Toasts.jsx'
-import { useToasts } from '../../../hooks/useToasts.js'
+import Toasts from '../../../components/Toasts'
+import { useToasts } from '../../../hooks/useToasts'
 import {
   ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf,
   composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf, notifySoundOf,
@@ -172,7 +172,7 @@ export default function GeneralPage() {
                         value={value}
                         checked={readingPaneOf(preferences) === value}
                         disabled={setPreference.isPending}
-                        onChange={() => save(PREFERENCE_KEYS.readingPane, value, t(toastKey))}
+                        onChange={() => void save(PREFERENCE_KEYS.readingPane, value, t(toastKey))}
                       />
                       {t(labelKey)}
                     </span>
@@ -194,7 +194,7 @@ export default function GeneralPage() {
                 value={isStreaming(preferences) ? ALL : String(requestSizeOf(preferences))}
                 disabled={setPreference.isPending}
                 onChange={event =>
-                  save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value, t))}
+                  void save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value, t))}
               >
                 {PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
                 <option value={ALL}>{t('general.pageSize.all')}</option>
@@ -207,7 +207,7 @@ export default function GeneralPage() {
               hint={t('general.preview.hint')}
               checked={showPreviewOf(preferences)}
               disabled={setPreference.isPending}
-              onChange={on => save(PREFERENCE_KEYS.showPreview, String(on),
+              onChange={on => void save(PREFERENCE_KEYS.showPreview, String(on),
                 t(on ? 'general.preview.on' : 'general.preview.off'))}
             />
 
@@ -217,7 +217,7 @@ export default function GeneralPage() {
               hint={t('general.groupConversations.hint')}
               checked={groupConversationsOf(preferences)}
               disabled={setPreference.isPending}
-              onChange={on => save(PREFERENCE_KEYS.groupConversations, String(on),
+              onChange={on => void save(PREFERENCE_KEYS.groupConversations, String(on),
                 t(on ? 'general.groupConversations.on' : 'general.groupConversations.off'))}
             />
 
@@ -227,7 +227,7 @@ export default function GeneralPage() {
               hint={t('general.folderIcons.hint')}
               checked={showFolderIconsOf(preferences)}
               disabled={setPreference.isPending}
-              onChange={on => save(PREFERENCE_KEYS.showFolderIcons, String(on),
+              onChange={on => void save(PREFERENCE_KEYS.showFolderIcons, String(on),
                 t(on ? 'general.folderIcons.on' : 'general.folderIcons.off'))}
             />
 
@@ -249,7 +249,7 @@ export default function GeneralPage() {
                       className={`action-chip${on ? ' is-on' : ''}`}
                       aria-pressed={on}
                       disabled={setPreference.isPending}
-                      onClick={() => save(
+                      onClick={() => void save(
                         PREFERENCE_KEYS.rowActions,
                         // Rebuilt from the canonical order, never from click order, so the stored
                         // string is the one the list already renders.
@@ -274,7 +274,7 @@ export default function GeneralPage() {
               hint={t('general.remoteImages.hint')}
               checked={alwaysShowImagesOf(preferences)}
               disabled={setPreference.isPending}
-              onChange={on => save(PREFERENCE_KEYS.alwaysShowImages, String(on),
+              onChange={on => void save(PREFERENCE_KEYS.alwaysShowImages, String(on),
                 t(on ? 'general.remoteImages.on' : 'general.remoteImages.off'))}
             />
 
@@ -288,7 +288,7 @@ export default function GeneralPage() {
               covered={alwaysShowImagesOf(preferences)}
               checked={trustContactsOf(preferences)}
               disabled={setPreference.isPending || alwaysShowImagesOf(preferences)}
-              onChange={on => save(PREFERENCE_KEYS.trustContacts, String(on),
+              onChange={on => void save(PREFERENCE_KEYS.trustContacts, String(on),
                 t(on ? 'general.trustContacts.on' : 'general.trustContacts.off'))}
             />
 
@@ -298,7 +298,7 @@ export default function GeneralPage() {
               hint={t('general.spamScore.hint')}
               checked={showSpamScoreOf(preferences)}
               disabled={setPreference.isPending}
-              onChange={on => save(PREFERENCE_KEYS.showSpamScore, String(on),
+              onChange={on => void save(PREFERENCE_KEYS.showSpamScore, String(on),
                 t(on ? 'general.spamScore.on' : 'general.spamScore.off'))}
             />
           </section>
@@ -322,7 +322,7 @@ export default function GeneralPage() {
                         value={value}
                         checked={composeFormatOf(preferences) === value}
                         disabled={setPreference.isPending}
-                        onChange={() => save(PREFERENCE_KEYS.composeFormat, value, t(toastKey))}
+                        onChange={() => void save(PREFERENCE_KEYS.composeFormat, value, t(toastKey))}
                       />
                       {t(labelKey)}
                     </span>
@@ -337,7 +337,7 @@ export default function GeneralPage() {
               hint={t('general.captureRecipients.hint')}
               checked={captureRecipientsOf(preferences)}
               disabled={setPreference.isPending}
-              onChange={on => save(PREFERENCE_KEYS.captureRecipients, String(on),
+              onChange={on => void save(PREFERENCE_KEYS.captureRecipients, String(on),
                 t(on ? 'general.captureRecipients.on' : 'general.captureRecipients.off'))}
             />
           </section>
@@ -351,7 +351,7 @@ export default function GeneralPage() {
               hint={t('general.notifySound.hint')}
               checked={notifySoundOf(preferences)}
               disabled={setPreference.isPending}
-              onChange={toggleSound}
+              onChange={on => void toggleSound(on)}
             />
 
             {/* Blocked disables it: a denied origin is never re-prompted, so a click would be a
@@ -363,7 +363,7 @@ export default function GeneralPage() {
               checked={notifyDesktopOf(preferences) && permission === 'granted'}
               disabled={setPreference.isPending || blocked || unsupported || insecure}
               locked={blocked || unsupported || insecure}
-              onChange={toggleDesktop}
+              onChange={on => void toggleDesktop(on)}
             />
 
             {blocked && (

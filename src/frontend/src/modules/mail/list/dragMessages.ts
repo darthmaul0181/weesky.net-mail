@@ -27,11 +27,14 @@ export function serializeDrag(payload: DragPayload): string {
 /** Null for anything that is not our shape: a foreign drag, a truncated string, no uids. */
 export function parseDrag(raw: string): DragPayload | null {
   try {
-    const value = JSON.parse(raw)
-    if (typeof value?.sourcePath !== 'string') return null
-    if (!Array.isArray(value.uids) || value.uids.length === 0) return null
-    if (!value.uids.every((uid: unknown) => typeof uid === 'number')) return null
-    return { sourcePath: value.sourcePath, uids: value.uids }
+    const value: unknown = JSON.parse(raw)
+    if (typeof value !== 'object' || value === null || !('sourcePath' in value) || !('uids' in value)) return null
+    const sourcePath: unknown = value.sourcePath
+    const uids: unknown = value.uids
+    if (typeof sourcePath !== 'string') return null
+    if (!Array.isArray(uids) || uids.length === 0) return null
+    if (!uids.every((uid): uid is number => typeof uid === 'number')) return null
+    return { sourcePath, uids }
   } catch {
     return null
   }

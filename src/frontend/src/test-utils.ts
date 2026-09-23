@@ -1,4 +1,5 @@
 import { act, fireEvent } from '@testing-library/react'
+import type { Mock } from 'vitest'
 import type { Viewport } from './hooks/useViewport'
 
 /** A dismissing press on a dialog's backdrop: it counts only when both halves land on it, so the
@@ -23,7 +24,7 @@ export async function settle() {
 
 const VIEWPORT_WIDTH: Record<Viewport, number> = { phone: 360, tablet: 768, desktop: 1280 }
 
-// jsdom answers no media query on its own and test-setup.js stubs every one to matches:false,
+// jsdom answers no media query on its own and test-setup.ts stubs every one to matches:false,
 // which is what keeps the whole existing suite on the desktop layout. These helpers replace that
 // stub for one file at a time; resetViewport puts the original back.
 const original = window.matchMedia
@@ -45,7 +46,7 @@ export function mockViewport(tier: Viewport) {
       addEventListener: (_event: string, fn: () => void) => { listeners.add(fn) },
       removeEventListener: (_event: string, fn: () => void) => { listeners.delete(fn) },
     } as unknown as MediaQueryList
-  }) as typeof window.matchMedia
+  })
 }
 
 /** Changes tier after a render — a rotation — and lets the subscribers react. */
@@ -129,4 +130,17 @@ export function fireEscape() {
   const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
   act(() => { document.dispatchEvent(event) })
   return event
+}
+
+/** Holds a mock's next call in flight until the test settles it, so the pending state a real
+    network shows between a request and its answer is rendered rather than batched away. */
+export function holdNextCall(mock: Mock) {
+  let settle: { resolve: (value: unknown) => void; reject: (reason: Error) => void } = {
+    resolve: () => {}, reject: () => {},
+  }
+  mock.mockImplementationOnce(() => new Promise((resolve, reject) => { settle = { resolve, reject } }))
+  return {
+    resolve: (value: unknown) => settle.resolve(value),
+    fail: () => settle.reject(new Error('Server error')),
+  }
 }

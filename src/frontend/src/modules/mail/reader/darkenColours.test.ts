@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { darkenColours, toDarkColour } from './darkenColours'
 
 describe('toDarkColour', () => {
@@ -99,7 +99,8 @@ describe('darkenColours', () => {
     const html = '<div style="background-color: #ffd916; color: #ffd916">x</div>'
 
     const dark = darkenColours(html)
-    const [background, text] = [...dark.matchAll(/#[0-9a-f]{6}/gi)].map(m => m[0])
+    const [background, text] =
+      [...dark.matchAll(/#[0-9a-f]{6}/gi)].map(m => m[0]) as [string, string]
 
     expect(slOf(background).s).toBeLessThan(slOf(text).s)
     expect(slOf(background).l).toBeLessThan(slOf(text).l)
@@ -248,7 +249,7 @@ describe('darkenColours', () => {
 
 /** Saturation and lightness in HSL, for asserting how far a colour was damped. */
 function slOf(colour: string): { s: number; l: number } {
-  const [r, g, b] = rgbOf(colour).map(c => c / 255)
+  const [r, g, b] = rgbOf(colour).map(c => c / 255) as [number, number, number]
   const max = Math.max(r, g, b)
   const min = Math.min(r, g, b)
   const l = (max + min) / 2
@@ -262,9 +263,9 @@ function slOf(colour: string): { s: number; l: number } {
 function rgbOf(colour: string): [number, number, number] {
   if (colour.startsWith('#')) {
     const d = colour.slice(1).match(/../g)!.map(h => parseInt(h, 16))
-    return [d[0], d[1], d[2]]
+    return [d[0]!, d[1]!, d[2]!]
   }
-  const [r, g, b] = colour.match(/\d+/g)!.map(Number)
+  const [r, g, b] = colour.match(/\d+/g)!.map(Number) as [number, number, number]
   return [r, g, b]
 }
 

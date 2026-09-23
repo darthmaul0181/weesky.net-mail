@@ -4,8 +4,8 @@ import type { MailFolderNode } from '../api/mailTypes'
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
   return {
-    path: 'X', name: 'X', specialUse: null, selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, uidNext: null, highestModSeq: null, children: [], ...partial,
+    path: 'X', name: 'X', selectable: true, subscribed: true,
+    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
   }
 }
 
@@ -148,6 +148,6 @@ describe('isSystemFolder', () => {
   it('is true for any folder holding a role, not just the inbox', () => {
     expect(isSystemFolder(node({ specialUse: 'inbox' }))).toBe(true)
     expect(isSystemFolder(node({ specialUse: 'trash' }))).toBe(true)
-    expect(isSystemFolder(node({ specialUse: null }))).toBe(false)
+    expect(isSystemFolder(node({}))).toBe(false)
   })
 })

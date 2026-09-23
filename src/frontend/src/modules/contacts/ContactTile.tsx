@@ -1,9 +1,9 @@
 import { memo } from 'react'
 import type { DragEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import PencilIcon from '../../icons/PencilIcon.jsx'
+import PencilIcon from '../../icons/PencilIcon'
 import StarIcon from '../../icons/StarIcon'
-import TrashIcon from '../../icons/TrashIcon.jsx'
+import TrashIcon from '../../icons/TrashIcon'
 import { displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
 

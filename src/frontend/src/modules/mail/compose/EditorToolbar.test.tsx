@@ -376,7 +376,7 @@ describe('EditorToolbar', () => {
     const onPick = vi.fn()
     render(<EditorToolbar editor={null} plainText={false} onPickImages={onPick} onTogglePlainText={noop} />)
     const file = new File(['x'], 'shot.png', { type: 'image/png' })
-    const input = screen.getByTestId('inline-image-input') as HTMLInputElement
+    const input = screen.getByTestId<HTMLInputElement>('inline-image-input')
 
     fireEvent.change(input, { target: { files: [file] } })
 
@@ -400,7 +400,7 @@ describe('EditorToolbar', () => {
 
     const { rerender } = render(<EditorToolbar editor={null} plainText={false}
       onPickImages={noop} onAddFiles={onAddFiles} onTogglePlainText={noop} />)
-    const input = screen.getByTestId('attachment-input') as HTMLInputElement
+    const input = screen.getByTestId<HTMLInputElement>('attachment-input')
     fireEvent.change(input, { target: { files: [file] } })
     expect(onAddFiles).toHaveBeenCalledWith([file])
     expect(input.value).toBe('')

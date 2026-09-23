@@ -35,17 +35,22 @@ interface Props {
 export default function AttachmentViewerModal({ images, initialIndex, onDownload, onClose }: Props) {
   const { t } = useTranslation('mail')
   const [index, setIndex] = useState(initialIndex)
+  // index is clamped to [0, images.length - 1] by onArrow and the nav buttons below, and the
+  // caller only opens this modal for a non-empty `images` and a valid `initialIndex` into it.
   const image = images[index]
+  const src = image?.src
   const several = images.length > 1
   // The failure, not its wording: worded here the effect would close over `t` and refetch the
   // bytes on a language change. Translated at render, so it follows the language on its own.
-  const [loaded, setLoaded] = useKeyedState<{ objectUrl?: string; error?: unknown }>(() => ({}), image.src)
+  const [loaded, setLoaded] =
+    useKeyedState<{ objectUrl?: string; error?: unknown }>(() => ({}), src ?? '')
   const { objectUrl, error } = loaded
 
   useEffect(() => {
+    if (!src) return undefined
     let url: string | null = null
     let cancelled = false
-    requestBlob(image.src)
+    requestBlob(src)
       .then((result: { blob: Blob }) => {
         if (cancelled) return
         url = URL.createObjectURL(result.blob)
@@ -58,7 +63,7 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [image.src, setLoaded])
+  }, [src, setLoaded])
 
   // Bound to the dialog's own box rather than to the document: a viewer under another dialog
   // never sees these, and Escape stays the layer stack's. Clamped, never wrapped — the same
@@ -67,6 +72,8 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
     if (event.key === 'ArrowLeft') setIndex(i => Math.max(0, i - 1))
     if (event.key === 'ArrowRight') setIndex(i => Math.min(images.length - 1, i + 1))
   }
+
+  if (!image) return null
 
   return (
     <Modal

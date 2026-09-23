@@ -13,7 +13,8 @@ function paths(node: Node, prefix = ''): string[] {
 }
 
 function leaf(bundle: Node, path: string): Node {
-  return path.split('.').reduce<Node>((node, key) => (node as Record<string, Node>)[key], bundle)
+  // path always comes from paths(bundle) (or its counterpart), so each step resolves.
+  return path.split('.').reduce<Node>((node, key) => (node as Record<string, Node>)[key]!, bundle)
 }
 
 describe('catalogue parity', () => {
@@ -65,7 +66,7 @@ describe('catalogue parity', () => {
 
   it('spaces French punctuation with a no-break space', () => {
     for (const [name, bundle] of Object.entries(fr)) {
-      for (const path of paths(bundle as Node)) {
+      for (const path of paths(bundle)) {
         expect(leaf(bundle as Node, path) as string, `${name}:${path}`).not.toMatch(LOOSE)
       }
     }
@@ -88,7 +89,7 @@ describe('catalogue parity', () => {
 
   it('writes every French apostrophe as ’', () => {
     for (const [name, bundle] of Object.entries(fr)) {
-      for (const path of paths(bundle as Node)) {
+      for (const path of paths(bundle)) {
         expect(leaf(bundle as Node, path) as string, `${name}:${path}`).not.toMatch(STRAIGHT)
       }
     }
@@ -96,7 +97,7 @@ describe('catalogue parity', () => {
 
   it('leaves no empty translation', () => {
     for (const [name, bundle] of Object.entries(fr)) {
-      for (const path of paths(bundle as Node)) {
+      for (const path of paths(bundle)) {
         expect(leaf(bundle as Node, path), `${name}:${path}`).not.toBe('')
       }
     }

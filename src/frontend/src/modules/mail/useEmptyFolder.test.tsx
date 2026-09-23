@@ -22,7 +22,7 @@ function seededClient() {
   })
   client.setQueryData(mailKeys.folders(ACC), [
     { path: 'Trash', name: 'Trash', specialUse: 'trash', total: 2, unread: 1, children: [] },
-    { path: 'Projects', name: 'Projects', specialUse: null, total: 3, unread: 2, children: [] },
+    { path: 'Projects', name: 'Projects', total: 3, unread: 2, children: [] },
   ])
   return client
 }
@@ -45,7 +45,7 @@ describe('useEmptyFolder', () => {
     expect(mocks.emptyFolder).toHaveBeenCalledWith('Trash', null, { accountId: 'primary' })
     // Emptied in place, not removed: the folder on screen shows empty at once, instead of
     // refetching the rows the server has not expunged yet and racing them back till the poll.
-    const source = client.getQueryData(mailKeys.messages(ACC, 'Trash', 0, 50)) as { messages: unknown[]; total: number } | undefined
+    const source = client.getQueryData<{ messages: unknown[]; total: number }>(mailKeys.messages(ACC, 'Trash', 0, 50))
     expect(source).toBeDefined()
     expect(source!.messages).toEqual([])
     expect(source!.total).toBe(0)

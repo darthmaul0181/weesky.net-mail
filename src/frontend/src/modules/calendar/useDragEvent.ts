@@ -14,7 +14,7 @@ export interface DragState {
 export interface DragEventOptions {
   enabled: boolean
   days: PlainDate[]
-  onDrop(o: Occurrence, deltaMinutes: number, deltaDays: number): void
+  onDrop: (o: Occurrence, deltaMinutes: number, deltaDays: number) => void
 }
 
 interface Area {

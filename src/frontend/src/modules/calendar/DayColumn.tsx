@@ -12,11 +12,11 @@ export interface DayColumnProps {
   day: PlainDate
   isToday: boolean
   entries: SliceEntry[]
-  onOpen(o: Occurrence, anchor: HTMLElement): void
-  onOpenEditor(o: Occurrence): void
+  onOpen: (o: Occurrence, anchor: HTMLElement) => void
+  onOpenEditor: (o: Occurrence) => void
   selectedKey?: string
   hoverKey?: string | null
-  onHover?(key: string | null): void
+  onHover?: (key: string | null) => void
   gestures?: GridGestures
 }
 

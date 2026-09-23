@@ -58,7 +58,7 @@ describe('DeliveryRepliesSection', () => {
 
   it('with a call received: the pill; the switch writes and toasts', async () => {
     vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: true, enabled: true, createdAt: '2026-09-14T16:00:00Z', lastCallAt: '2026-09-14T16:40:00Z' })
-    vi.mocked(api.adminSetDeliveryReplies).mockResolvedValue(undefined)
+    vi.mocked(api.adminSetDeliveryReplies).mockResolvedValue(null)
     const addToast = mount()
     expect(await screen.findByText(/Last call received on/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('checkbox', { name: 'Apply replies at delivery' }))
@@ -68,13 +68,13 @@ describe('DeliveryRepliesSection', () => {
 
   it('deleting asks first, then toasts', async () => {
     vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
-    vi.mocked(api.adminDeleteDeliveryReplyKey).mockResolvedValue(undefined)
+    vi.mocked(api.adminDeleteDeliveryReplyKey).mockResolvedValue(null)
     const addToast = mount()
     await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     // .at(-1) needs es2022 lib, which this project's tsconfig does not set (SchedulingAccountSection's
     // own tests use the same indexed form for the identical reason).
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The key was deleted.'))
   })
 
@@ -86,12 +86,12 @@ describe('DeliveryRepliesSection', () => {
       (configured
         ? { configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' }
         : { configured: false, enabled: false }))
-    vi.mocked(api.adminDeleteDeliveryReplyKey).mockImplementation(async () => { configured = false })
+    vi.mocked(api.adminDeleteDeliveryReplyKey).mockImplementation(async () => { configured = false; return null })
     mount()
     await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument())
     expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
@@ -182,7 +182,7 @@ describe('DeliveryRepliesSection', () => {
       mount()
       await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
       const confirmButtons = screen.getAllByRole('button', { name: 'Regenerate' })
-      await userEvent.click(confirmButtons[confirmButtons.length - 1])
+      await userEvent.click(confirmButtons[confirmButtons.length - 1]!)
       await screen.findByRole('dialog', { name: 'Delivery key' })
 
       await userEvent.keyboard('{Escape}')

@@ -2,12 +2,12 @@ import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { ApiError } from '../../../api.js'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal.jsx'
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import LoadingBlock from '../../../components/LoadingBlock'
-import PencilIcon from '../../../icons/PencilIcon.jsx'
+import PencilIcon from '../../../icons/PencilIcon'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
-import TrashIcon from '../../../icons/TrashIcon.jsx'
+import TrashIcon from '../../../icons/TrashIcon'
 import { messageForCode } from '../../../lib/apiErrorMessage'
 import { dateFormat } from '../../../lib/intl'
 import { SECURITY_OPTIONS, securityLabel } from '../../../lib/mailEndpointValidation'
@@ -16,9 +16,10 @@ import SchedulingAccountDialog from './SchedulingAccountDialog'
 import {
   useDeleteSchedulingAccount, useSchedulingAccount, useTestSchedulingAccount,
 } from './useSchedulingAccount'
+import type { AddToast } from '../../../hooks/useToasts'
 
 interface Props {
-  addToast: (message: string, kind?: string) => void
+  addToast: AddToast
 }
 
 function securityText(security: string | undefined, t: TFunction<'admin'>): string {
@@ -130,7 +131,7 @@ export default function SchedulingAccountSection({ addToast }: Props) {
         {account.lastTestOk === false && <span className="svc-account-pill is-fail">{t('scheduling.testFailed')}</span>}
         <div className="admin-list-item-actions">
           <button type="button" className="btn btn-ghost btn-auto" disabled={testAccount.isPending}
-            aria-label={t('scheduling.test')} aria-busy={testAccount.isPending} onClick={handleTest}>
+            aria-label={t('scheduling.test')} aria-busy={testAccount.isPending} onClick={() => void handleTest()}>
             {testAccount.isPending ? <span className="spinner" /> : t('scheduling.test')}
           </button>
           <button type="button" className="admin-icon-btn" title={t('actions.edit', { ns: 'common' })}
@@ -163,7 +164,7 @@ export default function SchedulingAccountSection({ addToast }: Props) {
       )}
       {deleting && account && (
         <DeleteConfirmModal entityLabel={account.login} loading={deleteAccount.isPending}
-          onConfirm={confirmDelete} onClose={() => setDeleting(false)}
+          onConfirm={() => void confirmDelete()} onClose={() => setDeleting(false)}
           returnFocusRef={headingRef} />
       )}
     </div>
