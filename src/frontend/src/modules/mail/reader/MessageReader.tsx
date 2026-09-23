@@ -1,4 +1,4 @@
-import { cloneElement, useEffect, useMemo, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { mailAttachmentUrl, requestBlob } from '../../../api.js'
@@ -6,18 +6,13 @@ import { downloadBlob } from '../../../lib/downloadBlob'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useTheme } from '../../../contexts/ThemeContext'
 import { useViewport } from '../../../hooks/useViewport'
-import PaperclipIcon from '../../../icons/PaperclipIcon'
-import ChevronRightIcon from '../../../icons/ChevronRightIcon'
-import ChevronUpIcon from '../../../icons/ChevronUpIcon'
 import ArrowLeftIcon from '../../../icons/ArrowLeftIcon'
-import ExternalLinkIcon from '../../../icons/ExternalLinkIcon'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import FolderMoveIcon from '../../../icons/FolderMoveIcon'
 import CopyIcon from '../../../icons/CopyIcon'
 import PencilIcon from '../../../icons/PencilIcon'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
-import Tooltip from '../../../components/Tooltip'
 import ImageOffIcon from '../../../icons/ImageOffIcon'
 import CodeIcon from '../../../icons/CodeIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
@@ -30,22 +25,17 @@ import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
 import type { MailAttachmentInfo, SpecialUse } from '../api/mailTypes'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import MoveMessagesModal from '../MoveMessagesModal'
-import AttachmentViewerModal from './AttachmentViewerModal'
 import {
   alwaysShowImagesOf, showSpamScoreOf, trustContactsOf, usePreferences,
 } from '../../../hooks/usePreferences'
 import { useContacts } from '../../contacts/queries'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
-import { formatReaderDate, formatReaderDateShort } from './formatReaderDate'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { hasOpenLayer } from '../../../lib/layerStack'
-import AddressLabel, { AddressList } from './AddressLabel'
-import AuthBadge from './AuthBadge'
-import SpamGauge from './SpamGauge'
 import ReaderActions from './ReaderActions'
-import ReaderDetails from './ReaderDetails'
+import ReaderHeader from './ReaderHeader'
+import ReaderAttachments from './ReaderAttachments'
 import { isWebUnsubscribe } from './unsubscribeLink'
-import { formatSize } from './formatSize'
 import { darkenColours } from './darkenColours'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 import { substituteInlineImages } from './inlineImages'
@@ -79,15 +69,9 @@ export default function MessageReader(
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
   const viewportNarrow = useViewport() === 'phone'
-  // Frozen per open message rather than tracking the viewport live: a changed srcDoc is a fresh
-  // iframe document load, and `narrow` crosses the 639px boundary on a phone rotation — reloading
-  // the body and throwing a reader midway through a long message back to the top. Adjusted during
-  // render rather than in an effect, per React's own pattern for resetting state when a prop
-  // changes: an effect fires after commit, so the message that just opened would paint one frame
-  // with the PREVIOUS message's padding before the effect corrected it. Calling setState below
-  // instead discards this render's output and replays the component immediately with the new
-  // state already in place — the freeze takes effect in the same render that opens the message,
-  // with no extra reload and no visible frame in between.
+  // Frozen per open message: a changed srcDoc reloads the iframe, so a phone rotation crossing 639px
+  // would throw the reader back to the top. Reset during render, not in an effect, so the message
+  // just opened never paints one frame with the previous one's padding.
   const readerKey = `${folderPath ?? ''}:${uid ?? ''}`
   const [frozenNarrow, setFrozenNarrow] = useState(() => ({ key: readerKey, value: viewportNarrow }))
   const { data: preferences } = usePreferences()
@@ -194,10 +178,8 @@ export default function MessageReader(
   if (isLoading) return fallback(t('reader.loading'))
   if (isError || !data) return fallback(t('reader.loadFailed'))
 
-  // Three ways a part is not an attachment to offer: the server calls it inline, the body
-  // displays it — a cid-referenced image often arrives with an attachment disposition — or the
-  // card below is already showing what the calendar file says. An unreadable one keeps its chip,
-  // since the card then has nothing to show and the file is all there is.
+  // Not offered as attachments: parts the server calls inline, parts the body displays (a cid image
+  // often carries an attachment disposition), and the calendar file the card shows unless unreadable.
   const cardShown = !!data.invitation && !data.invitation.unreadable
   const attachments = data.attachments.filter(
     attachment => !attachment.isInline && !displayedParts.has(attachment.part)
@@ -206,11 +188,6 @@ export default function MessageReader(
   const imageAttachments = attachments.filter(a => isImageType(a.contentType))
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
   const spamOn = !!preferences && showSpamScoreOf(preferences)
-  // A phone header spends four of its lines on metadata before the body starts. Two of them are
-  // recovered here: the date shrinks to its locale's short form and joins the recipients line,
-  // and the gauge moves behind the chevron. Both stay in full inside the details grid.
-  const compactDate = viewportNarrow
-    ? <span className="reader-date">{formatReaderDateShort(data.date)}</span> : null
 
   async function download(part: string, fileName: string) {
     setDownloadError(null)
@@ -327,92 +304,20 @@ export default function MessageReader(
 
   return (
     <article>
-      <header className="reader-header">
-        <div className="reader-stack">
-          <h1 className="reader-subject">
-            {onBack && (
-              <button
-                type="button"
-                className="reader-back"
-                aria-label={t('reader.back')}
-                onClick={onBack}
-              >
-                <ArrowLeftIcon size={16} />
-              </button>
-            )}
-            {/* Its own element so the phone block can ellipsise the SUBJECT rather than the h1:
-                a box with element children that clips is a real defect everywhere else in this
-                app, and probes/mobile-layout.html only forgives an ellipsised leaf. */}
-            <span className="reader-subject-text">{data.subject || t('list.noSubject')}</span>
-            {data.priority !== 'normal' && (
-              <Tooltip
-                placement="bottom-left"
-                content={t(data.priority === 'high' ? 'reader.priorityHigh' : 'reader.priorityLow')}
-              >
-                <span className={`reader-priority is-${data.priority}`}>
-                  {t(data.priority === 'high' ? 'list.highPriority' : 'list.lowPriority')}
-                </span>
-              </Tooltip>
-            )}
-          </h1>
-          <div className="reader-meta">
-            <div className="reader-from">
-              <AddressLabel sender name={data.fromName} address={data.fromAddress} />
-              <AuthBadge authentication={data.authentication} />
-              {!viewportNarrow && <span className="reader-date">({formatReaderDate(data.date)})</span>}
-              <button
-                type="button"
-                className={`details-toggle${detailsOpen ? ' is-open' : ''}`}
-                aria-expanded={detailsOpen}
-                aria-label={t(detailsOpen ? 'reader.hideDetails' : 'reader.showDetails')}
-                onClick={() => setDetailsOpen(open => !open)}
-              >
-                <ChevronRightIcon size={12} />
-              </button>
-              {/* Unsubscribing acts on the sender, not on this message — hence here, not in the
-                  actions zone. Not at all on a phone: at 360px the sender line has 316px and a
-                  mailing list's name spends most of it, so the pill never shared the line and
-                  always cost a whole one — 52px with its gutter, for a control the details grid
-                  already lists a chevron away. An icon-only pill saves nothing, 44px not fitting
-                  any better than 141. */}
-              {!viewportNarrow && unsubscribe && (
-                <a className="unsub-btn" href={unsubscribe} target="_blank" rel="noopener noreferrer">
-                  <ExternalLinkIcon />
-                  {t('reader.unsubscribe')}
-                </a>
-              )}
-            </div>
-            {detailsOpen ? (
-              <ReaderDetails
-                message={data}
-                showSubject={viewportNarrow}
-                showSpamScore={viewportNarrow && spamOn}
-              />
-            ) : (
-              <>
-                {(data.to.length > 0 || compactDate) && (
-                  <div className="reader-recipients reader-to-row">
-                    {data.to.length > 0 && (
-                      <span className="reader-to">{t('reader.details.to')} <AddressList addresses={data.to} /></span>
-                    )}
-                    {compactDate}
-                  </div>
-                )}
-                {data.cc.length > 0 && (
-                  <div className="reader-recipients">{t('reader.details.cc')} <AddressList addresses={data.cc} /></div>
-                )}
-              </>
-            )}
-            {spamOn && !viewportNarrow && <SpamGauge spamScore={data.spamScore} />}
-          </div>
-        </div>
-        {!bottomActions && readerActions}
-      </header>
+      <ReaderHeader
+        data={data}
+        onBack={onBack}
+        viewportNarrow={viewportNarrow}
+        detailsOpen={detailsOpen}
+        onToggleDetails={() => setDetailsOpen(open => !open)}
+        unsubscribe={unsubscribe}
+        spamOn={spamOn}
+        bottomActions={bottomActions}
+        readerActions={readerActions}
+      />
 
-      {/* The backend hit one of its sanitiser ceilings. Nothing here can restore the rest — the
-          cut happens before the body is ever parsed — so this states the fact and points at the
-          one view that still shows the whole thing. Silence would be worse than the cut: a
-          message ending mid-sentence reads as the sender's mistake. */}
+      {/* The backend hit a sanitiser ceiling before parsing, so nothing restores the rest: say so and
+          point at the full view, or a message ending mid-sentence reads as the sender's mistake. */}
       {data.truncated && (
         <div className="reader-truncated">
           {t('reader.truncated')}
@@ -454,16 +359,9 @@ export default function MessageReader(
       )}
 
       {data.htmlBody ? (
-        // Three independent barriers: the backend sanitised this, DOMPurify sanitised it again
-        // with a different parser, and this iframe can neither run scripts nor reach our
-        // origin. Message HTML is never rendered into the page itself.
-        //
-        // The two popup permissions are what make links work at all. A fully empty sandbox
-        // withholds every capability including navigation, so target="_blank" anchors — which
-        // is what the sanitiser rewrites every link into — silently do nothing on click. The
-        // escape clause matters as much as the popup one: without it the opened tab inherits
-        // this sandbox and the destination site loads scriptless and broken. Neither grants
-        // allow-scripts or allow-same-origin, so the message body itself stays inert.
+        // Third barrier after the backend and DOMPurify: never allow-scripts or allow-same-origin.
+        // The popup permissions are what make the sanitiser's target="_blank" links open at all, and
+        // the escape clause keeps the opened tab out of this sandbox. Never render bodies in the page.
         <iframe
           className="reader-body"
           sandbox="allow-popups allow-popups-to-escape-sandbox"
@@ -476,62 +374,20 @@ export default function MessageReader(
 
       {downloadError && <div className="reader-blocked-images">{downloadError}</div>}
 
-      {attachments.length > 0 && (
-        <div className="reader-attachments">
-          {attachments.map(attachment => {
-            // Built without a key: the non-image branch clones one on (no wrapping element,
-            // byte-identical DOM to the old unconditional loop), the image branch keys the
-            // wrapping <span> instead, since the chip is no longer the array's direct child.
-            const chip = (
-              <button
-                type="button"
-                className="attachment-chip"
-                onClick={() => void download(attachment.part, attachment.fileName)}
-              >
-                <PaperclipIcon size={14} />
-                {attachment.fileName}
-                <span className="attachment-chip-size">{formatSize(attachment.size)}</span>
-              </button>
-            )
-            if (!imageAttachments.includes(attachment)) {
-              return cloneElement(chip, { key: attachment.part })
-            }
-            return (
-              <span key={attachment.part} className="attachment-split">
-                {chip}
-                <DropdownMenu
-                  direction="up"
-                  ariaLabel={t('reader.moreActionsFor', { name: attachment.fileName })}
-                  className="attachment-split-more"
-                  trigger={<ChevronUpIcon size={13} />}
-                  items={[
-                    { label: t('reader.download'), onSelect: () => void download(attachment.part, attachment.fileName) },
-                    { label: t('reader.view'), onSelect: () => setViewed(attachment) },
-                  ]}
-                />
-              </span>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Last band of the column, so it sits on the screen's own edge — under the attachments,
-          which belong to the message, not to the actions taken on it. */}
-      {bottomActions && <div className="actionbar">{readerActions}</div>}
-
-      {viewed && (
-        <AttachmentViewerModal
-          images={imageAttachments.map(a => ({
-            part: a.part,
-            src: mailAttachmentUrl(folderPath!, uid, a.part, accountId),
-            fileName: a.fileName,
-            size: a.size,
-          }))}
-          initialIndex={Math.max(0, imageAttachments.findIndex(a => a.part === viewed.part))}
-          onDownload={image => void download(image.part, image.fileName)}
-          onClose={() => setViewed(null)}
-        />
-      )}
+      <ReaderAttachments
+        folderPath={folderPath}
+        uid={uid}
+        accountId={accountId}
+        attachments={attachments}
+        imageAttachments={imageAttachments}
+        viewed={viewed}
+        setViewed={setViewed}
+        download={(part, fileName) => void download(part, fileName)}
+      >
+        {/* Last band of the column, so it sits on the screen's own edge — under the attachments,
+            which belong to the message, not to the actions taken on it. */}
+        {bottomActions && <div className="actionbar">{readerActions}</div>}
+      </ReaderAttachments>
 
       {picker && (
         <MoveMessagesModal

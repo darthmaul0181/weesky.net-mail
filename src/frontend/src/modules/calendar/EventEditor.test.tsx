@@ -37,7 +37,7 @@ function draw(props: Partial<EventEditorProps> = {}) {
   const onDelete = vi.fn()
   const onClose = vi.fn()
   renderInCalendar(
-    <EventEditor detail={null} occurrence={null} initial={form()} calendars={CALENDARS}
+    <EventEditor detail={null} initial={form()} calendars={CALENDARS}
       saving={false} error={null} onReload={null} fullScreen={false}
       onSave={onSave} onDelete={onDelete} onClose={onClose} {...props} />)
   return { onSave, onDelete, onClose }
@@ -345,7 +345,7 @@ describe('EventEditor', () => {
   it('offers a way out of a stale write', async () => {
     const onReload = vi.fn()
     renderInCalendar(
-      <EventEditor detail={detailOf()} occurrence={null} initial={form()} calendars={CALENDARS}
+      <EventEditor detail={detailOf()} initial={form()} calendars={CALENDARS}
         saving={false} error="This event changed elsewhere since you opened it."
         onReload={onReload} fullScreen={false}
         onSave={vi.fn()} onDelete={vi.fn()} onClose={vi.fn()} />)

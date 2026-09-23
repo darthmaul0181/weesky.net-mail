@@ -23,13 +23,8 @@ export interface WebAppManifest {
 const THEME_COLOR = '#182238'
 const BACKGROUND_COLOR = '#f6f3ef'
 
-/**
- * The manifest the browser will read, or null when nothing should be posted at all.
- *
- * Every URL is absolute: a blob: has an opaque path, and resolving a relative reference against
- * it is not reliable. Building them from the current origin also makes the manifest correct on
- * both account and account-dev, with no build-time setting.
- */
+/** The manifest, or null when nothing should be posted. Every URL is absolute (a blob: has an
+ * opaque path), built from the current origin so it holds on every deployment. */
 export function buildManifest(
   settings: AppSettings | undefined, origin: string,
 ): WebAppManifest | null {

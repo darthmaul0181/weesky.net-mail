@@ -55,11 +55,8 @@ export function removeSummaries(messages: MailMessageSummary[], uids: number[]):
   return { messages: removed === 0 ? messages : kept, removed, removedUnread }
 }
 
-/**
- * The one place a cached page's two faces are rewritten: the flat `messages` and, on a grouped
- * page, every thread's own members — the backend fills one or the other, never both. A thread
- * the transform empties disappears with its last member.
- */
+// Rewrites both faces of a cached page, the flat `messages` and every thread's members (the backend
+// fills one or the other). A thread the transform empties disappears.
 export function mapPageSummaries(
   page: MailFolderPage, map: (messages: MailMessageSummary[]) => MailMessageSummary[],
 ): MailFolderPage {

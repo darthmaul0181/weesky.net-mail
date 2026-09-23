@@ -7,11 +7,8 @@ export interface Placed<T> {
   height: number
 }
 
-/**
- * One day's dated events side by side: a cluster is a run of events joined by overlap, and its
- * members share its width equally. A column is reused as soon as it frees up — 9–12, 9–10 and
- * 10–11 take two columns, a third spent on a slot nothing occupies reading as a fault.
- */
+/** One day's dated events side by side: overlapping events form a cluster sharing its width, and
+ * a freed column is reused (9–12, 9–10, 10–11 take two columns, not three). */
 export function layoutColumn<T>(
   items: T[],
   startMinuteOf: (item: T) => number,

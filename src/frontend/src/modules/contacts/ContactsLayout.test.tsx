@@ -220,7 +220,7 @@ describe('ContactsLayout', () => {
     await waitFor(() => expect(api.deleteContact).toHaveBeenCalledWith('b'))
   })
 
-  // Le lot passe par un seul appel, et un refus laisse l'écran sur l'état du serveur en le disant.
+  // The batch goes through one call, and a refusal leaves the screen on server state, saying so.
   it('deletes the selection and toasts on refusal', async () => {
     api.deleteContacts.mockRejectedValueOnce(new Error('refused'))
     renderAt('/contacts')
@@ -473,7 +473,7 @@ describe('ContactsLayout', () => {
         'b', expect.objectContaining({ cardHash: 'abc123' })))
     })
 
-    // A card the 4a backfill never reached answers no hash at all. The key has to be absent from
+    // A card the hash backfill never reached answers no hash at all. The key has to be absent from
     // the payload rather than present and undefined, which serialises as a version claim of null.
     it('omits the key entirely when the card carries no hash', async () => {
       api.updateContact.mockResolvedValue(undefined)
@@ -913,9 +913,10 @@ describe('contact groups', () => {
     expect(screen.queryByText('Carla')).not.toBeInTheDocument()
   })
 
-  // Un groupe supprimé ailleurs, un GUID étranger collé dans l'URL : le scope ne résout plus, et
-  // un carnet filtré sur rien serait indistinguable d'un carnet vide. Le repli emporte le scope et
-  // lui seul : une fiche ouverte qui disparaît avec le groupe se lit comme le contact parti avec.
+  // A group deleted elsewhere, a foreign GUID pasted into the URL: the scope no longer resolves,
+  // and a book filtered on nothing would be indistinguishable from an empty book. The fallback
+  // carries the scope and only the scope: a card left open when its group disappears reads as the
+  // contact having gone with it.
   it('falls back to the whole book when the scope names no known group, keeping the open card',
     async () => {
       // Every committed frame, not just the one a waitFor happens to sample: the whole book on
@@ -935,20 +936,20 @@ describe('contact groups', () => {
       expect(unhighlighted).toBe(0)
     })
 
-  // Une liste refusée répond elle aussi à la question — le scope ne résout pas — là où attendre
-  // les données seules tiendrait la colonne sur sa ligne de chargement pour la session entière.
+  // A refused list answers the same question too — the scope does not resolve — where waiting on
+  // the data alone would hold the column on its loading line for the whole session.
   it('falls back when the group list itself is refused, and says so in the band', async () => {
     api.getContactGroups.mockRejectedValue(new Error('boom'))
     renderAt('/contacts?scope=group:g1')
 
     await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
     expect(screen.queryByText(/loading contacts/i)).not.toBeInTheDocument()
-    // Une section vide dirait que le compte n'a aucun groupe, ce qui est un mensonge par omission.
+    // An empty section would say the account has no group, a lie by omission.
     expect(await screen.findByText('Could not load the groups')).toBeInTheDocument()
   })
 
-  // Le geste ajoute et ne retire jamais : un drop qui ajouterait ou retirerait selon l'état de
-  // chaque ligne rendrait un résultat différent par contact.
+  // The gesture adds and never removes: a drop that added or removed depending on each row's
+  // state would give a different result per contact.
   it('adds the dropped contacts to the group and never removes any', async () => {
     api.addContactGroupMembers.mockResolvedValue(undefined)
     renderAt('/contacts')
@@ -1008,7 +1009,7 @@ describe('contact groups', () => {
     expect(container.querySelector('.context-drawer.is-open')).toBeTruthy()
   })
 
-  // La suppression d'un groupe n'est pas celle de ses contacts, et le dialogue doit le dire.
+  // Deleting a group does not delete its contacts, and the dialog must say so.
   it('confirms a group deletion saying the contacts stay', async () => {
     api.deleteContactGroup.mockResolvedValue(undefined)
     renderAt('/contacts?scope=group:g1')
@@ -1024,7 +1025,7 @@ describe('contact groups', () => {
     await confirmDeletion()
 
     await waitFor(() => expect(api.deleteContactGroup).toHaveBeenCalledWith('g1'))
-    // Le scope suivait le groupe : il tombe sur le carnet entier plutôt que sur une liste vide.
+    // The scope was following the group: it falls back to the whole book rather than an empty list.
     await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
   })
 
@@ -1054,8 +1055,8 @@ describe('contact groups', () => {
     expect(screen.getByRole('menuitem', { name: 'Write to group' })).toBeDisabled()
   })
 
-  // Le scope se conserve dans l'URL pour tout ce qui n'est pas « all » — la règle qui remplace les
-  // sept `'favorites'` en dur.
+  // The scope is kept in the URL for everything but "all" — the rule that replaces the seven
+  // hard-coded `'favorites'`.
   it('keeps the group scope in the URL when a contact is opened', async () => {
     const router = renderRouter('/contacts?scope=group:g1')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())

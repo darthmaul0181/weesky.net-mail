@@ -8,13 +8,11 @@ import {
 } from '@tanstack/react-query'
 import { api } from '../../../api.js'
 import { holdNextCall, settle } from '../../../test-utils'
-import RulesPage, {
-  RuleEditorModal,
-  ConvertConfirmModal,
-  RuleCard,
-  isConditionValid,
-  isActionValid,
-} from './RulesPage'
+import RulesPage from './RulesPage'
+import { RuleEditorModal } from './RuleEditorModal'
+import { ConvertConfirmModal } from './ConvertConfirmModal'
+import { RuleCard } from './RuleCard'
+import { isConditionValid, isActionValid } from './ruleDraft'
 import type { MailFolderNode } from '../../mail/api/mailTypes'
 import type { SieveCondition, SieveRule, SieveRuleSet, SieveRuleWrite } from './rulesTypes'
 

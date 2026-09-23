@@ -85,7 +85,8 @@ describe('MonthView', () => {
     expect(chip?.querySelector('.event-dot')).toBeNull()
   })
 
-  // Decision 3 speaks of the week grid: the month draws the evening once, on its start day.
+  // The week grid lights both slices of an evening crossing midnight; the month draws the
+  // evening once, on its start day.
   it('draws an evening crossing midnight in one cell', () => {
     month([occurrenceOf({
       eventId: 'p1', summary: 'Party',

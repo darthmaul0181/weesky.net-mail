@@ -1,17 +1,9 @@
 import DOMPurify from 'dompurify'
 import { FORBID_TAGS, FORBID_ATTR } from '../sanitizePolicy'
 
-/**
- * Client-side pass over a body the backend already sanitised.
- *
- * This is not redundancy for its own sake: the two passes use different parsers in different
- * engines. The class of bug that defeats an HTML sanitiser is a parse divergence — the
- * sanitiser builds one tree, the browser builds another, and script survives in the gap
- * (GHSA-pgww-w46g-26qg was exactly that, in the backend's parser). A divergence in one engine
- * does not reproduce in the other, so a body has to defeat both to reach the iframe.
- *
- * The iframe sandbox is a third, independent barrier: it cannot run scripts at all.
- */
+// Second pass over a body the backend already sanitised, in another engine: a sanitiser falls to a
+// parse divergence with the browser, and one engine's divergence does not reproduce in the other.
+// The sandboxed iframe is the third barrier.
 export function sanitizeBody(html: string): string {
   if (!html) return ''
 
@@ -27,20 +19,12 @@ export function sanitizeBody(html: string): string {
 
 const BLOCKED_BACKGROUND = 'data-blocked-bg'
 
-/**
- * What `background-image` answers when nothing survives the cull. `initial` is the common one:
- * Blink answers it — not '' and not `none` — for a `background:` shorthand that declares no
- * image, which is how mail is routinely written and what the backend's longhand-only rule leaves
- * behind. A CSS-wide keyword cannot sit in a layer list, so listing one beside the restored URL
- * voids the whole declaration and consent restores nothing at all.
- */
+// Blink answers `initial` for a `background:` shorthand with no image. A CSS-wide keyword cannot sit
+// in a layer list, so keeping one beside a restored URL would void the whole declaration.
 const NO_SURVIVING_LAYER = /^\s*(none|initial|inherit|unset|revert|revert-layer)\s*$/i
 
-/**
- * A withheld URL is only ever re-entered inside url("…") after its scheme is checked and its
- * quotes and backslashes are encoded: DOMPurify validates neither — measured, it passes
- * url(javascript:…) straight through — so this is the only gate on the client side.
- */
+// Scheme checked, quotes and backslashes encoded: DOMPurify passes url(javascript:…) untouched,
+// so this is the only gate on the client side.
 function restorable(raw: string): string | null {
   let parsed: URL
   try {
@@ -52,21 +36,9 @@ function restorable(raw: string): string | null {
   return parsed.href.replace(/["\\]/g, encodeURIComponent)
 }
 
-/**
- * Restores remote images, on explicit user consent only. Runs before sanitising, so the
- * restored URLs are subject to the same pass as everything else.
- *
- * A background comes back through CSSOM, never by concatenating onto the style text: an open
- * construct already in that attribute — `a: url(` — captures appended text, and a `)` in the
- * withheld URL closes it, after which the rest parses as declarations of the forger's choosing.
- * Neither `)` nor `;` is percent-encoded by a URL parser, so assigning the property and letting
- * the browser reserialise the attribute is what closes that door.
- *
- * The attribute records no layer position, so the layers the cull left in the CSS (a gradient, a
- * cid: image Task 4 will resolve) are carried into the new value first and the withheld ones
- * after: that is the order the backend's own cases have, and it is the only way consent does not
- * make a surviving gradient disappear.
- */
+// On consent only, before sanitising. A background returns through CSSOM, never appended to the style
+// text, where an open `url(` would capture it and a `)` in the URL would inject declarations.
+// Layers the cull left (a gradient, a cid: image) go first, withheld ones after: the backend's order.
 export function revealBlockedImages(html: string): string {
   const revealed = html.replace(/data-blocked-src=/g, 'src=')
   if (!revealed.includes(BLOCKED_BACKGROUND)) return revealed
@@ -90,18 +62,9 @@ export function revealBlockedImages(html: string): string {
   return doc.body.innerHTML
 }
 
-/**
- * Wraps the sanitised fragment in a document, because a bare fragment in srcDoc inherits the
- * browser's defaults: an 8px body margin that left the message text visibly out of line with
- * the header above it, and a serif face for any body that brings no styles of its own.
- *
- * Everything here is our own markup with the sanitised fragment as its only variable part, and
- * none of it grants the body a capability — the sandbox still withholds scripts and same-origin.
- *
- * The rules are deliberately few. Message HTML carries its own styling and is entitled to it;
- * these set a floor for bodies that have none, and contain the two overflows that a body can
- * inflict on the layout regardless of its own intent.
- */
+// A document, not a bare fragment, which would take the browser's 8px margin and serif face. Nothing
+// here grants the body a capability; the rules only set a floor and contain the two overflows a body
+// can inflict on the layout.
 export function renderBodyDocument(
   fragment: string, options: { dark?: boolean; narrow?: boolean } = {},
 ): string {
@@ -112,10 +75,8 @@ export function renderBodyDocument(
     ? { scheme: 'dark', background: '#212429', text: '#e0e0e0' }
     : { scheme: 'light', background: '#ffffff', text: '#1a1a1a' }
 
-  // An image is the one thing darkenColours cannot recolour, so a pale banner blazes on the dark
-  // canvas. The dimming is uniform because it has to be: the iframe is cross-origin and sandboxed,
-  // so no pixel can be read to tell a banner from a photograph. The reader's colour toggle undoes
-  // it for one message, which is what makes a light touch the right one.
+  // An image is the one thing darkenColours cannot recolour, and the sandboxed cross-origin iframe
+  // lets no pixel be read, so the dimming is uniform. The colour toggle undoes it per message.
   const images = options.dark ? 'filter: brightness(0.85) saturate(0.9);' : ''
 
   // 44px of side margin out of a 360px screen is a lot to spend on nothing.
@@ -136,10 +97,9 @@ export function renderBodyDocument(
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     ${scale}
   }
-  /* A wide image or a long unbroken URL — this mailbox is largely made of the latter — would
-     otherwise scroll the body sideways. No height:auto - it recomputes every height from the
-     intrinsic ratio, and a 1x1 spacer gif stretched to 154x10 by attributes became 154px tall,
-     turning a newsletter button into a tower. */
+  /* A wide image or a long unbroken URL would scroll the body sideways. Never height:auto: it
+     recomputes heights from the intrinsic ratio, and a 1x1 spacer stretched to 154x10 by
+     attributes became a 154px tower. */
   img { max-width: 100%; ${images} }
   /* break-word, not anywhere: both break a long URL, but anywhere also feeds those break
      points into min-content sizing, so a table column can collapse to a single letter. */

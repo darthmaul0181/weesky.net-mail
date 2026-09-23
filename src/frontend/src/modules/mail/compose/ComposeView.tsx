@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { useBlocker, useLocation, useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { useAuth } from '../../../contexts/AuthContext'
 import type { Toast, ToastAction } from '../../../hooks/useToasts'
 import { useViewport } from '../../../hooks/useViewport'
@@ -12,27 +12,27 @@ import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, composeFormatOf, usePreferences, type Preferences } from '../../../hooks/usePreferences'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
-import { registerLeaveGuard } from '../../../lib/leaveGuard'
-import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
-import { stagedAttachmentUrl, uploadAttachment } from '../../../api.js'
 import DropdownMenu from '../../../components/DropdownMenu'
 import Modal from '../../../components/Modal'
-import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import KebabIcon from '../../../icons/KebabIcon'
 import RocketIcon from '../../../icons/RocketIcon'
 import type { MailPriority } from '../api/mailTypes'
 import AttachmentTray from './AttachmentTray'
 import { htmlToText, losesFormatting, textToHtml } from './bodyFormat'
 import EditorToolbar from './EditorToolbar'
-import IdentitySelect from './IdentitySelect'
+import ComposeFields from './ComposeFields'
 import { mailtoSeedFrom } from './mailtoSeed'
-import RecipientsField, { isValidAddress, namesByAddressOf } from './RecipientsField'
+import { isValidAddress } from './RecipientsField'
 import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
 import { applyComposeFormat, type ComposeAction, type ComposeSeed } from './composeSeed'
 import LoadingBlock from '../../../components/LoadingBlock'
 import { relativizeStagedUrls } from './stagedUrls'
 import { useStagedAttachments } from './useStagedAttachments'
+import { useComposeDropZone } from './useComposeDropZone'
+import { useInlineUploads, type InsertedInline } from './useInlineUploads'
+import { useLeaveGuard } from './useLeaveGuard'
+import LeaveDialog from './LeaveDialog'
 
 const NO_FORMATS: ActiveFormats = {
   bold: false, italic: false, underline: false, strikethrough: false,
@@ -48,16 +48,6 @@ function composeTitle(action: ComposeAction | undefined, t: TFunction<'compose'>
       : action === 'draft' ? t('titles.draft') : t('titles.newMessage')
 }
 
-/** The single predicate for "goes in the body", so the drop overlay and routeFiles cannot drift. */
-const isImage = (type: string) => type.startsWith('image/')
-
-const PRIORITIES: MailPriority[] = ['high', 'normal', 'low']
-
-function priorityLabel(value: MailPriority, t: TFunction<'compose'>): string {
-  return value === 'high' ? t('priority.high')
-    : value === 'low' ? t('priority.low') : t('priority.normal')
-}
-
 type ComposeState = { from?: string; seed?: ComposeSeed; backTo?: string } | null
 
 /* `from` is a folder and only the mail module has one. `backTo` is a whole path, for a caller
@@ -70,12 +60,8 @@ interface Props {
   onNotify: (message: string, kind?: Toast['type'], action?: ToastAction) => void
 }
 
-/**
- * The compose surface, replacing list+reader inside the mail module. Leaving with unsaved
- * changes loses them, so a router blocker owns every exit — folder click, ✕, Back — offering
- * to file a draft instead; beforeunload covers the tab.
- * A reply/forward/draft arrives as `location.state.seed`; a plain new message carries none.
- */
+// Replaces list+reader inside the mail module; `useLeaveGuard` owns every exit while something is
+// unsaved. A reply/forward/draft arrives as `location.state.seed`, a new message carries none.
 export default function ComposeView(props: Props) {
   const { t } = useTranslation('compose')
   const navigate = useNavigate()
@@ -125,10 +111,9 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
   const { data: contacts } = useContacts()
   const { data: groups } = useContactGroups()
   const capture = useCaptureContacts()
-  // Resolved once for the three fields, and by the same function the contacts band reads, so a
-  // group the field expands and one « Write to group » writes to can never be two sets.
-  // A book still in flight is not an empty one: rendering its groups as options would let a
-  // click on a group row report `toast.emptyGroup` on a carnet that just hasn't answered yet.
+  // Resolved by the function the contacts band reads, so a group the field expands and one Write to
+  // group writes to are one set. A book still in flight offers no groups: a click would report
+  // `toast.emptyGroup` on a book that just hasn't answered yet.
   const groupOptions = useMemo(
     () => (contacts ? groupOptionsOf(groups ?? [], contacts) : []), [groups, contacts])
   const notifyEmptyGroup = (name: string) => onNotify(t('toast.emptyGroup', { name }), 'error')
@@ -163,6 +148,7 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
   // applyComposeFormat has already settled every seeded case, so this only answers the no-seed one.
   const [text, setText] = useState<string | null>(
     seed ? seed.text : (openedFormat === 'text' ? '' : null))
+  const plainText = text !== null
   // Squire reads initialHtml once, at mount, so a switch back has to hand it the converted body
   // here — a prop change would never reach the editor it already built.
   const [editorHtml, setEditorHtml] = useState(seed?.html)
@@ -175,7 +161,7 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
   const [inlineAdopted, setInlineAdopted] = useState(false)
   // Held here as well as in the hook: the hook holds them to release them, this list rides the
   // payload and names the files the tray needs if the composer ever switches to plain text.
-  const [insertedInline, setInsertedInline] = useState<{ id: string; fileName: string; size: number }[]>([])
+  const [insertedInline, setInsertedInline] = useState<InsertedInline[]>([])
   // The seed alone: an inserted id reaches the hook through addInline, and handed in here as well
   // it would be held twice — released twice, and adopted into two tray rows the send packs twice.
   const seedInlineIds = useMemo(
@@ -193,25 +179,13 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
     ?? usableIdentities.find(i => i.isDefault)?.address
     ?? usableIdentities[0]?.address ?? null
 
-  // "Changed since open or the last save". A resumed draft opens clean — its content is
-  // already filed; any other seed opens changed, because its content exists nowhere else.
-  const [changed, setChanged] = useState(() => Boolean(seed) && seed?.action !== 'draft')
-
-  // The blocker predicate and the unload handler run inside a navigation, which can fire in the
-  // same click that dirtied the form — before any passive effect flushes. So the dirtying
-  // callbacks set the ref up front; the effect only carries it back to false when nothing is
-  // left to lose. A From choice counts like any other edit now: on a resumed draft it is the
-  // only change there is, and dropping it would silently send from the wrong address.
-  // The non-empty clause was written for a composer that could only gain content, so it only
-  // applies where there is no filed version: emptying a draft is a change like any other.
-  // An inserted inline image counts here as well as in the tray: it is content in the body, and
-  // resting on Squire having fired `input` for it would be resting on something asserted nowhere.
-  const dirty = changed && (draftRef !== null || to.length > 0 || cc.length > 0 || bcc.length > 0
-    || subject !== '' || bodyTouched || attachments.items.length > 0 || insertedInline.length > 0)
-  const dirtyRef = useRef(dirty)
-  const leavingRef = useRef(false)
-  useEffect(() => { dirtyRef.current = dirty }, [dirty])
-  const markDirty = useCallback(() => { dirtyRef.current = true; setChanged(true) }, [])
+  // The non-empty clause only applies where no version is filed: emptying a draft is a change too.
+  // An inserted inline image counts on its own rather than resting on Squire having fired `input`.
+  const hasContent = draftRef !== null || to.length > 0 || cc.length > 0 || bcc.length > 0
+    || subject !== '' || bodyTouched || attachments.items.length > 0 || insertedInline.length > 0
+  const backTarget = backTargetOf(state)
+  const { dirty, markDirty, markClean, leave, asking, keepEditing, leaveBehind } = useLeaveGuard(
+    Boolean(seed) && seed?.action !== 'draft', hasContent, backTarget)
   const changeFrom = useCallback((v: string | null) => { markDirty(); setFromAddress(v) }, [markDirty])
   const changeTo = useCallback((v: string[]) => { markDirty(); setTo(v) }, [markDirty])
   const changeCc = useCallback((v: string[]) => { markDirty(); setCc(v) }, [markDirty])
@@ -228,155 +202,12 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
   // The one edit that shrinks the form, so nothing else can notice it.
   const removeFile = useCallback((key: string) => { markDirty(); removeStaged(key) }, [markDirty, removeStaged])
 
-  // An inline upload never reaches the tray, so attachments.uploading cannot see it. Until it
-  // resolves there is no id for a send to carry, for an adoption to move, or for a discard to
-  // release, which is why everything that consumes those ids waits on this count.
-  const [inlineUploads, setInlineUploads] = useState(0)
-  const addInline = attachments.addInline
-  const insertImages = useCallback(async (files: File[]) => {
-    for (const file of files) {
-      setInlineUploads(n => n + 1)
-      try {
-        const info = await uploadAttachment(file, { accountId, inline: true })
-        addInline(info.id)
-        setInsertedInline(previous => [...previous, info])
-        editor?.insertImage(stagedAttachmentUrl(info.id, accountId))
-        // Only once something is actually in the body: a refused upload leaves nothing to lose,
-        // and a composer dirtied by it would still ask to save on the way out.
-        markDirty()
-      } catch (error) {
-        onNotify(apiErrorMessage(error, t('toast.imageFailed')), 'error')
-      } finally {
-        setInlineUploads(n => n - 1)
-      }
-    }
-  }, [markDirty, accountId, addInline, editor, onNotify, t])
-
-  // An image goes in the body, anything else in the tray. Plain text has no body to put one in,
-  // so there everything is an attachment.
-  const routeFiles = useCallback((files: File[]) => {
-    if (text !== null) { addFiles(files); return }
-    const images = files.filter(file => isImage(file.type))
-    const rest = files.filter(file => !isImage(file.type))
-    if (rest.length > 0) addFiles(rest)
-    if (images.length > 0) void insertImages(images)
-  }, [text, addFiles, insertImages])
-
-  // Counter, not a boolean: dragleave fires at every child boundary, so the overlay only
-  // goes away when as many leaves as enters have fired (or on drop).
-  const [dropTarget, setDropTarget] = useState(false)
-  const dragDepth = useRef(0)
-  const [bodyInsert, setBodyInsert] = useState(false)
-  const bodyDepth = useRef(0)
-
-  function carriesFiles(event: React.DragEvent) {
-    return Array.from(event.dataTransfer.types).includes('Files')
-  }
-  // A drag withholds its bytes until the drop, but not the types — enough to word the overlay on
-  // the predicate routeFiles will sort by, so it never promises an insertion the drop won't make.
-  function carriesImage(event: React.DragEvent) {
-    return Array.from(event.dataTransfer.items).some(
-      item => item.kind === 'file' && isImage(item.type))
-  }
-  function onDragEnter(event: React.DragEvent) {
-    if (!carriesFiles(event)) return
-    event.preventDefault()
-    dragDepth.current += 1
-    setDropTarget(true)
-  }
-  function onDragOver(event: React.DragEvent) {
-    if (carriesFiles(event)) event.preventDefault()
-  }
-  function onDragLeave(event: React.DragEvent) {
-    if (!carriesFiles(event)) return
-    dragDepth.current = Math.max(0, dragDepth.current - 1)
-    if (dragDepth.current === 0) setDropTarget(false)
-  }
-  function onDrop(event: React.DragEvent) {
-    if (!carriesFiles(event)) return
-    event.preventDefault()
-    resetDrag()
-    const files = Array.from(event.dataTransfer.files)
-    if (files.length > 0) addFiles(files)
-  }
-  function resetDrag() {
-    dragDepth.current = 0
-    bodyDepth.current = 0
-    setDropTarget(false)
-    setBodyInsert(false)
-  }
-  function onBodyDragEnter(event: React.DragEvent) {
-    if (!carriesFiles(event)) return
-    bodyDepth.current += 1
-    // Plain text has no body to show an image in, so there a drop attaches like any other.
-    setBodyInsert(text === null && carriesImage(event))
-  }
-  function onBodyDragLeave(event: React.DragEvent) {
-    if (!carriesFiles(event)) return
-    bodyDepth.current = Math.max(0, bodyDepth.current - 1)
-    if (bodyDepth.current === 0) setBodyInsert(false)
-  }
-  // Stops here: the surface handler below would attach what the body has just taken. It therefore
-  // owes the surface its own reset, which is what resetDrag is for.
-  function onBodyDrop(event: React.DragEvent) {
-    if (!carriesFiles(event)) return
-    event.preventDefault()
-    event.stopPropagation()
-    resetDrag()
-    const files = Array.from(event.dataTransfer.files)
-    if (files.length > 0) routeFiles(files)
-  }
-  function onBodyPaste(event: React.ClipboardEvent) {
-    const files = Array.from(event.clipboardData.files)
-    if (files.length === 0) return
-    // Capture phase, and stopped rather than merely prevented: Squire's _onPaste never reads
-    // defaultPrevented, so a clipboard carrying an image plus text/plain (Explorer) or plus
-    // rtf+html (Word) would insert its own artefact beside ours.
-    event.preventDefault()
-    event.stopPropagation()
-    routeFiles(files)
-  }
-  const blocker = useBlocker(useCallback(() => dirtyRef.current && !leavingRef.current, []))
-
-  // The same question, asked by something the router cannot see — today, the mailbox switch in
-  // the identity menu. It resolves on the dialog's buttons, so both roads end in one prompt.
-  const [leaveAsk, setLeaveAsk] = useState<((ok: boolean) => void) | null>(null)
+  const { inlineUploads, routeFiles } = useInlineUploads({
+    accountId, plainText, editor, addFiles, addInline: attachments.addInline,
+    setInsertedInline, markDirty, onNotify,
+  })
+  const dropZone = useComposeDropZone(plainText, addFiles, routeFiles)
   const [confirmPlain, setConfirmPlain] = useState(false)
-
-  useEffect(() => {
-    registerLeaveGuard(() => dirtyRef.current && !leavingRef.current
-      ? new Promise<boolean>(resolve => setLeaveAsk(() => resolve))
-      : Promise.resolve(true))
-    return () => registerLeaveGuard(null)
-  }, [])
-
-  useEffect(() => {
-    function onBeforeUnload(event: BeforeUnloadEvent) {
-      if (dirtyRef.current && !leavingRef.current) event.preventDefault()
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [])
-
-  const backTarget = backTargetOf(state)
-
-  const leave = useCallback(() => {
-    leavingRef.current = true
-    void navigate(backTarget)
-  }, [navigate, backTarget])
-
-  // The dialog serves two callers, so its buttons answer whichever one opened it: the blocker
-  // holds a navigation to release, the guard holds a promise to settle.
-  function keepEditing() {
-    if (leaveAsk) { setLeaveAsk(null); leaveAsk(false); return }
-    blocker.reset?.()
-  }
-
-  function leaveBehind() {
-    leavingRef.current = true
-    if (leaveAsk) { setLeaveAsk(null); leaveAsk(true); void navigate(backTarget); return }
-    blocker.proceed?.()
-  }
 
   // SquireEditor binds onChange once at mount, so the callback has to be stable.
   const touchBody = useCallback(() => { markDirty(); setBodyTouched(true) }, [markDirty])
@@ -409,26 +240,11 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
   const canSend = to.length > 0 && allValid && !busy
   const canSaveDraft = allValid && !busy
 
-  // Measured on a Galaxy S25: the keyboard takes 426px of an 832px screen, so the composer only
-  // ever has 406 while anything is being typed, and the header, the fields and the toolbar spend
-  // 294 of them — 113px of body, four lines, which is what it had before the whole mobile pass.
-  // Folded, the fields are 48px and the body 226. `narrow &&` rather than a stored flag reset on
-  // rotation: growing past 639px brings them back without this state having to be told.
+  // On a phone the keyboard leaves ~406px, so the fields fold while the caret is in the body.
+  // `narrow &&` rather than a flag reset on rotation: growing past 639px brings them back unasked.
   const [fieldsFolded, setFieldsFolded] = useState(false)
   const [refocusTo, setRefocusTo] = useState(false)
   const folded = narrow && fieldsFolded
-  const recipientNames = useMemo(() => namesByAddressOf(contacts ?? []), [contacts])
-  const nameOf = (token: string) => recipientNames.get(canonicalAddress(token)) ?? token
-  // The sender is named only where it can be wrong: `IdentitySelect` shows a menu on exactly this
-  // condition, so the summary and the field cannot disagree about whether there is a choice.
-  const choosableFrom = (identityList ?? []).filter(i => !i.stale).length > 1
-  const summary = [
-    ...(choosableFrom && effectiveFrom ? [`${t('fields.from')} : ${effectiveFrom}`] : []),
-    // Send is disabled without a recipient, so a folded line that stayed silent would leave a dead
-    // button and no visible reason for it.
-    to.length ? `${t('fields.to')} : ${to.map(nameOf).join(', ')}` : t('fields.noRecipient'),
-    subject || t('fields.noSubject'),
-  ].join(' · ')
 
   const buildPayload = () => ({
     to, cc, bcc, subject,
@@ -486,8 +302,7 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
       {
         onSuccess: (saved) => {
           setDraftRef({ folderPath: saved.folderPath, uid: saved.uid })
-          setChanged(false)
-          dirtyRef.current = false
+          markClean()
           onNotify(t('toast.draftSaved'))
           onSaved?.()
         },
@@ -505,13 +320,9 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
   }
 
   return (
-    <div className="compose-view" data-testid="compose-view"
-      onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-      {/* Measured at 360: title + Send + Save draft + ✕ came to 462px of content in a 360px band,
-          which has no `flex-wrap` — Save draft was cut off and the ✕, the only visible way out of
-          the composer, ended a hundred pixels past the screen. The title goes because the subject
-          field says the same thing one row down, and Save draft into a menu because Send is the
-          action this surface exists for. */}
+    <div className="compose-view" data-testid="compose-view" {...dropZone.surface}>
+      {/* At 360px title + Send + Save draft + ✕ overflowed the band, which does not wrap, and pushed
+          the ✕ off screen: the title goes (the subject says it) and Save draft moves into a menu. */}
       <div className="compose-header">
         {!narrow && <span className="modal-title">{composeTitle(seed?.action, t)}</span>}
         <button type="button" className="btn btn-primary compose-send" disabled={!canSend} onClick={submit}>
@@ -536,87 +347,23 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
         <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={close}>✕</button>
       </div>
 
-      {/* Unmounted while folded, never hidden: hidden in CSS they would keep their place in the
-          tab order and Tab would walk into invisible fields. Nothing is lost either — the caret
-          reaching the body has already blurred the recipients field, so its half-typed token was
-          committed on the way. */}
-      <div className="compose-fields">
-        {folded ? (
-          <button
-            type="button"
-            className="compose-summary"
-            aria-expanded={false}
-            aria-label={t('fields.showFields')}
-            onClick={() => { setFieldsFolded(false); if (to.length === 0) setRefocusTo(true) }}
-          >
-            <span className="compose-summary-text">{summary}</span>
-            <ChevronDownIcon size={14} />
-          </button>
-        ) : (
-        <>
-        <div className="compose-from">
-          <span className="compose-from-label">{t('fields.from')}</span>
-          {effectiveFrom ? (
-            // The whole list, not the usable one: the select keeps stale rows out of the menu
-            // itself, and needs them to name a choice that went stale under the composer.
-            <IdentitySelect identities={identityList ?? []} value={effectiveFrom} onChange={changeFrom} />
-          ) : (
-            <span className="compose-from-value">
-              {identity ? `${identity.displayName} (${identity.email})` : ''}
-            </span>
-          )}
-        </div>
-        <div className="compose-to-row">
-          <RecipientsField id="compose-to" label={t('fields.to')} tokens={to} onChange={changeTo}
-            autoFocus={!seed || refocusTo} contacts={contacts}
-            groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />
-          <span className="compose-cc-links">
-            {!showCc && <button type="button" className="compose-link-btn" onClick={() => setShowCc(true)}>{t('fields.cc')}</button>}
-            {!showBcc && <button type="button" className="compose-link-btn" onClick={() => setShowBcc(true)}>{t('fields.bcc')}</button>}
-            {!showPriority && (
-              <button type="button" className="compose-link-btn" onClick={() => setShowPriority(true)}>{t('fields.priority')}</button>
-            )}
-          </span>
-        </div>
-        {showCc && <RecipientsField id="compose-cc" label={t('fields.cc')} tokens={cc} onChange={changeCc}
-          contacts={contacts} groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />}
-        {showBcc && <RecipientsField id="compose-bcc" label={t('fields.bcc')} tokens={bcc} onChange={changeBcc}
-          contacts={contacts} groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />}
-        {/* Stays open while the value is not Normal: folding it would take a live setting off the
-            screen while it kept riding on the message. Cc and Bcc are safe to fold — their tokens
-            stay visible either way. */}
-        {(showPriority || priority !== 'normal') && (
-          <div className="compose-priority">
-            <span className="compose-priority-label">{t('fields.priority')}</span>
-            <DropdownMenu
-              ariaLabel={t('fields.priority')}
-              className="compose-priority-select"
-              align="left"
-              // priorityLabel falls back to Normal, so an out-of-union value cannot blank the app.
-              trigger={<>{priorityLabel(priority, t)} <ChevronDownIcon size={13} /></>}
-              items={PRIORITIES.map(p => ({ label: priorityLabel(p, t), onSelect: () => changePriority(p) }))}
-            />
-          </div>
-        )}
-        <div className="field-h">
-          <label htmlFor="compose-subject">{t('fields.subject')}</label>
-          <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />
-        </div>
-        </>
-        )}
-      </div>
+      <ComposeFields folded={folded}
+        onUnfold={() => { setFieldsFolded(false); if (to.length === 0) setRefocusTo(true) }}
+        identity={identity} identityList={identityList} effectiveFrom={effectiveFrom} changeFrom={changeFrom}
+        to={to} changeTo={changeTo} autoFocusTo={!seed || refocusTo} cc={cc} changeCc={changeCc}
+        bcc={bcc} changeBcc={changeBcc} contacts={contacts} groupOptions={groupOptions}
+        notifyEmptyGroup={notifyEmptyGroup} showCc={showCc} setShowCc={setShowCc} showBcc={showBcc}
+        setShowBcc={setShowBcc} showPriority={showPriority} setShowPriority={setShowPriority}
+        priority={priority} changePriority={changePriority} subject={subject} changeSubject={changeSubject} />
 
-      <EditorToolbar editor={editor} active={active} plainText={text !== null}
+      <EditorToolbar editor={editor} active={active} plainText={plainText}
         switchLocked={inlineUploads > 0}
         onPickImages={routeFiles}
         onAddFiles={addFiles}
         onTogglePlainText={() => (text === null ? toPlainText() : toHtml())} />
-      {/* The fold is keyed on the caret entering the BODY, never on the keyboard: it opens on To
-          and on the subject too, and keying it there would fold the fields at the very moment they
-          are being filled. `onFocus` because React listens for `focusin`, which bubbles out of
-          Squire's contenteditable and out of the plain-text textarea alike. */}
-      <div className="compose-body" onDragEnter={onBodyDragEnter} onDragLeave={onBodyDragLeave}
-        onDrop={onBodyDrop} onPasteCapture={onBodyPaste}
+      {/* The fold keys on the caret entering the body, never on To or the subject being filled.
+          `onFocus` because React's focusin bubbles out of Squire and the textarea alike. */}
+      <div className="compose-body" {...dropZone.body}
         onFocus={() => { setFieldsFolded(true); setRefocusTo(false) }}>
         {text === null ? (
           <SquireEditor ref={setEditor} initialHtml={editorHtml} onChange={touchBody} onFormatChange={setActive} />
@@ -628,33 +375,17 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
 
       <AttachmentTray items={attachments.items} onRemove={removeFile} />
 
-      {/* No ✕ and no backdrop close: the three answers are on its buttons, so Escape takes the
-          harmless one rather than picking one of them. */}
-      {(blocker.state === 'blocked' || leaveAsk !== null) && (
-        <Modal role="alertdialog" title={t('leave.title')} onEscape={keepEditing}>
-          <p>{t('leave.body')}</p>
-          <div className="folder-pick-submit">
-            <button type="button" className="btn btn-ghost" onClick={keepEditing}>{t('leave.keepEditing')}</button>
-            {/* Locked while busy: it deletes the staged ids a save, send or upload may still be reading. */}
-            <button type="button" className="btn btn-ghost" disabled={busy}
-              onClick={() => {
-                // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
-                attachments.discardAll()
-                leaveBehind()
-              }}>
-              {t('leave.discard')}
-            </button>
-            {/* Locked on an invalid token too, where the reason is not on screen: say it. */}
-            <button type="button" className="btn btn-primary" disabled={!canSaveDraft}
-              title={allValid ? undefined : t('leave.fixAddress')}
-              onClick={() => saveDraft(() => {
-                attachments.discardAll()
-                leaveBehind()
-              })}>
-              {t('leave.saveDraft')}
-            </button>
-          </div>
-        </Modal>
+      {asking && (
+        <LeaveDialog busy={busy} canSaveDraft={canSaveDraft} allValid={allValid} onKeepEditing={keepEditing}
+          onDiscard={() => {
+            // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
+            attachments.discardAll()
+            leaveBehind()
+          }}
+          onSaveDraft={() => saveDraft(() => {
+            attachments.discardAll()
+            leaveBehind()
+          })} />
       )}
 
       {/* No ✕, like the leave guard: both of its answers are on its buttons. */}
@@ -670,9 +401,9 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
         </Modal>
       )}
 
-      {dropTarget && (
+      {dropZone.dropTarget && (
         <div className="compose-drop-overlay">
-          {t(bodyInsert ? 'drop.image' : 'drop.files')}
+          {t(dropZone.bodyInsert ? 'drop.image' : 'drop.files')}
         </div>
       )}
     </div>

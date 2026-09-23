@@ -38,7 +38,7 @@ const NAME_MAX = 100
 const ADDRESS_MAX = 320
 
 /** `ContactValidator.MaxAddressesPerContact` / `MaxPhonesPerContact` /
-    `MaxPostalAddressesPerContact` (décision 8): the add button disappears at the cap rather than
+    `MaxPostalAddressesPerContact`: the add button disappears at the cap rather than
     letting the save fail on a banner. */
 const EMAIL_MAX = 50
 const PHONE_MAX = 10
@@ -48,15 +48,9 @@ const POSTAL_PARTS = [
   'poBox', 'extended', 'street', 'locality', 'region', 'postalCode', 'country',
 ] as const
 
-/** The ten a card may carry and most contacts do not. `group` says which side of the form the
-    field belongs to once revealed — a name joins the hero beside the other names, everything else
-    the aside column. A field the card fills is always rendered
-    and never offered here: the menu hides emptiness, never content. `as const` narrows `label` to
-    the literal keys below, so the typed `t()` checks each one with no second union to keep in
-    sync — the idiom `roleLabel.ts`'s `KEYS` and `apiErrorMessage.ts`'s `CODES` already use. `id`
-    is kebab-case, like every other id in this file, where `key` is the camelCase wire name.
-    `displayName`'s 255 mirrors `contacts.display_name`'s column width, not a validator constant:
-    unlike the other eight, `ContactValidator.Validate` never bounds it. */
+/** The ten optional fields; `group` says which side of the form a revealed one joins. A field the
+ * card fills is rendered, never offered: the menu hides emptiness, not content. `displayName`'s
+ * 255 mirrors its column width, since `ContactValidator.Validate` never bounds it. */
 const OPTIONAL = [
   { key: 'nickname', id: 'nickname', label: 'fields.nickname', maxLength: NAME_MAX, long: false, group: 'name' },
   { key: 'displayName', id: 'display-name', label: 'editor.displayName', maxLength: 255, long: false, group: 'name' },
@@ -83,10 +77,9 @@ function blank(value: string | undefined): string | null {
   return trimmed === '' ? null : trimmed
 }
 
-/** On these fields the server reads `null` as "the request does not name this field, the card
-    keeps its own" and the empty string as the clear — the opposite of the names, where `null` is
-    the user emptying the box. So an untouched field sends `null`, which also spares a NOTE, ORG
-    or URL the projector truncated to its column from being rewritten by an unrelated edit. */
+/** Here the server reads `null` as "not named, keep the card's own" and '' as a clear, the
+ * opposite of the names. An untouched field sends `null`, which also spares a NOTE, ORG or URL the
+ * projector truncated from being rewritten by an unrelated edit. */
 function submitted(value: string, seeded: string): string | null {
   const trimmed = value.trim()
   return trimmed === seeded.trim() ? null : trimmed
@@ -99,12 +92,9 @@ function scalarsToDraft(
   scalars: Record<OptionalKey, string>, seeded: Record<OptionalKey, string>,
 ): Record<OptionalKey, string | null> {
   return Object.fromEntries(OPTIONAL.map(f => [f.key,
-    // The two names are excluded, because `Apply` replaces a name null included — there, null is
-    // the user who emptied the box, where on the other eight it means the request did not name
-    // the field at all. For displayName that also matters when nothing was typed: an empty string
-    // strips the card's FN, which no valid vCard may lack, while null falls back to the one the
-    // server computes. `submitted` would defeat it by echoing the seeded value back, which is
-    // exactly how the FN used to freeze at the shape the name had on the day the card was made.
+    // Not `submitted`: `Apply` replaces the two names, null included, so an empty displayName goes
+    // as null and the server computes the FN (an empty string would strip it). Echoing the seed
+    // back froze the FN at the name the card was created with.
     NAMES.has(f.key) ? blank(scalars[f.key]) : submitted(scalars[f.key], seeded[f.key]),
   ])) as Record<OptionalKey, string | null>
 }
@@ -144,7 +134,7 @@ export default function ContactEditView({
   // field the user never touched from one they emptied on purpose.
   const [seededScalars] = useState(scalars)
   const [seededBirthday] = useState(birthday)
-  // Grows with the menu, never shrinks: a field emptied by the user stays on screen (décision 1).
+  // Grows with the menu, never shrinks: a field emptied by the user stays on screen.
   const [revealed, setRevealed] = useState<Set<OptionalKey>>(() =>
     new Set(OPTIONAL.filter(f => blank(contact?.[f.key]) != null).map(f => f.key)))
   // The card's own rank per line, never the array index: a deleted address leaves a hole, and a
@@ -175,8 +165,8 @@ export default function ContactEditView({
   const [photoError, setPhotoError] = useState<PhotoErrorKey | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  // Révoqué avec le choix qui l'a créé : trois choix successifs tiendraient sinon trois images
-  // pour la vie de l'onglet.
+  // Revoked with the choice that created it: three successive choices would otherwise hold three
+  // images for the life of the tab.
   useEffect(() => {
     if (choice.kind !== 'chosen') return
     return () => URL.revokeObjectURL(choice.url)
@@ -212,7 +202,7 @@ export default function ContactEditView({
   }
 
   // The preference is a property of the line, not its rank: moving the line would change nothing
-  // now that the composer puts it back at its own position (decision 5).
+  // now that the composer puts it back at its own position.
   function makePrimary(index: number) {
     setAddresses(previous => previous.map((line, i) => ({ ...line, pref: i === index ? 1 : 101 })))
   }
@@ -252,7 +242,7 @@ export default function ContactEditView({
 
   async function pickPhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
-    // Vidé tout de suite : rechoisir le même fichier après une erreur ne lève aucun change sinon.
+    // Cleared right away: re-picking the same file after an error would otherwise raise no change.
     event.target.value = ''
     if (!file) return
 
@@ -261,8 +251,8 @@ export default function ContactEditView({
       const { base64, blob } = await reducePhoto(file)
       setChoice({ kind: 'chosen', base64, url: URL.createObjectURL(blob) })
     } catch (error) {
-      // Narrowed rather than cast : ce que le module ne dit pas explicitement trop lourd est
-      // illisible, qui est aussi la lecture honnete d'un throw inattendu.
+      // Anything the module does not flag as too large reads as unreadable, which is also the
+      // honest reading of an unexpected throw.
       setPhotoError((error as Error).message === PHOTO_TOO_LARGE ? PHOTO_TOO_LARGE : PHOTO_UNREADABLE)
     }
   }
@@ -272,7 +262,7 @@ export default function ContactEditView({
     setChoice(choice.kind === 'chosen' ? { kind: 'kept' } : { kind: 'removed' })
   }
 
-  /** The design's fixed table (décision 4): a token the table does not name is shown raw. */
+  /** The design's fixed table: a token the table does not name is shown raw. */
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!valid || saving) return
@@ -353,7 +343,7 @@ export default function ContactEditView({
                 {t('editor.removePhoto')}
               </button>
             )}
-            {/* Sous l'avatar et non dans le banner : c'est le champ qui a échoué, pas la sauvegarde. */}
+            {/* Under the avatar, not in the banner: the field failed, not the save. */}
             {photoError && (
               <p className="contact-editor-photo-error" data-testid="editor-photo-error">{t(photoError)}</p>
             )}
@@ -477,10 +467,9 @@ export default function ContactEditView({
           <div className="contact-address-list">
             {postalAddresses.map((line, index) => (
               <div key={index} className="contact-postal-item" data-testid={`postal-row-${index}`}>
-                {/* Three rows, the shape the mockup settled on: street with its type, then the
-                    city line, then region and country. PO box and extended only when the card
-                    carries them — décision 9 keeps all seven editable, it does not demand two
-                    empty boxes on every address. */}
+                {/* Street with its type, then the city line, then region and country. PO box
+                    and extended only when the card carries them: all seven stay editable, without
+                    two empty boxes on every address. */}
                 {(line.poBox ?? '') !== '' || (line.extended ?? '') !== '' ? (
                   <div className="contact-postal-row">
                     <label className="visually-hidden" htmlFor={`contact-postal-pobox-${index}`}>
@@ -559,12 +548,9 @@ export default function ContactEditView({
           </div>
         </div>
 
-        {/* A native date picker can only express a full date; the vCard admits three others
-            (décision 7), so this stays text. What travels is no longer what is typed: the field
-            reads and writes through contactBirthday, so a card exported by a phone shows as a date
-            instead of as `19930621T115900Z`, and the placeholder's own `27/10/1979` is stored as
-            the vCard spelling instead of verbatim. Text neither form recognises still passes
-            through untouched — that is the escape hatch décision 7 asked for. */}
+        {/* Text, not a date picker: the vCard admits partial dates a picker cannot express. The
+            field goes through contactBirthday (`19930621T115900Z` shows as a date, `27/10/1979`
+            is stored in vCard form); text neither form recognises passes through untouched. */}
         <span className="field-v-label"><CalendarIcon size={15} />{t('editor.misc')}</span>
 
         <div className="field-v">
@@ -587,10 +573,8 @@ export default function ContactEditView({
           </div>
         ))}
         {OPTIONAL.some(f => !revealed.has(f.key)) && (
-          /* `align` because `.dropdown-root` is a block spanning the whole column, so the
-             default right anchoring put the menu 223px to the right of a link 106px wide.
-             `direction` because the column ends here and the fold is right below: measured, the
-             menu ran 75px past it. */
+          /* `align`: `.dropdown-root` spans the column, so right anchoring put the menu 223px off
+             the link. `direction`: the fold is right below, and the menu measured 75px past it. */
           <DropdownMenu ariaLabel={t('editor.addField')} className="contact-address-add"
             direction="auto" align="left" trigger={t('editor.addField')}
             items={OPTIONAL.filter(f => !revealed.has(f.key)).map(f => (

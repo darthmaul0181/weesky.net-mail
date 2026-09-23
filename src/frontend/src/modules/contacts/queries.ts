@@ -12,7 +12,7 @@ export const contactKeys = {
   /** Under `all`, so the invalidation every write already fires refreshes the open card too. */
   detail: (accountId: string, id: string) => ['contacts', accountId, id] as const,
   /** Keyed by the card's hash: a removal, a replacement and a stale entry are then three different
-      keys, so react-query has nothing old left to serve while it refetches (décision 10). */
+      keys, so react-query has nothing old left to serve while it refetches. */
   photo: (accountId: string, id: string, cardHash: string) =>
     ['contacts', accountId, id, 'photo', cardHash] as const,
 }
@@ -34,15 +34,9 @@ function invalidateBook(queryClient: QueryClient, accountId: string) {
 const sortBook = (data: ContactListResponse): Contact[] => [...data.contacts].sort(compareContacts)
 const groupsOf = (data: ContactGroupsResponse): ContactGroup[] => data.groups
 
-/**
- * The whole book, cached. Sorted in `select`, so the page and the composer read one already-
- * ordered list rather than each sorting its own copy. The reader passes false when its
- * contact-trust setting is off, so an account that never opens Contacts pays nothing.
- *
- * `ContactTile`'s memo rests on TanStack's default `structuralSharing`, which keeps an untouched
- * contact's object identity across a refetch: with it off every tile redraws on every poll —
- * slower, never stale — and the list's headline cost comes back.
- */
+/** The whole book, sorted in `select` once for every reader; the reader passes false when its
+ * contact-trust setting is off. `ContactTile`'s memo rests on the default `structuralSharing`,
+ * which keeps an untouched contact's identity across a refetch. */
 export function useContacts(enabled = true) {
   const accountId = useAccountId()
 
@@ -55,11 +49,7 @@ export function useContacts(enabled = true) {
   })
 }
 
-/**
- * One contact's whole card. Only the open one is fetched: the list carries what a tile needs, and
- * hauling every contact's phones, notes and postal addresses through it would make the book pay
- * for a column that shows one.
- */
+/** One contact's whole card, fetched for the open one only: the list carries what a tile shows. */
 export function useContact(id: string | null) {
   const accountId = useAccountId()
 
@@ -82,10 +72,8 @@ export function useContactPhoto(id: string | null, hasPhoto: boolean, cardHash: 
   })
 }
 
-// Settled, not success: after a refused write the screen must fall back to the server's state
-// rather than keep an optimistic list nobody stored. `invalidatesGroups` is for the three writes
-// that change group membership by construction — deleting a contact drops it from its groups,
-// importing can create members — and routes through the shared `invalidateBook` helper.
+// Settled, not success: a refused write falls back to server state. `invalidatesGroups` is for the
+// writes that change membership by construction (a deletion, an import).
 function useContactMutation<TArgs, TResult = unknown>(
   mutationFn: (args: TArgs) => Promise<TResult>,
   invalidatesGroups = false,
@@ -135,10 +123,8 @@ export function useImportContacts() {
     (file: File) => api.importContacts(file), true)
 }
 
-/**
- * The whole group list, cached. A write to one group changes every contact's chip set, so the
- * page and the composer read one already-fetched truth rather than each polling their own.
- */
+/** The whole group list, cached: a write to one group changes every contact's chips, so the page
+ * and the composer read one truth. */
 export function useContactGroups(enabled = true) {
   const accountId = useAccountId()
 

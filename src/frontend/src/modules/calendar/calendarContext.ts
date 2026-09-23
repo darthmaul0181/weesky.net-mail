@@ -28,11 +28,8 @@ export interface CalendarContextValue {
   retryWindow: () => void
   openEditor: (id: string, instanceId?: string) => void
   createAt: (start: Date, end: Date, allDay: boolean) => void
-  /**
-   * The recurring-scope question, as a promise: the layout owns the dialog, every caller awaits
-   * its answer. `null` is the ✕ — the gesture is abandoned, nothing is written. Task 6's drop is
-   * the second caller after the editor and the preview.
-   */
+  /** The recurring-scope question as a promise: the layout owns the dialog, the editor, the
+   * preview and a drop await it. `null` is the ✕, and nothing is written. */
   askScope: (mode: 'save' | 'delete', name: string, repeatText: string | null,
     allowed?: EditScope[]) => Promise<EditScope | null>
   /** A pointer gesture has begun on the grid: the bubble is anchored to a chip that is about to

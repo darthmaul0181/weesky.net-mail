@@ -27,11 +27,8 @@ function shift({ year, month }: Cursor, delta: number): Cursor {
   return { year: Math.floor(index / 12), month: (index % 12) + 1 }
 }
 
-/**
- * The sidebar's month picker. It walks a month at a time on its own and never moves the anchor
- * doing it — looking ahead is not choosing — but it follows the anchor whenever the grid does,
- * so picking a week in the toolbar cannot leave the two showing different months.
- */
+/** The sidebar's month picker. Walking months never moves the anchor (looking ahead is not
+ * choosing), but it follows the anchor, so it cannot show another month than the grid. */
 export default function MiniMonth({ anchor, today, rules, locale, onPick }: MiniMonthProps) {
   const { t } = useTranslation('calendar')
   const [cursor, setCursor] = useState<Cursor>(() => cursorOf(anchor))

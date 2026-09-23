@@ -36,11 +36,8 @@ export function groupsOf(page: MailFolderPage): ThreadGroup[] {
   return page.messages.map(message => ({ key: message.uid, messages: [message] }))
 }
 
-/**
- * Snapshot semantics, the dedupeByUid rules transposed: the first version of a thread wins,
- * a member already shown under an earlier thread is dropped, and a thread emptied by that
- * drop disappears — two rows for one message would otherwise survive an offset shift.
- */
+// The dedupeByUid rules for threads: the first version wins, a member already shown is dropped, and a
+// thread emptied by that disappears, or an offset shift would leave two rows for one message.
 export function dedupeThreads(pages: MailFolderPage[]): ThreadGroup[] {
   const seenThreads = new Set<number>()
   const seenUids = new Set<number>()

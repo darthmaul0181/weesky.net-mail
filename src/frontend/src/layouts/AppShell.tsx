@@ -21,11 +21,9 @@ export default function AppShell() {
   const newEvent = useMatch('/calendar/new') != null
   const editingEvent = useMatch('/calendar/:id/edit') != null
   const writing = composing || newContact || editingContact || newEvent || editingEvent
-  // An open message owns the phone screen and draws its own action bar at the foot of it, so the
-  // tab bar would point at the tab it is already on. Keyed on the uid rather than on the viewport:
-  // the bar's own stylesheet withholds it above 639px whatever this decides, and a route flag
-  // cannot fall out of step with the reader's own hook the way a second `useViewport` would.
-  // Both calls unconditional, for the reason spelled out above the three matches.
+  // An open message draws its own action bar on a phone, so the tab bar would point at the tab it
+  // is on. Keyed on the uid, not the viewport: the bar's stylesheet withholds it above 639px anyway.
+  // Both calls unconditional, for the reason above the matches.
   const onMail = useMatch('/mail') != null
   const onContacts = useMatch('/contacts') != null
   const [params] = useSearchParams()

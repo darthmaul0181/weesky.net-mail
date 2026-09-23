@@ -15,11 +15,8 @@ export interface DayStripProps {
 const BEFORE = 2
 const AFTER = 2
 
-/**
- * The week over the phone's day grid. It is a scroll-snap band of whole weeks rather than a
- * gesture of our own: the browser's own snapping handles the fling, the rubber band and the
- * accessibility of it, and nothing here has to measure a pointer.
- */
+/** The week over the phone's day grid: a scroll-snap band of whole weeks, so the browser handles
+ * the fling, the rubber band and their accessibility, and nothing measures a pointer. */
 export default function DayStrip({ selected, onPick }: DayStripProps) {
   const { t } = useTranslation('calendar')
   const { rules, lang, region, today } = useCalendar()

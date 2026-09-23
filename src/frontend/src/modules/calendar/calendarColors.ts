@@ -9,7 +9,7 @@ const NAMES = {
 type CalendarColour = keyof typeof NAMES
 type ColourName = typeof NAMES[CalendarColour]
 
-/** The twelve the palette offers, drawn from the mockup. They are data rather than theme: a
+/** The twelve the palette offers. They are data rather than theme: a
     calendar keeps its colour across every palette, so none of them is a token. Typed as the name
     map's own keys, so a thirteenth colour cannot be added here without naming it there. */
 export const CALENDAR_COLORS: readonly CalendarColour[] = [

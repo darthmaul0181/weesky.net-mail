@@ -31,8 +31,8 @@ export default function SearchResults({
   const { t } = useTranslation('calendar')
   const { tz, calendarById, setAnchor } = useCalendar()
 
-  // Decision 11: the click goes to that date *in the current view*, so the search is cleared —
-  // left standing, the results keep replacing the grid that has just been moved.
+  // The click goes to that date *in the current view*, so the search is cleared — left standing,
+  // the results keep replacing the grid that has just been moved.
   const openAt = (occurrence: Occurrence, anchor: HTMLElement) => {
     const day = dayOf(occurrence, tz)
     if (day) setAnchor(day)

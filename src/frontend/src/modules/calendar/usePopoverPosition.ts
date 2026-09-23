@@ -13,17 +13,9 @@ export interface PopoverPosition {
   top: number
 }
 
-/**
- * Where a bubble hangs off the chip that opened it: to its right, flipped to its left when that
- * would run past the window, and pulled back up when the bottom would fall off the screen. A
- * chip that leaves no side free — a list row spans the window — gets the bubble under it, from
- * its left edge, or above it when the screen has no room below. Fixed coordinates, so the scroll
- * container it was opened from is none of its business — the bubble closes on a scroll rather
- * than following one.
- *
- * It takes the chip's rectangle rather than the chip itself: a search result opens its bubble and
- * clears the results in the same commit, so the element is off the screen by the time this runs.
- */
+/** Where a bubble hangs: right of the chip, flipped left or pulled up to stay on screen, or under
+ * (else above) a chip that spans the window. Fixed coordinates; it closes on a scroll. Takes the
+ * rect, not the chip: a search result leaves the screen in the commit that opens its bubble. */
 export function usePopoverPosition(rect: DOMRect): PopoverPosition {
   const [node, setNode] = useState<HTMLElement | null>(null)
   const [position, setPosition] = useState({ left: 0, top: 0 })

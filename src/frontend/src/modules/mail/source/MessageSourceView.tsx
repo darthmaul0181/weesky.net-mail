@@ -6,11 +6,8 @@ import { formatReaderDate } from '../reader/formatReaderDate'
 import { formatSize } from '../reader/formatSize'
 import { useMessageSource } from '../queries'
 
-/**
- * The message as it arrived, on its own tab. Deliberately chrome-less — no rail, no folder
- * tree, no way back: the route is a sibling of AppShell rather than a child, which is what
- * keeps useFolders' 60-second poll out of a tab whose only job is to show a text file.
- */
+// Chrome-less: the route is AppShell's sibling, not its child, which keeps useFolders' 60s poll out
+// of a tab whose only job is to show a text file.
 export default function MessageSourceView() {
   const { t } = useTranslation('mail')
   const [params] = useSearchParams()

@@ -27,11 +27,8 @@ interface Props {
   onClose: () => void
 }
 
-/**
- * Add/edit an admin-curated external mail provider — the admin dialog shape, one `.field-h` row
- * per field. Client-side validation mirrors `AdminController.Validate` exactly (name length, host
- * syntax, port range, sieve both-or-neither) so the common refusals never round-trip.
- */
+/** Adds or edits an admin-curated external provider, one `.field-h` row per field. Validation
+ * mirrors `AdminController.Validate` exactly, so the common refusals never round-trip. */
 export default function ExternalDomainDialog({ domain, onSave, onClose }: Props) {
   const { t } = useTranslation('admin')
   const isEdit = !!domain

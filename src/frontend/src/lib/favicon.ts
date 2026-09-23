@@ -1,11 +1,5 @@
-/**
- * Paints a dot on the tab icon while the inbox holds unread mail.
- *
- * The icon is drawn over the one `index.html` already carries, so a rebuilt favicon travels here
- * on its own — the href is read from the link element rather than named, since Vite hashes the
- * asset at build. Everything degrades to "no badge" rather than throwing: a tab icon is not worth
- * a broken shell, and jsdom has no canvas at all.
- */
+/** Paints an unread dot over the tab icon `index.html` carries, read from the link element since
+ * Vite hashes it. Degrades to "no badge" rather than throwing: jsdom has no canvas. */
 const SIZE = 32
 const RADIUS = 7
 const FALLBACK = '#e2674a'

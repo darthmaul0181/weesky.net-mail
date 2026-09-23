@@ -22,12 +22,8 @@ function pushChildren(stack: Item[], node: Node, quote: number) {
   for (let i = children.length - 1; i >= 0; i--) stack.push({ node: children[i]!, quote })
 }
 
-/**
- * The editor's HTML as the text a recipient would read. Mirrors the backend's own block walk
- * (OutgoingMailSanitizer.ExtractText), plus the part that only exists here: a blockquote comes
- * back as '>'-prefixed lines, nesting included, which is what makes a switched reply readable.
- * Explicit stack, not recursion: a paste can carry thousands of nested elements.
- */
+// Mirrors the backend's OutgoingMailSanitizer.ExtractText, plus blockquotes as '>'-prefixed lines so
+// a switched reply stays readable. An explicit stack, not recursion: a paste can nest thousands deep.
 export function htmlToText(html: string): string {
   const lines: Line[] = []
   let current: Line = { text: '', quote: 0 }

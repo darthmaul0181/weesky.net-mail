@@ -36,7 +36,7 @@ const anchors: HTMLElement[] = []
 const WIDTH = window.innerWidth
 const HEIGHT = window.innerHeight
 
-// The preview now always fetches the detail (Task 7); a case with nothing to say about it still
+// The preview now always fetches the detail; a case with nothing to say about it still
 // needs an answer, or the query settles on `undefined`, which react-query refuses to hold.
 beforeEach(() => {
   api.getEvent.mockResolvedValue(detailOf({ id: 'e1' }))
@@ -384,8 +384,8 @@ describe('EventPreview', () => {
     expect(bubble.querySelector('.event-preview-attendees')).toBeNull()
   })
 
-  // Décision 7: an override's own ATTENDEE lines (its `recurrenceId` set) describe one instance's
-  // answer, not the series — the bubble shows the master's organizer and guests regardless.
+  // An override's own ATTENDEE lines (its `recurrenceId` set) describe one instance's answer, not
+  // the series — the bubble shows the master's organizer and guests regardless.
   it('reads the master\'s attendees, never an override\'s', async () => {
     api.getEvent.mockResolvedValue(detailOf({
       id: 'e1', canInvite: false, attendees: [

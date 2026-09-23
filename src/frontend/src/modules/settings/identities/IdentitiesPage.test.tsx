@@ -29,7 +29,7 @@ describe('IdentitiesPage', () => {
     vi.mocked(useReplaceIdentities).mockReturnValue({ mutate, isPending: false } as never)
     vi.mocked(useAliases).mockReturnValue({ data: [], isLoading: false } as never)
     vi.mocked(useAuth).mockReturnValue({
-      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', subDomains: [] },
     } as never)
   })
 
@@ -137,7 +137,7 @@ describe('IdentitiesPage', () => {
       isLoading: false, isError: false,
     } as never)
     vi.mocked(useAuth).mockReturnValue({
-      identity: { email: 'mick@weesky.be', displayName: 'New Name', initials: 'MW', subDomains: [] },
+      identity: { email: 'mick@weesky.be', displayName: 'New Name', subDomains: [] },
     } as never)
     render(<IdentitiesPage />)
     const primaryTile = screen.getByText('primary').closest('.admin-list-item')!
@@ -163,7 +163,7 @@ describe('IdentitiesPage', () => {
   it('drops the optimistic list when the account changes under a pending save', () => {
     const authFor = (activeAccountId: string) => ({
       activeAccountId,
-      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', subDomains: [] },
     })
     vi.mocked(useReplaceIdentities).mockReturnValue({ mutate, isPending: true } as never)
     vi.mocked(useAuth).mockReturnValue(authFor('primary') as never)
@@ -225,7 +225,7 @@ describe('IdentitiesPage', () => {
       data: [{ name: 'support', domain: 'weesky.be' }], isLoading: false,
     } as never)
     vi.mocked(useAuth).mockReturnValue({
-      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', subDomains: [] },
       activeAccount: null, accountsLoading: true,
     } as never)
     render(<IdentitiesPage />)
@@ -246,7 +246,7 @@ describe('IdentitiesPage', () => {
     beforeEach(() => {
       vi.mocked(useIdentities).mockReturnValue({ data: connected, isLoading: false, isError: false } as never)
       vi.mocked(useAuth).mockReturnValue({
-        identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+        identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', subDomains: [] },
         activeAccount: { id: 'linked-1', email: 'shared@ext.example', displayName: 'Shared box', isPrimary: false },
       } as never)
     })
@@ -303,14 +303,14 @@ describe('IdentitiesPage', () => {
     })
   })
 
-  // A generic-platform deployment (Task 6's capabilities.strictIdentities: false) has no aliases
-  // to curate From addresses from, so the primary account takes the connected-account branch that
+  // A generic-platform deployment (capabilities.strictIdentities: false) has no aliases to curate
+  // From addresses from, so the primary account takes the connected-account branch that
   // already exists — a freely typed address, no star, no useAliases call — rather than a third
   // rendering path.
   describe('on the primary account when capabilities.strictIdentities is false', () => {
     beforeEach(() => {
       vi.mocked(useAuth).mockReturnValue({
-        identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+        identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', subDomains: [] },
         capabilities: { strictIdentities: false },
       } as never)
     })

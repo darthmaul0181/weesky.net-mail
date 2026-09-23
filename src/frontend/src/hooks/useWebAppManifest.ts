@@ -2,18 +2,9 @@ import { useEffect } from 'react'
 import { buildManifest } from '../lib/webAppManifest'
 import { useAppSettings } from './useAppSettings'
 
-/**
- * Posts the manifest the browser reads to offer installation.
- *
- * It is built in memory rather than served as a file: the specification wants start_url on the
- * same origin as the manifest, which rules out the API, and the frontend is a heap of static
- * files with no route able to compose it. A blob: inherits the document's origin, so the check
- * passes.
- *
- * Nothing is posted until the settings have answered "enabled". The alternative — a static
- * manifest posted straight away and then removed — made the install icon appear and then vanish,
- * which reads as a rendering fault.
- */
+/** Posts the install manifest as an in-memory blob: start_url must share the manifest's origin,
+ * which rules out the API, and a static frontend cannot compose it. Posted only once the settings
+ * say "enabled": posting then withdrawing made the install icon flash. */
 export function useWebAppManifest(): void {
   const { data } = useAppSettings()
 

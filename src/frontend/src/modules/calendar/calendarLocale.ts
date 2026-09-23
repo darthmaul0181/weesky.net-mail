@@ -4,11 +4,8 @@ import {
 } from './plainDate'
 import type { View } from './windowOf'
 
-/**
- * Two sources: the month and day *names* follow the interface language, the first day of the
- * week and the clock format follow the browser's region — a bare `en` says Sunday and 12 hours,
- * and a Belgian reading an English interface still counts his weeks from Monday.
- */
+/** Month and day names follow the interface language; the first weekday and the clock follow the
+ * browser's region: a bare `en` says Sunday and 12 hours to a Belgian who counts from Monday. */
 export interface WeekRules {
   /** 1 = Monday … 7 = Sunday, ISO-8601's own numbering. */
   firstDay: 1 | 2 | 3 | 4 | 5 | 6 | 7
@@ -34,11 +31,8 @@ export const weekInfoOf: WeekInfoReader = locale => {
 const SUNDAY_REGIONS = new Set(
   ['US', 'CA', 'JP', 'BR', 'IL', 'MX', 'PH', 'ZA', 'KR', 'TW', 'HK', 'AU'])
 
-/**
- * The interface language with the browser's own region grafted on (décision 14): the month names
- * follow the language, the field order and the separators the region, and neither alone is right.
- * A browser naming no region leaves English on `en-GB`, the day-first English this product reads.
- */
+/** The interface language with the browser's region grafted on: names from the language, field
+ * order and separators from the region. With no region, English reads `en-GB` (day first). */
 export function dateLocaleOf(lang: string, navigatorLanguage: string): string {
   const language = lang.split('-')[0] ?? lang
   let region: string | undefined
@@ -185,11 +179,8 @@ export function weekdayNameOf(
     .format(new Date(MONDAY_UTC_MS + offset * DAY_MS))
 }
 
-/**
- * The seven column heads, already in the order the week is drawn in. It takes the **resolved**
- * locale rather than a language and a region: every caller has already grafted one through
- * `dateLocaleOf`, and doing it a second time inside here is how the two answers drift.
- */
+/** The seven column heads in drawing order. Takes the locale `dateLocaleOf` already resolved:
+ * grafting a second time in here is how two answers drift. */
 export function dayNames(
   locale: string, rules: WeekRules, style: 'short' | 'narrow',
 ): string[] {

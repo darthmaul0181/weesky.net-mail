@@ -1,9 +1,7 @@
 import type { MailFolderNode } from '../api/mailTypes'
 
-/**
- * A custom MIME so a folder can recognise our payload from its dragover types alone: the browser
- * withholds dataTransfer *values* until drop, but always exposes the list of types.
- */
+// A custom MIME lets a folder recognise our payload on dragover: the browser withholds dataTransfer
+// values until drop but always exposes the types.
 export const DRAG_MIME = 'application/x-weesky-messages'
 
 export interface DragPayload {
@@ -11,11 +9,8 @@ export interface DragPayload {
   uids: number[]
 }
 
-/**
- * The dragged row carries the whole checked selection when every uid it stands for is checked,
- * its own uids otherwise — so dragging an unchecked row never disturbs a selection made for
- * something else, and a collapsed thread drags every member, like its other controls act on them.
- */
+// The whole selection when every uid of the row is checked, the row's own uids otherwise, so dragging
+// an unchecked row never disturbs a selection; a collapsed thread drags every member.
 export function dragUids(selectedUids: number[], rowUids: number[]): number[] {
   return rowUids.every(uid => selectedUids.includes(uid)) ? selectedUids : rowUids
 }

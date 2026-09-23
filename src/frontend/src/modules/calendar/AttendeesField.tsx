@@ -13,7 +13,7 @@ interface Props {
 }
 
 /** The composer's recipients field, on the guest list: chips, the book's suggestions, and the
-    name the book knows carried along as the CN the server will write (décision 8). */
+    name the book knows carried along as the CN the server will write. */
 export default function AttendeesField({ value, onChange, isValid }: Props) {
   const { t } = useTranslation('calendar')
   const { data: contacts } = useContacts()

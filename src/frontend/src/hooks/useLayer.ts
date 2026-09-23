@@ -27,12 +27,9 @@ interface Options {
   preferReturnRef?: RefObject<boolean>
 }
 
-/**
- * Puts one surface on the layer stack while it is active: Escape and Tab reach it only while it
- * is the topmost one, and focus moves in on activation and back out on close. It answers the two
- * questions a surface acting on a pointer of its own asks: whether it is that topmost layer, and
- * whether anything trapped stands over it.
- */
+/** Puts a surface on the layer stack while active: Escape and Tab reach it only when topmost, and
+ * focus moves in on activation and back on close. It answers whether it is topmost and whether a
+ * trap stands over it. */
 export function useLayer({
   active, ref, onEscape, initialFocusRef, returnFocusRef, preferReturnRef,
 }: Options) {
@@ -107,10 +104,9 @@ export function useLayer({
     const covered = coveredAtClose.current
     handedTo.current = null
     coveredAtClose.current = false
-    // A layer that stood over this one and is still standing owns the focus, whatever state the
-    // element holding it is in — a confirm's own button goes disabled for the width of its write,
-    // which `reachable()` refuses. Recorded at close rather than re-derived: a confirm opened from
-    // inside a dialog must still re-check with that dialog on the stack.
+    // A layer still standing above owns the focus, even on a button disabled for its write (which
+    // `reachable()` refuses). Recorded at close, not re-derived: a confirm opened inside a dialog
+    // must still re-check with that dialog on the stack.
     if (covered && hasOpenLayer()) return
     if (reachable(back) && !reachable(document.activeElement)) back.focus()
   }, [active])

@@ -1,13 +1,8 @@
 import { useKeyedState } from '../../../hooks/useKeyedState'
 
-/**
- * Checkbox selection over the loaded rows, keyed by whatever identifies one: the mail's numeric
- * uids, the contacts' GUIDs. `resetKey` (folder + page, or the contacts scope) clears it; the hook
- * never stores the row list, so the caller intersects `selected` with what is on screen — a
- * departed row stops counting on its own. `toggleRange` selects the inclusive slice from the
- * last-toggled anchor to `index`, over the `keys` order the caller passes in; the anchor resets
- * with the selection.
- */
+// Keyed by uid or GUID; `resetKey` clears it. The row list is never stored, so the caller intersects
+// `selected` with what is on screen. `toggleRange` selects from the last-toggled anchor to `index`
+// over the caller's `keys`; the anchor resets with the selection.
 export function useSelection<T = number>(resetKey: string) {
   const [selected, setSelected] = useKeyedState<Set<T>>(() => new Set(), resetKey)
   const [anchor, setAnchor] = useKeyedState<number | null>(() => null, resetKey)

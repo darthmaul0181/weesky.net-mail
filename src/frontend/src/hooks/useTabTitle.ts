@@ -19,14 +19,9 @@ function remembered(): string | null {
   }
 }
 
-/**
- * Names the mailbox being read in the tab, under the application name an administrator set in
- * Administration › Application. Mounted in the shell and on the login page, which has no shell.
- *
- * It waits for the account list rather than falling back to the signed-in address: during that
- * window a persisted connected account would be announced as the primary. The name falls back to
- * the one the last load remembered, then to the hostname — a tab must always say something.
- */
+/** Names the mailbox in the tab, under the administrator's application name; mounted in the shell
+ * and on the login page. Waits for the account list, or a persisted connected account reads as the
+ * primary; the name falls back to the last load's, then to the hostname. */
 export function useTabTitle(): void {
   const { activeAccount } = useAuth()
   const { data } = useAppSettings()

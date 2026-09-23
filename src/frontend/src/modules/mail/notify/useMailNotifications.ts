@@ -54,10 +54,7 @@ function unreadDeltaOf(previous: FolderSnapshot, next: FolderSnapshot): number |
     : null
 }
 
-/**
- * Rings for mail arriving in the inbox, whatever the user is looking at. Lives in AppShell,
- * not the mail module, so it also fires from settings and the other sections.
- */
+// Mounted in AppShell, not the mail module, so it rings from settings and the other sections too.
 export function useMailNotifications(): void {
   const accountId = useAccountId()
   const navigate = useNavigate()

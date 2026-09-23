@@ -23,11 +23,8 @@ function ordinal(n: number, t: TFunction<'calendar'>, locale: string): string {
   return t(`repeat.ordinal.${rule}` as 'repeat.ordinal.other', { n, ns: 'calendar' })
 }
 
-/**
- * The backend takes `bySetPos` from -366 to 366 and gives it back exactly, so a rule an iPhone
- * wrote arrives here as one the screen believes it can show. Anything the table cannot name is
- * counted rather than approximated: reading `-2` as "last" would state what the rule does not.
- */
+/** `bySetPos` runs -366 to 366, so an iPhone's rule may arrive here. What the table cannot name
+ * is counted, not approximated: reading `-2` as "last" would state what the rule does not. */
 function positionText(position: number, t: TFunction<'calendar'>, locale: string): string {
   if (position === -1) return t('repeat.position.last', { ns: 'calendar' })
   if (position >= 1 && position <= NAMED_POSITIONS.length) {
@@ -40,12 +37,9 @@ function positionText(position: number, t: TFunction<'calendar'>, locale: string
     : t('repeat.position.nth', { n, ns: 'calendar' })
 }
 
-/** A stored rule read back as a sentence — the line under the Repeat picker, and the only thing
-    shown for a rule the picker cannot draw. The days are named by `Intl` and joined by
-    `Intl.ListFormat`, so the conjunction is the language's own rather than a translated comma. */
-// `{ ns: 'calendar' }` is redundant to i18next, which reads the namespace off the TFunction, and
-// not redundant to `locales/keys.test.ts`, which binds a file's namespace from its
-// `useTranslation(...)` call and finds none here. Do not tidy it away.
+/** A stored rule as a sentence, the days named by `Intl` and joined by `Intl.ListFormat` (the
+ * language's own conjunction). `{ ns: 'calendar' }` is for `keys.test.ts`, which finds no
+ * `useTranslation` here to bind a namespace from: do not tidy it away. */
 export function recurrenceSummary(
   rule: RecurrenceWrite, t: TFunction<'calendar'>, lang: string, navigatorLanguage: string,
 ): string {

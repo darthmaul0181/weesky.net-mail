@@ -9,13 +9,14 @@ import type { MailFolderNode } from '../api/mailTypes'
 
 interface Props {
   folders: MailFolderNode[]
-  /** Pre-selected parent — the folder in view when the dialog is opened from the mail column. */
+  /** Pre-selected parent, for a caller that has a folder already in view; `FoldersPage`, the only
+      caller today, leaves it unset. */
   defaultParent?: string
   onClose: () => void
   onNotify: (message: string, type?: 'success' | 'error') => void
 }
 
-/** Shared by the mail column's footer and the folders settings page, so the two cannot drift. */
+/** Reached from `FoldersPage` alone: folder management has no shortcut in the mail column. */
 export default function CreateFolderModal({ folders, defaultParent = '', onClose, onNotify }: Props) {
   const { t } = useTranslation('mail')
   const [name, setName] = useState('')

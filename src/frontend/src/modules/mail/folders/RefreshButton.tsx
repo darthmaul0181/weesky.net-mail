@@ -8,12 +8,8 @@ interface Props {
   onRefresh: () => void
 }
 
-/**
- * The manual face of the poll, beside the compose button. The icon spins while the folders
- * query fetches and always finishes the rotation it started, so a fast answer still reads as
- * one full turn: the class releases at the animation's iteration boundary, with a timer as
- * the fallback for environments where the animation never iterates (reduced motion).
- */
+// Always finishes the turn it started, so a fast answer still reads as one rotation: the class is
+// released at the animation's iteration boundary, with a timer for reduced motion, where none comes.
 export default function RefreshButton({ fetching, onRefresh }: Props) {
   const { t } = useTranslation('mail')
   // Latched while a fetch runs, so the turn outlives it until the release below.

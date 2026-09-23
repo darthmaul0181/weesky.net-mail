@@ -131,11 +131,9 @@ function yieldsToCaret(event: KeyboardEvent): boolean {
   return !vertical || box === 'multiline'
 }
 
-/**
- * Roving tabindex over a `role="grid"`: one tab stop at a time, the arrows and Home/End walking the
- * widgets a cell holds — or, under `cellEntry`, the cells themselves, which F2 enters and Escape
- * leaves. The listener is the container's: a grid is not a layer and must not compete for Escape.
- */
+/** Roving tabindex over a `role="grid"`: the arrows and Home/End walk a cell's widgets, or under
+ * `cellEntry` the cells (F2 enters, Escape leaves). The listener is the container's: a grid is
+ * not a layer and must not compete for Escape. */
 export function useGridNav({ ref, cellEntry }: GridNavOptions): void {
   const stop = useRef<HTMLElement | null>(null)
   // Where focus last was, which is not where the stop is: a control that goes disabled hands the

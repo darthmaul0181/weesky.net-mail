@@ -15,12 +15,9 @@ import { useAliases, useIdentities, useReplaceIdentities } from '../../mail/quer
 import IdentityDialog from './IdentityDialog'
 import { applyAddition, applyDefault, applyLabel, applyRemoval, sortIdentities, toRows } from './identityRows'
 
-/**
- * The curated From list, styled like the Administration tiles. Every action PUTs the whole set, so
- * each one builds on the list the one before it produced — the invalidation's refetch has not landed
- * yet, and a payload computed from the server snapshot would silently revert its predecessor.
- * `edited` is that list; it is dropped the moment the server speaks again, and at once on a refusal.
- */
+/** The curated From list. Every action PUTs the whole set, so each builds on `edited`, the list
+ * the last one produced: the refetch may not have landed, and the server snapshot would revert
+ * it. `edited` drops when the server answers, and at once on a refusal. */
 export default function IdentitiesPage() {
   // Keyed on the account, not reset by an effect: `edited` is account A's list, and a replace in
   // flight blocks the reset the server-data check would have done, so a switch left it to be PUT
@@ -32,11 +29,9 @@ export default function IdentitiesPage() {
 function IdentitiesPanel() {
   const { identity, activeAccount, accountsLoading, capabilities } = useAuth()
   const { t } = useTranslation('settings')
-  // `!== false`, not `=== true`: activeAccount is null while the account list loads, and the page
-  // must open on the variant the settings nav already assumed rather than swap wording under way.
-  // A generic platform with no aliases to curate From addresses from (capabilities.strictIdentities
-  // === false) forces the primary through the connected-account branch that already exists below —
-  // free-input address, no star, no useAliases — rather than growing a third rendering path.
+  // `!== false`: while the list loads the page opens on the variant the nav assumed. A platform
+  // with no aliases (`strictIdentities === false`) sends the primary down the connected branch
+  // (free address, no star) rather than a third rendering path.
   const ownMailbox = activeAccount?.isPrimary !== false && capabilities?.strictIdentities !== false
   // In that window the variant is only a guess, while the list below may already be a connected
   // mailbox's — a save built on the wrong one is refused — so nothing is actionable yet.

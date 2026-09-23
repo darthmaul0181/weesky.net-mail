@@ -183,8 +183,8 @@ describe('useMessageList', () => {
       'INBOX', 0, 30, expect.objectContaining({ grouped: true }))
   })
 
-  // One shape for both modes: a flat row is a conversation of one, so Task 9's row never learns
-  // which mode it is drawing.
+  // One shape for both modes: a flat row is a conversation of one, so a row never learns which
+  // mode it is drawing.
   it('wraps every message as its own group in flat mode', async () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '10', 'mail.showPreview': 'true' })
     mocks.getMailMessages.mockResolvedValue(pageOf([1, 2], 25))

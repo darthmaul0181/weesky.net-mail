@@ -1,13 +1,8 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 
-/**
- * One forwarder per key, built once and never rebuilt, each reading the handler of the render it
- * is called in. A memoised row handed a callback object its list rebuilt every render re-draws
- * whenever anything does; this is what a long list hands its rows instead.
- *
- * The key set is read once, at mount: build the handlers unconditionally, or a key added later has
- * no forwarder and one removed leaves a forwarder that throws when it is called.
- */
+/** One forwarder per key, built once, each calling the handler of the latest render, so memoised
+ * rows get stable callbacks. The key set is read at mount: build handlers unconditionally, or a
+ * later key has no forwarder and a removed one throws. */
 export function useForwarders<T extends Record<string, (...args: never[]) => unknown>>(
   handlers: T,
 ): T {

@@ -16,12 +16,8 @@ export interface StagedItem {
 
 let nextKey = 0
 
-/**
- * `accountId` names the mailbox the staging happens in; staged files are namespaced by account on
- * the backend. `initial` seeds parts the backend already staged (a forward's attachments):
- * uploaded, done. `inlineIds` are the staged parts living in the body rather than the tray —
- * never shown here, but released with it, since nothing else knows they exist.
- */
+// Staged files are namespaced by account. `initial` seeds parts already staged (a forward's), and
+// `inlineIds` live in the body: never shown here, yet released with the tray.
 export function useStagedAttachments(
   accountId: string,
   initial: { id: string; fileName: string; size: number }[] = [],
@@ -43,10 +39,8 @@ export function useStagedAttachments(
   // one wholesale from the seed prop, which knows nothing about an insertion.
   const addedInlineRef = useRef<{ id: string; accountId: string }[]>([])
   const discardedRef = useRef(false)
-  // A passive sync is early enough here, unlike itemsRef below: the inline ids come from the
-  // seed a composer mounts on, so they cannot change between a render and the handler after it.
-  // An id already known keeps the account it was recorded under; only a new one takes the
-  // current account, or a switch would rewrite the owner of files it never staged.
+  // A passive sync is enough: the inline ids come from the seed and cannot change between a render and
+  // the next handler. A known id keeps its recorded account, or a switch would rewrite its owner.
   useEffect(() => {
     const known = new Map(inlineRef.current.map(entry => [entry.id, entry]))
     inlineRef.current = inlineIds
@@ -65,10 +59,8 @@ export function useStagedAttachments(
     api.deleteAttachment(id, { accountId: owner }).catch(() => { /* sweeper's problem now */ })
   }, [])
 
-  // Synchronous, like apply/itemsRef above and for the same reason: a discard can run before the
-  // next passive flush, and an id it never saw is an id nobody releases. An upload that lands
-  // after the discard is that same leak one tick later, so past one there is nothing to hold: the
-  // id is released on the spot instead of joining a list nobody will read again.
+  // Synchronous, since a discard can run before the next passive flush; an upload landing after the
+  // discard is released on the spot rather than joining a list nobody reads again.
   const addInline = useCallback((id: string) => {
     if (discardedRef.current) { release(id, accountId); return }
     addedInlineRef.current = [...addedInlineRef.current, { id, accountId }]
@@ -104,11 +96,8 @@ export function useStagedAttachments(
     apply(previous => previous.filter(i => i.key !== key))
   }, [apply, release])
 
-  /**
-   * The body no longer has anywhere to show an inline part, so it becomes an ordinary attachment.
-   * `known` names the files — the caller holds the seed those ids came from. Idempotent: a second
-   * call finds nothing left to move.
-   */
+  // The body can no longer show an inline part, so it becomes an attachment. `known` names the files
+  // from the caller's seed. Idempotent.
   const adoptInline = useCallback((known: { id: string; fileName: string; size: number }[]) => {
     const moving = [...inlineRef.current, ...addedInlineRef.current]
     if (moving.length === 0) return

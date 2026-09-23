@@ -12,19 +12,9 @@ function decode(value: string): string {
   }
 }
 
-/**
- * The hfields, still percent-encoded, keyed lower-case, first occurrence winning.
- *
- * Hand-parsed rather than read through URLSearchParams, which applies form encoding and so reads
- * a `+` as a space. RFC 6068 hfields are RFC 3986 query components, where `+` is a literal: read
- * the form way, `alice+tag@weesky.be` becomes `alice tag@weesky.be`, fails the address gate and
- * is dropped — the composer opens one recipient short with nothing on screen to say so.
- *
- * An hfname is an RFC 5322 header name, so it is case-insensitive: `?Subject=` and `?CC=` are the
- * same fields as `?subject=` and `?cc=`. Matched case-sensitively they were dropped in silence and
- * the composer opened visibly incomplete. Folding runs before the first-occurrence rule, so a link
- * carrying both `?subject=` and `?Subject=` keeps the leftmost of the two, whichever its spelling.
- */
+// Hand-parsed: URLSearchParams reads `+` as a space, but RFC 6068 hfields are RFC 3986 queries where it
+// is literal (`alice+tag@`). Names are folded to lower case before the first-occurrence rule, since an
+// hfname is a case-insensitive header name.
 function hfieldsOf(search: string): Map<string, string> {
   const fields = new Map<string, string>()
   for (const pair of search.replace(/^\?/, '').split('&')) {
@@ -45,13 +35,8 @@ function addressesOf(...raw: string[]): string[] {
     .filter(isValidAddress)
 }
 
-/**
- * A mailto: URL (RFC 6068) becomes the seed the composer already knows how to open with.
- *
- * It arrives from the operating system, so from the outside world: the body is plain text and is
- * escaped before it enters an HTML editor, and the addresses go through the same check as the
- * ones a user types. Headers other than to, cc, bcc, subject and body are ignored.
- */
+// A mailto: arrives from the outside world: the body is plain text, escaped before the HTML editor,
+// and the addresses face the typed-address check. Only to, cc, bcc, subject and body are read.
 export function mailtoSeedFrom(search: string): ComposeSeed | null {
   const raw = new URLSearchParams(search).get('mailto')
   if (!raw) return null

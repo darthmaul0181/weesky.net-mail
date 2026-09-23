@@ -1,18 +1,12 @@
 import type { ContactScope } from './ContactScopes'
 
-/**
- * A custom MIME so a scope can recognise our payload from its dragover types alone: the browser
- * withholds dataTransfer *values* until drop, but always exposes the list of types. Distinct from
- * the mail's, so dragging messages over the contacts column offers nothing.
- */
+/** A MIME of our own, recognised from the dragover types alone (values are withheld until drop),
+ * and distinct from the mail's, so dragged messages offer nothing here. */
 export const CONTACT_DRAG_MIME = 'application/x-weesky-contacts'
 
 export interface ContactDragPayload { ids: string[] }
 
-/**
- * The dragged tile carries the whole checked selection when it belongs to it, itself alone
- * otherwise — so dragging an unchecked tile never disturbs a selection made for something else.
- */
+/** The whole checked selection when the dragged tile is in it, the tile alone otherwise. */
 export function dragIds(selectedIds: string[], id: string): string[] {
   return selectedIds.includes(id) ? selectedIds : [id]
 }
@@ -35,11 +29,8 @@ export function parseContactDrag(raw: string): ContactDragPayload | null {
   }
 }
 
-/**
- * A drop target is a scope a contact can belong to. `all` is the complete view rather than a
- * group, so nothing can be added to it — the same refusal `canDropInto` makes for the source
- * folder. Groups, when they land, are targets by construction.
- */
+/** `all` is the complete view, not a group, so nothing can be added to it (the mail's source
+ * folder refusal). */
 export function canDropIntoScope(scope: ContactScope): boolean {
   return scope !== 'all'
 }

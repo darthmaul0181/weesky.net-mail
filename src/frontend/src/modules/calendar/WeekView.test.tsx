@@ -59,8 +59,8 @@ describe('WeekView', () => {
     expect(headers[3]).toHaveAccessibleName(/Wednesday.*16 September/)
   })
 
-  // Decision 3: the two pieces carry one occurrence key, so the bubble's highlight reaches both
-  // columns rather than the half the pointer happened to be on.
+  // The two pieces carry one occurrence key, so the bubble's highlight reaches both columns
+  // rather than the half the pointer happened to be on.
   it('lights both slices of an evening crossing midnight', () => {
     week([PARTY], WEEK, '2026-09-16', false, 'd1#')
 

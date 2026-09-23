@@ -360,8 +360,8 @@ describe('allowedScopes', () => {
 })
 
 describe('isRecurring', () => {
-  // Décision 8: the RECURRENCE-ID of the occurrence opened, and nothing else. A repeat the picker
-  // has just added has no other occurrence to reach, so there is nothing to ask about.
+  // The RECURRENCE-ID of the occurrence opened, and nothing else. A repeat the picker has just
+  // added has no other occurrence to reach, so there is nothing to ask about.
   it('reads the occurrence, never the repeat the form carries', () => {
     expect(isRecurring(occurrenceOf())).toBe(true)
     expect(isRecurring(occurrenceOf({ instanceId: '' }))).toBe(false)

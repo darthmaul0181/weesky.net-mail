@@ -4,10 +4,7 @@ interface Props {
   onReach: () => void
 }
 
-/**
- * An empty marker that reports when it scrolls into view. It is placed among the rows rather
- * than after the last one, so the next block starts before the reader reaches the end.
- */
+// Placed among the rows rather than after the last one, so the next block starts before the end.
 export default function LoadMoreSentinel({ onReach }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const latest = useRef(onReach)

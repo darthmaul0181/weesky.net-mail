@@ -70,8 +70,8 @@ describe('ScopeModal', () => {
       .toBe('This event repeats. What should the change apply to?')
   })
 
-  // Owner decision 2: the three ways out are uniform here too, and all three mean "no scope" —
-  // never a scope picked by default, which would write something nobody asked for.
+  // The three ways out are uniform here too, and all three mean "no scope" — never a scope picked
+  // by default, which would write something nobody asked for.
   it('answers no scope on the ✕, on Escape and on a press on the backdrop', async () => {
     const { onClose, onPick } = draw(ALL)
 

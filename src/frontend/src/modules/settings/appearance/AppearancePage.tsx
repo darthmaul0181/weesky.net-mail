@@ -32,16 +32,9 @@ const PALETTES: { value: Palette; name: string; isDefault?: boolean }[] = [
   { value: 'indigo', name: 'Indigo & violet' },
 ]
 
-/** Renders in the palette it advertises rather than the active one: the palette selectors are
-    attribute-based and unanchored to <html>, so stamping both attributes here re-declares all
-    the tokens on this subtree.
-
-    It summarises what the app actually shows now — the compose button and the attachment chip
-    both carry --action-primary, which is the trait that most distinguishes one palette from
-    another, and the folder column is --folders-bg rather than --surface. A preview built before
-    those two changes showed the accent on a rail item alone and read as six shades of grey.
-    `large` only scales --pp: one markup and one rule set for both sizes, so the thumbnail and
-    the enlarged view cannot drift apart. */
+/** Renders in the palette it advertises: the palette selectors are attribute-based and unanchored,
+ * so stamping both attributes re-declares every token here. It shows --action-primary (compose,
+ * attachment chip), which tells palettes apart; `large` only scales --pp. */
 function PalettePreview({ value, dark, large }: { value: Palette; dark: boolean; large?: boolean }) {
   return (
     <span

@@ -7,7 +7,7 @@ import type {
   ContactDetail, ContactDetailEmail, ContactDraft, ContactDraftEmail,
 } from './contactTypes'
 
-// Le reducteur est teste chez lui : ici on veut l'editeur, pas le canvas.
+// The reducer is tested on its own: this file wants the editor, not the canvas.
 vi.mock('./contactPhoto', () => ({
   PHOTO_UNREADABLE: 'editor.photoUnreadable',
   PHOTO_TOO_LARGE: 'editor.photoTooLarge',
@@ -15,14 +15,14 @@ vi.mock('./contactPhoto', () => ({
 }))
 
 beforeEach(() => {
-  // jsdom n'implemente pas l'API des URL objet ; l'apercu s'en sert.
+  // jsdom has no object-URL API, and the preview uses it.
   URL.createObjectURL = vi.fn(() => 'blob:preview')
   URL.revokeObjectURL = vi.fn()
   vi.mocked(reducePhoto).mockResolvedValue({ base64: 'QUJD', blob: new Blob(['ABC']) })
 })
 
-/** L'input du fichier est `hidden` — l'utilisateur clique l'avatar, jamais lui — et userEvent
-    refuse d'interagir avec un element invisible. Le fichier est donc pose directement. */
+/** The file input is `hidden` — the user clicks the avatar, never the input — and userEvent
+    refuses to touch an invisible element, so the file is set directly. */
 function choose(file: File) {
   fireEvent.change(screen.getByTestId('editor-photo-input'), { target: { files: [file] } })
 }
@@ -64,8 +64,8 @@ const addressless: ContactDetail = {
   addresses: [], phones: [], postalAddresses: [],
 }
 
-// Augments bruno with the two repeatable families this task adds. 'OTHER' is not in PHONE_TYPES:
-// it stands for a token the card carries and the table does not name (decision 4).
+// Augments bruno with the two repeatable families. 'OTHER' is not in PHONE_TYPES: it stands for a
+// token the card carries and the table does not name.
 const withLines: ContactDetail = {
   ...bruno,
   phones: [
@@ -80,7 +80,7 @@ const withLines: ContactDetail = {
 }
 
 // A vCard 3.0 round trip on a preferred email projects `PREF` into the very field the dropdown
-// reads (défaut 4(a)); a quoted TYPE unquotes into a token the write-side grammar refuses (4(b)).
+// reads (defect 4(a)); a quoted TYPE unquotes into a token the write-side grammar refuses (4(b)).
 const messyTypes: ContactDetail = {
   ...bruno,
   phones: [
@@ -188,8 +188,8 @@ describe('ContactEditView', () => {
     expect(screen.getByLabelText(/address 1/i)).toHaveValue('')
   })
 
-  // Replaces the three "move up" cases: the button no longer displaces anything (decision 5), so
-  // what has to be proved is that it writes pref and leaves the list where it stands.
+  // Replaces the three "move up" cases: the button no longer displaces anything, so what has to
+  // be proved is that it writes pref and leaves the list where it stands.
   it('sends pref when a line is made the primary, and does not reorder the list', async () => {
     const { onSave } = setup({ contact: bruno })
 
@@ -217,9 +217,9 @@ describe('ContactEditView', () => {
     expect(within(screen.getByTestId('address-row-2')).getByText(/^primary$/i)).toBeInTheDocument()
   })
 
-  // Le badge se calcule sur les mêmes lignes que l'enregistrement retient : vider le texte de la
-  // ligne désignée laissait le badge sur une ligne vide pendant que la soumission promouvait
-  // silencieusement la première ligne gardée.
+  // The badge is computed off the same lines the save keeps: emptying the text of the designated
+  // line left the badge on a blank line while the submission silently promoted the first line
+  // still kept.
   it('rend le badge à la première ligne gardée quand la ligne désignée est vidée', async () => {
     const { onSave } = setup({ contact: trio })
     await userEvent.click(within(screen.getByTestId('address-row-2'))
@@ -405,8 +405,8 @@ describe('ContactEditView', () => {
     expect(screen.queryByRole('button', { name: /add a phone/i })).not.toBeInTheDocument()
   })
 
-  // `ContactValidator.MaxAddressesPerContact` : la 51e ligne fait échouer l'enregistrement, le
-  // aller-retour que la décision 8 existe pour éviter.
+  // `ContactValidator.MaxAddressesPerContact`: the 51st line fails the save, the round trip this
+  // guard exists to avoid.
   it('au plafond des adresses, le bouton d’ajout disparaît aussi', async () => {
     const many = {
       ...bruno,
@@ -429,8 +429,8 @@ describe('ContactEditView', () => {
     expect(screen.queryByRole('button', { name: /add a postal address/i })).not.toBeInTheDocument()
   })
 
-  // Défaut 4(a) : un aller-retour 3.0 projette PREF dans le champ type lui-même
-  // (`INTERNET,PREF,WORK`) ; le menu ne doit jamais l'offrir comme choix.
+  // Defect 4(a): a 3.0 round trip projects PREF into the type field itself
+  // (`INTERNET,PREF,WORK`); the menu must never offer it as a choice.
   it('strips PREF from a projected type before it ever reaches the phone dropdown', () => {
     setup({ contact: messyTypes })
 
@@ -440,9 +440,9 @@ describe('ContactEditView', () => {
     expect(optionTexts.some(value => value.toUpperCase().includes('PREF'))).toBe(false)
   })
 
-  // Défaut 4(b) : un TYPE cité (`TYPE="Work Email"`) s'affiche brut dans le menu — décision 4 —
-  // mais un jeton hors grammaire ne doit jamais repartir dans la requête, ou la fiche devient
-  // impossible à enregistrer une seconde fois.
+  // Defect 4(b): a quoted TYPE (`TYPE="Work Email"`) shows raw in the menu, but a token outside
+  // the grammar must never go back out in the request, or the card becomes impossible to save a
+  // second time.
   it('shows a quoted type raw in the dropdown but drops it from what is submitted', async () => {
     const { onSave } = setup({ contact: messyTypes })
 
@@ -453,8 +453,8 @@ describe('ContactEditView', () => {
     expect(onSave.mock.calls[0]![0].postalAddresses).toEqual([expect.objectContaining({ type: '' })])
   })
 
-  /* Le surnom suit la même règle que les huit autres depuis qu'il a quitté le héros : une carte
-     sur cent en porte un, et sa boîte occupait une ligne pleine sur toutes les autres. */
+  /* The nickname follows the same rule as the other eight since it left the hero: one card in a
+     hundred carries one, and its box used to take a whole line on all the others. */
   it('cache le surnom d’une carte qui n’en porte pas, et le propose au menu', async () => {
     setup({ contact: solo })
 
@@ -485,9 +485,9 @@ describe('ContactEditView', () => {
     expect(onSave.mock.calls[0]![0].nickname).toBe('bru')
   })
 
-  /* Le surnom et le nom affiché ne sont pas des champs comme les huit autres : `Apply` remplace
-     un nom, null compris, donc null y est l'utilisateur qui vide la boîte — pas « la requête ne
-     nomme pas ce champ ». Une chaîne vide laisserait un NICKNAME vide sur la carte. */
+  /* The nickname and the display name are not fields like the other eight: `Apply` replaces a
+     name, null included, so null there is the user emptying the box — never "the request does
+     not name this field". An empty string would leave an empty NICKNAME on the card. */
   it('envoie null pour un surnom que l’utilisateur vide', async () => {
     const { onSave } = setup({ contact: bruno })
     await userEvent.clear(screen.getByLabelText(/nickname/i))
@@ -521,8 +521,8 @@ describe('ContactEditView', () => {
     expect(onSave.mock.calls[0]![0].jobTitle).toBe('Ingénieure')
   })
 
-  // Sur ces champs le serveur lit `null` comme « la requête ne nomme pas le champ » : envoyer
-  // null ici rendrait la société que l'utilisateur vient d'effacer.
+  // On these fields the server reads `null` as "the request does not name the field": sending
+  // null here would give back the organisation the user just cleared.
   it('envoie une chaîne vide pour une société amorcée que l’utilisateur vide', async () => {
     const { onSave } = setup({ contact: { ...bruno, organization: 'Weesky' } })
     await userEvent.clear(screen.getByLabelText(/organisation/i))
@@ -531,8 +531,8 @@ describe('ContactEditView', () => {
     expect(onSave.mock.calls[0]![0].organization).toBe('')
   })
 
-  // L'autre moitié de la même convention : un champ intact n'est pas renvoyé du tout, ce qui
-  // empêche une édition sans rapport de réécrire une valeur que le projecteur avait tronquée.
+  // The other half of the same convention: an untouched field is not sent at all, which stops an
+  // unrelated edit from rewriting a value the projector had truncated.
   it('envoie null pour une société amorcée que l’utilisateur ne touche pas', async () => {
     const { onSave } = setup({ contact: { ...bruno, organization: 'Weesky' } })
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
@@ -553,9 +553,9 @@ describe('ContactEditView', () => {
     expect(screen.getByLabelText(/birthday/i)).toHaveValue('21/06/1993')
   })
 
-  /* Ce que le champ montre n’est plus ce que la carte porte, donc l’égalité qui décide de ne rien
-     envoyer se juge sur la forme tapée. Sans ça, éditer le nom réécrirait l’anniversaire et lui
-     ferait perdre son heure. */
+  /* What the field shows is no longer what the card carries, so the equality that decides whether
+     to send anything is judged on the typed form. Without that, editing the name would rewrite
+     the birthday and it would lose its time. */
   it('un anniversaire non touché n’est pas réécrit par une modification voisine', async () => {
     const { onSave } = setup({ contact: { ...bruno, birthday: '19930621T115900Z' } })
     await userEvent.type(screen.getByLabelText(/first name/i), 'x')
@@ -580,7 +580,7 @@ describe('ContactEditView', () => {
     expect(onSave.mock.calls[0]![0].birthday).toBe('--10-27')
   })
 
-  // Le bandeau : la photo que la carte porte, jamais une porte pour la remplacer (décision 12).
+  // The banner: the photo the card carries, never a door to replace it.
   it('montre la photo du contact quand la mise en page en résout une', () => {
     setup({ contact: bruno, photo: 'blob:une-photo' })
 
@@ -588,7 +588,7 @@ describe('ContactEditView', () => {
     expect(screen.queryByTestId('editor-avatar-blank')).not.toBeInTheDocument()
   })
 
-  // Sans photo, la fiche montre ses initiales — pas une pastille anonyme.
+  // Without a photo the card shows its initials, not an anonymous disc.
   it('replie sur les initiales du contact quand la carte ne porte pas de photo', () => {
     setup({ contact: bruno })
 
@@ -596,7 +596,7 @@ describe('ContactEditView', () => {
     expect(screen.queryByTestId('editor-avatar-blank')).not.toBeInTheDocument()
   })
 
-  // Meme boite en creation, pour que la hauteur du bandeau ne saute pas entre les deux modes.
+  // Same box when creating, so the banner's height does not jump between the two modes.
   it('tient la place de la photo par une pastille en creation', () => {
     setup({ contact: null })
 
@@ -604,8 +604,8 @@ describe('ContactEditView', () => {
     expect(screen.queryByTestId('editor-photo')).not.toBeInTheDocument()
   })
 
-  // L'etoile decrit le contact, donc elle est dans le bandeau et non parmi les champs — mais elle
-  // garde le nom accessible que son ancienne ligne libellee lui donnait.
+  // The star describes the contact, so it sits in the banner rather than among the fields, but it
+  // keeps the accessible name its old labelled row gave it.
   it("porte l'etoile dans le bandeau, a cote des noms", () => {
     setup({ contact: bruno })
 
@@ -614,7 +614,7 @@ describe('ContactEditView', () => {
     expect(star.closest('.contact-editor-hero')).not.toBeNull()
   })
 
-  // ---- la photo (decision 9) --------------------------------------------------------------------
+  // ---- the photo ----------------------------------------------------------------------------
 
   it('opens the picker from the avatar itself', async () => {
     setup({ contact: bruno })
@@ -652,9 +652,9 @@ describe('ContactEditView', () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: '' }))
   })
 
-  // Le test qui tient la decision 9 : la prop arrive apres le montage, comme le blob dans la vraie
-  // application. Un seed gele vaudrait null ici, et le retrait partirait en null. `setup` ne rend
-  // qu'une fois, alors ce test-ci tient son propre rerender.
+  // Covers the photo arriving after mount, as the blob does in the real app. A seed frozen at
+  // mount would read null here, and the removal would go out as null. `setup` only renders once,
+  // so this test drives its own rerender.
   it('still removes a photo that arrived after mount', async () => {
     const onSave = vi.fn<(draft: ContactDraft) => void>()
     const props = { contact: bruno, saving: false, error: null, onCancel: vi.fn(), onSave }

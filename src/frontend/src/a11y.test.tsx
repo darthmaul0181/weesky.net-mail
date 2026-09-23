@@ -249,7 +249,7 @@ describe('accessibility sweep', () => {
     const { container } = renderInCalendar(
       <QueryClientProvider client={queryClient()}>
         <Modal header={false} labelledBy={EDITOR_TITLE_ID} onClose={vi.fn()}>
-          <EventEditor detail={null} occurrence={null} initial={initial} calendars={calendars}
+          <EventEditor detail={null} initial={initial} calendars={calendars}
             saving={false} error={null} onReload={null} fullScreen={false}
             onSave={vi.fn()} onDelete={vi.fn()} onClose={vi.fn()} />
         </Modal>

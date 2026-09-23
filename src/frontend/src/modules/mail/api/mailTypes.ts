@@ -252,11 +252,7 @@ export interface MailMessageDetail {
   invitation?: MailInvitation
 }
 
-/**
- * Why the stored choice no longer holds. The page words its notice from this: one
- * undifferentiated flag made it assert the folder had been renamed or deleted even when the
- * folder is plainly still there.
- */
+// Lets the page word its notice: one flag made it claim a rename or deletion of a folder still there.
 export type StaleOverrideReason = 'missing' | 'notSelectable' | 'folderTaken'
 
 export interface FolderRoleStaleOverride {

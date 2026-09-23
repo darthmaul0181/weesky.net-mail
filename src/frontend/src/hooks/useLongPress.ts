@@ -2,15 +2,9 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent } from 'react'
 import { GESTURE_TRAVEL_PX } from './gestureThresholds'
 
-/**
- * A press held still for `ms`. The travel guard is what separates it from a scroll: a finger
- * that moves more than 10px was dragging the list, not choosing a row.
- *
- * Touch and pen only. A mouse already has hover, a context menu and a click of its own, and a
- * mouse press held still is not a gesture anyone means: on a desktop it enrolled the row in the
- * selection and swallowed the click that would have opened it, and a drag that hesitated before
- * moving carried the whole selection instead of the one row grabbed.
- */
+/** A press held still for `ms`; moving past 10px is a scroll, not a choice. Touch and pen only: a
+ * held mouse press enrolled the row in the selection, swallowed the click that opens it, and made
+ * a hesitant drag carry the whole selection. */
 export function useLongPress(onLongPress: () => void, ms = 500) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const origin = useRef({ x: 0, y: 0 })

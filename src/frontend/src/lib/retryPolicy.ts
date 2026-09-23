@@ -1,9 +1,5 @@
-/**
- * The app-wide query retry rule. Two statuses a retry cannot rescue: 401, where api.ts has
- * already cleared the session and retrying only delays the redirect to /login, and 409
- * `connected_credentials_invalid`, where the account's stored password no longer decrypts and
- * every request under it fails until the user re-enters it.
- */
+/** Never retried: a 401 (api.ts already cleared the session; a retry delays /login) and a 409
+ * `connected_credentials_invalid` (every request fails until the password is re-entered). */
 export function shouldRetry(failureCount: number, error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status
   if (status === 401 || status === 409) return false

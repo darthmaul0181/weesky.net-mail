@@ -3,7 +3,7 @@ import type { AttendeeProjection } from './calendarTypes'
 import { dotClassOf, guestAnswerOf } from './attendeeStatus'
 
 /** The guests and what each answered: one dot, one name, one word. Drawn only where the answers
-    are true — the user's own events (décision 12). */
+    are true — the user's own events. */
 export default function AttendeeStatusList({ guests }: { guests: AttendeeProjection[] }) {
   const { t } = useTranslation('calendar')
   return (

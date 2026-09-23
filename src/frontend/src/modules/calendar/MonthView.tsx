@@ -60,11 +60,8 @@ function startMinuteBelowAll(timed: Occurrence[], tz: string): number {
   return startMinuteBetween(last ? wallClockOf(last, tz)[1].minute : null, null)
 }
 
-/**
- * The month, always on the six rows `monthGrid` answers: a grid that changed height between
- * September and October would move every row under the cursor. A row entirely outside the month
- * is drawn sunken like each of its cells rather than dropped.
- */
+/** The month, always six rows (`monthGrid`): a grid changing height between months would move
+ * every row under the cursor. A row wholly outside the month is drawn sunken, not dropped. */
 export default function MonthView({
   onOpen, onOpenEditor, selectedKey, previewOpen,
 }: MonthViewProps) {

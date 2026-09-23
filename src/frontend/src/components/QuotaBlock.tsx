@@ -9,7 +9,7 @@ interface QuotaProps {
   quota: Quota | null
 }
 
-/** S14: the figures QuotaBlock and QuotaMini both draw — used/total in whichever unit fits,
+/** The figures QuotaBlock and QuotaMini both draw — used/total in whichever unit fits,
     the percentage and the danger/warn threshold class. One computation, two renderings. */
 function quotaFigures(quota: Quota, t: TFunction<'common'>) {
   const useGb = Math.max(quota.storageBytesUsed, quota.storageBytesLimit) >= GB

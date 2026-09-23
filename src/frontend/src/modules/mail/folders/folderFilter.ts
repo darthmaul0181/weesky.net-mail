@@ -1,7 +1,5 @@
-/**
- * Folded to what a user actually types: nobody reaches for the accent to find
- * "Courrier indésirable". NFD splits each letter from its diacritics, and \p{M} drops them.
- */
+// Nobody reaches for the accent to find "Courrier indésirable": NFD splits off the diacritics
+// and \p{M} drops them.
 export function normalizeQuery(value: string): string {
   return value.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
 }

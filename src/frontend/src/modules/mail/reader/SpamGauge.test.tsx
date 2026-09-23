@@ -28,8 +28,8 @@ describe('SpamGauge', () => {
   })
 
   // The precedent is HelpTooltip: a real button, describing itself with the bubble it opens.
-  // Fix round 1: named with the score itself, not just "Spam score:" — a plain aria-label
-  // would have hidden the visible "7.0 / 16.0" behind an unlabelled description.
+  // Named with the score itself, not just "Spam score:" — a plain aria-label would have hidden
+  // the visible "7.0 / 16.0" behind an unlabelled description.
   it('is a real button, named with the score itself and describing itself with the raw header', () => {
     render(<SpamGauge spamScore={spam} />)
 

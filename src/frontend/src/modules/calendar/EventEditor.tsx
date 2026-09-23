@@ -11,7 +11,7 @@ import { useCalendar } from './calendarContext'
 import { isInvitableAddress } from './guestAddress'
 import CalendarSelect from './CalendarSelect'
 import type {
-  Availability, Calendar, EditScope, EventDetail, Occurrence, RecurrenceWrite, Visibility,
+  Availability, Calendar, EditScope, EventDetail, RecurrenceWrite, Visibility,
 } from './calendarTypes'
 import {
   alignEnd, defaultRule, ruleOf, type EventFormState, validate,
@@ -24,9 +24,9 @@ import ReminderList from './ReminderList'
 import { convertReminder } from './reminderPresets'
 
 export interface EventEditorProps {
-  /** `null` is a creation: the layout owns every query, so an absent detail is the whole signal. */
+  /** `null` is a creation: `detail` comes from the layout's own query, so an absent value is the
+      whole signal. */
   detail: EventDetail | null
-  occurrence: Occurrence | null
   initial: EventFormState
   calendars: Calendar[]
   saving: boolean
@@ -39,7 +39,7 @@ export interface EventEditorProps {
       a layer on the phone — is what moves the focus there. */
   titleRef?: RefObject<HTMLInputElement>
   onSave: (form: EventFormState, scope: EditScope | null) => void
-  onDelete: (scope: EditScope | null) => void
+  onDelete: () => void
   /** Carries whether anything was typed: the layout owns the discard question, and only the form
       knows what it holds. */
   onClose: (dirty: boolean) => void
@@ -82,8 +82,6 @@ function withStart(form: EventFormState, startDate: string, startTime: string): 
     same on each — what "the user changed something" means here. */
 const same = (a: EventFormState, b: EventFormState) => JSON.stringify(a) === JSON.stringify(b)
 
-/** `occurrence` is not read here — the layout builds `initial` from it and sends its instance id
-    with the save — but it stays on the contract: task 6 hands the same pair to the same screen. */
 export default function EventEditor({
   detail, initial, calendars, saving, error, onReload, fullScreen, titleRef, onSave, onDelete,
   onClose, onDirtyChange,
@@ -188,11 +186,9 @@ export default function EventEditor({
       <form id={FORM_ID} className="calendar-editor-form" onSubmit={submit}>
         <div className="field-h">
           <label htmlFor="event-title">{t('editor.title')}</label>
-          {/* Both, and neither is redundant: the surface focuses `titleRef` when it opens with the
-              form already in hand, and `autoFocus` is what moves the focus off the loading ✕ on
-              the commit the form lands in — a later one, which no layer activation follows. */}
-          {/* eslint-disable-next-line jsx-a11y/no-autofocus -- documented exception (Task 4): the
-              Title field's second, later-commit focus path, alongside the ref above */}
+          {/* Not redundant: `titleRef` focuses the field when the surface opens with the form in
+              hand, `autoFocus` when the form lands on a later commit, off the loading ✕. */}
+          {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the later-commit focus path above */}
           <input id="event-title" type="text" value={form.title} autoFocus ref={titleRef}
             placeholder={t('editor.titlePlaceholder')}
             onChange={event => set({ title: event.target.value })} />
@@ -208,14 +204,9 @@ export default function EventEditor({
           </div>
         )}
 
-        {/* Start and End are two rows of one shape — a date as wide as a date, a time box, and on
-            the first row the All-day switch after the time, where it acts. All day on, the time
-            boxes stay, disabled, and read 00:00: the same row, the same width, two controls asleep.
-            The clocks they hide are kept, so the switch turned back off finds them. While a series
-            runs the End date is drawn disabled on the start date — the shipped defect was a
-            3-month event repeated weekly, ten of them overlapping every day, because a free end
-            date beside a rule reads as the end of the SERIES to everyone who did not write the
-            code. */}
+        {/* Start and End are one row shape. All day disables the time boxes at 00:00 and keeps their
+            clocks for when it is turned off. While a series runs, End stays on the start date: a free
+            end date beside a rule reads as the end of the series. */}
         <div className="field-h">
           <label htmlFor="event-start-date">{t('editor.start')}</label>
           <input id="event-start-date" type="date" required aria-label={t('editor.startDate')}
@@ -387,7 +378,7 @@ export default function EventEditor({
 
         <div className="editor-actions">
           {detail && (
-            <button type="button" className="btn btn-danger" onClick={() => onDelete(null)}>
+            <button type="button" className="btn btn-danger" onClick={onDelete}>
               {t('editor.delete')}
             </button>
           )}

@@ -21,11 +21,8 @@ interface Props {
 const day = () => dateFormat({ day: 'numeric', month: 'short' })
 const stamp = () => dateFormat({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
-/**
- * The key the mail server presents to apply guests' replies at delivery, and the switch (spec
- * 5e3). No "Test" button, unlike the sending account above: a test from here would prove the door
- * answers, not that Dovecot calls it — the last-call date is the only honest signal (décision 8).
- */
+/** The key the mail server presents to apply guests' replies at delivery, and the switch. No Test
+ * button: it would prove the door answers, not that Dovecot calls it; the last-call date does. */
 export default function DeliveryRepliesSection({ addToast }: Props) {
   const { t } = useTranslation('admin')
   const { data: key, isLoading, isError } = useDeliveryReplyKey()
@@ -106,12 +103,9 @@ export default function DeliveryRepliesSection({ addToast }: Props) {
           : <span className="svc-account-pill">{t('deliveryReplies.noCall')}</span>)}
         <div className="admin-list-item-actions">
           {configured ? (
-            // A distinct key from the "empty" branch below: without one, React's reconciler can
-            // leave a stale DOM node's class/content behind rather than unmount+remount across
-            // this Fragment/single-element ternary — the same reasoning SchedulingAccountSection's
-            // own renderCard() keys its three branches for, one level up (its whole card, not just
-            // this row). Caught here because it silently broke useLayer's "is the opener still
-            // connected" check (§`hooks/useLayer.ts`): the reused node stayed connected under new content.
+            // Keyed apart from the "empty" branch, or React reuses the node across this ternary and
+            // useLayer's "is the opener still connected" check sees it connected under new content.
+            // SchedulingAccountSection's renderCard keys its branches for the same reason.
             <Fragment key="configured-actions">
               <button type="button" className="admin-icon-btn" title={t('deliveryReplies.regenerate')}
                 aria-label={t('deliveryReplies.regenerate')} onClick={() => setConfirming('regenerate')}>

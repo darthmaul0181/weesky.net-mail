@@ -7,14 +7,8 @@ export const ENVELOPE_GLYPH =
 export const LIST_GLYPH =
   '<path d="M9 6h11M9 12h11M9 18h11"></path><path d="M4 6h.01M4 12h.01M4 18h.01"></path>'
 
-/**
- * The pill that follows the cursor during a drag: a glyph, what the drop will do, and how many
- * rows are riding along. Built as a detached node the caller hands to setDragImage — the browser
- * snapshots it, so it only has to exist at the moment of the drag, not stay in the visible tree.
- *
- * The label and the glyph are the caller's because the two modules drag different things: the mail
- * moves messages, the contacts book favourites or groups them.
- */
+// A detached node `setDragPill` hands to the drag, which snapshots it. The label and glyph are the
+// caller's: the mail moves messages, the contacts book favourites or groups them.
 export function buildDragPill(
   count: number,
   label: string = i18next.t('mail:move.actionMove'),
@@ -44,4 +38,13 @@ export function buildDragPill(
 
   pill.append(env, labelNode, badge)
   return pill
+}
+
+/** Hands the pill to the drag, mounted off-screen just long enough for the browser to snapshot it. */
+export function setDragPill(dataTransfer: DataTransfer, pill: HTMLElement) {
+  pill.style.position = 'absolute'
+  pill.style.top = '-9999px'
+  document.body.appendChild(pill)
+  dataTransfer.setDragImage(pill, 12, 12)
+  setTimeout(() => pill.remove(), 0)
 }

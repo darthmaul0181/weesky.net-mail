@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react'
 import SelectionBand from './SelectionBand'
 
 describe('SelectionBand', () => {
-  // La règle que le squelette apporte, et la seule : le centre cède au décompte dès qu'une ligne est
-  // cochée. Écrite ici plutôt que dans chaque appelant, sinon les deux modules la réinventent.
+  // The one rule the skeleton brings: the centre gives way to the count as soon as a row is
+  // checked. Written here rather than in each caller, or the two modules would reinvent it.
   it('shows the caller centre at rest and the count once rows are checked', () => {
     const { rerender } = render(
       <SelectionBand allSelected={false} indeterminate={false} onToggleAll={() => {}}
@@ -26,8 +26,8 @@ describe('SelectionBand', () => {
     expect(screen.getByText('3 sélectionnés')).toBeInTheDocument()
   })
 
-  // Un filtre reste vrai pendant qu'une sélection est en cours : l'étoile du mail est dans le
-  // titre, et le décompte ne doit pas l'emporter avec le nom du dossier.
+  // A filter stays true while a selection is in progress: the mail's star is in the title, and
+  // the count must not carry it away along with the folder name.
   it('keeps the trailing slot through the swap', () => {
     render(
       <SelectionBand allSelected={false} indeterminate count={2} countLabel="2 sélectionnés"
@@ -39,7 +39,7 @@ describe('SelectionBand', () => {
     expect(screen.getByRole('button', { name: 'Favoris seulement' })).toBeInTheDocument()
   })
 
-  // indeterminate est une propriété DOM et non un attribut : un JSX qui l'écrit ne la pose pas.
+  // indeterminate is a DOM property, not an attribute: JSX that writes it does not set it.
   it('sets the master box indeterminate as a DOM property', () => {
     render(
       <SelectionBand allSelected={false} indeterminate onToggleAll={() => {}}

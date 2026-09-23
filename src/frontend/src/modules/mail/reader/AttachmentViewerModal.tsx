@@ -26,12 +26,8 @@ interface Props {
   onClose: () => void
 }
 
-/**
- * Image attachment preview. Fetches through requestBlob because the API cookie is Lax and
- * cross-origin: a plain <img src> at the API would go out without it. The object URL lives
- * as long as the shown image and is revoked on navigation and on close. Arrows and the
- * keyboard's ArrowLeft/ArrowRight move through the message's images; the ends do not wrap.
- */
+// requestBlob because the API cookie is Lax and cross-origin: a plain <img src> would go out
+// without it. The object URL is revoked on navigation and on close; the arrows do not wrap.
 export default function AttachmentViewerModal({ images, initialIndex, onDownload, onClose }: Props) {
   const { t } = useTranslation('mail')
   const [index, setIndex] = useState(initialIndex)

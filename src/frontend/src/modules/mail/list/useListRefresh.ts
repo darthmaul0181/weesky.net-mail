@@ -48,10 +48,8 @@ async function refreshFirstBlock(
   }
 }
 
-/**
- * Watches the polled folder listing and refreshes the displayed list when its folder moved.
- * The first observation of a folder is the baseline and never triggers.
- */
+// Refreshes the list when the polled listing says its folder moved; the first observation is the
+// baseline and never triggers.
 export function useListRefresh(folderPath: string | null, enabled = true): void {
   const accountId = useAccountId()
   const client = useQueryClient()

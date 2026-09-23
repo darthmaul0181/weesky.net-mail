@@ -13,11 +13,9 @@ interface DeleteConfirmModalProps {
   returnFocusRef?: RefObject<HTMLElement | null>
 }
 
-// Closing is the ✕ and Escape, as in the admin dialogs — no Cancel button. `message` overrides the
-// default one-liner (e.g. the emptying warning). The danger fallback (var(--danger, #dc2626)) is
-// kept — --danger is defined in every theme, so it renders identically everywhere.
-// `title` and `confirmLabel` exist for the one question that is not a deletion — discarding an
-// edited form — which asks exactly this shape and must not put "Delete" on its own button.
+// Closed by the ✕ and Escape, with no Cancel button, as in the admin dialogs. `title` and
+// `confirmLabel` serve the one question that is not a deletion (discarding an edited form), which
+// must not put "Delete" on its button.
 export default function DeleteConfirmModal({
   entityLabel, onConfirm, onClose, loading, message, title, confirmLabel, returnFocusRef,
 }: DeleteConfirmModalProps) {

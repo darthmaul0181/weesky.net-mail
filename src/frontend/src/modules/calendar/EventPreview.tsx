@@ -40,11 +40,8 @@ export interface EventPreviewProps {
   onDelete: () => void
 }
 
-/**
- * The bubble a click on a chip opens: what the occurrence knows, and the two things to do about
- * it. It never queries — the minutes of a reminder and the attendees live in the detail, which is
- * the editor's business, so the bell here says only that one is set.
- */
+/** The bubble a click on a chip opens. It fetches the detail for the rule and the attendees but
+ * not the reminder: the bell says only that one is set. */
 export default function EventPreview({
   occurrence, calendar, anchor, rect, returnFocusRef, onClose, onEdit, onDelete,
 }: EventPreviewProps) {
@@ -98,9 +95,9 @@ export default function EventPreview({
   const title = occurrence.summary || t('views.noTitle')
   const color = colorOf(occurrence, calendarById)
 
-  // Décision 7: names only on a received event. The PARTSTAT it carries is the organizer's snapshot
-  // at send time, almost always empty or stale here — the user's own answer lives in the mail's
-  // card. On the user's own event the answers arrive here, so each guest wears one (décision 12).
+  // Names only on a received event. The PARTSTAT it carries is the organizer's snapshot at send
+  // time, almost always empty or stale here — the user's own answer lives in the mail's card. On
+  // the user's own event the answers arrive here, so each guest wears one.
   const master = (detail?.attendees ?? []).filter(a => !a.recurrenceId)
   const organizer = detail?.canInvite ? undefined : master.find(a => a.isOrganizer)
   const guests = master.filter(a => !a.isOrganizer)

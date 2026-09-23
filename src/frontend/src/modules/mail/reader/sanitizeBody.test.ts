@@ -119,8 +119,8 @@ describe('revealBlockedImages — backgrounds', () => {
     expect(style).toContain(', url("https://cdn.example/l.png")')
   })
 
-  // Task 4 resolves cid backgrounds; this only has to keep the one already in the CSS in the
-  // stack. Assigning through CSSOM reserialises the attribute, so the cid layer comes back
+  // `useInlineImages` resolves cid backgrounds; this only has to keep the one already in the CSS
+  // in the stack. Assigning through CSSOM reserialises the attribute, so the cid layer comes back
   // quoted rather than character for character — the layer survives, its spelling need not.
   it('leaves a cid layer in place and restores the remote one after it', () => {
     const html = '<div data-blocked-bg="https://evil.example/z.png" ' +

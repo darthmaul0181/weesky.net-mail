@@ -1214,7 +1214,7 @@ body {
 .svc-account-section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0 0 4px; }
 .svc-account-section-intro { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 560px; }
 
-/* Configured, not-configured and password-unreadable share the tile skin (mock-up "B"'s .card):
+/* Configured, not-configured and password-unreadable share the tile skin (.card):
    centered like every other .admin-list-item. Green by default — the account works — muted when
    there is none, red when its password cannot be read. */
 .svc-account-card > svg { flex: none; color: var(--success); }
@@ -1231,8 +1231,8 @@ body {
 .svc-account-warn-text { font-size: 13px; color: var(--danger); margin: 2px 0 0; }
 .svc-account-empty-text { flex: 1; min-width: 200px; margin: 2px 0; color: var(--text-muted); font-size: 13px; }
 
-/* The last-test pill, mock-up "B": a tinted fill, not the identities page's plain-outline .row-tag.
-   Muted by default (mock-up "5e3"'s "no call yet" pill) — .is-ok/.is-fail override it. */
+/* The last-test pill: a tinted fill, not the identities page's plain-outline .row-tag.
+   Muted by default (the "no call yet" pill) — .is-ok/.is-fail override it. */
 .svc-account-pill { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex: none; color: var(--text-muted); background: color-mix(in oklab, var(--text-muted) 12%, transparent); }
 .svc-account-pill.is-ok { color: var(--success); background: color-mix(in oklab, var(--success) 12%, transparent); }
 .svc-account-pill.is-fail { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
@@ -1253,22 +1253,22 @@ body {
    .modal outranks the margin shorthands of .settings-note (shell.css, loaded later) and the result. */
 .modal .svc-account-field-indent { margin-left: 126px; }
 
-/* The dialog's inline test result, mock-up "B": an icon plus a sentence, never a boxed alert —
+/* The dialog's inline test result: an icon plus a sentence, never a boxed alert —
    `.alert-error` still applies to a save refusal, which blocks the whole form. */
 .svc-account-test-result { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; max-width: 56ch; font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
 .svc-account-test-result svg { flex: none; }
 .svc-account-test-result.is-ok { color: var(--success); }
 .svc-account-test-result.is-fail { color: var(--danger); }
 
-/* Pushes Tester to the leading edge of .folder-pick-submit's flex-end row (mock-up "B"'s footer)
+/* Pushes Tester to the leading edge of .folder-pick-submit's flex-end row (the dialog footer)
    instead of a second copy of that row's own layout and phone stacking (mail.css). */
 .svc-account-test-btn { margin-right: auto; }
 
-/* ── Delivery replies (Application tab, spec 5e3) ────────────────────────── */
+/* ── Delivery replies (Application tab) ──────────────────────────────────── */
 
 /* Its own row, not `.field-h.is-setting`: that modifier's 260px fixed label column is what put
    the switch ~150px right of the label text — this row wants the switch immediately after the
-   words instead, mock-up "5e3"'s own layout. */
+   words instead. */
 .dlv-toggle { display: flex; align-items: center; gap: 12px; margin: 0; }
 .dlv-toggle > label:first-child { font-size: 14px; font-weight: 600; color: var(--text); }
 .dlv-toggle.is-off > label:first-child { color: var(--text-muted); }
@@ -1898,7 +1898,7 @@ body {
   flex-shrink: 0;
 }
 
-/* Trait vertical séparant les actions du bouton déplier/replier */
+/* Vertical rule separating the actions from the expand/collapse button */
 .rule-card-btns-sep {
   width: 1px;
   align-self: stretch;
@@ -2339,8 +2339,8 @@ body {
 .contact-scope-count { flex: none; color: var(--text-muted); font-size: 12px; }
 .contact-scope.is-active .contact-scope-count { color: inherit; }
 
-/* The Groups heading carries the « + » — decision 13 keeps it out of `.column-actions`, whose
-   width is measured to the pixel for a French label. */
+/* The Groups heading carries the « + », kept out of `.column-actions`, whose width is measured
+   to the pixel for a French label. */
 .contact-scopes-groups-header {
   display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; padding: 0 10px;
   color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;

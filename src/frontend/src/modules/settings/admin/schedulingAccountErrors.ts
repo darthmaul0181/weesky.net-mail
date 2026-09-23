@@ -3,11 +3,8 @@ import { ApiError } from '../../../api.js'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { RequestTimeoutError } from '../../../lib/withTimeout'
 
-/**
- * A refusal this screen cannot name a code for is shown, not swallowed: a mapped code still goes
- * through `apiErrorMessage`; an unmapped 400 shows the server's own English sentence after a
- * translated lead; a 404 (the account gone mid-session) says so plainly.
- */
+/** A refusal is shown, never swallowed: a mapped code through `apiErrorMessage`, an unmapped 400
+ * as the server's sentence after a translated lead, a 404 (account gone) plainly. */
 export function schedulingErrorMessage(err: unknown, t: TFunction<'admin'>, fallback: string): string {
   const mapped = apiErrorMessage(err, '')
   if (mapped) return mapped

@@ -23,11 +23,8 @@ export function returnFocus(
   if (reachable(to) && root?.contains(document.activeElement)) to.focus(options)
 }
 
-/**
- * A dismissible surface that is not a dialog — a menu, a popover, the calendar bubble — on the
- * layer stack: Escape reaches it only while it is the topmost one, and a press outside it closes
- * it. No trap: Tab may leave a menu, and what it walks into is the page behind it.
- */
+/** A dismissible surface that is not a dialog (menu, popover, calendar bubble) on the layer stack:
+ * Escape while it is topmost, closed by a press outside. No trap: Tab may leave it. */
 export function useDismiss({
   open, rootRef, onDismiss, anchorRef, refocusRef, closeOnScroll = false,
 }: Options) {
@@ -46,9 +43,8 @@ export function useDismiss({
 
   useEffect(() => {
     if (!open) return undefined
-    // A press that lands on a surface above this one is that surface's business: the confirm a
-    // menu row opened is "outside" by containment alone, and closing under it is the bug. The
-    // question is a trap above, not the top place: a menu over a popover suspends neither, so one
+    // A press on a surface above this one is that surface's business (a confirm a menu row opened).
+    // The test is a trap above, not the top place: a menu over a popover suspends neither, so one
     // press on the page closes both.
     function outside(event: MouseEvent) {
       const target = event.target as Node

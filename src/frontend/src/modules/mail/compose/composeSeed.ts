@@ -18,7 +18,7 @@ export type ComposeAction = 'reply' | 'replyAll' | 'forward' | 'editAsNew' | 'dr
 /** Identifies the stored draft a save from the composer replaces. */
 export interface DraftRef { folderPath: string; uid: number }
 
-/** Everything a prefilled composer opens with — the shape a 2c3 draft also takes. */
+/** Everything a prefilled composer opens with — the shape a draft also takes. */
 export interface ComposeSeed {
   /** What opened the composer — the header names it. */
   action: ComposeAction
@@ -173,16 +173,9 @@ export function buildDraftSeed(
   }
 }
 
-/**
- * The account's chosen editor, applied to a seed before the composer mounts.
- *
- * A resumed draft is exempt and the test is `action`, never `text`: an HTML draft carries
- * `text: null` exactly like a reply does, so a body test cannot tell the two apart and would
- * discard what the draft holds. `ComposeView` draws the same boundary for its dirty flag.
- *
- * Clearing `contentId` is the whole of the attachment handling: the composer already splits the
- * seed's attachments on that field, so an inline image lands in the tray with nothing else to do.
- */
+// A resumed draft is exempt, tested on `action` and never `text`: an HTML draft carries `text: null`
+// like a reply does. Clearing `contentId` is the whole attachment handling, since the composer splits
+// the seed's attachments on that field.
 export function applyComposeFormat(
   seed: ComposeSeed | null, format: ComposeFormat,
 ): ComposeSeed | null {

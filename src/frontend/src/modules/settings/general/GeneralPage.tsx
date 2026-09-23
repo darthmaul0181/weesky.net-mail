@@ -82,10 +82,7 @@ function EditorGlyph({ variant }: { variant: ComposeFormat }) {
   )
 }
 
-/**
- * Settings that shape the app rather than the account. The values come from the backend with
- * its defaults already filled in, so this page never has to know what a default is.
- */
+/** Settings that shape the app, not the account; the backend fills the defaults in. */
 export default function GeneralPage() {
   const { t } = useTranslation('settings')
   const { data: preferences, isLoading, isError } = usePreferences()

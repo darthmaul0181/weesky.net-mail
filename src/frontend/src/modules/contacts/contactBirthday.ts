@@ -6,11 +6,8 @@ const Dated = /^(\d{4})-?(\d{2})-?(\d{2})/
 /** vCard's year-less birthday: `--0315` and its extended spelling. */
 const YearLess = /^--(\d{2})-?(\d{2})$/
 
-/**
- * A card's BDAY as the interface's language spells it, or the raw value when it says something
- * this cannot read — a birthday that vanishes reads as data lost, where an odd-looking one reads
- * as a card to correct. The year is never invented: a card that gives none is formatted without.
- */
+/** A card's BDAY in the interface's language, never inventing a year. Unreadable values come back
+ * raw: a birthday that vanishes reads as data lost, an odd one as a card to correct. */
 export function formatBirthday(raw: string | null | undefined, locale?: string): string | null {
   const value = raw?.trim()
   if (!value) return null
@@ -44,10 +41,8 @@ function format(
   return dateFormat({ ...options, timeZone: 'UTC' }, locale).format(date)
 }
 
-/** What the field accepts: day first, then month, then an optional year — the shape its own
-    placeholder has always advertised. Any of the three separators a keyboard offers. Day first in
-    both languages on purpose: the stored card is one card, and reading `03/04/1990` as April in
-    English and March in French would make the same date mean two days depending on who opened it. */
+/** Day, month, optional year, with any keyboard separator, as the placeholder shows. Day first in
+ * both languages: one card must not read `03/04/1990` as April in English and March in French. */
 const Typed = /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{4}))?$/
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -58,16 +53,8 @@ function real(year: number, month: number, day: number): boolean {
   return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
-/**
- * The stored BDAY as the editor's field shows it.
- *
- * The field used to render the stored value raw, so a card exported by a phone —
- * `BDAY:19930621T115900Z` — read as exactly that, beside a placeholder inviting `27/10/1979`. The
- * card next door showed `21 juin 1993` the whole time, because only the reading side ever parsed.
- *
- * A value this cannot read is still shown verbatim, for `formatBirthday`'s reason: a birthday that
- * vanishes reads as data lost, where an odd-looking one reads as a card to correct.
- */
+/** The stored BDAY as the editor's field shows it (a phone's `19930621T115900Z` read raw before);
+ * an unreadable value is shown verbatim, for `formatBirthday`'s reason. */
 export function birthdayToInput(raw: string | null | undefined): string {
   const value = raw?.trim()
   if (!value) return ''
@@ -81,18 +68,9 @@ export function birthdayToInput(raw: string | null | undefined): string {
   return value
 }
 
-/**
- * What the field's text is stored as — the vCard spelling, not the typed one.
- *
- * The backend bounds this string's length and nothing else, so whatever leaves here is what lands
- * after `BDAY:`. Typing the placeholder's own `27/10/1979` therefore used to write a malformed
- * vCard date, which the card then had to print verbatim because no reader could parse it: the
- * field was teaching its own corruption.
- *
- * Text this cannot read travels exactly as typed, which is décision 7's escape hatch — the vCard
- * admits forms neither this nor a native picker can express, and refusing them here would make a
- * card carrying one permanently unsaveable.
- */
+/** The field's text as the vCard spelling: the backend only bounds the length, so a typed
+ * `27/10/1979` once landed as a malformed BDAY. Unreadable text travels as typed, or a card holding
+ * a form no picker expresses could never be saved. */
 export function inputToBirthday(text: string): string {
   const value = text.trim()
   if (value === '') return ''

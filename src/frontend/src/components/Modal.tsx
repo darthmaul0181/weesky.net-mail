@@ -38,10 +38,8 @@ export interface ModalProps {
   children: ReactNode
 }
 
-/**
- * The one dialog shell: a named `aria-modal` box on the layer stack, with three ways out — the ✕,
- * Escape, and a press that starts and ends on the backdrop. Sizing stays in `styles/modal.css`.
- */
+/** The one dialog shell: a named `aria-modal` box on the layer stack, closed by the ✕, Escape or
+ * a press that starts and ends on the backdrop. Sizing stays in `styles/modal.css`. */
 export default function Modal({
   title, icon, onClose, onEscape, closeLabel, busy = false, role = 'dialog',
   initialFocusRef, returnFocusRef, preferReturnRef, className, overlayClassName, headerExtra,

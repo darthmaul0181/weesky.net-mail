@@ -18,11 +18,8 @@ export interface ColourGridProps<T extends string> {
   labelledBy?: string
 }
 
-/**
- * Six colours to a row, one tab stop for the lot, the colour in force carrying `aria-pressed` so
- * Tab lands on it. No `cellEntry`: one widget per cell has nothing to enter, which is what leaves
- * Escape to the popover or dialog underneath.
- */
+/** Six colours to a row, one tab stop, the colour in force carrying `aria-pressed` so Tab lands
+ * on it. No `cellEntry`: nothing to enter, which leaves Escape to the popover or dialog beneath. */
 export default function ColourGrid<T extends string>({
   rows, value, nameOf, onPick, className, label, labelledBy,
 }: ColourGridProps<T>) {

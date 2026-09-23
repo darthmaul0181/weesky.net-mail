@@ -114,7 +114,7 @@ describe('SchedulingAccountSection — last-test pill', () => {
   })
 })
 
-// The mock-up says "14 sept.": day + abbreviated month, never the locale's full short date
+// "14 sept.": day + abbreviated month, never the locale's full short date
 // (dateStyle: 'short' reads "9/14/26" in English and gives no way to tell the two apart by eye).
 describe('SchedulingAccountSection — last-test date format', () => {
   it('formats it as day + abbreviated month in English', async () => {

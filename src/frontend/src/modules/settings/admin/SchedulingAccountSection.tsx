@@ -27,11 +27,8 @@ function securityText(security: string | undefined, t: TFunction<'admin'>): stri
   return option ? securityLabel(option, t) : (security ?? '')
 }
 
-/**
- * The SMTP service account `ServiceMailQueue` uses to send calendar invitations when a device
- * write (a phone, Thunderbird over CalDAV) has no user session of its own — configured here,
- * below the existing Application settings, and nowhere else (mockup "B", spec 5e2).
- */
+/** The SMTP account `ServiceMailQueue` sends invitations with when a device write (CalDAV) has no
+ * user session; configured here and nowhere else. */
 export default function SchedulingAccountSection({ addToast }: Props) {
   const { t } = useTranslation('admin')
   const { data: account, isLoading, isError } = useSchedulingAccount()

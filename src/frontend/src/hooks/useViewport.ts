@@ -14,14 +14,8 @@ function read(): Viewport {
   return 'desktop'
 }
 
-/**
- * Which tier the viewport is in. It decides what MOUNTS — which pane, whether the splitter
- * exists, whether the drawer traps focus — and never how wide anything is: a width computed
- * here would be a second source of truth beside the stylesheet, and the two would drift.
- *
- * Without matchMedia it answers 'desktop', which is the layout that exists today rather than
- * a blank screen.
- */
+/** Which tier the viewport is in. It decides what mounts, never how wide anything is: a width here
+ * would be a second source of truth beside the stylesheet. Without matchMedia, 'desktop'. */
 export function useViewport(): Viewport {
   const [viewport, setViewport] = useState(read)
 

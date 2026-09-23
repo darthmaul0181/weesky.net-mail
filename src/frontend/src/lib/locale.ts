@@ -1,20 +1,11 @@
-/**
- * Which language the interface speaks, resolved once from four sources.
- *
- * The chain is stored preference → localStorage mirror → browser → English. `auto` and any value
- * this build does not recognise fall through at every link alike: both mean "this link has no
- * answer", and treating an unknown value as an answer would strand an account on a locale the
- * build cannot render.
- */
+/** The interface language: stored preference → localStorage mirror → browser → English. `auto` and
+ * any unknown value fall through alike: an unknown one taken as an answer would strand an account
+ * on a locale the build cannot render. */
 export const SUPPORTED_LOCALES = ['en', 'fr'] as const
 export type Locale = typeof SUPPORTED_LOCALES[number]
 
-/**
- * The mirror covers the two cases the server cannot: the login page, which has no session and so
- * no preferences to read, and the first render, which precedes the answer to GET /api/Preferences.
- * It is written whenever preferences arrive and deliberately never cleared on sign-out — clearing
- * it would send the login page back to the browser's language every time.
- */
+/** Covers what the server cannot: the login page and the render before GET /api/Preferences.
+ * Never cleared on sign-out, or the login page would revert to the browser's language. */
 export const LANGUAGE_MIRROR_KEY = 'ui_language'
 
 function asLocale(value: string | undefined): Locale | undefined {

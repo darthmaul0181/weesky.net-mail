@@ -17,10 +17,8 @@ interface Props {
   onNotify: (message: string, type?: 'success' | 'error') => void
 }
 
-/**
- * Assigns the five system roles. "Automatic" follows the server; a pick corrects it where a
- * messy history (both "Drafts" and "Brouillons") made detection guess wrong.
- */
+/** Assigns the five system roles. "Automatic" follows the server; a pick corrects a guess a messy
+ * history (both "Drafts" and "Brouillons") got wrong. */
 export default function SystemFoldersModal({ onClose, onNotify }: Props) {
   const { t } = useTranslation('settings')
   const { t: tMail } = useTranslation('mail')
@@ -110,10 +108,8 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
   )
 }
 
-/**
- * Says what "automatic" resolves to and how. "The server declared it" versus "we guessed from
- * the name" is the distinction this dialog exists for: only the guess is likely to be wrong.
- */
+/** What "automatic" resolves to, and whether the server declared it or the name was guessed:
+ * only a guess is likely wrong. */
 function automaticLabel(
   entry: FolderRoleEntry | undefined,
   nameOf: (path: string | null) => string | null,

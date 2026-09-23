@@ -13,21 +13,15 @@ export function flatten(nodes: MailFolderNode[], depth = 0): Array<{ node: MailF
   return nodes.flatMap(node => [{ node, depth }, ...flatten(node.children, depth + 1)])
 }
 
-/**
- * Derives a folder's parent path by removing its leaf name. Works for any hierarchy
- * separator, because the leaf name is known and cannot contain one — the backend rejects
- * names that do.
- */
+// Strips the leaf name, so any separator works: the backend rejects names containing one.
 export function parentOf(folder: MailFolderNode): string {
   return folder.path.length > folder.name.length
     ? folder.path.slice(0, folder.path.length - folder.name.length - 1)
     : ''
 }
 
-/**
- * The target of each role action, anywhere in the tree — a server may nest its trash under the
- * inbox. Two folders claiming one role is a server-side conflict: the first in tree order wins.
- */
+// Anywhere in the tree, since a server may nest its trash under the inbox. Two folders claiming one
+// role is a server-side conflict: the first in tree order wins.
 export function rolePathsOf(nodes: MailFolderNode[]): RolePaths {
   const paths: RolePaths = { trash: null, archive: null, junk: null }
 
@@ -50,11 +44,8 @@ export function isSystemFolder(node: MailFolderNode): boolean {
   return Boolean(node.specialUse)
 }
 
-/**
- * Inbox first, then everything by name — system folders interleaved, not grouped: here the
- * question is "where is the folder I am looking for". `FolderTree.splitByRole` does the
- * opposite. localeCompare, or every accented name files after "Z".
- */
+// Inbox first, then everything by name, role folders interleaved: here the question is "where is my
+// folder". localeCompare, or every accented name files after "Z".
 export function sortFolders(nodes: MailFolderNode[]): MailFolderNode[] {
   return [...nodes]
     .sort((a, b) => {

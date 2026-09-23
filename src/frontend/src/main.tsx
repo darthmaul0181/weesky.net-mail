@@ -20,10 +20,9 @@ import App from './App'
 import { initI18n } from './lib/i18n'
 import { readLanguageMirror, resolveLocale } from './lib/locale'
 
-// Awaited before the first render: the catalogue has to be in hand or the app paints its own
-// keys. `.then` rather than top-level await, so the bundle needs no ESM-TLA target. The `.catch`
-// covers a hashed chunk failing to load — a tab left open across a redeploy, a flaky first visit —
-// which would otherwise leave every route, /login included, a permanently blank document.
+// Awaited before the first render, or the app paints its own keys; `.then`, not top-level await,
+// so the bundle needs no TLA target. The `.catch` covers a hashed chunk failing to load (a
+// redeploy under an open tab), which would otherwise leave every route a blank document.
 void initI18n(resolveLocale(undefined, readLanguageMirror(), navigator.languages))
   .then(() => {
     createRoot(document.getElementById('root')!).render(

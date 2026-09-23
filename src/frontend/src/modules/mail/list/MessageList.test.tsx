@@ -2349,7 +2349,7 @@ describe('the list as a grid', () => {
     expect(screen.getByLabelText('Collapse conversation')).toBeInTheDocument()
   })
 
-  /* The lot's headline change, measured rather than assumed: one tick used to cost 93ms at 2000
+  /* The headline change, measured rather than assumed: one tick used to cost 93ms at 2000
      rows because every row re-rendered. Nothing is mocked — a getter on a field only `MessageRow`
      reads counts the real memoised component rendering, or not. */
   it('does not re-render the other rows when one checkbox changes', async () => {
@@ -2397,7 +2397,7 @@ describe('the list as a grid', () => {
     } finally { vi.useRealTimers() }
   })
 
-  /* The one interaction between this memo and lot 2c's hook. The content cell renders a constant
+  /* The one interaction between this memo and `useGridNav`. The content cell renders a constant
      `tabIndex={-1}` and the hook writes `0` onto the DOM; React rewrites only a prop that changed
      between renders, so a row re-rendering must not take the stop back. */
   it('leaves the hook\'s tab stop alone when a row re-renders', async () => {

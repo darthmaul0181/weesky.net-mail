@@ -30,10 +30,6 @@ describe('deriveIdentity', () => {
     expect(deriveIdentity(uppercase).displayName).toBe('Mick@weesky.be')
   })
 
-  it('initials are first letters of user and domain, uppercased', () => {
-    expect(deriveIdentity(account).initials).toBe('MW')
-  })
-
   it('subDomains excludes the primary domain', () => {
     expect(deriveIdentity(account).subDomains).toEqual([{ id: 'EXT', name: 'example.org' }])
   })

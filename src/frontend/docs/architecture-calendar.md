@@ -8,13 +8,13 @@ routes pointed at the **same** lazy layout, not layouts of their own — the `/m
 `/contacts/:id/edit` mechanism — so the editor is a surface over the grid rather than a trip away
 from it, and the sidebar never unmounts under it.
 
-**The URL is the state.** `?view` and `?date` are normalised by an effect with `replace`, so Back
-leaves the module instead of bouncing off the normalisation, and a value neither reads falls back
-rather than blanking the screen. The default view comes from `localStorage` `calendar.view`,
-written by `setView` alone — the splitter sizes' precedent, a device memory and not an account
-preference. Every navigation inside the module carries `view` and `date` along (`searchWith`), and
-`openEditor`/`createAt` pass their arguments as **search params rather than router state**: a
-reload has to reopen the same draft, and `state` does not survive one.
+**The URL is the state** (`useCalendarUrlState`). `?view` and `?date` are normalised by an effect
+with `replace`, so Back leaves the module instead of bouncing off the normalisation, and a value
+neither reads falls back rather than blanking the screen. The default view comes from `localStorage`
+`calendar.view`, written by `setView` alone — the splitter sizes' precedent, a device memory and not
+an account preference. Every navigation inside the module carries `view` and `date` along
+(`searchWith`), and `openEditor`/`createAt` pass their arguments as **search params rather than
+router state**: a reload has to reopen the same draft, and `state` does not survive one.
 
 Files under `src/modules/calendar/`:
 
@@ -55,6 +55,10 @@ Files under `src/modules/calendar/`:
 - `gridGestures.ts`, `pointerGesture.ts`, `useDragEvent.ts`, `useResizeEvent.ts`,
   `useCreateByDrag.ts` — the three pointer gestures over the grid
 - `phone/PhoneMonth.tsx`, `phone/DayStrip.tsx` — the two screens that exist only below 640px
+- `useCalendarUrlState.ts`, `useCalendarSearch.ts`, `useEditorSeed.ts`, `useGestureWrites.ts`,
+  `useEventWrites.ts`, `useCalendarWrites.ts`, `CalendarDialogs.tsx` — `CalendarLayout`'s parts:
+  the URL, the debounced search, the editor's seed, the queued gesture writes, the event saves and
+  deletions, the calendars' own writes, and the seven dialogs over the grid
 - `calendarContext.ts` — the module's context, in a file of its own; `calendarTestHarness.tsx` —
   `renderInCalendar`, which mounts any view with neither a router nor a `QueryClient`
 
@@ -94,17 +98,22 @@ server's so the two sides say the same thing.
 window's occurrences by `isVisible !== false` rather than `=== true`: a box nobody has unticked
 hiding its own events reads as a load that lost them.
 
-**The editor is seeded once per `editorKey`, and the key is the lever.** `editorKey` is
-`` `${id ?? 'new'}#${instance}#${reloads}` ``; a seed is planted when it changes and never again,
-so an invalidation behind an open form — one of this module's own mutations, a focus refetch —
-cannot reseed what is being typed. `editorReady` is **latched on the seed** for the same reason:
-it is recomputed every render, and a window arriving without the edited instance flipped it false,
-unmounted the keyed editor and threw the draft away. A form already sown never waits for anything
-again. **And the seed dies with the editor it was sown for**: kept past the close, the next
+**The editor is seeded once per `editorKey`, and the key is the lever** (`useEditorSeed`).
+`editorKey` is `` `${id ?? 'new'}#${instance}#${reloads}` ``; a seed is planted when it changes and
+never again, so an invalidation behind an open form — one of this module's own mutations, a focus
+refetch — cannot reseed what is being typed. `editorReady` is **latched on the seed** for the same
+reason: it is recomputed every render, and a window arriving without the edited instance flipped it
+false, unmounted the keyed editor and threw the draft away. A form already sown never waits for
+anything again. Nor is a form ever sown from a detail being read again after it went stale — a
+save's own invalidation is one, and the hash it holds is the version that save replaced, the
+invitation hook writing once more — or from one whose last read failed, since a cached copy of an
+event deleted elsewhere would sow a form for nothing. An occurrence is found in the window first,
+then in the search results the editor may have been opened from, then in one day fetched around the
+instance: without the last two, a search result seeded the *master's* hours and a narrow save,
+finding no instance, moved the occurrence instead of editing it. **And the seed dies with the editor it was sown for**: kept past the close, the next
 creation found it under the same `new##0` key and reused it — a click on the grid put its slot in
-the URL and opened the draft of the last *New event*, the next hour of the clock. The URL was
-right all along and the test only read the URL, which is how it shipped; the test now reads the
-form.
+the URL and opened the draft of the last *New event*, the next hour of the clock. The URL was right
+all along and the test only read the URL, which is how it shipped; the test now reads the form.
 
 **A save carries the hash the form was seeded with, and a 409 offers Reload rather than a retry.**
 `updateBodyOf` is handed `{ ...detail, icsHash: seed.hash }`, so a second Save after a stale
@@ -205,12 +214,12 @@ cached occurrence through `useMoveOccurrence`'s `onMutate` and rolls it back on 
 block stays where the pointer left it instead of snapping home and back. The write itself needs the
 event's `detail` — the version it read and the zone it is written in — which comes from the cache
 the editor fills, or one fetch. **Two gestures on one event are queued behind each other**
-(`pending`, a `Map<eventId, Promise>` claimed *before* the first await): "move it, then a quarter
-of an hour more" is one gesture in the user's head and two drops in ours, and sent together they
-carry the same `ifHash` and the second comes back 409 — a refusal for having done exactly what the
-grid invites. The second waits and reads the version the first wrote. A drop on a series asks the
-scope question first, through `askScope`, which is a **promise**: the layout owns the one dialog
-and three callers await its answer, `null` being the ✕ and nothing written.
+(`useGestureWrites`' `pending`, a `Map<eventId, Promise>` claimed *before* the first await): "move
+it, then a quarter of an hour more" is one gesture in the user's head and two drops in ours, and
+sent together they carry the same `ifHash` and the second comes back 409 — a refusal for having done
+exactly what the grid invites. The second waits and reads the version the first wrote. A drop on a
+series asks the scope question first, through `askScope`, which is a **promise**: the layout owns
+the one dialog and three callers await its answer, `null` being the ✕ and nothing written.
 
 **A click on the empty part of a month cell creates, and the chips around it name the hour** —
 and so does **Enter** on the focused cell, which lands below every chip the cell drew, since a

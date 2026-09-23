@@ -2,10 +2,8 @@ import { act, fireEvent } from '@testing-library/react'
 import type { Mock } from 'vitest'
 import type { Viewport } from './hooks/useViewport'
 
-/** A dismissing press on a dialog's backdrop: it counts only when both halves land on it, so the
-    three events are one gesture. Queried by class, not role: `ContextDrawer`'s scrim and
-    `MessageList`'s root also carry `role="presentation"`, which `getAllByRole` cannot tell apart
-    from a modal's overlay. */
+/** A dismissing press on a dialog's backdrop, both halves landing on it. Queried by class, not
+ * role: `ContextDrawer`'s scrim and `MessageList`'s root also carry `role="presentation"`. */
 export function pressBackdrop() {
   const backdrop = document.querySelector('.modal-overlay') as HTMLElement
   fireEvent.mouseDown(backdrop)
@@ -13,11 +11,8 @@ export function pressBackdrop() {
   fireEvent.click(backdrop)
 }
 
-/**
- * A macrotask boundary, which drains every pending microtask. TanStack v5 notifies its observers
- * on one, and effects fire at the end of an await chain: a silence assertion made before that
- * drains holds against any implementation whatsoever, including one that fires on every render.
- */
+/** A macrotask boundary, draining every pending microtask (TanStack notifies on one): a silence
+ * assertion made before it holds against any implementation, even one firing every render. */
 export async function settle() {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
@@ -69,24 +64,17 @@ export function viewportListenerCount() {
   return listeners.size
 }
 
-/**
- * jsdom has no `TouchEvent` constructor; a plain `Event` carrying a `touches` array is what
- * `usePullToRefresh` actually reads, and it dispatches through the same listeners. Shared between
- * its own test and `MessageList`'s so the two cannot drift on what a touch event needs to carry —
- * does not wrap in `act()` itself, since callers batch a whole gesture into one `act()` or split
- * it across several depending on what they are testing.
- */
+/** jsdom has no `TouchEvent`; a plain `Event` carrying `touches` is what `usePullToRefresh` reads.
+ * Shared by its test and `MessageList`'s so the two cannot drift. No `act()` here: callers batch
+ * a gesture into one or split it. */
 export function fireTouch(element: HTMLElement, type: string, y: number) {
   const event = new Event(type, { bubbles: true, cancelable: true })
   Object.defineProperty(event, 'touches', { value: [{ clientY: y }] })
   element.dispatchEvent(event)
 }
 
-/**
- * jsdom carries no `PointerEvent` constructor and leaves the three capture calls undefined on
- * every element. A `MouseEvent` with a `pointerId` is the whole of what a gesture reads, and the
- * capture stubs are what stop `setPointerCapture` throwing under the first drag.
- */
+/** jsdom has no `PointerEvent` and no capture calls: a `MouseEvent` with a `pointerId` is all a
+ * gesture reads, and the stubs stop `setPointerCapture` throwing under the first drag. */
 class SyntheticPointerEvent extends MouseEvent {
   pointerId: number
 
@@ -121,11 +109,9 @@ export function pointerDownOn(element: HTMLElement, x = 0, y = 0, target: HTMLEl
   } as unknown as import('react').PointerEvent
 }
 
-/** Escape as a gesture in flight hears it: on `document`, which is where each of them listens.
-    Bubbles and is cancelable, matching the layer stack's own contract — a non-cancelable event
-    would make `preventDefault()` a no-op and hide whether a layer actually swallowed the key.
-    Returns the event, so a caller can read `defaultPrevented` off it. Wrapped like the pointer
-    helpers, so the abandonment is on screen before it is asserted. */
+/** Escape on `document`, where every gesture listens; cancelable, as the layer stack's contract
+ * needs, so the returned event's `defaultPrevented` tells whether a layer swallowed it. Wrapped
+ * like the pointer helpers, so the abandonment is on screen before it is asserted. */
 export function fireEscape() {
   const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
   act(() => { document.dispatchEvent(event) })

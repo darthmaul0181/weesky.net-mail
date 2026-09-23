@@ -67,7 +67,7 @@ describe('CalendarToolbar', () => {
   })
 
   // A 360px band has no room for a fourth segment and a 30ch box: the phone searches from the
-  // list (task 7) and reads a week as seven separate days.
+  // list and reads a week as seven separate days.
   it('drops the week segment and the search box on a phone', () => {
     draw({ view: 'day', phone: true, weekNumber: 38 })
     expect(screen.getAllByRole('radio').map(input => (input as HTMLInputElement).value))

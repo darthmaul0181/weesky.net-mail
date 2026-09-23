@@ -1,70 +1,40 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import type {
-  CSSProperties, DragEvent, KeyboardEvent, ReactNode, RefObject,
-} from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode, RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
 } from '../../../hooks/usePreferences'
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
-import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import { hasOpenLayer } from '../../../lib/layerStack'
 import { rolePathsOf } from '../folders/folderNodes'
-import { useDeleteMessages, useEmptyFolder, useFolders, useMoveMessages, useSearchMessages, useSetFlags } from '../queries'
-import MoveMessagesModal from '../MoveMessagesModal'
-import AdvancedSearchModal from './AdvancedSearchModal'
+import { useDeleteMessages, useFolders, useMoveMessages, useSetFlags } from '../queries'
 import EmptyFolderBanner from './EmptyFolderBanner'
 import SearchBar from './SearchBar'
 import SearchResultsBanner from './SearchResultsBanner'
-import { criteriaFromForm, isEmptyCriteria, isStarredOnly, labelOf } from './searchCriteria'
-import type { AdvancedForm, SearchCriteria } from './searchCriteria'
+import { isStarredOnly, labelOf } from './searchCriteria'
+import type { SearchCriteria } from './searchCriteria'
 import { DRAG_MIME, dragUids, serializeDrag } from './dragMessages'
-import { buildDragPill } from './dragImage'
+import { buildDragPill, setDragPill } from './dragImage'
 import MessageRow, { rowUidsOf } from './MessageRow'
 import type { CheckGesture, RowCallbacks } from './MessageRow'
+import MessageGrid from './MessageGrid'
+import ListDialogs from './ListDialogs'
 import { memberUids } from './threading'
-import type { ThreadGroup } from './threading'
 import LoadMoreSentinel from './LoadMoreSentinel'
 import { sentinelIndexOf } from './messageStream'
 import Pagination from './Pagination'
 import SelectionToolbar from './SelectionToolbar'
 import { useSelection } from './useSelection'
+import { useBulkActions } from './useBulkActions'
+import { useListSearch } from './useListSearch'
 import { useKeyedState } from '../../../hooks/useKeyedState'
 import { ROW_EXIT_MS } from './useRowExit'
 import type { RowExit } from './useRowExit'
 import { useMessageList } from './useMessageList'
 import { useForwarders } from '../../../hooks/useForwarders'
-import { useGridNav } from '../../../hooks/useGridNav'
 import { useToday } from '../../../hooks/useToday'
 import { usePullToRefresh } from '../../../hooks/usePullToRefresh'
-
-/**
- * The rows' container. It is a component of its own because `useGridNav`'s effect is keyed on the
- * ref alone: a grid that is absent when its owner first lays out never gets the hook at all, and
- * this element comes and goes with the rows — a loading, failed or empty list draws none.
- */
-function MessageGrid({ label, rowCount, selecting, children }: {
-  label: string
-  /** The folder's own row total, or -1 where it is not knowable in rows. */
-  rowCount: number
-  selecting: boolean
-  children: ReactNode
-}) {
-  const grid = useRef<HTMLDivElement>(null)
-  useGridNav({ ref: grid })
-  return (
-    <div
-      className={`message-list${selecting ? ' has-selection' : ''}`}
-      role="grid"
-      aria-label={label}
-      aria-rowcount={rowCount}
-      ref={grid}
-    >
-      {children}
-    </div>
-  )
-}
 
 interface Props {
   folderPath: string | null
@@ -96,10 +66,7 @@ interface Props {
   regionRef?: RefObject<HTMLElement | null>
 }
 
-/**
- * Three bands: a heading, the rows, and the footer. Only the middle one scrolls — the pager
- * used to sit after the last row, so reaching it meant scrolling past fifty messages.
- */
+// Three bands (heading, rows, footer); only the rows scroll, so the pager never sits past the last row.
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
     inDrawer = false, onNotify, onRows, onDeparted, rowExit, search = null, onSearchChange,
@@ -113,44 +80,9 @@ export default function MessageList(
   const rowActions = useMemo<readonly RowAction[]>(
     () => (preferences ? rowActionsOf(preferences) : DEFAULT_ROW_ACTIONS), [preferences])
 
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [advanced, setAdvanced] = useState<{ subject: string } | null>(null)
-  const [searchPage, setSearchPage] = useState(0)
-
-  // Render-time resets, the useMessageList pattern: no effect-lag page or stale-bar frame.
-  const [shownSearch, setShownSearch] = useState(search)
-  if (search !== shownSearch) { setShownSearch(search); setSearchPage(0) }
-  const [shownFolder, setShownFolder] = useState(folderPath)
-  if (folderPath !== shownFolder) { setShownFolder(folderPath); setSearchOpen(false); setAdvanced(null) }
-
   const pageSize = preferences ? requestSizeOf(preferences) : 0
-  const searchQuery = useSearchMessages(search, searchPage, pageSize)
-  const searching = search !== null
-  const crossFolder = searching && search.allFolders
-  const starred = searching && search.flagged === true
-
-  // Memoised rather than rebuilt: a fresh `groups` would rebuild `loadedUids` and `selectedUids`
-  // with it on every render. No row is ever handed `members` here — a hit is its own group.
-  const searchView = useMemo(() => {
-    const results = (searchQuery.data?.results ?? []) as MailMessageSummary[]
-    const found = searchQuery.data?.total ?? 0
-    return {
-      // Search hits are never threaded: each result is its own one-member group.
-      groups: results.map((result): ThreadGroup => ({ key: result.uid, messages: [result] })),
-      messages: results,
-      total: found,
-      isLoading: searchQuery.isLoading,
-      isError: searchQuery.isError,
-      paging: {
-        page: searchPage,
-        lastPage: pageSize > 0 ? Math.max(0, Math.ceil(found / pageSize) - 1) : 0,
-        onSelect: setSearchPage,
-      },
-      streaming: null,
-      // Results are never threaded, whatever the grouping setting says: one hit, one row.
-      rowTotal: found,
-    }
-  }, [searchQuery.data, searchQuery.isLoading, searchQuery.isError, searchPage, pageSize])
+  const listSearch = useListSearch(folderPath, search, onSearchChange, pageSize)
+  const { searchOpen, searchPage, searching, crossFolder, starred, searchView } = listSearch
 
   // One shape for the render, whichever source fills it — rows/pager/footer never learn which.
   const view = searching ? searchView : list
@@ -166,14 +98,10 @@ export default function MessageList(
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
   const { departing } = rowExit
-  const emptyFolder = useEmptyFolder(onNotify)
   const { data: folders } = useFolders()
   const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
   // Named for the confirm dialog; the uids are the whole thread when the row is one.
   const [expunging, setExpunging] = useState<{ label: string; uids: number[] } | null>(null)
-  const [confirmingBulk, setConfirmingBulk] = useState(false)
-  const [confirmingEmpty, setConfirmingEmpty] = useState(false)
-  const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
   // A Set, not the array: `includes` per row is quadratic across the page, and a drag carrying
   // the whole selection is exactly when the page is longest.
   const [draggingUids, setDraggingUids] = useState<Set<number> | null>(null)
@@ -219,52 +147,10 @@ export default function MessageList(
   const indeterminate = count > 0 && !allSelected
   const overCap = count > 200
 
-  // Fires the batch, advances the reader when the open row is in it, then drops the selection.
-  // The whole batch is handed on so the reader can skip every departing row, not just the open one.
-  // The rows leave together — a stagger over a batch of fifty is two seconds of waiting.
-  function runBulk(uids: number[], fire: () => void) {
-    rowExit.depart(uids, fire)
-    if (selectedUid !== null && uids.includes(selectedUid)) onDeparted?.(selectedUid, uids)
-    selection.clear()
-  }
-
-  function bulkMove(target: string | null, copy: boolean) {
-    if (!folderPath || !target || !count) return
-    const path = folderPath
-    const uids = selectedUids
-    if (copy) {  // A copy departs nothing; the rows stay, so only the selection is dropped.
-      moveMessages.mutate({ folderPath: path, uids, targetFolderPath: target, copy: true })
-      selection.clear()
-    } else {
-      runBulk(uids, () => moveMessages.mutate({ folderPath: path, uids, targetFolderPath: target, copy: false }))
-    }
-  }
-
-  function bulkDelete() {
-    if (!folderPath || !count) return
-    if (inTrash) { setConfirmingBulk(true); return }
-    bulkMove(roles.trash, false)
-  }
-
-  function expungeBulk() {
-    if (!folderPath || !count) return
-    const path = folderPath
-    const uids = selectedUids
-    runBulk(uids, () => deleteMessages.mutate({ folderPath: path, uids }))
-    setConfirmingBulk(false)
-  }
-
-  function bulkMark(value: boolean) {
-    if (!folderPath || !count) return  // Marking read keeps the rows, so the reader never advances.
-    setFlags.mutate({ folderPath, uids: selectedUids, flag: 'seen', value })
-    selection.clear()
-  }
-
-  function pickTarget(target: string) {
-    if (!picker) return
-    bulkMove(target, picker.mode === 'copy')
-    setPicker(null)
-  }
+  const bulk = useBulkActions({
+    folderPath, inTrash, purges, trashPath: roles.trash, selectedUids, selectedUid, selection,
+    rowExit, onDeparted, onNotify, moveMessages, deleteMessages, setFlags,
+  })
 
   // The dialogs render inside this root, so their Escape bubbles here: it belongs to whatever
   // layer is open, not to the selection. Asking the stack rather than listing the dialogs keeps
@@ -300,19 +186,12 @@ export default function MessageList(
     reportDeparted(uids)
   }
 
-  // The selection-or-row rule lives in dragUids; the pill lives off-screen just long enough
-  // for the browser to snapshot it.
   function onRowDragStart(event: DragEvent<HTMLDivElement>, rowUids: number[]) {
     if (crossFolder || !folderPath) return
     const uids = dragUids(selectedUids, rowUids)
     event.dataTransfer.setData(DRAG_MIME, serializeDrag({ sourcePath: folderPath, uids }))
     event.dataTransfer.effectAllowed = 'move'
-    const pill = buildDragPill(uids.length)
-    pill.style.position = 'absolute'
-    pill.style.top = '-9999px'
-    document.body.appendChild(pill)
-    event.dataTransfer.setDragImage(pill, 12, 12)
-    setTimeout(() => pill.remove(), 0)
+    setDragPill(event.dataTransfer, buildDragPill(uids.length))
     setDraggingUids(new Set(uids))
   }
 
@@ -324,56 +203,10 @@ export default function MessageList(
     reportDeparted(uids)
   }
 
-  // Trash/junk purge permanently, so they confirm first; elsewhere it's a move to trash, undoable.
-  function requestEmpty() {
-    if (!folderPath) return
-    if (purges) setConfirmingEmpty(true)
-    else emptyFolder.mutate({ folderPath, targetFolderPath: roles.trash })
-  }
-
-  function confirmEmpty() {
-    if (!folderPath) return
-    emptyFolder.mutate({ folderPath })
-    setConfirmingEmpty(false)
-  }
-
   // A cross-folder hit belongs to another folder: it opens there. Otherwise it is the open folder.
   function openRow(message: MailMessageSummary) {
     if (crossFolder) onOpenResult?.(message.uid, (message as MailSearchResult).folderPath)
     else onSelect(message.uid)
-  }
-
-  function toggleSearch() {
-    if (searchOpen) closeSearch()
-    else setSearchOpen(true)
-  }
-
-  function closeSearch() {
-    setSearchOpen(false)
-    setAdvanced(null)
-    onSearchChange(null)
-  }
-
-  function quickSearch(text: string) {
-    if (folderPath) onSearchChange({ folderPath, allFolders: false, quick: text })
-  }
-
-  /** The star writes the same `flagged` criterion the advanced form's checkbox does, on the
-      search already running when there is one — so the two are one state, not two filters. */
-  function toggleStarred() {
-    if (search?.flagged) {
-      const rest: SearchCriteria = { ...search }
-      delete rest.flagged
-      onSearchChange(isEmptyCriteria(rest) ? null : rest)
-      return
-    }
-    if (search) { onSearchChange({ ...search, flagged: true }); return }
-    if (folderPath) onSearchChange({ folderPath, allFolders: false, flagged: true })
-  }
-
-  function advancedSearch(form: AdvancedForm) {
-    setAdvanced(null)
-    if (folderPath) onSearchChange(criteriaFromForm(folderPath, form))
   }
 
   function checkRow(uids: number[], index: number, { was, whole, shift }: CheckGesture) {
@@ -505,10 +338,8 @@ export default function MessageList(
   }
 
   return (
-    // display:contents band wrapper: it owns no box, so the three bands still stack under
-    // .mail-list, but its keydown catches Escape from the toolbar as well as the rows.
-    // The exit's duration is written once, here, from the constant the hook waits on: the keyframes
-    // hold the split as percentages, so the two can never drift.
+    // display:contents: no box of its own, so the bands still stack under .mail-list, yet its keydown
+    // catches Escape from the toolbar too. The exit duration comes from the constant the hook waits on.
     <div
       className="message-list-root"
       role="presentation"
@@ -526,24 +357,22 @@ export default function MessageList(
         onToggleAll={() => allSelected ? selection.clear() : selection.selectAll(loadedUids)}
         overCap={overCap}
         deleteLabel={deleteLabel}
-        archive={{ onRun: () => bulkMove(roles.archive, false), disabledReason: archiveOff ? archiveReason : undefined }}
-        junk={{ onRun: () => bulkMove(roles.junk, false), disabledReason: junkOff ? junkReason : undefined }}
-        del={{ onRun: bulkDelete, disabledReason: trashOff ? trashReason : undefined }}
-        move={{ onRun: () => setPicker({ mode: 'move' }) }}
-        copy={{ onRun: () => setPicker({ mode: 'copy' }) }}
-        markRead={{ onRun: () => bulkMark(true) }}
-        markUnread={{ onRun: () => bulkMark(false) }}
-        emptyFolder={{ onRun: requestEmpty,
-          // Emptying acts on the whole real folder, so it is off under a search: its reason would
-          // otherwise read off the search total, and the non-purge branch fires with no confirm.
-          // A purge already on the wire closes this door too, or the banner beside it is greyed
-          // while the same action stays live one menu away.
-          disabledReason: emptyFolder.isPending ? t('list.emptying')
+        archive={{ onRun: () => bulk.bulkMove(roles.archive, false), disabledReason: archiveOff ? archiveReason : undefined }}
+        junk={{ onRun: () => bulk.bulkMove(roles.junk, false), disabledReason: junkOff ? junkReason : undefined }}
+        del={{ onRun: bulk.bulkDelete, disabledReason: trashOff ? trashReason : undefined }}
+        move={{ onRun: () => bulk.setPicker({ mode: 'move' }) }}
+        copy={{ onRun: () => bulk.setPicker({ mode: 'copy' }) }}
+        markRead={{ onRun: () => bulk.bulkMark(true) }}
+        markUnread={{ onRun: () => bulk.bulkMark(false) }}
+        emptyFolder={{ onRun: bulk.requestEmpty,
+          // Off under a search, whose total the reason would read and where the non-purge branch has no
+          // confirm; off during a purge too, or the greyed banner's action stays live one menu away.
+          disabledReason: bulk.emptying ? t('list.emptying')
             : searching ? t('list.clearSearchFirst') : emptyReason }}
         searchOpen={searchOpen}
-        onToggleSearch={toggleSearch}
+        onToggleSearch={listSearch.toggleSearch}
         starred={starred}
-        onToggleStarred={toggleStarred}
+        onToggleStarred={listSearch.toggleStarred}
         starredDisabled={!starred && !folderPath}
         selectionDisabled={crossFolder}
       />
@@ -551,26 +380,26 @@ export default function MessageList(
       {searchOpen && folderPath && (
         <SearchBar
           folderTitle={folderName || folderPath}
-          onSearch={quickSearch}
-          onOpenAdvanced={text => setAdvanced({ subject: text })}
-          onClose={closeSearch}
+          onSearch={listSearch.quickSearch}
+          onOpenAdvanced={text => listSearch.setAdvanced({ subject: text })}
+          onClose={listSearch.closeSearch}
         />
       )}
 
       {/* The lit star is the whole indication when it stands alone, so the heading keeps the
           folder name; any other criterion hands it back to the banner. */}
-      {searching && !isStarredOnly(search) && (
+      {search && !isStarredOnly(search) && (
         <SearchResultsBanner
-          total={searchQuery.data?.total ?? null}
+          total={listSearch.searchTotal}
           label={labelOf(search)}
-          onClear={closeSearch}
+          onClear={listSearch.closeSearch}
         />
       )}
 
       {/* The empty-folder offer belongs to the folder itself, not to a search laid over it. */}
       {!searching && (
-        <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={requestEmpty}
-          busy={emptyFolder.isPending} />
+        <EmptyFolderBanner role={folderRole ?? null} total={total} onEmpty={bulk.requestEmpty}
+          busy={bulk.emptying} />
       )}
 
       <div className="mail-list-scroll" ref={scrollRef}>
@@ -593,65 +422,20 @@ export default function MessageList(
         </div>
       )}
 
-      {/* Only inside the trash: everywhere else deleting is a move, and the trash is the undo. */}
-      {expunging && (
-        <DeleteConfirmModal
-          entityLabel={expunging.label}
-          onConfirm={expunge}
-          onClose={() => setExpunging(null)}
-          loading={deleteMessages.isPending}
-          returnFocusRef={regionRef}
-        />
-      )}
-
-      {picker && (
-        <MoveMessagesModal
-          mode={picker.mode}
-          folders={folders ?? []}
-          currentFolderPath={folderPath}
-          onPick={pickTarget}
-          onClose={() => setPicker(null)}
-        />
-      )}
-
-      {/* Bulk in-trash expunge: the same modal as a single row, named for the whole batch. */}
-      {confirmingBulk && (
-        <DeleteConfirmModal
-          entityLabel={t('list.bulkLabel', { count })}
-          onConfirm={expungeBulk}
-          onClose={() => setConfirmingBulk(false)}
-          loading={deleteMessages.isPending}
-          returnFocusRef={regionRef}
-        />
-      )}
-
-      {/* Permanent purge, from trash or junk: a fuller warning worded for the folder, since this
-          cannot be undone. Closing is the ✕ alone, like every delete confirm. */}
-      {confirmingEmpty && (
-        <DeleteConfirmModal
-          entityLabel={folderName || folderPath}
-          message={
-            <>
-              {t('list.emptyConfirmLine1', { folder: folderName || folderPath })}
-              <br />
-              {t('list.emptyConfirmLine2')}
-            </>
-          }
-          onConfirm={confirmEmpty}
-          onClose={() => setConfirmingEmpty(false)}
-          loading={emptyFolder.isPending}
-          returnFocusRef={regionRef}
-        />
-      )}
-
-      {advanced && folderPath && (
-        <AdvancedSearchModal
-          folderTitle={folderName || folderPath}
-          initialSubject={advanced.subject}
-          onSearch={advancedSearch}
-          onClose={() => setAdvanced(null)}
-        />
-      )}
+      <ListDialogs
+        folderPath={folderPath}
+        folderTitle={folderName || folderPath}
+        folders={folders ?? []}
+        regionRef={regionRef}
+        expunging={expunging}
+        onExpunge={expunge}
+        onCloseExpunge={() => setExpunging(null)}
+        deleting={deleteMessages.isPending}
+        bulk={bulk}
+        advanced={listSearch.advanced}
+        onAdvancedSearch={listSearch.advancedSearch}
+        onCloseAdvanced={() => listSearch.setAdvanced(null)}
+      />
     </div>
   )
 }

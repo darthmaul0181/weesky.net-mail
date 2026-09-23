@@ -81,10 +81,7 @@ if (import.meta.hot) {
   })
 }
 
-/**
- * Opens a layer on top of the stack: Escape and Tab go to it alone until it is removed or
- * another one is pushed over it.
- */
+/** Opens a layer on top: Escape and Tab go to it alone until it is removed or covered. */
 export function pushLayer(layer: Layer): LayerHandle {
   const entry: Entry = {
     layer,

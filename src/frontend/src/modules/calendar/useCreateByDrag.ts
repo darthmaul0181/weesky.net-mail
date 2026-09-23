@@ -22,11 +22,8 @@ export interface CreateByDragOptions {
 const SLOT_MINUTES = 30
 const CLICK_MINUTES = 60
 
-/**
- * Drawing a new event on an empty column. The instants it hands over are the day's own midnight
- * in the calendar's zone plus the minutes traced — never a `Date` built from local components,
- * which would read the machine's zone and answer one thing in Brussels and another on a runner.
- */
+/** Drawing a new event on an empty column: the day's midnight in the calendar's zone plus the
+ * minutes traced, never a `Date` from local components (the machine's zone). */
 export function useCreateByDrag({
   enabled, days, tz, previewOpen, onCreate,
 }: CreateByDragOptions) {

@@ -13,13 +13,8 @@ interface Props {
   addToast: AddToast
 }
 
-/**
- * Whether the webmail advertises itself as an installable app, and under what name.
- *
- * An instance-wide setting, hence reserved to administration: the name is what every user will
- * see under the icon. Switching the toggle off does not uninstall anyone — an already-installed
- * app stays installed, it simply stops being offered to others.
- */
+/** Whether the webmail advertises itself as an installable app, and under what name: instance-wide,
+ * so admin only. Switching it off uninstalls nobody; it stops offering the app to others. */
 export default function ApplicationTab({ addToast }: Props) {
   const { t } = useTranslation('admin')
   const { data: settings, isLoading, isError } = useAppSettings()
@@ -27,18 +22,9 @@ export default function ApplicationTab({ addToast }: Props) {
   const [name, setName] = useState('')
   const [shortName, setShortName] = useState('')
 
-  // The fields are reseeded from the server's answer: after a save that is the value it kept,
-  // after a refusal that is server state rather than an optimistic lie.
-  //
-  // Seeded DURING the render that first has an answer, not from an effect, and that is a race
-  // rather than a preference: an effect runs after the commit, so the inputs were mounted empty
-  // for one frame and filled on the next. CI caught it — `findByLabelText` resolves on the commit
-  // that mounts the field, which on a loaded runner is the frame before the effect, and the
-  // assertion read `""`. A render-phase update re-renders before React commits, so no tree in
-  // which the input exists empty is ever produced. Keyed on the object identity React Query hands
-  // back, which is also what the reverts below depend on: structural sharing returns the SAME
-  // reference when a refetch is deep-equal, so a refused save that left the server unchanged
-  // reseeds nothing here and the catch block has to put the field back itself.
+  // Seeded during render from each new answer object, never in an effect, which mounted the inputs
+  // empty for one frame (CI read it). A deep-equal refetch keeps the same object, reseeding nothing,
+  // so the catch below reverts a refused field itself (docs/architecture-settings.md).
   const [seeded, setSeeded] = useState<typeof settings>(undefined)
   if (settings && settings !== seeded) {
     setSeeded(settings)
@@ -73,13 +59,8 @@ export default function ApplicationTab({ addToast }: Props) {
       shortNameSaved = true
       addToast(t('application.nameSaved'))
     } catch (error) {
-      // Revert only the field(s) whose own save did not go through. The two calls are
-      // sequential, so a refusal on the second one leaves the first already accepted by the
-      // server — resetting it too would show a stale value for the moment before the next
-      // refetch corrects it back. Invalidating alone is not enough for the field that does need
-      // reverting: when the rejected value leaves the server's value unchanged, the refetch
-      // returns data deep-equal to what is cached, so React Query's structural sharing keeps the
-      // same object reference and the effect above never re-runs.
+      // Revert only the field whose own save failed: the calls are sequential, so a second refusal
+      // leaves the first accepted, and a deep-equal refetch keeps the same object, reseeding nothing.
       if (!nameSaved) setName(s[APP_SETTING_KEYS.name] ?? '')
       if (!shortNameSaved) setShortName(s[APP_SETTING_KEYS.shortName] ?? '')
       addToast(apiErrorMessage(error, t('application.nameSaveFailed')), 'error')

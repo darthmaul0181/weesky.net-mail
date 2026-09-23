@@ -20,10 +20,7 @@ export interface CalendarDialogProps {
   onClose: () => void
 }
 
-/**
- * Create, rename and recolour, in one dialog: same fields, same validation, three titles. `Modal`
- * owns the three ways out, and the `<form>` is what makes Enter submit.
- */
+/** Create, rename and recolour in one dialog: same fields, same validation, three titles. */
 export default function CalendarDialog({
   title, initialName, initialColor, focus, saving, onSubmit, onClose,
 }: CalendarDialogProps) {

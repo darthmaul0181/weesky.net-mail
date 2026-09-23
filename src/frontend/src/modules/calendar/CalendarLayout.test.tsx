@@ -68,7 +68,7 @@ beforeEach(() => {
   api.getCalendars.mockResolvedValue({ calendars: CALENDARS })
   api.getOccurrences.mockResolvedValue({ occurrences: [] })
   api.searchEvents.mockResolvedValue({ occurrences: [] })
-  // The preview now always fetches the detail (Task 7); a test with nothing to say about it
+  // The preview now always fetches the detail; a test with nothing to say about it
   // still needs an answer, or the query settles on the undefined react-query refuses to hold.
   api.getEvent.mockResolvedValue(detail())
   api.getContacts.mockResolvedValue({ contacts: [] })
@@ -327,8 +327,8 @@ describe('CalendarLayout', () => {
     expect(screen.getByRole('button', { name: 'All occurrences' })).toBeEnabled()
   })
 
-  // Décision 8: an event is recurring when the occurrence opened carries a RECURRENCE-ID, never
-  // because the picker has just been set — the series has no other occurrence to reach yet.
+  // An event is recurring when the occurrence opened carries a RECURRENCE-ID, never because the
+  // picker has just been set — the series has no other occurrence to reach yet.
   it('saves a repeat just added to a lone event without asking anything', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
     api.getEvent.mockResolvedValue(detail())
@@ -519,8 +519,8 @@ describe('CalendarLayout', () => {
     expect(screen.getByLabelText('Start time')).toHaveValue('09:00')
   })
 
-  // Décision 11: the click goes to that day in the *current view*, so the box is emptied on the
-  // way — the results used to stay up and go on covering the grid they had just moved.
+  // The click goes to that day in the *current view*, so the box is emptied on the way — the
+  // results used to stay up and go on covering the grid they had just moved.
   it('gives the grid back at the day a search hit sits on', async () => {
     api.searchEvents.mockResolvedValue({
       occurrences: [floating('e1', 'Dentist', '2026-09-16T09:00:00')],
@@ -862,8 +862,8 @@ describe('CalendarLayout', () => {
     expect(screen.queryByText('Discard changes?')).toBeNull()
   })
 
-  // Owner decision 2: the scope question's own ways out all mean "no scope", and the editor under
-  // it stays exactly as it was.
+  // The scope question's own ways out all mean "no scope", and the editor under it stays exactly
+  // as it was.
   it('gives Escape to the scope question alone, over the editor', async () => {
     api.getOccurrences.mockResolvedValue({
       occurrences: [floating('e1', 'Dentist', '2026-09-16T09:00:00')],
@@ -1084,8 +1084,8 @@ describe('CalendarLayout', () => {
   })
 
   // A 360px screen has nowhere to hang a 300px bubble: the tap is the editor.
-  // Décisions 3 and 10: the bubble is anchored to an event that is highlighted, and every chip
-  // of that occurrence carries the highlight.
+  // The bubble is anchored to an event that is highlighted, and every chip of that occurrence
+  // carries the highlight.
   it('lights the chip the open bubble hangs off', async () => {
     api.getOccurrences.mockResolvedValue({ occurrences: [occurrence('e1', 'Stand-up')] })
     renderAt('/calendar?view=week&date=2026-09-16')
@@ -1449,7 +1449,7 @@ describe('CalendarLayout — the grid gestures', () => {
 })
 
 describe('CalendarLayout — the phone tier', () => {
-  // ── The phone tier (task 7) ──────────────────────────────────────────────────────────────
+  // ── The phone tier ───────────────────────────────────────────────────────────────────────
 
   it('draws the month as a picker over the selected day’s list on a phone', async () => {
     mockViewport('phone')

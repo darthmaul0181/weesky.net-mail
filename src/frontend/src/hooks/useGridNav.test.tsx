@@ -379,7 +379,7 @@ describe('useGridNav', () => {
     expect(press('Escape')).toBe(true)
     expect(press('Tab')).toBe(true)
     expect(press('PageDown')).toBe(true)
-    // F2 is Task 5's cell-entry key and means nothing here yet.
+    // F2 is the cell-entry key and means nothing here yet.
     expect(press('F2')).toBe(true)
     expect(press('a')).toBe(true)
     expect(press('ArrowDown', { altKey: true })).toBe(true)

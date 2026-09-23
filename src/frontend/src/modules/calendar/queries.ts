@@ -39,11 +39,9 @@ export function useCalendars(tz: string) {
   })
 }
 
-/** One screenful of occurrences. `keepPreviousData` is what stops the grid blanking between two
-    weeks: the previous one stays drawn, greyed by `isPlaceholderData`, until the next answers. */
-/** `keepPrevious` is the grid's own behaviour and nobody else's: a caller that reads the answer to
-    decide something — which occurrence is being edited — must not be handed the previous window's
-    list as though it were this one's. */
+/** One screenful of occurrences. `keepPrevious` keeps the last window drawn (greyed by
+ * `isPlaceholderData`) rather than blanking; the grid's alone, since a caller deciding something
+ * (the occurrence being edited) must never read the previous window as this one. */
 export function useWindow(
   window: Window, tz: string, options: { enabled?: boolean; keepPrevious?: boolean } = {},
 ) {
