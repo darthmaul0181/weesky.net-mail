@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { Profiler, type ReactNode } from 'react'
 import MessageList from './MessageList'
 import type { MailFolderNode } from '../api/mailTypes'
 import { fireTouch as dispatchTouch, settle } from '../../../test-utils'
@@ -2120,6 +2120,25 @@ describe('conversation rows', () => {
     expect(container.querySelectorAll('.message-row')).toHaveLength(1)
     expect(screen.getByLabelText('Expand conversation'))
       .toHaveAttribute('aria-expanded', 'false')
+  })
+
+  // onRender runs in the commit phase, after the DOM is written: it sees every frame the user could.
+  it('never commits a frame of the unfolded thread in the next folder', () => {
+    const rows: number[] = []
+    const profiled = (folderPath: string) => (
+      <Profiler id="list" onRender={() => rows.push(document.querySelectorAll('.message-row').length)}>
+        <MessageList {...defaultListProps()} folderPath={folderPath} />
+      </Profiler>
+    )
+    const { rerender } = render(profiled('INBOX'), { wrapper })
+    fireEvent.click(screen.getByLabelText('Expand conversation'))
+    expect(rows[rows.length - 1]).toBe(3)
+
+    rows.length = 0
+    rerender(profiled('Archives'))
+
+    expect(rows).not.toContain(3)
+    expect(rows[rows.length - 1]).toBe(1)
   })
 
   it('a long press on the collapsed row selects the whole thread', () => {

@@ -16,14 +16,17 @@ interface Props {
  */
 export default function RefreshButton({ fetching, onRefresh }: Props) {
   const { t } = useTranslation('mail')
-  const [spinning, setSpinning] = useState(false)
+  // Latched while a fetch runs, so the turn outlives it until the release below.
+  const [lingering, setLingering] = useState(false)
+  if (fetching && !lingering) setLingering(true)
+  const spinning = fetching || lingering
   const fetchingRef = useRef(fetching)
   const iconRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     fetchingRef.current = fetching
-    if (fetching) { setSpinning(true); return }
-    const fallback = setTimeout(() => setSpinning(false), 800)
+    if (fetching) return
+    const fallback = setTimeout(() => setLingering(false), 800)
     return () => clearTimeout(fallback)
   }, [fetching])
 
@@ -33,7 +36,7 @@ export default function RefreshButton({ fetching, onRefresh }: Props) {
   useEffect(() => {
     const el = iconRef.current
     if (!el) return
-    const release = () => { if (!fetchingRef.current) setSpinning(false) }
+    const release = () => { if (!fetchingRef.current) setLingering(false) }
     el.addEventListener('animationiteration', release)
     return () => el.removeEventListener('animationiteration', release)
   }, [])

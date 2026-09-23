@@ -857,6 +857,7 @@ export default function RulesPage() {
     }
   }, [addToast, accountId])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches on mount and per account; the loading flag belongs to the request it starts
   useEffect(() => { load() }, [load])
 
   // Clearing alone still leaves a window: between the switch and the arriving load the old set is

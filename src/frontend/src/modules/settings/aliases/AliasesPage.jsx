@@ -76,6 +76,7 @@ export default function AliasesPage() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches on mount; the loading flag belongs to the request it starts
   useEffect(() => { fetchAliases() }, [fetchAliases])
 
   const visibleAliases = aliases

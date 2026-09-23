@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
+import { Profiler } from 'react'
 import RefreshButton from './RefreshButton'
 
 afterEach(() => { vi.useRealTimers() })
@@ -53,5 +54,18 @@ describe('RefreshButton', () => {
     expect(spinner()).toHaveClass('is-spinning')
     act(() => { vi.advanceTimersByTime(800) })
     expect(spinner()).not.toHaveClass('is-spinning')
+  })
+
+  it('spins from the very frame the fetch starts', () => {
+    const spins: boolean[] = []
+    const button = (fetching: boolean) => (
+      <Profiler id="refresh" onRender={() => spins.push(spinner().classList.contains('is-spinning'))}>
+        <RefreshButton fetching={fetching} onRefresh={() => {}} />
+      </Profiler>
+    )
+    const { rerender } = render(button(false))
+    spins.length = 0
+    rerender(button(true))
+    expect(spins).toEqual([true])
   })
 })

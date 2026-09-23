@@ -29,6 +29,7 @@ import { sentinelIndexOf } from './messageStream'
 import Pagination from './Pagination'
 import SelectionToolbar from './SelectionToolbar'
 import { useSelection } from './useSelection'
+import { useKeyedState } from '../../../hooks/useKeyedState'
 import { ROW_EXIT_MS } from './useRowExit'
 import type { RowExit } from './useRowExit'
 import { useMessageList } from './useMessageList'
@@ -199,8 +200,7 @@ export default function MessageList(
 
   // Which threads are unfolded; a look at this folder's page, not a preference, so it resets
   // with the selection: on a folder change, a page change, and entering or leaving a search.
-  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
-  useEffect(() => { setExpanded(new Set()) }, [resetKey])
+  const [expanded, setExpanded] = useKeyedState<Set<number>>(() => new Set(), resetKey)
   const toggleExpanded = (key: number) => setExpanded(prev => {
     const next = new Set(prev)
     if (next.has(key)) next.delete(key); else next.add(key)

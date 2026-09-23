@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest'
 import { BUILT_AT, WEB_COMMIT, WEB_VERSION, versionLabel } from './appVersion'
 import { versionStamp } from './versionStamp'
 

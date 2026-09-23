@@ -153,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isLoggedIn) {
       wasLoggedIn.current = true
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- follows the session flag, set by login, logout and a 401: loads the account, or drops it and flushes the caches
       refreshAccount()
     } else {
       sessionGeneration.current += 1
@@ -227,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!connectedRows || activeAccountId === PRIMARY_ACCOUNT_ID) return
     if (connectedRows.find(row => row.id === activeAccountId)?.credentialsValid) return
     localStorage.removeItem(ACTIVE_ACCOUNT_KEY)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored id is only known stale once the account list arrives, and it is corrected in storage too
     setActiveAccountId(PRIMARY_ACCOUNT_ID)
   }, [connectedRows, activeAccountId])
 

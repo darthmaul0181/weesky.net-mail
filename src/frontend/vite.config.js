@@ -165,7 +165,7 @@ export default defineConfig(({ command, mode }) => {
     envDir,
     plugins: [react()],
     // Build-only plugins, so they belong to the output rather than to Vite's own list.
-    build: { rollupOptions: { plugins: [collectNotices, emitNotices] } },
+    build: { rolldownOptions: { plugins: [collectNotices, emitNotices] } },
     define: {
       __APP_VERSION__: JSON.stringify(versionStamp(PRODUCT_VERSION, RELEASE)),
       __APP_COMMIT__: JSON.stringify(shortCommit()),
@@ -177,7 +177,7 @@ export default defineConfig(({ command, mode }) => {
     },
     test: {
       environment: 'jsdom',
-      globals: true,
+      globals: false,
       // Palette parity and the responsive contract test parse stylesheets for their actual text;
       // Vitest mocks a CSS import to '' otherwise, which passes every check vacuously. Keep this
       // broad enough to cover every sheet either test globs — the responsive contract's `./*.css`

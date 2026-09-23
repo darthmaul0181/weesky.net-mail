@@ -44,6 +44,7 @@ export function AccountsTab({ addToast, returnFocusRef }) {
     }
   }, [addToast])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches on mount; the loading flag belongs to the request it starts
   useEffect(() => { load() }, [load])
 
   async function handleDelete() {

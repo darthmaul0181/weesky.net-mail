@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Profiler } from 'react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { mockViewport, resetViewport } from '../../../test-utils'
 import ComposeView from './ComposeView'
@@ -87,7 +88,7 @@ let prefs: Record<string, string> = {}
 
 function renderCompose(
   from: string | undefined = 'INBOX', seed?: ComposeSeed, search = '',
-  { cold = false, backTo }: { cold?: boolean; backTo?: string } = {}) {
+  { cold = false, backTo, onCommit }: { cold?: boolean; backTo?: string; onCommit?: () => void } = {}) {
   const onNotify = vi.fn()
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -101,7 +102,8 @@ function renderCompose(
     ],
     { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed, backTo } }], initialIndex: 1 },
   )
-  render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
+  const tree = <QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>
+  render(onCommit ? <Profiler id="compose" onRender={onCommit}>{tree}</Profiler> : tree)
   return { onNotify, router }
 }
 
@@ -561,6 +563,31 @@ describe('the priority row', () => {
     pick('Normal')
 
     expect(screen.getByText('Priority', { selector: '.compose-link-btn' })).toBeInTheDocument()
+  })
+
+  it('never commits the row at normal on its way to folding', () => {
+    const rows: boolean[] = []
+    renderCompose('INBOX', undefined, '', {
+      onCommit: () => rows.push(document.querySelector('.compose-priority') !== null),
+    })
+    fireEvent.click(screen.getByText('Priority'))
+    pick('High')
+
+    fireEvent.click(trigger())
+    rows.length = 0
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Normal' }))
+
+    expect(rows).not.toContain(true)
+  })
+
+  // Only a return to normal folds it: picking Normal on a row just opened at Normal changes nothing.
+  it('keeps a row opened at normal when Normal is picked', () => {
+    renderCompose()
+
+    fireEvent.click(screen.getByText('Priority'))
+    pick('Normal')
+
+    expect(trigger()).toHaveTextContent('Normal')
   })
 
   /** Same rule as a From-only edit: on a resumed draft the priority is the only change there is,
