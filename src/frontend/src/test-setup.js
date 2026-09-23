@@ -1,6 +1,6 @@
-import { beforeEach, vi } from 'vitest'
-import '@testing-library/jest-dom'
-import { configure } from '@testing-library/react'
+import { afterEach, beforeEach, vi } from 'vitest'
+import '@testing-library/jest-dom/vitest'
+import { cleanup, configure } from '@testing-library/react'
 import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import en from './locales/en'
@@ -70,3 +70,4 @@ window.IntersectionObserver = FakeIntersectionObserver
 globalThis.IntersectionObserver = FakeIntersectionObserver
 
 beforeEach(() => { FakeIntersectionObserver.instances = [] })
+afterEach(cleanup)

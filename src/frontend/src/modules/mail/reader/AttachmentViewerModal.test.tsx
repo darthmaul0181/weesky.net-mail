@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
+import { Profiler } from 'react'
 import AttachmentViewerModal from './AttachmentViewerModal'
 import Modal from '../../../components/Modal'
 import { fireEscape } from '../../../test-utils'
@@ -175,5 +176,50 @@ describe('AttachmentViewerModal', () => {
     fireEvent.keyDown(screen.getByRole('dialog', { name: 'Delete this message?' }), { key: 'ArrowRight' })
 
     expect(screen.getByText('2 / 3')).toBeInTheDocument()
+  })
+
+  describe('never commits a frame of the previous image', () => {
+    const shown: (string | null)[] = []
+    const record = () => shown.push(
+      document.querySelector('.attachment-viewer-img')?.getAttribute('src')
+        ?? document.querySelector('.attachment-viewer-error')?.textContent ?? null)
+    const renderProfiled = () => render(
+      <Profiler id="viewer" onRender={record}>
+        <AttachmentViewerModal images={IMAGES} initialIndex={0} onDownload={vi.fn()} onClose={vi.fn()} />
+      </Profiler>,
+    )
+    beforeEach(() => {
+      shown.length = 0
+      let made = 0
+      URL.createObjectURL = vi.fn(() => `blob:url-${++made}`)
+    })
+
+    it('neither its picture nor its error', async () => {
+      vi.mocked(requestBlob).mockRejectedValueOnce(new Error('boom'))
+      renderProfiled()
+      await screen.findByText('Could not load the image')
+      shown.length = 0
+      fireEvent.click(screen.getByLabelText('Next image'))
+      await screen.findByRole('img', { name: 'diagram.png' })
+      expect(shown).not.toContain('Could not load the image')
+
+      shown.length = 0
+      fireEvent.click(screen.getByLabelText('Next image'))
+      await screen.findByRole('img', { name: 'last.png' })
+      expect(shown).not.toContain('blob:url-1')
+    })
+
+    it('nor its revoked URL when coming back before the next one loads', async () => {
+      renderProfiled()
+      await screen.findByRole('img', { name: 'photo.png' })
+      vi.mocked(requestBlob).mockImplementationOnce(() => new Promise(() => {}))
+      fireEvent.click(screen.getByLabelText('Next image'))
+      shown.length = 0
+      fireEvent.click(screen.getByLabelText('Previous image'))
+      await screen.findByRole('img', { name: 'photo.png' })
+      await act(async () => {})
+      expect(shown).not.toContain('blob:url-1')
+      expect(screen.getByRole('img', { name: 'photo.png' })).toHaveAttribute('src', 'blob:url-2')
+    })
   })
 })

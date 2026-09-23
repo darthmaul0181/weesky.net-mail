@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
+import { useLayoutEffect } from 'react'
 import { useSelection } from './useSelection'
 
 const LOADED = [10, 20, 30, 40, 50]
@@ -73,5 +74,42 @@ describe('useSelection', () => {
     key = 'INBOX::1'
     rerender()
     expect(result.current.selected.size).toBe(0)
+  })
+
+  it('never commits the previous resetKey\'s ticks', () => {
+    let key = 'INBOX::0'
+    const committed: number[] = []
+    const { result, rerender } = renderHook(() => {
+      const selection = useSelection(key)
+      useLayoutEffect(() => { committed.push(selection.selected.size) })
+      return selection
+    })
+    act(() => result.current.toggle(20, 1))
+    committed.length = 0
+    key = 'Archive::0'
+    rerender()
+    expect(committed).toEqual([0])
+  })
+
+  it('forgets the range anchor when the resetKey changes', () => {
+    let key = 'INBOX::0'
+    const { result, rerender } = renderHook(() => useSelection(key))
+    act(() => result.current.toggle(40, 3))
+    key = 'INBOX::1'
+    rerender()
+    act(() => result.current.toggleRange(LOADED, 1))
+    expect([...result.current.selected]).toEqual([20])
+  })
+
+  it('forgets the range anchor across a round trip back to the same resetKey', () => {
+    let key = 'INBOX::0'
+    const { result, rerender } = renderHook(() => useSelection(key))
+    act(() => result.current.toggle(40, 3))
+    key = 'Archive::0'
+    rerender()
+    key = 'INBOX::0'
+    rerender()
+    act(() => result.current.toggleRange(LOADED, 1))
+    expect([...result.current.selected]).toEqual([20])
   })
 })

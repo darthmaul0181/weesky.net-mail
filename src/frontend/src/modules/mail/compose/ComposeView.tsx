@@ -217,8 +217,11 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
   const changeCc = useCallback((v: string[]) => { markDirty(); setCc(v) }, [markDirty])
   const changeBcc = useCallback((v: string[]) => { markDirty(); setBcc(v) }, [markDirty])
   const changeSubject = useCallback((v: string) => { markDirty(); setSubject(v) }, [markDirty])
-  const changePriority = useCallback((v: MailPriority) => { markDirty(); setPriority(v) }, [markDirty])
-  useEffect(() => { if (priority === 'normal') setShowPriority(false) }, [priority])
+  const changePriority = useCallback((v: MailPriority) => {
+    markDirty()
+    if (v === 'normal' && priority !== 'normal') setShowPriority(false)
+    setPriority(v)
+  }, [markDirty, priority])
   const stageFiles = attachments.addFiles
   const removeStaged = attachments.remove
   const addFiles = useCallback((files: File[]) => { markDirty(); stageFiles(files) }, [markDirty, stageFiles])

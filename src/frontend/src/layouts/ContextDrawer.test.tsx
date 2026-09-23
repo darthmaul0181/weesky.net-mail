@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, render, renderHook, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useLayoutEffect } from 'react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import ContextDrawer, { useContextDrawer } from './ContextDrawer'
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
@@ -142,5 +143,27 @@ describe('useContextDrawer', () => {
     await changeViewport('desktop')
     // A focus trap left armed on a panel nobody can see is worse than a drawer left open.
     expect(result.current.open).toBe(false)
+  })
+
+  it('never commits a frame open on desktop', async () => {
+    mockViewport('phone')
+    const committed: string[] = []
+    const { result } = renderHook(() => {
+      const state = useContextDrawer()
+      useLayoutEffect(() => { committed.push(`${state.inDrawer}/${state.open}`) })
+      return state
+    })
+    await act(async () => result.current.toggle())
+    committed.length = 0
+    await changeViewport('desktop')
+    expect(committed).toEqual(['false/false'])
+  })
+
+  it('stays open between the two drawer tiers', async () => {
+    mockViewport('phone')
+    const { result } = renderHook(() => useContextDrawer())
+    await act(async () => result.current.toggle())
+    await changeViewport('tablet')
+    expect(result.current.open).toBe(true)
   })
 })

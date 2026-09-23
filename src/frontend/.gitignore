@@ -4,3 +4,5 @@ dist
 .env.local
 .env.production
 .env.dev
+coverage
+.vite

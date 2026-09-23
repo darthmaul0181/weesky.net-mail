@@ -34,6 +34,7 @@ export function usePopoverPosition(rect: DOMRect): PopoverPosition {
     const fitsRight = right + POPOVER_WIDTH <= window.innerWidth
     const fitsLeft = rect.left - GAP - POPOVER_WIDTH >= EDGE
     if (fitsRight || fitsLeft) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- measures the node, which exists only after commit
       setPosition({
         left: fitsRight ? right : rect.left - POPOVER_WIDTH - GAP,
         top: Math.max(EDGE, Math.min(rect.top, window.innerHeight - height - EDGE)),

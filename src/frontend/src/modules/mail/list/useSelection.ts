@@ -1,20 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useKeyedState } from '../../../hooks/useKeyedState'
 
 /**
  * Checkbox selection over the loaded rows, keyed by whatever identifies one: the mail's numeric
  * uids, the contacts' GUIDs. `resetKey` (folder + page, or the contacts scope) clears it; the hook
  * never stores the row list, so the caller intersects `selected` with what is on screen — a
  * departed row stops counting on its own. `toggleRange` selects the inclusive slice from the
- * last-toggled anchor to `index`, over the `keys` order the caller passes in.
+ * last-toggled anchor to `index`, over the `keys` order the caller passes in; the anchor resets
+ * with the selection.
  */
 export function useSelection<T = number>(resetKey: string) {
-  const [selected, setSelected] = useState<Set<T>>(() => new Set())
-  const anchor = useRef<number | null>(null)
-
-  useEffect(() => {
-    setSelected(new Set())
-    anchor.current = null
-  }, [resetKey])
+  const [selected, setSelected] = useKeyedState<Set<T>>(() => new Set(), resetKey)
+  const [anchor, setAnchor] = useKeyedState<number | null>(() => null, resetKey)
 
   return {
     selected,
@@ -25,7 +21,7 @@ export function useSelection<T = number>(resetKey: string) {
         if (next.has(key)) next.delete(key); else next.add(key)
         return next
       })
-      anchor.current = index
+      setAnchor(index)
     },
     /** A batch on or off in one call — the thread row's checkbox, whatever mix it covered. */
     setMany(keys: T[], on: boolean) {
@@ -36,18 +32,18 @@ export function useSelection<T = number>(resetKey: string) {
       })
     },
     toggleRange(keys: T[], index: number) {
-      const from = anchor.current ?? index
+      const from = anchor ?? index
       const [lo, hi] = from <= index ? [from, index] : [index, from]
       setSelected(prev => new Set([...prev, ...keys.slice(lo, hi + 1)]))
-      anchor.current = index
+      setAnchor(index)
     },
     selectAll(keys: T[]) {
       setSelected(new Set(keys))
-      anchor.current = null
+      setAnchor(null)
     },
     clear() {
       setSelected(new Set())
-      anchor.current = null
+      setAnchor(null)
     },
   }
 }

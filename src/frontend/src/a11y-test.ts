@@ -1,3 +1,4 @@
+import { expect } from 'vitest'
 import { axe } from 'jest-axe'
 
 interface AxeOverrides {

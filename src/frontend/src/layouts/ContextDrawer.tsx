@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import MenuIcon from '../icons/MenuIcon'
 import { useLayer } from '../hooks/useLayer'
 import { useViewport } from '../hooks/useViewport'
+import { useKeyedState } from '../hooks/useKeyedState'
 
 interface Props {
   open: boolean
@@ -66,13 +67,11 @@ export function DrawerToggle({ onClick }: { onClick: () => void }) {
 /** The state the three layouts share, so none of them re-derives the tier rule. */
 export function useContextDrawer() {
   const inDrawer = useViewport() !== 'desktop'
-  const [open, setOpen] = useState(false)
-  const close = useCallback(() => setOpen(false), [])
-  const toggle = useCallback(() => setOpen(value => !value), [])
-
   // Growing back to desktop must disarm it: the panel goes inline and an open flag would
-  // otherwise reopen the drawer the moment the window narrows again.
-  useEffect(() => { if (!inDrawer) setOpen(false) }, [inDrawer])
+  // otherwise reopen the drawer the moment the window narrows again. Phone and tablet share a key.
+  const [open, setOpen] = useKeyedState(() => false, String(inDrawer))
+  const close = useCallback(() => setOpen(false), [setOpen])
+  const toggle = useCallback(() => setOpen(value => !value), [setOpen])
 
   return { inDrawer, open, toggle, close }
 }

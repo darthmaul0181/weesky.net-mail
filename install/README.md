@@ -118,10 +118,10 @@ pointed at just any mail service.
 
 ## Step 1 — Build the application
 
-You need the **.NET 10 SDK** and **Node.js 20** for this step only. The simplest is to build on the
-server itself. If you would rather not install them there, build on another machine and copy three
-folders to the server, keeping their place in the repository: `out/api`, `src/frontend/dist` and
-`install`.
+You need the **.NET 10 SDK** and **Node.js 22.12 or later** for this step only. The simplest is to
+build on the server itself. If you would rather not install them there, build on another machine and
+copy three folders to the server, keeping their place in the repository: `out/api`,
+`src/frontend/dist` and `install`.
 
 Every command in this guide runs **as root, from the repository folder**.
 

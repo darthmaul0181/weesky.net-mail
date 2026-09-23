@@ -7,6 +7,7 @@ import ChevronLeftIcon from '../../../icons/ChevronLeftIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { formatSize } from './formatSize'
+import { useKeyedState } from '../../../hooks/useKeyedState'
 
 export interface ViewerImage {
   /** IMAP body part id — the caller's key back to the attachment for a download. */
@@ -34,32 +35,30 @@ interface Props {
 export default function AttachmentViewerModal({ images, initialIndex, onDownload, onClose }: Props) {
   const { t } = useTranslation('mail')
   const [index, setIndex] = useState(initialIndex)
-  const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  // The failure, not its wording: worded here the effect would close over `t` and refetch the
-  // bytes on a language change. Translated at render, so it follows the language on its own.
-  const [error, setError] = useState<unknown>(null)
   const image = images[index]
   const several = images.length > 1
+  // The failure, not its wording: worded here the effect would close over `t` and refetch the
+  // bytes on a language change. Translated at render, so it follows the language on its own.
+  const [loaded, setLoaded] = useKeyedState<{ objectUrl?: string; error?: unknown }>(() => ({}), image.src)
+  const { objectUrl, error } = loaded
 
   useEffect(() => {
     let url: string | null = null
     let cancelled = false
-    setError(null)
-    setObjectUrl(null)
     requestBlob(image.src)
       .then((result: { blob: Blob }) => {
         if (cancelled) return
         url = URL.createObjectURL(result.blob)
-        setObjectUrl(url)
+        setLoaded({ objectUrl: url })
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err)
+        if (!cancelled) setLoaded({ error: err })
       })
     return () => {
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [image.src])
+  }, [image.src, setLoaded])
 
   // Bound to the dialog's own box rather than to the document: a viewer under another dialog
   // never sees these, and Escape stays the layer stack's. Clamped, never wrapped — the same
