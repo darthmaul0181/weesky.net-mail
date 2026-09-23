@@ -1,9 +1,5 @@
-/**
- * Pass a `title` where the icon is the only thing carrying the meaning — in a message row it
- * is the sole sign of an attachment. Leave it out where adjacent text already says it, as in
- * an attachment chip next to its file name, and the icon is hidden from assistive tech
- * instead of read out twice.
- */
+/** Pass `title` where the icon alone carries the meaning (a message row); omit it beside text that
+ * says it (an attachment chip) and the icon is hidden from assistive tech. */
 export default function PaperclipIcon({ size = 14, title }: { size?: number; title?: string }) {
   return (
     <svg

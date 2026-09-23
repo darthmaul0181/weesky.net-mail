@@ -7,13 +7,8 @@ import PencilIcon from '../../../icons/PencilIcon'
 import RocketIcon from '../../../icons/RocketIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 
-/**
- * One table from role to glyph, sitting beside roleLabel for the same reason: a second consumer
- * reads this mapping rather than inventing its own, so one folder can never wear two icons.
- *
- * It hands back an element rather than a component, because a component resolved during a render
- * remounts its subtree on every pass — the row would rebuild its glyph each time it redraws.
- */
+// Beside roleLabel so one folder never wears two icons. Hands back an element, not a component: a
+// component resolved during render remounts its subtree on every pass.
 const BY_ROLE: Record<string, (size: number) => ReactElement> = {
   inbox: size => <InboxIcon size={size} />,
   drafts: size => <PencilIcon size={size} />,

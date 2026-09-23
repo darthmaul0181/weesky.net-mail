@@ -35,11 +35,8 @@ const WAITING: MessageListState = {
 const NO_BLOCKS: MailFolderPage[] = []
 const NO_GROUPS: ThreadGroup[] = []
 
-/**
- * One shape for both modes, so the list renders a pager or a sentinel without ever learning
- * what "All" means. Both queries are always called — hooks cannot be conditional — with the
- * inactive one disabled, which issues no request.
- */
+// One shape for paged and streaming, so the list never learns what "All" means. Both queries are
+// always called, hooks being unconditional; the inactive one is disabled and issues no request.
 export function useMessageList(folderPath: string | null): MessageListState {
   const [page, setPage] = useState(0)
   const [shownFolder, setShownFolder] = useState(folderPath)

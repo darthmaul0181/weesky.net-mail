@@ -160,7 +160,7 @@ beforeEach(() => {
   // not hold, and would otherwise assert against a composer quietly creating contacts.
   prefs = { 'contacts.captureRecipients': 'false' }
   mocks.getPreferences.mockImplementation(async () => prefs)
-  // Default: identities still loading — every pre-existing test keeps the 2c1 plain From.
+  // Default: identities still loading — every other test keeps the plain From.
   vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
 
@@ -276,8 +276,8 @@ describe('ComposeView', () => {
     expect(screen.getByRole('button', { name: 'Remove Bruno Mertens' })).toBeInTheDocument()
   })
 
-  // Never inserted in silence (decision 15): the composer's own notifier is the road that
-  // announcement takes, which is what makes this the wiring's only visible seam.
+  // Never inserted in silence: the composer's own notifier is the road that announcement takes,
+  // which is what makes this the wiring's only visible seam.
   it('says so rather than adding nothing when a group resolves to nobody', async () => {
     mocks.getContactGroups.mockResolvedValue({ groups: [{ id: 'g2', name: 'Ghosts', memberIds: ['gone'] }] })
     const { onNotify } = renderCompose()

@@ -23,10 +23,8 @@ const bounded = (value: string): string | null => {
   return trimmed === '' ? null : trimmed
 }
 
-/**
- * A header display name split into the two columns a contact has. A comma means the corporate
- * "Last, First"; otherwise the last space separates given names from the family name.
- */
+/** A header display name split into first and last: a comma means "Last, First", otherwise the
+ * last space separates them. */
 export function splitFullName(
   raw: string, address: string,
 ): { firstName: string | null; lastName: string | null } {
@@ -45,10 +43,8 @@ export function splitFullName(
   return { firstName: bounded(name.slice(0, space)), lastName: bounded(name.slice(space + 1)) }
 }
 
-/**
- * Which recipients of a sent message deserve a contact. Blank entries, the account's own
- * addresses, addresses the book already holds and repeats within one send are all dropped.
- */
+/** The recipients of a sent message worth a contact: no blanks, none of the account's own
+ * addresses, none already in the book, no repeats within one send. */
 export function capturable(
   contacts: Contact[],
   recipients: string[],

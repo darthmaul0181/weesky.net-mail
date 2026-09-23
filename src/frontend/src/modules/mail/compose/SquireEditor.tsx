@@ -55,15 +55,9 @@ const toggles: Partial<Record<EditorCommand, [keyof Squire, keyof Squire, string
 
 const invoke = (squire: Squire, method: keyof Squire) => (squire[method] as () => void)()
 
-/**
- * Squire sanitises every setHTML and every paste through this, and it otherwise reaches for a
- * *global* DOMPurify the app never defines — without it the constructor throws. Stricter than
- * Squire's own default, which turns the protocol check off; outgoing mail allows http/https/mailto.
- * Shares FORBID_TAGS/FORBID_ATTR with the reader: this div is a plain part of the SPA document,
- * so a surviving <style> would apply document-wide rather than staying scoped to a sandboxed iframe.
- * document.importNode matches Squire's own default — appendChild alone adopts but does not reset
- * internal element state.
- */
+// Squire would otherwise reach for a global DOMPurify the app never defines. Stricter than its default
+// (protocols checked) and sharing the reader's FORBID lists: this div is in the SPA document, where a
+// surviving <style> would apply document-wide. importNode resets element state as Squire's default does.
 const sanitizeToDOMFragment = (html: string): DocumentFragment => {
   const fragment = DOMPurify.sanitize(html, {
     RETURN_DOM_FRAGMENT: true, WHOLE_DOCUMENT: false, FORCE_BODY: false, FORBID_TAGS, FORBID_ATTR,
@@ -71,10 +65,7 @@ const sanitizeToDOMFragment = (html: string): DocumentFragment => {
   return document.importNode(fragment, true)
 }
 
-/**
- * Thin React shell over Squire. The canvas follows the app theme (see .compose-editor); the
- * toolbar's active state rides Squire's pathChange event.
- */
+// The canvas follows .compose-editor; the toolbar's active state rides Squire's pathChange event.
 const SquireEditor = forwardRef<EditorHandle, Props>(function SquireEditor(
   { onChange, onFormatChange, initialHtml }, ref,
 ) {

@@ -1,14 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
 
-/**
- * The instance's settings, not the account's: they decide whether the webmail advertises itself
- * as an installable app and under what name. The read is anonymous, so this hook also serves the
- * login page.
- *
- * The backend answers every known key with its default already filled in — no copy of those
- * defaults here, or the two would drift apart at the first change.
- */
+/** The instance's settings (installable app, its name), not the account's; the read is anonymous,
+ * so the login page uses it too. The backend fills every default: no copy here to drift. */
 export const APP_SETTING_KEYS = {
   installable: 'app.installable',
   name: 'app.name',

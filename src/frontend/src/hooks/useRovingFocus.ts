@@ -11,11 +11,8 @@ interface Options {
     default is in; a checkbox, a radio and a button hold no caret and answer to no key of one. */
 const TEXT_TYPES = ['text', 'search', 'url', 'tel', 'email', 'password', 'number']
 
-/**
- * Which keys belong to a caret rather than to the walk: Home and End in any text box, and ↓/↑ in a
- * multi-line one, where they move between its own lines. A single-line `<input>` keeps ↓/↑, which
- * is how a combobox's field reaches its list.
- */
+/** Keys that belong to a caret: Home/End in any text box, ↓/↑ in a multi-line one. A single-line
+ * `<input>` keeps ↓/↑, which is how a combobox's field reaches its list. */
 export function textBox(target: EventTarget | null): 'single' | 'multiline' | null {
   const node = target as HTMLElement | null
   if (node?.tagName === 'INPUT') {
@@ -25,21 +22,9 @@ export function textBox(target: EventTarget | null): 'single' | 'multiline' | nu
   return node?.closest('[contenteditable]:not([contenteditable="false"])') ? 'multiline' : null
 }
 
-/**
- * The ARIA menu pattern's keyboard walk over one open surface: it focuses the first item, ↓/↑ move
- * and wrap, and Home/End jump to the ends. ←/→ are deliberately left alone — in that pattern they
- * belong to a submenu, and answering them would teach a dialect of our own.
- *
- * Focus itself moves and no `tabindex` is rewritten, so the walk and the layer stack's Tab read one
- * and the same list — `tabbablesIn` — and cannot disagree about where focus may go inside a menu
- * standing over a trapped dialog. What it spends it marks `preventDefault`, so nothing underneath
- * answers the same key.
- *
- * Two bounds worth knowing. The handler is the surface's own, so a key pressed once focus has left
- * it never reaches the walk at all — there is nothing to stop, and the arrows are the page's again.
- * And a surface holding no focusable returns before marking anything, so the arrows fall through to
- * whatever is behind it rather than being swallowed by an empty menu.
- */
+/** The ARIA menu walk over one open surface: first item focused, ↓/↑ wrap, Home/End to the ends;
+ * ←/→ belong to a submenu. It moves real focus over `tabbablesIn`, the stack's own Tab list, and
+ * `preventDefault`s every key it spends (docs/architecture-shell.md). */
 export function useRovingFocus({ active, containerRef }: Options) {
   // `preventScroll`: the first item sits against the trigger just pressed, so there is nothing to
   // scroll to — and a scroll would close an upward menu, whose flip is state and so lands a frame

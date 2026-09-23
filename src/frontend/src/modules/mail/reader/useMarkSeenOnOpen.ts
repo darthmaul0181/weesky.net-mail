@@ -72,10 +72,8 @@ function markedUnreadSince(
   })
 }
 
-/**
- * Marks a message read once per opening — armed on uid change, fired when the detail arrives.
- * Failure is silent by design: the next poll corrects it.
- */
+/** Marks a message read once per opening, when its detail arrives. Failure is silent: the next poll
+ * corrects it. */
 export function useMarkSeenOnOpen(
   folderPath: string | null, uid: number | null, detailLoaded: boolean,
 ) {

@@ -32,7 +32,7 @@ describe('ContactScopes', () => {
 
   // `is-active` is the hook the navigation paint hangs on, and it must land on the active row
   // alone. Whether that paint is a fill rather than an accent bar is a CSS fact jsdom computes
-  // nothing about — it is measured in the browser pass, Task 15.
+  // nothing about — it is measured in the browser pass.
   it('marks the active scope, and only the active one', () => {
     renderScopes({ scope: 'favorites' })
 
@@ -66,7 +66,7 @@ describe('ContactScopes', () => {
     expect(screen.getByRole('button', { name: /all contacts/i })).toHaveTextContent('0')
   })
 
-  // « Tous les contacts » n'est pas un groupe : il ne s'allume jamais et n'appelle rien.
+  // "All contacts" is not a group: it never lights up and calls nothing.
   it('never lights up the all scope', () => {
     const onDropContacts = vi.fn()
     renderScopes({ total: 2, favorites: 0, onDropContacts })
@@ -91,7 +91,7 @@ describe('ContactScopes', () => {
     expect(onDropContacts).toHaveBeenCalledWith('favorites', { ids: ['a'] })
   })
 
-  // Le survol allume, le départ éteint : une cible restée allumée derrière le curseur ment.
+  // A hover lights it, leaving douses it: a target left lit behind the cursor is a lie.
   it('goes dark again when the drag leaves', () => {
     renderScopes({ total: 2, favorites: 0, onDropContacts: vi.fn() })
     const target = screen.getByRole('button', { name: /favourites/i })
@@ -102,7 +102,7 @@ describe('ContactScopes', () => {
     expect(target).not.toHaveClass('drop-ready')
   })
 
-  // Sans handler la bande n'est pas une cible : la classe ne doit pas s'allumer pour rien.
+  // Without a handler the strip is no target: the class must not light up for nothing.
   it('is inert without a drop handler', () => {
     renderScopes({ total: 2, favorites: 0 })
     const target = screen.getByRole('button', { name: /favourites/i })
@@ -126,8 +126,8 @@ describe('the groups section', () => {
     await userEvent.click(screen.getByRole('button', { name: `Actions for ${name}` }))
   }
 
-  // Le « + » vit sur l'en-tête de la section, jamais dans `.column-actions` (décision 13) : le
-  // premier groupe se crée depuis une section encore vide.
+  // The « + » lives on the section heading, never in `.column-actions`: the first group is
+  // created from a section that is still empty.
   it('offers the section and its + even with no group at all', async () => {
     const onCreateGroup = vi.fn()
     renderScopes({ onCreateGroup })
@@ -138,15 +138,16 @@ describe('the groups section', () => {
     expect(onCreateGroup).toHaveBeenCalled()
   })
 
-  // Un intitulé qui n'est qu'un texte gras n'est pas une structure : rien ne mène un lecteur
-  // d'écran à la section.
+  // A heading that is only bold text is not a structure: nothing leads a screen reader to the
+  // section.
   it('names the section with a heading', () => {
     renderScopes()
 
     expect(screen.getByRole('heading', { name: 'Groups' })).toBeInTheDocument()
   })
 
-  // Une liste refusée rendait une section vide, indistinguable d'un compte sans aucun groupe.
+  // A refused list used to render an empty section, indistinguishable from an account with no
+  // group at all.
   it('says the list was refused instead of drawing an empty section', () => {
     renderScopes({ groupsError: true })
 
@@ -172,8 +173,8 @@ describe('the groups section', () => {
     expect(onScope).toHaveBeenCalledWith('group:g2')
   })
 
-  // La ligne est une cible par construction : `canDropIntoScope` n'accepte que ce qui n'est pas
-  // « all », et le scope voyage entier jusqu'au parent.
+  // The row is a target by construction: `canDropIntoScope` only accepts what is not `all`, and
+  // the scope travels whole to the parent.
   it('lights up a group row and hands the payload over on drop', () => {
     const onDropContacts = vi.fn()
     renderScopes({ groups: [friends], onDropContacts })
@@ -206,8 +207,8 @@ describe('the groups section', () => {
     expect(onDeleteGroup).toHaveBeenCalledWith(friends)
   })
 
-  // Un composeur sans destinataire n'est pas une réponse : l'entrée est refusée en amont, et
-  // c'est le parent qui sait si le groupe offre une adresse.
+  // A composer with no recipient is not an answer: the entry is refused upstream, and it is the
+  // parent that knows whether the group offers an address.
   it('disables writing to a group that offers no address', async () => {
     renderScopes({ groups: [family], groupHasAddresses: () => false })
 

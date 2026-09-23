@@ -444,8 +444,8 @@ describe('RecipientsField — group rows', () => {
     expect(onChange).toHaveBeenCalledWith(['jose@x.com', 'josé@x.com'])
   })
 
-  // Nothing is ever inserted in silence (decision 15): a group nobody in the book resolves is a
-  // state the user has to be told about, and this is the only road that announcement takes.
+  // Nothing is ever inserted in silence: a group nobody in the book resolves is a state the user
+  // has to be told about, and this is the only road that announcement takes.
   it('raises the empty-group notice instead of adding nothing', async () => {
     const onChange = vi.fn()
     const onEmptyGroup = vi.fn()

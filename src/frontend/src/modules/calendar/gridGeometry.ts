@@ -1,9 +1,6 @@
 import { MINUTES_PER_DAY } from './plainDate'
 
-/**
- * The hour grid's own arithmetic, in one place: a pixel figure written twice — in a stylesheet
- * and in a drag handler — is a pixel figure that drifts. These are the pointer's side.
- */
+/** The hour grid's arithmetic, the pointer's side, in one place so no pixel figure drifts. */
 export const HOUR_PX = 56
 export const SNAP_MINUTES = 15
 /** Where the grid is scrolled to when it opens: the rest of the day is a scroll away. */

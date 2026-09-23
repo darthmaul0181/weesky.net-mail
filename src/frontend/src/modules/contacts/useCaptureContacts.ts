@@ -19,11 +19,8 @@ function draftFor(candidate: CaptureCandidate): ContactDraft {
   }
 }
 
-/**
- * Creating and un-creating captured contacts. Deliberately not `useMutation`: both halves are
- * started by the composer and finish after it has navigated away — the create resolves during the
- * unmount, and the undo is clicked from a toast the composer no longer owns.
- */
+/** Creating and undoing captured contacts, not `useMutation`: both finish after the composer has
+ * gone (the create during its unmount, the undo from a toast it no longer owns). */
 export function useCaptureContacts() {
   const queryClient = useQueryClient()
   const accountId = useAccountId()

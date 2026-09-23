@@ -12,7 +12,6 @@ export interface Account {
 export interface AccountIdentity {
   email: string
   displayName: string
-  initials: string
   subDomains: AccountDomain[]
 }
 
@@ -22,15 +21,11 @@ export function deriveIdentity(account: Account): AccountIdentity {
   const defaultDomain = primaryDomain ?? list[0]
   const domainName = defaultDomain?.name ?? ''
   const email = domainName ? `${account.userName}@${domainName}` : (account.userName ?? '')
-  const initials =
-    (account.userName?.[0] ?? '').toUpperCase() +
-    (domainName?.[0] ?? account.mailbox?.[0] ?? '').toUpperCase()
   // Whitespace is not a name, the way `IdentityResolver.LabelFor` reads it.
   const hasName = !!account.fullName?.trim()
   return {
     email,
     displayName: hasName ? account.fullName! : email,
-    initials,
     subDomains: primaryDomain ? list.filter(d => d.id !== account.mailbox) : list,
   }
 }

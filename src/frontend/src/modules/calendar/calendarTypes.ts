@@ -1,7 +1,5 @@
-/** One calendar as `GET /api/Calendars` answers it. `isDefault` is derived server-side: the
-    collection no deletion may take. The API serialises with `WhenWritingNull`, so an absent value
-    is omitted from the JSON rather than sent as `null` — every optional field below is therefore
-    `?:`, never `| null`. */
+/** One calendar (`GET /api/Calendars`). `isDefault` is derived server-side: the one no deletion
+ * may take. The API omits null fields, so optional fields are `?:`, never `| null`. */
 export interface Calendar {
   id: string
   davName: string
@@ -141,16 +139,9 @@ export interface EventUpdateBody extends EventWrite {
   ifHash: string
 }
 
-/**
- * One instance inside a window (`GET /api/Calendar/Events` and `.../Search`), in the shape its own
- * time has — never more than one of the three at once:
- * - dated: `startUtc`/`endUtc` (ISO instants) and `timeZone`;
- * - all-day: `startDate`/`endDateExclusive` (the morning after);
- * - floating: `localStart`/`localEnd`, wall-clock readings that belong to no zone.
- *
- * `instanceId` is the literal `RECURRENCE-ID` a client would write to address this instance —
- * never the UTC instant — and `''` for an event that does not repeat.
- */
+/** One instance in a window, in exactly one time shape: dated (`startUtc`/`endUtc` + `timeZone`),
+ * all-day (`startDate`/`endDateExclusive`) or floating (`localStart`/`localEnd`, no zone).
+ * `instanceId` is the literal `RECURRENCE-ID`, never the UTC instant, and `''` when not repeating. */
 export interface Occurrence {
   eventId: string
   calendarId: string

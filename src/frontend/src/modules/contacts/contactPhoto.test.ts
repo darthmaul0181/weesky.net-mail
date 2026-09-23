@@ -35,7 +35,7 @@ describe('reducePhoto', () => {
   it('crops a landscape to a centred square', async () => {
     await reducePhoto(new File([], 'p.jpg'))
 
-    // sx, sy, sw, sh : la moitié du débord à gauche, rien en haut, le côté court des deux côtés.
+    // sx, sy, sw, sh: half the overhang on the left, none on top, the short side on both sides.
     expect(drawn[0]!.slice(0, 4)).toEqual([100, 0, 200, 200])
   })
 
@@ -55,8 +55,8 @@ describe('reducePhoto', () => {
     expect(sides[0]).toBe(300)
   })
 
-  // Un canvas naît noir transparent et le JPEG jette l'alpha : sans ce fond, un logo sur fond
-  // transparent devient un carré noir.
+  // A canvas is born transparent black and JPEG throws the alpha away: without this ground, a
+  // logo on a transparent background becomes a black square.
   it('paints the white ground before the image', async () => {
     await reducePhoto(new File([], 'p.jpg'))
 

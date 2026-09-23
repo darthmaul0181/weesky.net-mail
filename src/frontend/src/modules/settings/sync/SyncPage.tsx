@@ -39,11 +39,8 @@ function CopyableRow(
   )
 }
 
-/**
- * The one screen of slices 4c-i and 5c. Named for what it does rather than for the protocols it
- * speaks: CardDAV and CalDAV are words the user meets in their client, not in their head, and
- * naming the route after the first to arrive would have forced a rename on a bookmark.
- */
+/** Named for what it does, not the protocols: CardDAV and CalDAV are words users meet in their
+ * client, and a route named after the first would have forced a bookmark rename. */
 export default function SyncPage() {
   const { t } = useTranslation('settings')
   const [state, setState] = useState<DavCredentials | null>(null)

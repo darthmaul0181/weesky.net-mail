@@ -9,10 +9,8 @@ export interface ModuleEntry {
   Icon: (props: { size?: number }) => React.JSX.Element
 }
 
-/** The one definition of the module set. AppRail and BottomNav both read it, or a module added
-    later shows up on a desktop and vanishes on a phone.
-    `satisfies` rather than a `: readonly ModuleEntry[]` annotation: the latter widens each
-    `labelKey` to `string`, which the typed `t()` guard then rejects as an unknown key. */
+/** The one module set, read by AppRail and BottomNav alike. `satisfies`, not an annotation, which
+ * would widen `labelKey` to `string` and fail the typed `t()`. */
 export const MODULES = [
   { to: '/mail', labelKey: 'rail.mail', Icon: MailIcon },
   { to: '/calendar', labelKey: 'rail.calendar', Icon: CalendarIcon },

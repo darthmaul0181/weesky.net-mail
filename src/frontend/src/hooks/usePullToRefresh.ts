@@ -5,21 +5,14 @@ import { GESTURE_TRAVEL_PX } from './gestureThresholds'
 const THRESHOLD = 64
 const MAX = 96
 
-/**
- * The gesture that replaces the refresh button once the folder column is a drawer. It only
- * starts at the very top of the list: a downward drag anywhere else is a scroll.
- *
- * Returns the current pull in pixels and whether releasing now would refresh, so the caller can
- * draw a band. Native listeners rather than React's, because touchmove has to be non-passive to
- * be preventable, and React attaches its own passively.
- */
+/** The pull that replaces the refresh button once the folder column is a drawer, starting only at
+ * the list's top. Native listeners: touchmove must be non-passive to be preventable, and React
+ * attaches passively. Returns the pull in px and whether releasing would refresh. */
 export function usePullToRefresh(ref: RefObject<HTMLElement | null>, onRefresh: () => void) {
   const [pull, setPull] = useState(0)
 
-  // Held in a ref, like ContextDrawer's onCloseRef: the caller's real call site hands in a fresh
-  // arrow every render, and `setPull` below re-renders it on every touch frame. Depending on the
-  // callback directly re-ran the listener effect mid-gesture, resetting `origin`/`travelled` to
-  // nothing before the drag ever reached the threshold.
+  // In a ref: the caller hands a fresh arrow every render and `setPull` re-renders every touch
+  // frame, so depending on it re-ran the listener effect and reset the gesture mid-drag.
   const onRefreshRef = useRef(onRefresh)
   useEffect(() => { onRefreshRef.current = onRefresh })
 
@@ -42,12 +35,8 @@ export function usePullToRefresh(ref: RefObject<HTMLElement | null>, onRefresh: 
       const touch = event.touches[0]
       if (!touch) return
       const travel = touch.clientY - origin
-      // Negative travel is the list scrolling up under the finger; nulling origin ends the
-      // gesture rather than leaving it to resume from the original start point, which would let
-      // a later downward drag over the same touch read as a pull past a list that already moved.
-      // Strictly negative, not <= 0: a frame whose clientY exactly repeats the start — routine on
-      // a real device when the finger's first movement is sideways — is zero travel, not a
-      // scroll, and must fall through to the ordinary sub-threshold branch below.
+      // Negative travel is the list scrolling up: end the gesture, or a later downward drag reads as
+      // a pull. Strictly < 0: a repeated clientY (a sideways first move) is not a scroll.
       if (travel < 0) { origin = null; travelled = 0; setPull(0); return }
       // Below the shared jitter floor, neither draw the band nor preventDefault: a 1-2px wobble
       // during an ordinary tap must not re-render the list on every touch frame.

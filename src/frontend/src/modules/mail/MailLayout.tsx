@@ -51,14 +51,7 @@ function resultFolderOf(state: unknown): string | null {
     && typeof state.resultFolder === 'string' ? state.resultFolder : null
 }
 
-/**
- * The mail module's three columns. The shell provides a single outlet, so a module builds its
- * own columns inside it — the same way the settings section does.
- *
- * Selection lives in search params rather than route segments: a folder path may contain '/',
- * which is exactly why folder paths stay out of route segments in the API too. Deep links and
- * the back button still work.
- */
+// Selection lives in search params, not route segments: a folder path may contain '/'.
 export default function MailLayout() {
   const { t } = useTranslation('mail')
   const [params, setParams] = useSearchParams()
@@ -89,10 +82,9 @@ export default function MailLayout() {
   const uid = uidParam ? Number(uidParam) : null
 
   const [search, setSearch] = useState<SearchCriteria | null>(null)
-  // The folder a cross-folder result was opened from, carried by the history entry that opened it
-  // so it lands in the same commit as the uid. Honoured only while a search stands and a message
-  // is open: Back or a reload without a search shows the URL folder's list, which the entry's
-  // folder would contradict, and an entry whose reader closed names no hit to wind back.
+  // The folder a cross-folder result was opened from, carried by its history entry so it lands with
+  // the uid. Honoured only while a search stands and a message is open, or it would contradict the
+  // URL folder's list or name a hit nothing can wind back to.
   const entryState: unknown = useLocation().state
   const resultFolder = search && uid !== null ? resultFolderOf(entryState) : null
 
@@ -111,11 +103,9 @@ export default function MailLayout() {
   // carries the previous account's folder and one the user just chose in this account's.
   const picked = useRef<{ path: string; accountId: string } | null>(null)
 
-  // On a change, never on mount: the previous mailbox's folder and uid name nothing in the new
-  // one, while a deep link into a folder is a legitimate way in. The inbox redirect takes over.
-  // Held while composing, ref included: the composer's leave guard blocks this navigation and can
-  // refuse it, and a ref advanced by then would swallow a reset that never happened. `composing`
-  // is a dependency, so leaving the composer is what fires the held reset.
+  // On a change, never on mount: the old mailbox's folder and uid name nothing in the new one. Held
+  // while composing, ref included, since the leave guard may refuse this navigation; `composing` is a
+  // dependency, so leaving the composer fires the held reset.
   const lastAccount = useRef(accountId)
   useEffect(() => {
     if (composing || lastAccount.current === accountId) return
@@ -142,12 +132,9 @@ export default function MailLayout() {
     ? (folderNode.specialUse ? roleLabel(folderNode.specialUse, t) : folderNode.name)
     : undefined
 
-  // Landing on three empty columns asks the user to pick the one folder everybody starts in.
-  // The inbox comes from the resolution chain's role rather than the name "INBOX", so a server
-  // that names it otherwise still lands right. No uid: which message to read stays the user's
-  // call. Replaces the entry, or Back would bounce off the redirect instead of leaving mail.
-  // Never while composing: the composer names no folder, and the redirect would be a navigation
-  // the leave guard then has to question.
+  // Found by role rather than the name "INBOX"; no uid, which message to read stays the user's call.
+  // Replaces the entry so Back leaves mail. Never while composing: the leave guard would have to
+  // question the redirect.
   useEffect(() => {
     if (composing || folder || !folders) return
 
@@ -311,12 +298,9 @@ export default function MailLayout() {
 
   if (settling) return <div className="mail-full-pane"><LoadingBlock /></div>
 
-  // Not a column that failed to load but a mailbox that cannot be opened at all, so the three
-  // columns would only frame three copies of the same failure. Never over an open composer: this
-  // replaces the subtree by re-render, which no leave guard can see, so a poll answering 409
-  // would discard an unsaved draft without asking. It waits until the composer is left.
-  // An OAuth mailbox reaches the same 409 with no password anywhere in the story: the consent was
-  // withdrawn at the provider, or the cipher holding its refresh token no longer opens.
+  // A mailbox that cannot be opened at all. Never over an open composer: this replaces the subtree by
+  // re-render, which no leave guard sees, so a poll answering 409 would discard an unsaved draft.
+  // An OAuth mailbox gets the same 409 when consent was withdrawn or its token cipher no longer opens.
   if (!composing && needsAccountPassword(error)) {
     const byConsent = activeAccount?.authMode === 'OAuth2'
     return (
@@ -341,10 +325,8 @@ export default function MailLayout() {
         <RefreshButton fetching={refreshFetching} onRefresh={refresh} />
       </div>
       <div className="mail-folders-scroll">
-        {/* The tree waits on the preferences too: without that, an account that turned the
-            icons on gets a column that appears late and pushes every name sideways. The two
-            queries leave together, so it costs nothing in the ordinary case — and an errored
-            preferences query still resolves, leaving the tree to draw without icons. */}
+        {/* The tree waits on the preferences too, or an account with folder icons on sees the names
+            shift late. An errored preferences query still resolves, and the tree draws without icons. */}
         {(isLoading || preferencesLoading) && <p className="mail-empty">{t('folders.loading')}</p>}
         {isError && <p className="mail-empty">{t('folders.loadFailed')}</p>}
         {folders && !preferencesLoading && (
@@ -423,10 +405,8 @@ export default function MailLayout() {
         </>
       )}
 
-      {/* The reader draws its own bar across the foot of a phone screen, and the button is anchored
-          73px up from that same edge: leaving it there puts a 56px disc over the delete and the
-          kebab. A tablet at `none` keeps it — its reader has no bar, and the folder column's own
-          Compose is behind the drawer. */}
+      {/* Not over a phone reader: its bar owns the foot of the screen and the button would cover
+          delete and the kebab. A tablet at `none` keeps it: no bar, and the column's Compose is hidden. */}
       {!composing && !(viewport === 'phone' && pane === 'none' && uid !== null) && (
         <FloatingAction label={t('layout.newMessage')} onClick={openCompose}>
           <RocketIcon size={22} />

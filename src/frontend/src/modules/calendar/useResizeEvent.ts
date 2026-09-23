@@ -19,11 +19,8 @@ export interface ResizeEventOptions {
   onResize: (o: Occurrence, newDurationMinutes: number) => void
 }
 
-/**
- * Dragging a block's foot. The handle sends an absolute duration rather than a delta, so what the
- * server is told is what the grid drew; a quarter of an hour is the floor, under which a chip has
- * neither a title nor a hit area left.
- */
+/** Dragging a block's foot. It sends an absolute duration, so the server is told what the grid
+ * drew; a quarter of an hour is the floor, below which a chip has no title or hit area left. */
 export function useResizeEvent({ enabled, onResize }: ResizeEventOptions) {
   const [resize, setResize] = useState<ResizeState | null>(null)
   const stop = useRef<(() => void) | null>(null)

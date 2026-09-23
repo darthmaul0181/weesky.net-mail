@@ -72,13 +72,9 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
   unauthorizedHandler = fn
 }
 
-/**
- * An HTTP failure that keeps its status. The backend puts a stable string in the
- * ResultEnveloppe message — "credentials_unavailable", "Message not found" — which is
- * surfaced as `code` so callers can branch on it without matching prose.
- *
- * Extends Error, so existing `rejects.toThrow(message)` expectations still hold.
- */
+/** An HTTP failure that keeps its status. The backend's stable ResultEnveloppe message
+ * ("credentials_unavailable", "Message not found") is `code`, so callers branch without matching
+ * prose. Extends Error, so `rejects.toThrow(message)` still holds. */
 export class ApiError extends Error {
   status: number
   code: string | null
@@ -168,10 +164,7 @@ export async function request<T>(
   return payload as T
 }
 
-/**
- * Fetches a binary response — attachments. Separate from request() because that helper always
- * parses JSON.
- */
+/** Fetches a binary response (attachments), since request() always parses JSON. */
 export async function requestBlob(
   path: string, options: RequestOptions = {},
 ): Promise<{ blob: Blob; fileName: string }> {
@@ -623,10 +616,8 @@ export const api = {
     request<null>('PUT', '/api/AppSettings', { key, value }),
 }
 
-/**
- * Builds the attachment download URL. Kept beside the api object so encoding stays in one place.
- * A subresource fetch cannot carry a header, so a connected account rides along as `?account=`.
- */
+/** The attachment download URL, encoded in one place. A subresource fetch cannot carry a header,
+ * so a connected account rides along as `?account=`. */
 export function mailAttachmentUrl(folder: string, uid: number, part: string, accountId?: string | null): string {
   const account = carriesAccount(accountId) ? `&account=${encodeURIComponent(accountId)}` : ''
   return `/api/Mail/Messages/Attachment?folder=${encodeURIComponent(folder)}&uid=${uid}&part=${encodeURIComponent(part)}${account}`
@@ -635,22 +626,16 @@ export function mailAttachmentUrl(folder: string, uid: number, part: string, acc
 /** The API origin. Exported so the composer can undo an absolute staged URL before sending. */
 export const API_BASE = BASE
 
-/**
- * Builds a staged attachment's content URL — the src the composer shows inline images through.
- * Absolute, unlike mailAttachmentUrl: that one is a request path handed to requestBlob, which
- * prefixes BASE itself, while an <img> subresource would resolve against the SPA's own origin.
- * Staged files are namespaced by account on the backend, so a connected account must carry
- * `?account=` here too or its inline images 404.
- */
+/** A staged attachment's content URL, the src of the composer's inline images. Absolute, unlike
+ * mailAttachmentUrl, or an <img> resolves it against the SPA's origin. Staged files are namespaced
+ * by account, so a connected account carries `?account=` or its inline images 404. */
 export function stagedAttachmentUrl(id: string, accountId?: string | null): string {
   const account = carriesAccount(accountId) ? `?account=${encodeURIComponent(accountId)}` : ''
   return `${BASE}/api/Mail/Attachments/${id}/content${account}`
 }
 
-/**
- * Uploads one outgoing attachment. XMLHttpRequest, not fetch: only XHR exposes upload
- * progress, and a 25 MB file without a bar reads as a hang.
- */
+/** Uploads one outgoing attachment. XHR, not fetch: only XHR exposes upload progress, and a
+ * 25 MB file without a bar reads as a hang. */
 export function uploadAttachment(
   file: File, { onProgress, signal, accountId, inline }: UploadOptions = {},
 ): Promise<StagedAttachmentInfo> {

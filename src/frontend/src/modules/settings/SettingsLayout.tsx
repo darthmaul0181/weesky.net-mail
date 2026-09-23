@@ -34,11 +34,9 @@ export default function SettingsLayout() {
   const { t } = useTranslation('settings')
   const { pathname } = useLocation()
   const drawer = useContextDrawer()
-  // `!== false`, not `=== true`: activeAccount is null while the account list loads, and the
-  // primary nav must stay full during that window rather than flash away and back. Capabilities
-  // read the same way, and for the same reason — null while it loads, absent on a backend that
-  // predates it — and the two never gate the same tab: a connected account's Rules answers to its
-  // own sieveSupported, never to the platform's capabilities.
+  // `!== false`: activeAccount and capabilities are null while they load (capabilities absent on an
+  // older backend), and the nav must not flash away and back. A connected account's Rules answers
+  // to its own sieveSupported, never to the platform's capabilities.
   const isPrimary = activeAccount?.isPrimary !== false
   const aliasesAvailable = capabilities?.aliases !== false
   const davAvailable = capabilities?.dav !== false

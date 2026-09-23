@@ -15,11 +15,8 @@ interface Props {
   onNotify: (message: string, type?: 'success' | 'error') => void
 }
 
-/**
- * Every folder as one tile, indented by depth. A folder holding a role keeps its controls
- * disabled rather than losing them: withheld, those rows are a different shape from the rest
- * and read as a rendering fault. Its role is changed in the system-folders dialog.
- */
+// A folder holding a role keeps its controls, disabled: withheld, its row is a different shape and
+// reads as a rendering fault. Roles change in the system-folders dialog.
 export default function FolderManager({ folders, onNotify }: Props) {
   const { t } = useTranslation('mail')
   const [renaming, setRenaming] = useState<MailFolderNode | null>(null)

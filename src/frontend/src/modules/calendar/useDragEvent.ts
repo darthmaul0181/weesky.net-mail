@@ -25,11 +25,8 @@ interface Area {
   vertical: boolean
 }
 
-/**
- * The box the day columns share, from the chip's own ancestry rather than measured on the grid:
- * `.day-column` carries its day, so the area's left edge is that column's minus the days before
- * it — which is exact whatever the scrollbar takes off the body's width.
- */
+/** The box the day columns share, from the chip's ancestry (`.day-column` carries its day) rather
+ * than measured on the grid: exact whatever the scrollbar takes off the body's width. */
 function areaOf(chip: HTMLElement, days: PlainDate[]): Area | null {
   const band = chip.closest<HTMLElement>('.allday-days')
   if (band) {
@@ -51,11 +48,8 @@ function columnOf(area: Area, x: number): number {
   return area.width > 0 ? columnAt(x, area.left, area.width, area.columns) : 0
 }
 
-/**
- * Dragging a block to another hour or another day. It knows nothing of what a drop writes — the
- * layout wires `onDrop` — and nothing of where a chip is drawn: the view reads `drag` and offsets
- * the chip itself, so one gesture serves the hour grid and the all-day band alike.
- */
+/** Dragging a block to another hour or day. The layout wires what a drop writes and the view
+ * offsets the chip from `drag`, so one gesture serves the hour grid and the all-day band. */
 export function useDragEvent({ enabled, days, onDrop }: DragEventOptions) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const stop = useRef<(() => void) | null>(null)

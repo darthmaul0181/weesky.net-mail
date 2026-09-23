@@ -983,10 +983,10 @@
 .detail-muted { color: var(--text-muted); }
 .reader-security { display: inline-flex; align-items: center; gap: 5px; }
 
-/* A recipient with a tooltip is now a real <button> (jsx-a11y/no-noninteractive-tabindex, lot 2b
-   task 3); border/padding/background undo the UA button chrome, and `display: inline` keeps it
-   flowing like the plain text it replaces instead of the UA's inline-block. The sender variant
-   below already carried this reset before this lot and keeps its own display. */
+/* A recipient with a tooltip is now a real <button> (jsx-a11y/no-noninteractive-tabindex);
+   border/padding/background undo the UA button chrome, and `display: inline` keeps it flowing
+   like the plain text it replaces instead of the UA's inline-block. The sender variant below
+   already carried this reset and keeps its own display. */
 .address-label { color: inherit; font: inherit; border: 0; padding: 0; background: none; }
 
 .address-label:not(.is-sender) { display: inline; }
@@ -1006,8 +1006,8 @@
 
 /* A line shield inheriting the verdict colour — the icon carries its own size, so the badge is
    just a colour-setting container. --success reads green, --danger red, in both modes. Now a
-   <button> (lot 2b task 3): border/padding/background undo the UA button chrome; display was
-   already inline-flex here, so the button box matches the span it replaces unchanged. */
+   <button>: border/padding/background undo the UA button chrome; display was already inline-flex
+   here, so the button box matches the span it replaces unchanged. */
 .auth-badge {
   display: inline-flex;
   align-items: center;
@@ -1025,9 +1025,9 @@
    trailing space — the same trap .reader-recipients fell into. */
 .reader-spam { display: block; }
 
-/* Now a <button> (lot 2b task 3): border/padding/background undo the UA button chrome, and
-   color/font keep .spam-gauge-value inheriting from the surrounding text as it did as a span.
-   display was already inline-flex here, so the box matches the span it replaces unchanged. */
+/* Now a <button>: border/padding/background undo the UA button chrome, and color/font keep
+   .spam-gauge-value inheriting from the surrounding text as it did as a span. display was
+   already inline-flex here, so the box matches the span it replaces unchanged. */
 .spam-gauge {
   display: inline-flex;
   align-items: center;
@@ -1119,9 +1119,9 @@
 .attachment-split-more:hover { background: var(--action-primary-hover); }
 .banner-split-more { padding: 0 7px; }
 
-/* The invitation card (spec 5e, decision 6, the "Retenue" board of the mock-up): the event
-   preview's card on the reader's sunken band, between the header and the body. The rows and the
-   sentences are indented under the title by the icon's width plus its gap. */
+/* The invitation card: the event preview's card on the reader's sunken band, between the header
+   and the body. The rows and the sentences are indented under the title by the icon's width plus
+   its gap. */
 .invitation-card {
   margin: 14px 22px 0;
   padding: 14px 16px 12px;
@@ -1147,7 +1147,7 @@
 .invitation-card-badge.is-cancel { color: var(--danger); }
 .invitation-card-context { margin: 0 0 0 24px; color: var(--text); }
 .invitation-card-hint { margin: 0 0 0 24px; color: var(--text-muted); }
-/* One right-aligned label column, at least the mock-up's 88px and never narrower than the
+/* One right-aligned label column, at least 88px and never narrower than the
    longest label; minmax(0, 1fr) lets a long value wrap instead of widening the card. */
 .invitation-card-rows {
   display: grid;
@@ -1160,7 +1160,7 @@
 .invitation-card-repeats { color: var(--text-muted); }
 .invitation-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 .invitation-card-actions.is-answered { justify-content: space-between; }
-/* Every button is as wide as its label — the mock-up's btn-sm — whatever .btn-primary's form default. */
+/* Every button is as wide as its label — like btn-sm — whatever .btn-primary's form default. */
 .invitation-card .btn { width: auto; padding: 7px 12px; font-size: 13px; }
 .invitation-card-answer { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
 .invitation-card-answer.is-muted { color: var(--text-muted); }

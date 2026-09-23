@@ -1,32 +1,29 @@
 import { type ReactNode, useEffect, useRef } from 'react'
 
 export interface SelectionBandProps {
-  /** Cochée quand tout l'écran est sélectionné. */
+  /** Checked when the whole screen is selected. */
   allSelected: boolean
   indeterminate: boolean
   onToggleAll: () => void
   selectionDisabled?: boolean
   selectAllLabel: string
-  /** Combien de lignes sont cochées. Au-dessus de zéro, `countLabel` remplace `center`. */
+  /** How many rows are checked. Above zero, `countLabel` replaces `center`. */
   count: number
   countLabel: string
-  /** Ce que la bande porte AU REPOS : un titre, un champ de recherche, ce que l'appelant veut. */
+  /** What the band carries AT REST: a title, a search field, whatever the caller wants. */
   center: ReactNode
-  /** Avant la case : le hamburger du tiroir, ou rien. */
+  /** Before the checkbox: the drawer hamburger, or nothing. */
   leading?: ReactNode
-  /** Après le centre et à l'intérieur du titre : ce qui filtre la vue plutôt que d'agir sur elle.
-      Il survit au décompte, parce qu'un filtre reste vrai pendant qu'une sélection est en cours. */
+  /** After the centre and inside the title: what filters the view rather than acting on it. It
+      survives the count, because a filter stays true while a selection is in progress. */
   trailing?: ReactNode
-  /** Les actions, à droite. */
+  /** The actions, on the right. */
   children: ReactNode
 }
 
-/**
- * The band both list columns wear. It owns the master checkbox, the rule that the centre gives way
- * to the count while a selection stands, and nothing else: the actions are the caller's, and so is
- * whatever sits in the centre at rest — the mail puts its folder name there, the contacts their
- * search field.
- */
+/** The band both list columns wear: the master checkbox, and the centre giving way to the count
+ * while a selection stands. The actions, and the centre at rest (the folder name, the search
+ * field), are the caller's. */
 export default function SelectionBand({
   allSelected, indeterminate, onToggleAll, selectionDisabled, selectAllLabel,
   count, countLabel, center, leading, trailing, children,

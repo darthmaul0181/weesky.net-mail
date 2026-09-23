@@ -8,13 +8,9 @@ interface Props {
   onClose: () => void
 }
 
-/**
- * The store's refusals arrive as prose rather than as codes, so they are matched here and
- * re-spelled from the catalogue — the way apiErrorMessage maps a stable code. A reason this does
- * not recognise prints as the generic: English server prose on a French screen is worse than a
- * line number and a plain sentence. Every key is written out, since one reaching `t()` as a
- * variable is invisible to `src/locales/keys.test.ts`.
- */
+/** The store's refusals arrive as prose, so they are matched and re-spelled from the catalogue; an
+ * unknown one prints as the generic, never as English on a French screen. Every key is written
+ * out: one reaching `t()` as a variable is invisible to `keys.test.ts`. */
 function reasonText(reason: string, t: TFunction<'contacts'>): string {
   if (reason === 'Neither a name nor a valid e-mail address') {
     return t('contactImport.noNameOrAddress', { ns: 'errors' })
@@ -43,10 +39,8 @@ function reasonText(reason: string, t: TFunction<'contacts'>): string {
   return t('contactImport.unknown', { ns: 'errors' })
 }
 
-/**
- * What the import did, line by line where it refused. The counters count rows, so they add up to
- * the file's data rows — a reader who is missing contacts can tell which bucket took them.
- */
+/** What the import did, line by line where it refused. The counters count rows, so they add up to
+ * the file's data rows. */
 export default function ImportReportModal({ report, onClose }: Props) {
   const { t } = useTranslation('contacts')
   const counters: [string, number, string][] = [

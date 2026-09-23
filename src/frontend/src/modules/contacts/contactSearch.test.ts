@@ -194,7 +194,7 @@ describe('suggestionsFor', () => {
     expect(rows[0]!.names).toEqual(['Alice Dupont', 'Compta Weesky'])
   })
 
-  // Task 14 builds `exclude` from what the user typed into the field, where case is free — an
+  // `exclude` is built from what the user typed into the field, where case is free — an
   // already-present token in another case must still keep its address out of the dropdown.
   it('excludes an address regardless of the case it is spelled in', () => {
     const emma = contact({ id: 'e2', firstName: 'Emma', addresses: ['emma@example.com'] })
@@ -388,8 +388,8 @@ describe('suggestionsFor — group rows', () => {
     expect(suggestionsFor([], 'zzz', { groups: [team] })).toEqual([])
   })
 
-  // The three group slots and the ten address slots are two budgets (decision 15): a matched
-  // group must never cost the field one of the addresses it would otherwise have offered.
+  // The three group slots and the ten address slots are two budgets: a matched group must never
+  // cost the field one of the addresses it would otherwise have offered.
   it('caps the groups at three without spending an address slot', () => {
     const groups: GroupOption[] = Array.from({ length: 4 }, (_, i) => ({
       id: `g${i}`, name: `Example ${i}`, memberCount: 1, addresses: [`g${i}@example.com`],

@@ -11,10 +11,7 @@ interface Props {
   onClose: () => void
 }
 
-/**
- * One dialog for the two gestures (decision 13): same field, same validation, two titles. `Modal`
- * owns the three ways out, and the form is what makes Enter submit.
- */
+/** One dialog for creating and renaming: same field, same validation, two titles. */
 export default function GroupNameModal({ title, initialName, saving, onSubmit, onClose }: Props) {
   const { t } = useTranslation('contacts')
   const [name, setName] = useState(initialName)

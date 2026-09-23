@@ -4,6 +4,7 @@ paths:
   - "src/frontend/src/modules/settings/general/**"
   - "src/frontend/src/layouts/AppShell.tsx"
   - "src/frontend/src/modules/mail/queries.ts"
+  - "src/frontend/src/modules/mail/folders.ts"
 ---
 
 # New-mail notifications
@@ -28,7 +29,7 @@ paths:
 
 **Enabling the sound plays it**, synchronously inside the click and before any `await` (`toggleSound`). Browsers block audio from a page nobody has interacted with — exactly the situation a notification fires into — so playing on enable both proves to the user it works and earns the origin the engagement Chrome and Edge track for future autoplay. A rejected `play()` is swallowed (`channels.ts`): a failed notification must not raise a second interruption announcing its own failure.
 
-**`refetchIntervalInBackground` (`queries.ts`, `useFolders`) is conditional on the settings, separately from `enabled`.** An unfocused tab that asked for nothing must keep costing nothing; a notification is only useful while the tab is elsewhere. Both it and the notification hook's own `enabled` read one exported predicate, `notifiesOf` (`hooks/usePreferences.ts`), rather than deriving `sound || desktop` twice. `enabled` gates whether the query runs at all, `refetchIntervalInBackground` gates whether it keeps polling once the tab loses focus — a user with sound or desktop on needs the second, everyone else needs neither.
+**`refetchIntervalInBackground` (`folders.ts`, `useFolders`) is conditional on the settings, separately from `enabled`.** An unfocused tab that asked for nothing must keep costing nothing; a notification is only useful while the tab is elsewhere. Both it and the notification hook's own `enabled` read one exported predicate, `notifiesOf` (`hooks/usePreferences.ts`), rather than deriving `sound || desktop` twice. `enabled` gates whether the query runs at all, `refetchIntervalInBackground` gates whether it keeps polling once the tab loses focus — a user with sound or desktop on needs the second, everyone else needs neither.
 
 **`settle()` (defined in `src/test-utils.ts`, used here) is load-bearing in every test that asserts silence, not decoration.** TanStack v5 notifies observers on a macrotask, so `await act(() => setQueryData(...))` returns before the hook has even re-rendered — a silence assertion made there holds against any hook whatsoever, including one that notifies on every tick. That shape of bug shipped once: five tests once asserted silence about a race they never actually created, and a hook rewritten to notify on every single poll tick still passed eleven of the twelve.
 

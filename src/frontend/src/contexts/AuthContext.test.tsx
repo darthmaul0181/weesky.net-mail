@@ -342,8 +342,8 @@ describe('AuthContext', () => {
     })
 
     // The metadata is genuinely unknown until the list lands, and claiming it is the primary's
-    // marks the primary row as the active one. Task 13 makes that row clickable, where the mark
-    // would move the user off their own mailbox on a click meant to change nothing.
+    // marks the primary row as the active one — a clickable row, where the mark would move the
+    // user off their own mailbox on a click meant to change nothing.
     it('leaves the active account unresolved while the list loads', async () => {
       localStorage.setItem('mail.activeAccount', 'acct-1')
       mocks.hasSession.mockReturnValue(true)

@@ -3,11 +3,8 @@ import { addDays, type PlainDate, utcOfLocalMidnight } from './plainDate'
 
 export type View = 'day' | 'week' | 'month' | 'list'
 
-/**
- * What one screenful asks the API for, and what it draws. The two are not the same range:
- * `from`/`to` are the ISO instants the request carries, `firstVisible`/`lastVisible` the days the
- * grid actually holds.
- */
+/** One screenful: `from`/`to` are the instants the request carries, `firstVisible`/`lastVisible`
+ * the days the grid holds (docs/architecture-calendar.md). */
 export interface Window {
   from: string
   to: string

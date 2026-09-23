@@ -12,14 +12,8 @@ export interface RowExit {
   depart: (uids: number[], fire: () => void) => void
 }
 
-/**
- * Holds a row on screen while it leaves, then fires the mutation that removes it.
- *
- * The order is forced rather than chosen: `useMoveMessages`' own `onMutate` drops the uid from the
- * list caches before the request goes out, so React unmounts the row in the same tick as the click
- * and there is no interval where it is still mounted and already leaving. Firing late is what
- * creates one. The mutation is optimistic, so the 300ms cost nothing anybody waits on.
- */
+// The mutation fires after the exit, not before: its `onMutate` drops the uid from the caches, which
+// unmounts the row in the same tick. Being optimistic, the 300ms delay costs nothing anybody waits on.
 export function useRowExit(): RowExit {
   const [departing, setDeparting] = useState<ReadonlySet<number>>(NONE)
   // The set is mirrored in a ref so `depart` can read it without depending on it: a new identity

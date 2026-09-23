@@ -1,7 +1,4 @@
-/**
- * The reducer the editor runs before anything leaves the browser (décision 8). Pure — no query, no
- * React, no i18n: it throws the translation key and lets the caller render it.
- */
+// The editor's photo reducer, pure: no query, React or i18n; it throws a translation key.
 
 /** `ContactValidator.MaxPhotoBytes`, mirrored: what the server accepts once decoded. */
 const MAX_BYTES = 512 * 1024

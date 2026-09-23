@@ -19,12 +19,8 @@ export interface ImportDialogProps {
   onClose: () => void
 }
 
-/**
- * One file, two destinations: an existing calendar, or a new one the same gesture creates. The
- * file's own header pre-fills the second — an export says what it is, and asking the user to
- * retype it is asking them to get it wrong. Nothing past that header is read here: an export
- * runs to tens of megabytes and this runs on the pick.
- */
+// One file, to an existing calendar or a new one its header pre-fills. Nothing past the header is
+// read: an export runs to tens of megabytes and this runs on the pick.
 /** All a header can occupy: `calendarHeaderOf` stops at the first component in any case. */
 const HEADER_BYTES = 65_536
 

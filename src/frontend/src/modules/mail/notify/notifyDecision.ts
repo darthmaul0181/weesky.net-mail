@@ -12,10 +12,7 @@ export interface NotifyDecision {
   sinceUid: number
 }
 
-/**
- * Whether this poll tick should notify, and about how many messages. uidNext alone decides:
- * a deletion or a read-flip made in another client moves the other counters, not this one.
- */
+// uidNext alone decides: a deletion or a read-flip in another client moves the other counters.
 export function notifyDecision(
   previousUidNext: number | null,
   nextUidNext: number | null,
@@ -34,21 +31,9 @@ export function newSince(messages: MailMessageSummary[], sinceUid: number): Mail
   return messages.filter(message => message.uid >= sinceUid)
 }
 
-/**
- * A message moved into the inbox is appended with a fresh uid, so uidNext advances exactly as it
- * does for real delivery — only the flags tell the two apart, and an already-read arrival is not
- * new mail. The flags are the direct witness and are used whenever the fetched page carried the
- * batch whole.
- *
- * It routinely does not. A filed message keeps its own `Date` while the page is sorted by it, so
- * a mail dragged in from another folder takes the highest uid in the folder and lands wherever
- * its date puts it — past the fetched window entirely once it is older than the page's last row.
- * `unreadDelta` is the witness left for that case: nothing the user has to read arrived, so
- * nothing rang. It is only ever consulted there, which is why it does not reopen the read-flip
- * race the flag test is written against — a real delivery is the newest message in the folder
- * and sits at the top of the page, never in this branch. A counter that cannot be compared
- * (null on either side) buys no silence: announcing beats swallowing real mail.
- */
+// A read message moved into the inbox advances uidNext like delivery; its flags tell them apart when
+// the page carried the batch whole, `unreadDelta` when it did not (a real delivery tops the page, so
+// never lands here). A counter that cannot be compared buys no silence: announcing beats swallowing.
 export function silentBatch(
   arrivals: MailMessageSummary[], count: number, unreadDelta: number | null,
 ): boolean {

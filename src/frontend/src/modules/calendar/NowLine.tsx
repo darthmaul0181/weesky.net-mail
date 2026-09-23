@@ -10,11 +10,8 @@ export interface NowLineProps {
 
 const TICK_MS = 60_000
 
-/**
- * The clock's own line across the grid — full strength over today's column, a shadow of itself
- * over the others, and absent from a week today is not in. The day is read off the tick rather
- * than off the layout, so at midnight the line moves to the next column on its own.
- */
+/** The clock's line: full over today's column, faint over the others, absent from another week.
+ * The day comes from the tick, not the layout, so at midnight it moves on its own. */
 export default function NowLine({ days }: NowLineProps) {
   const { t } = useTranslation('calendar')
   const { tz } = useCalendar()

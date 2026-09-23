@@ -3,11 +3,8 @@ import type { TFunction } from 'i18next'
 import type { EditScope } from './calendarTypes'
 import Modal from '../../components/Modal'
 
-/**
- * The whole question, in one sentence. It lives here rather than at the call site because the two
- * halves have to be chosen together: the question that names the series carries no preamble, and
- * the one that has no series to name carries its own — glueing the wrong pair said "repeats" twice.
- */
+/** The whole question in one sentence. Both halves are chosen here together: glueing the wrong
+ * preamble to the wrong question said "repeats" twice. */
 export function scopeSentence(
   mode: 'save' | 'delete', name: string, repeatText: string | null, t: TFunction<'calendar'>,
 ): string {
@@ -26,14 +23,9 @@ export interface ScopeModalProps {
   onClose: () => void
 }
 
-/**
- * How far an edit or a deletion reaches on a series. The three are always drawn — a scope the
- * change cannot take is greyed and says why, because a button that disappears reads as a
- * rendering fault rather than as a rule.
- *
- * An alertdialog: it interrupts to ask one question rather than offering a surface. All three ways
- * out mean no scope, never one picked by default (owner decision 2).
- */
+/** How far an edit or deletion reaches on a series. All three scopes are drawn; one the change
+ * cannot take is greyed with its reason. An alertdialog: every way out means no scope, never a
+ * default one. */
 export default function ScopeModal({
   title, sentence, allowed, onPick, onClose,
 }: ScopeModalProps) {

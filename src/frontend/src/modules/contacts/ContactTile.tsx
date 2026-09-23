@@ -7,11 +7,8 @@ import TrashIcon from '../../icons/TrashIcon'
 import { displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
 
-/**
- * Everything a tile asks the list to do, as one object built once and never rebuilt — a tile
- * holding a callback the list re-creates would redraw whenever anything did. Each takes the
- * contact it acts on, so nothing here closes over a tile.
- */
+/** Everything a tile asks the list to do, as one object built once: a callback the list re-creates
+ * would redraw every tile. Each takes the contact it acts on, so none closes over a tile. */
 export interface TileCallbacks {
   open: (id: string) => void
   /** The index the selection anchors on is a position in the list, so the list resolves it: the
@@ -34,11 +31,8 @@ export interface ContactTileProps {
   on: TileCallbacks
 }
 
-/**
- * One tile, on two lines. It reads its own catalogue rather than taking strings: four of its
- * labels interpolate this contact's own name, which a list computing them would pay for on every
- * render, and staying subscribed is what redraws it on a language switch.
- */
+/** One tile on two lines. It reads its own catalogue: four labels interpolate the contact's name,
+ * which the list would recompute every render, and the subscription redraws it on a language switch. */
 function ContactTile({ contact, checked, open, dragging, on }: ContactTileProps) {
   const { t } = useTranslation('contacts')
   const name = displayNameOf(contact)
@@ -123,9 +117,6 @@ function ContactTile({ contact, checked, open, dragging, on }: ContactTileProps)
   )
 }
 
-/**
- * The whole of this task's headline change. Every prop above is a primitive, this tile's own
- * contact, or the one callback object the list builds once, so the default shallow compare is what
- * makes one ticked checkbox — and one letter typed — redraw one tile instead of the whole book.
- */
+// Every prop is a primitive, this tile's contact or the list's one callback object, so the shallow
+// compare makes a ticked box or a typed letter redraw one tile, not the whole book.
 export default memo(ContactTile)

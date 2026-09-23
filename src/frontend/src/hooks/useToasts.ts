@@ -30,10 +30,8 @@ interface TimerEntry {
 
 export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([])
-  // A dismissal outlives nothing: a timer left running past the unmount fires into a page that is
-  // gone, and in a test into a torn-down jsdom, where React reaches for a window that no longer is.
-  // Each entry also carries what a pause needs to resume correctly: the time left when it was
-  // armed and when that arming started — an error toast, which never arms one, has no entry here.
+  // Cleared on unmount: a timer firing past it reaches a gone page (in a test, a torn-down jsdom).
+  // Each entry keeps the time left and when it was armed, for a pause; an error toast has none.
   const timers = useRef(new Map<number, TimerEntry>())
 
   const clearTimer = useCallback((id: number) => {

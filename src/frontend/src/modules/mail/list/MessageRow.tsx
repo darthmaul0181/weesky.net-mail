@@ -16,11 +16,8 @@ import TrashIcon from '../../../icons/TrashIcon'
 import { formatListDate } from './formatDate'
 import { useLongPress } from '../../../hooks/useLongPress'
 
-/**
- * The row's box: a component only so the long-press hook has somewhere to live, a hook not being
- * callable inside the `.map()` that draws the rows. A held press still ends in a click on every
- * touch browser, and `onClickCapture` eats that one before anything below it sees it.
- */
+// A component only so the long-press hook can live outside the rows' `.map()`. A held press still
+// ends in a click on touch browsers, which `onClickCapture` eats.
 function Row({ onLongPress, children, ...rest }:
   { onLongPress?: () => void; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
   const fired = useRef(false)
@@ -60,11 +57,8 @@ export function rowUidsOf(message: MailMessageSummary, members?: MailMessageSumm
   return members ? members.map(one => one.uid) : [message.uid]
 }
 
-/**
- * Everything a row asks the list to do, as one object built once and never rebuilt — a row
- * holding a callback the list re-creates would re-render whenever anything did. Each takes the
- * uids the row acts on, so nothing here closes over a row.
- */
+// Built once and never rebuilt, so a row never re-renders for a re-created callback; each takes the
+// uids it acts on, so nothing here closes over a row.
 export interface RowCallbacks {
   open: (message: MailMessageSummary) => void
   /** `was` is the box's state before the press, `whole` a conversation head answering for its
@@ -118,11 +112,8 @@ export interface MessageRowProps {
 
 const NO_ACTIONS: readonly RowAction[] = []
 
-/**
- * One row — a plain message, a collapsed thread head, or an unfolded member. It reads its own
- * catalogue rather than taking strings: half a dozen of its labels interpolate this row's own
- * sender, subject, date or count, which a list computing them would pay for on every render.
- */
+// A plain message, a collapsed thread head or an unfolded member. It reads its own catalogue: labels
+// interpolating its sender, subject, date or count would cost the list on every render.
 function MessageRow({
   message, members, groupKey, expanded, member, rowIndex, ariaRow, wide, drafts, crossFolder,
   today, showsPreview, rowActions, checked, open, leaving, dragging, archiveOff, archiveReason,
@@ -390,9 +381,6 @@ function MessageRow({
   )
 }
 
-/**
- * The whole of the lot's headline change. Every prop above is a primitive, a reference the list
- * memoises, or this row's own message, so the default shallow compare is what makes one ticked
- * checkbox redraw one row instead of every row in the folder.
- */
+// Every prop is a primitive, a reference the list memoises or this row's own message, so the shallow
+// compare lets one ticked checkbox redraw one row instead of the whole folder.
 export default memo(MessageRow)

@@ -23,11 +23,8 @@ export interface DayColumnProps {
 /** Under this a chip has no room for its own title, and a quarter-hour event would be a rule. */
 const MIN_CHIP_PX = 20
 
-/**
- * One day of the hour grid: the cells that draw its rules, then the blocks over them. The column
- * carries its own day on `data-day`, which is what the pointer handlers read to know where a
- * block was dropped without measuring anything.
- */
+/** One day of the hour grid: the cells drawing its rules, then the blocks. `data-day` is what the
+ * pointer handlers read to know where a block was dropped without measuring. */
 export default function DayColumn({
   day, isToday, entries, onOpen, onOpenEditor, selectedKey, hoverKey, onHover, gestures,
 }: DayColumnProps) {

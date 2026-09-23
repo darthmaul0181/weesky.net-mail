@@ -5,14 +5,12 @@ import type { Contact } from './contactTypes'
 import type { ContactGroup } from './contactGroupTypes'
 
 const DEFAULT_LIMIT = 10
-/** Three, against the addresses' ten: the two budgets are independent (decision 15), so a matched
-    group never costs the field an address it would otherwise have offered. */
+/** Three, against the addresses' ten: the two budgets are independent, so a matched group never
+    costs the field an address it would otherwise have offered. */
 const GROUP_LIMIT = 3
 
-/** Diacritics stripped and lower-cased. Nobody reaches for the é key to look somebody up, so a
-    query has to match an accented contact and the reverse. \p{M} (combining marks), not
-    \p{Diacritic} — the latter also covers ASCII '^' and '`', which would then vanish from plain
-    text (`folderFilter.ts`'s `normalizeQuery` uses the same class for the same reason). */
+/** Diacritics stripped, lower-cased, so an accented contact matches a plain query and back. \p{M},
+ * not \p{Diacritic}, which also strips ASCII '^' and '`' (as in `folderFilter.ts`). */
 export function fold(value: string): string {
   return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 }
@@ -55,17 +53,9 @@ export type ComposerSuggestion =
   | ({ kind: 'address' } & AddressSuggestion)
   | ({ kind: 'group' } & GroupOption)
 
-/**
- * The resolved primary address of every group's members, deduplicated on `canonicalAddress` — the
- * app's own address identity, distinct from `fold`'s search normalisation, which strips
- * diacritics and would collapse two distinct SMTPUTF8 mailboxes ('josé@x.com', 'jose@x.com') into
- * one, silently dropping a member who never receives the mail.
- *
- * Computed once by the caller and read by the field and the band alike, so "writing to this group
- * reaches nobody" is one answer rather than two that can disagree. `memberCount` counts the
- * membership, never what writing would reach: a group of three whose members carry no address is
- * still a group of three.
- */
+/** Every group's members' primary addresses, deduplicated on `canonicalAddress`, never `fold`,
+ * which would merge two SMTPUTF8 mailboxes ('josé@', 'jose@') and drop a member. `memberCount`
+ * counts membership, not reachable addresses (docs/architecture-contacts.md). */
 export function groupOptionsOf(groups: ContactGroup[], contacts: Contact[]): GroupOption[] {
   const byId = new Map(contacts.map(contact => [contact.id, contact]))
   return groups.map(group => {
@@ -92,19 +82,9 @@ export interface AddressSuggestion {
   names: string[]
 }
 
-/**
- * The composer's dropdown. Address rows are keyed on `canonicalAddress`, the app's own address
- * identity, since an address is what gets inserted: one address carried by several contacts — or
- * spelled in different case by two of them — is one row naming all of them, never several rows
- * producing the identical recipient. `fold` stays reserved for matching the query, never identity
- * — it would otherwise collapse two distinct SMTPUTF8 mailboxes that differ only by a diacritic.
- * The rendered `address` keeps its original spelling; only the key is canonicalised.
- *
- * Group rows come first and are capped before the merge, so the ten address places stay the ten
- * address places. A group whose every address is already a token is dropped — picking it could
- * only add nothing — while a group carrying no address at all is kept, because that is a state
- * the user has to be told about and the field's toast is where it is said.
- */
+/** The composer's dropdown. Address rows are keyed on `canonicalAddress` (never `fold`, which would
+ * merge SMTPUTF8 mailboxes) and keep their spelling. Groups come first, capped apart; a group whose
+ * addresses are all tokens is dropped, one with none kept (docs/architecture-contacts.md). */
 export function suggestionsFor(
   contacts: Contact[],
   query: string,

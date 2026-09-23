@@ -29,11 +29,8 @@ interface Props {
   returnFocusRef?: RefObject<HTMLElement | null>
 }
 
-/**
- * The admin dialog for the calendar invitation service account. The password field is required
- * exactly when the server would also require one (`SchedulingAccountController`): nothing stored,
- * an unreadable stored password, or host/port no longer matching what was saved.
- */
+/** The invitation service account's dialog. The password is required exactly when the server
+ * requires it: nothing stored, an unreadable stored one, or host/port changed since the save. */
 export default function SchedulingAccountDialog({ account, addToast, onSave, onClose, returnFocusRef }: Props) {
   const { t } = useTranslation('admin')
   const saveAccount = useSaveSchedulingAccount()

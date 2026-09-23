@@ -11,10 +11,8 @@ interface Props {
   onEmpty: () => void
 }
 
-// The copy describes the effect of the action, never the server's retention: some servers purge
-// the trash after N days on their own — we do not control that, so we never assert it.
-// The link is one key across both roles: the role name it interpolates carries the article the
-// French sentence needs, which is why it is not `roleLabel`'s capitalised title.
+// The copy describes the action, never the server's retention, which we do not control. The role
+// name it interpolates carries the article French needs, hence not `roleLabel`'s capitalised title.
 export default function EmptyFolderBanner({ role, total, busy = false, onEmpty }: Props) {
   const { t } = useTranslation('mail')
   if ((role !== 'trash' && role !== 'junk') || total <= 0) return null

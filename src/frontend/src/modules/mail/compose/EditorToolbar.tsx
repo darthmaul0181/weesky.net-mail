@@ -162,10 +162,8 @@ export default function EditorToolbar(
     </span>
   )
 
-  // `is-extra` is what the phone block folds away; the groups keep their own markup either way,
-  // because font, size, alignment and the two swatch grids are menus and popovers, and a menu
-  // cannot hold another. Hidden by the stylesheet rather than unmounted, so an open popover among
-  // them is not destroyed by a fold — and so the tab order needs no second source of truth.
+  // `is-extra` groups are folded by the phone stylesheet, never unmounted, so an open popover among
+  // them survives a fold and the tab order needs no second source of truth.
   return (
     <div className={`compose-toolbar${narrow && expanded ? ' is-expanded' : ''}`} ref={container}>
       {/* Stays when everything else folds away: it is the only way back to the editor. */}
@@ -230,10 +228,8 @@ export default function EditorToolbar(
         </span>
       </div>
       <div className="compose-tool-group is-extra">
-        {/* Icon only: spelling the value on the trigger made the bar a different width per font,
-            so it re-flowed under the user at the moment of choosing. The choice moved into the
-            menu, which is the one place it was ever read from — the bar cannot see the format at
-            the caret and only ever echoed the last pick. */}
+        {/* Icon only: spelling the value changed the bar's width per font and re-flowed it under the
+            pointer. The bar cannot see the format at the caret, so the choice lives in the menu. */}
         <DropdownMenu ariaLabel={t('toolbar.font')} align="left" className="compose-tool-select"
           trigger={<><FontIcon size={ICON} /><ChevronDownIcon size={CHEVRON} /></>}
           items={FONTS.map(name => ({

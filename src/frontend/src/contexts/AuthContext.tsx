@@ -33,7 +33,7 @@ interface AuthContextValue {
   isAdmin: boolean
   account: Account | null
   accountLoaded: boolean
-  /** What the platform wires up (Task 6). Null before it loads and for a backend that predates
+  /** What the platform wires up. Null before it loads and for a backend that predates
    *  the endpoint — every gate elsewhere reads a field `!== false` for exactly that reason. */
   capabilities: Capabilities | null
   identity: AccountIdentity | null
@@ -66,10 +66,8 @@ function mapRow(row: ConnectedAccount): ActiveAccount {
   }
 }
 
-// Contained here rather than inline in refreshAccount: an older backend that predates the route
-// (or a test that never mocked it) throws synchronously calling api.getCapabilities() at all — the
-// try/catch has to sit around that call, not around its result, or the throw escapes as an
-// unhandled rejection instead of resolving to "no capabilities".
+// An older backend (or an unmocked test) throws synchronously from api.getCapabilities(), so the
+// try/catch wraps the call itself, or the throw escapes as an unhandled rejection.
 async function fetchCapabilities(): Promise<Capabilities | null> {
   try {
     return (await api.getCapabilities()) ?? null
@@ -98,10 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   })
 
-  // Bumped on every isLoggedIn → false transition (below); refreshAccount captures it at the
-  // start and checks it before each late setState, so a slow answer from a session that has since
-  // ended cannot resurrect its account/isAdmin/capabilities into whatever session is current when
-  // it finally resolves.
+  // Bumped when a session ends; refreshAccount checks it before each late setState, so a slow
+  // answer from an ended session cannot resurrect its account, isAdmin or capabilities.
   const sessionGeneration = useRef(0)
 
   const refreshAccount = useCallback(async () => {
@@ -131,11 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null)
   }, [])
 
-  // What the effect below flushes on is a session *ending*, so it has to know whether one was
-  // running. Seeded from the session flag rather than from a "first run" boolean: the question is
-  // whether there was a session to end, not how many times the effect has run, and StrictMode's
-  // second mount pass would spend a first-run flag on the mount itself and then clear on a mount
-  // after all.
+  // Whether a session was running, for the flush below. Seeded from the session flag, not a
+  // "first run" boolean, which StrictMode's second mount pass would spend.
   const wasLoggedIn = useRef(isLoggedIn)
 
   useEffect(() => {
@@ -148,24 +141,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccount(null)
       setAccountLoaded(false)
       setCapabilities(null)
-      // The query keys are account-scoped in shape only — the id is the constant 'primary' until
-      // linked accounts ship — so folders, messages, contacts and preferences left in the cache
-      // are served to whoever signs in next. It runs here, not in logout(), so the 401 path is
-      // covered too.
-      //
-      // resetQueries, not clear(): clear() *removes* every query, and an observer whose query
-      // leaves the cache is never told — it keeps its last result and never sees another change.
-      // RequireAuth unmounts the authenticated readers before this effect runs, but the install
-      // manifest is mounted above the router and outlives every session, so clear() left it
-      // observing a detached query and blind to the settings for the rest of the tab. reset drops
-      // the data of every query while leaving them in the cache, and refetches the active ones
-      // only — the readers RequireAuth just unmounted are inactive, so nothing doomed is refetched.
-      // The mutation cache is emptied by hand, the one thing clear() did that reset does not.
-      //
-      // Only on the transition, never on a logged-out first mount: there is nothing cached to
-      // flush yet, and flushing indiscriminately destroyed the in-flight queries that siblings
-      // mounted above the router had already started — the app-settings read behind the install
-      // manifest among them, which left /login unable to offer installation at all.
+      // Flushed here, not in logout(), so a 401 is covered: account-scoped keys still hand one
+      // session's cache to the next. resetQueries, never clear(), which detaches the observers above
+      // the router (the install manifest). Only on a transition: a first-mount flush killed their reads.
       if (wasLoggedIn.current) {
         void queryClient.resetQueries()
         queryClient.getMutationCache().clear()
@@ -208,10 +186,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeAccount = accounts.find(a => a.id === activeAccountId)
     ?? (accountsLoading ? null : primaryAccount)
 
-  // Only once the list is in hand: run while the query is in flight and a reload on a connected
-  // account clears the stored id and flashes the primary mailbox before jumping back. Invalid
-  // credentials fall back too — the reload path would otherwise reach the broken mailbox that
-  // switchAccount refuses to open, and answer every folder and message request with a failure.
+  // Only once the list is in hand, or a reload on a connected account flashes the primary. Invalid
+  // credentials fall back too: the reload would reach a mailbox switchAccount refuses to open.
   useEffect(() => {
     if (!connectedRows || activeAccountId === PRIMARY_ACCOUNT_ID) return
     if (connectedRows.find(row => row.id === activeAccountId)?.credentialsValid) return

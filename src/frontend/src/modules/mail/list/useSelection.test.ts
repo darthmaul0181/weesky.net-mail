@@ -36,7 +36,7 @@ describe('useSelection', () => {
     expect(result.current.selected.size).toBe(0)
   })
 
-  // Les contacts sont des GUID : le hook ne peut plus être lié aux uids du mail.
+  // Contacts are GUIDs: the hook can no longer be tied to the mail's uids.
   it('holds string keys as readily as numeric ones', () => {
     const { result } = renderHook(() => useSelection<string>('all'))
 

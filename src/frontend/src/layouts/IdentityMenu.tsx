@@ -21,11 +21,8 @@ function labelOf(acc: ActiveAccount): string {
   return acc.displayName || acc.email
 }
 
-/**
- * The account block at the foot of the folder column and of the settings nav, where the topbar
- * avatar used to be. Its menu opens upward — the block sits at the bottom of the screen — and is
- * where the session's mailbox is chosen. Settings is not repeated here: the rail's gear owns it.
- */
+/** The account block at the foot of the folder column and the settings nav; its upward menu is
+ * where the session's mailbox is chosen. No Settings entry: the rail's gear owns it. */
 export default function IdentityMenu() {
   const { identity, accounts, activeAccount, switchAccount, logout } = useAuth()
   const { t } = useTranslation()
@@ -54,11 +51,8 @@ export default function IdentityMenu() {
     void navigate(LINKED_ACCOUNTS)
   }
 
-  // switchAccount refuses a target whose password no longer decrypts, so that row leads to the
-  // page where it is re-entered rather than pretending to be a switch.
-  //
-  // The guard is asked before anything changes: a switch is a state change, not a navigation, so
-  // the composer's router blocker cannot see it and an open draft would be left behind in silence.
+  // A row whose password no longer decrypts leads to its repair page. The leave guard is asked
+  // first: a switch is a state change the composer's router blocker cannot see.
   async function pickAccount(acc: ActiveAccount) {
     if (!acc.credentialsValid) return goToLinkedAccounts()
     setOpen(false)

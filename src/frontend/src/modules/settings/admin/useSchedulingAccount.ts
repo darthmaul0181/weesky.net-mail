@@ -4,11 +4,8 @@ import { withTimeout } from '../../../lib/withTimeout'
 
 export type SchedulingSecurity = 'None' | 'StartTls' | 'SslOnConnect'
 
-/**
- * The SMTP service account `ServiceMailQueue` sends calendar invitations with when a device
- * write has no user session (CalDAV, a phone or Thunderbird). Configured in Administration >
- * Application, `api/SchedulingAccount`. The password is write-only: the API never returns it.
- */
+/** The invitation service account (`api/SchedulingAccount`, Administration > Application). The
+ * password is write-only: the API never returns it. */
 export interface SchedulingAccount {
   configured: boolean
   host?: string

@@ -2,8 +2,8 @@ import type { TFunction } from 'i18next'
 import { canonicalAddress } from '../../lib/canonicalAddress'
 import type { AttendeeProjection, AttendeeWrite } from './calendarTypes'
 
-/** What a guest answered, in the organizer's calendar — where the answers actually arrive
-    (spec 5e, décision 12). Anything but the three answers is "no answer yet". */
+/** What a guest answered, in the organizer's calendar — where the answers actually arrive.
+    Anything but the three answers is "no answer yet". */
 export function guestAnswerOf(partStat: string | undefined, t: TFunction<'calendar'>): string {
   switch (partStat?.toUpperCase()) {
     case 'ACCEPTED': return t('guestAnswer.accepted', { ns: 'calendar' })

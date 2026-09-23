@@ -7,11 +7,8 @@ interface Props {
   onClose: () => void
 }
 
-/**
- * What the import did, entry by entry where it refused. Six buckets rather than four: a file
- * carries tasks and journals this calendar has no screen for, and a reader missing events needs
- * to see that they were set aside rather than lost.
- */
+/** What the import did, entry by entry where it refused. Six buckets, not four: tasks and journals
+ * this calendar cannot show must read as set aside, not lost. */
 export default function CalendarImportReportModal({ report, onClose }: Props) {
   const { t } = useTranslation('calendar')
   const counters: [string, number, string][] = [

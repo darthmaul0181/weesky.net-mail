@@ -80,8 +80,8 @@ describe('inputToBirthday', () => {
     expect(inputToBirthday('29/02')).toBe('--0229')
   })
 
-  /* Décision 7's escape hatch: the vCard admits forms neither this nor a picker can express, and
-     refusing them would make a card carrying one permanently unsaveable. */
+  /* The escape hatch: the vCard admits forms neither this nor a picker can express, and refusing
+     them would make a card carrying one permanently unsaveable. */
   it('passes through what it cannot read', () => {
     expect(inputToBirthday('printemps 1993')).toBe('printemps 1993')
     expect(inputToBirthday('1993-06-21')).toBe('1993-06-21')

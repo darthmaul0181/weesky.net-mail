@@ -26,11 +26,8 @@ function byName(a: MailFolderNode, b: MailFolderNode): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
 }
 
-/**
- * The two blocks the tree draws a rule between: folders holding a role in reading order, then
- * the rest by name. Not named `sortFolders` — `folderNodes.sortFolders` does the opposite, and
- * two orders answering two questions must not share a name.
- */
+// Role folders in reading order, then the rest by name. Not `sortFolders`: `folderNodes.sortFolders`
+// answers the opposite question, and two orders must not share a name.
 export function splitByRole(folders: MailFolderNode[]): {
   system: MailFolderNode[]
   others: MailFolderNode[]
@@ -51,22 +48,14 @@ export function sortChildren(folders: MailFolderNode[]): MailFolderNode[] {
   return [...folders].sort(byName)
 }
 
-/**
- * A folder holding a role is always shown, subscribed or not: it is one the user cannot hide
- * anyway — FolderManager greys its switch off and the API refuses the call — so filtering it
- * on subscription would contradict a rule the product already makes. Dovecot leaves INBOX
- * unsubscribed and Proximus subscribes nothing at all; on both, the flag says nothing about a
- * folder mail is filed into by role.
- */
+// A role folder is shown subscribed or not: the user cannot hide it anyway. Dovecot leaves INBOX
+// unsubscribed and Proximus subscribes nothing, so the flag says nothing about a role folder.
 export function isVisible(folder: MailFolderNode): boolean {
   return folder.subscribed || isSystemFolder(folder)
 }
 
-/**
- * An unread badge is a call to go and read something. That reading is worth prompting in a
- * folder you keep, and not in the two you do not: nobody is behind on their deleted mail, and
- * an unread count on junk advertises exactly what the filter was meant to spare you.
- */
+// No unread prompt for trash or junk: nobody is behind on deleted mail, and a junk count advertises
+// what the filter was meant to spare.
 export function showsUnreadCount(folder: MailFolderNode): boolean {
   return folder.specialUse !== 'trash' && folder.specialUse !== 'junk'
 }

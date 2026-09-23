@@ -1,16 +1,8 @@
 import i18next from 'i18next'
 
-/**
- * Turns a backend failure into something a French reader can read.
- *
- * The API answers in English and stays that way; what it does guarantee is a stable `code` on the
- * failures a client is expected to branch on. Those are translated here. Everything else falls back
- * to the caller's own local message — which every call site already spelled out, as the second
- * operand of the `err.message || '…'` this replaces. Server prose stops reaching the screen; it is
- * still on the error object for the console and the logs, where a symbol is what a developer wants.
- */
-// `as const` so the values are a literal union rather than `string`: the typed t() accepts them
-// straight, with no cast to smuggle an unchecked key past the compiler.
+// A backend failure in the reader's language: a stable `code` is translated, anything else falls
+// back to the caller's own message; server prose stays on the error for the logs. `as const` keeps
+// the values a literal union, so the typed t() takes them with no cast.
 const CODES = {
   credentials_unavailable: 'errors:credentialsUnavailable',
   account_not_found: 'errors:accountNotFound',

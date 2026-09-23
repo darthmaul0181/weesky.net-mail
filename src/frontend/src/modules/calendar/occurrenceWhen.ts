@@ -30,11 +30,8 @@ export function daysOf(o: Occurrence, tz: string): [PlainDate, PlainDate] | null
   return [start.day, end.minute === 0 ? addDays(end.day, -1) : end.day]
 }
 
-/**
- * What an occurrence says about when it happens, in its two parts: the day or the days it spans,
- * then its hours or that it takes the whole day. The bubble prints them with a dot between, a
- * chip's name with a comma — its own day being carried by position, which no reader can hear.
- */
+/** When an occurrence happens, in two parts: its days, then its hours or "all day". The bubble
+ * joins them with a dot, a chip's name with a comma, since no reader hears a chip's position. */
 export function whenPartsOf(
   o: Occurrence, { tz, lang, region, cycle }: WhenFormat, t: TFunction<'calendar'>,
 ): string[] {

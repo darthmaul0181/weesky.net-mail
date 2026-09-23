@@ -18,13 +18,8 @@ function readAsDataUri(blob: Blob): Promise<string> {
   })
 }
 
-/**
- * The parts the body displays itself: referenced by it, listed on the detail, and an image. A cid
- * pointing at anything else stays a broken image, the same rule the compose side applies.
- *
- * Exported because the attachment row withholds exactly these — a part shown in the body is not
- * one to offer again — and the two decisions must be one, or a file vanishes from both places.
- */
+// Referenced by the body, listed on the detail, and an image. Exported because the attachment row
+// withholds exactly these: two separate decisions could make a file vanish from both places.
 export function bodyInlineParts(
   attachments: MailAttachmentInfo[] | undefined, sanitizedHtml: string,
 ): { cid: string; part: string }[] {
@@ -37,14 +32,8 @@ export function bodyInlineParts(
   })
 }
 
-/**
- * data: URIs for the inline images a message body references, keyed by bare cid.
- * Fetches nothing when the body references no cid or the detail lists no matching image part.
- *
- * The reader's iframe is sandboxed without allow-same-origin, so its own requests are
- * cookieless and no authenticated URL can load in there. The SPA fetches the bytes over the
- * session it already holds and hands them to the iframe inlined.
- */
+// data: URIs keyed by bare cid, fetched over the SPA's own session: the sandboxed iframe is
+// cookieless, so no authenticated URL loads in there.
 export function useInlineImages(
   folder: string | null, uid: number | null,
   attachments: MailAttachmentInfo[] | undefined,
@@ -54,10 +43,8 @@ export function useInlineImages(
   const parts = useMemo(
     () => bodyInlineParts(attachments, sanitizedHtml), [attachments, sanitizedHtml])
 
-  // Account-scoped like every other key here, so a second linked mailbox cannot serve its own
-  // images for the same folder and uid. Message parts are immutable per folder+uid, so the pair
-  // is the whole identity of the answer — and refetching them on every window focus, as the app
-  // defaults to, is one IMAP part fetch per inline image per alt-tab.
+  // Account-scoped, so a second mailbox cannot serve its images for the same folder and uid. Parts are
+  // immutable per folder+uid: a focus refetch would be one IMAP part fetch per image per alt-tab.
   const { data } = useQuery({
     queryKey: ['mail', accountId, 'inline', folder ?? '', uid ?? 0],
     queryFn: async () => {

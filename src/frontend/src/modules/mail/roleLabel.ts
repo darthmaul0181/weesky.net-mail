@@ -1,11 +1,7 @@
 import type { TFunction } from 'i18next'
 
-/**
- * Display label for a well-known folder role — the seam the codebase reserved for this.
- *
- * It takes `t` rather than being a hook because two of its callers are not components. The keys
- * are a literal map rather than a template, so the typed `t()` still checks every one of them.
- */
+// Takes `t` rather than being a hook, since two callers are not components; a literal key map, so
+// the typed `t()` still checks every key.
 const KEYS = {
   inbox: 'folders.roles.inbox',
   sent: 'folders.roles.sent',

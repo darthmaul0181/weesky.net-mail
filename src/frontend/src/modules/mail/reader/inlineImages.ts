@@ -1,13 +1,6 @@
-/**
- * The reader's cid: side. The iframe is sandboxed without allow-same-origin, so its requests
- * carry no cookie and no authenticated URL can work in there: the SPA fetches the parts itself
- * and the body reaches the iframe with the bytes already inlined as data: URIs.
- *
- * Everything here goes through the DOM rather than a string replacement. An attribute value is
- * entity-escaped in the markup — a Content-ID holding an `&` is written `&amp;` — so a regex
- * over the html looks for an id the map is not keyed by, and writes one back the browser then
- * re-reads differently. The parser decodes and re-encodes for free.
- */
+// The iframe has no allow-same-origin, so it sends no cookie: cid parts are inlined as data: URIs.
+// Through the DOM, never a regex: attribute values are entity-escaped (`&amp;`), so a string match
+// would look up an id the map is not keyed by.
 
 const SCHEME = 'cid:'
 

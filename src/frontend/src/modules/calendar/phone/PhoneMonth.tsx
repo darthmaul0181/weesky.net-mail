@@ -16,11 +16,8 @@ export interface PhoneMonthProps {
 /** Three is what a 48px cell holds beside its number; a fourth is drawn outside it. */
 const MAX_DOTS = 3
 
-/**
- * The phone's month: a picker rather than a grid of events. A 360px screen gives a cell 48px,
- * which is a number and a hint of what the day holds — so the day's own events are listed under
- * it instead of crammed inside it.
- */
+/** The phone's month, a picker: a 48px cell holds a number and a hint, so the day's own events
+ * are listed under it rather than crammed in. */
 export default function PhoneMonth({ anchor, selected, dotsByDay, onPick }: PhoneMonthProps) {
   const { rules, lang, region, today } = useCalendar()
   const locale = dateLocaleOf(lang, region)

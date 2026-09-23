@@ -1,10 +1,5 @@
-/**
- * Plain text into element content: the five characters a browser would otherwise read as markup.
- *
- * The ampersand goes first, or every entity the later replacements produce is escaped a second
- * time and `<` comes out as `&amp;lt;`. One copy for the whole app: two escapers side by side is
- * how one of them quietly stops covering a character the other does.
- */
+/** Plain text into element content. The ampersand goes first, or the later entities are escaped
+ * twice (`&amp;lt;`). One copy app-wide, so no escaper quietly misses a character. */
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')

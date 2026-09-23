@@ -14,19 +14,12 @@ import { useImportContacts } from './queries'
 interface Props {
   contacts: Contact[] | undefined
   onError: (message: string) => void
-  /**
-   * The trigger's skin, which is the caller's because the placement is: a 40px `.btn` beside Add
-   * contact on a desktop, a `.selection-btn` in the list band once the scope column is a drawer.
-   */
+  /** The caller's, as the placement is: a 40px `.btn` on a desktop, a `.selection-btn` in a drawer. */
   triggerClassName: string
 }
 
-/**
- * Import and export, behind one trigger. They are the rarest actions in the module and used to be
- * two filled buttons across the foot of the scope column — the heaviest thing in it after the
- * primary action, and a shape no other column here wears. The mail folder column's own top row is
- * the precedent: a primary action and one square beside it.
- */
+/** Import and export, the module's rarest actions, behind one trigger beside the primary action,
+ * as the mail folder column's top row does. */
 export default function ContactsTransfer({ contacts, onError, triggerClassName }: Props) {
   const { t } = useTranslation('contacts')
   const input = useRef<HTMLInputElement>(null)

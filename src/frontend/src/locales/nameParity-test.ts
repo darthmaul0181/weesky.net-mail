@@ -8,12 +8,8 @@ function leaf(bundle: unknown, path: string): unknown {
   )
 }
 
-/**
- * The two guards a palette named through a map needs. A key resolved by hex is invisible to
- * `keys.test.ts` and to `tsc` alike, so each palette calls this from its own test file and fails
- * there: a colour added with no name of its own, or a name given to two colours — two controls a
- * reader cannot tell apart.
- */
+/** A palette named through a map is invisible to `keys.test.ts` and `tsc`, so each palette's test
+ * calls this: it fails on a colour with no name, or one name for two colours. */
 export function namesInBothLanguages<T extends string>(
   colours: readonly T[], keyOf: (colour: T) => string, bundle: Extract<keyof typeof en, keyof typeof fr>,
 ): void {

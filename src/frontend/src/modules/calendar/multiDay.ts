@@ -13,8 +13,8 @@ export type Placement =
   | { kind: 'band'; from: PlainDate; to: PlainDate }
   | { kind: 'slices'; slices: Slice[] }
 
-/** A dated event lasting a whole day or more goes in the all-day band rather than the hour grid
-    (décision 3): a column filled end to end says nothing about when the event is, and two of them
+/** A dated event lasting a whole day or more goes in the all-day band rather than the hour grid:
+    a column filled end to end says nothing about when the event is, and two of them
     read as two events. An evening running from 22:00 to 02:00 is four hours, and stays sliced. */
 const BAND_MIN_MINUTES = 24 * 60
 
@@ -35,10 +35,8 @@ export function wallClockOf(o: Occurrence, tz: string): [WallClock, WallClock] {
   })) as [WallClock, WallClock]
 }
 
-/** How long an occurrence runs, in minutes of the wall clock of `tz` — which is what the grid
-    draws it as, and therefore what a resize is counted against. The zone is a parameter because a
-    write knows the event's own (`detail.fields.timeZone`) where a pointer only has the
-    occurrence's: one formula, the zone stated at each call. */
+/** How long an occurrence runs in wall-clock minutes of `tz`: what the grid draws and a resize
+ * counts against. A parameter, since a write knows the event's zone and a pointer the occurrence's. */
 export function durationMinutesOf(o: Occurrence, tz: string = o.timeZone ?? 'UTC'): number {
   const [start, end] = wallClockOf(o, tz)
   return daysBetween(start.day, end.day) * MINUTES_PER_DAY + end.minute - start.minute

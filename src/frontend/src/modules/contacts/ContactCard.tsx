@@ -39,25 +39,14 @@ interface Props {
   groups?: { id: string; name: string }[]
   /** Drops this contact from one group. Absent when there is nowhere to drop it from. */
   onRemoveFromGroup?: (groupId: string) => void
-  /** The phone's foot-of-screen shape: named cells in a band instead of a header cluster. Set by
-      the layout, which is the only thing that knows the tier — never a `useViewport` of the card's
-      own, for the reason `MessageReader.bottomActions` is a prop too.
-
-      Two things now hang off it, because it is the tier signal and not only a bar switch: the
-      action bar, and the Directions link, which `geo:` makes phone-only. Deriving the tier a
-      second time inside the card is exactly what the note above forbids. */
+  /** The phone's shape: a band of named cells, and the Directions link (`geo:` is phone-only). Set
+   * by the layout, the only thing that knows the tier; never a `useViewport` of the card's own. */
   bottomActions?: boolean
 }
 
-/**
- * The contact in reading mode — the column the mail module gives its reader. Editing happens on
- * its own route, in a full-width editor, so this stays a viewer.
- *
- * The shape is a banner, then who this is, then what can be done, then the data — in that order,
- * because a fiche is read to answer "who" before "how do I reach them". Every row renders only
- * when its datum exists: an empty labelled row reads as data that went missing rather than data
- * that was never entered.
- */
+/** The contact in reading mode; editing has its own route. A banner, who this is, the actions,
+ * then the data. A row renders only when its datum exists: an empty labelled row reads as data
+ * that went missing. */
 export default function ContactCard({
   contact, onBack, onEdit, onDelete, onToggleFavorite, onWrite, groups, onRemoveFromGroup,
   bottomActions = false,
@@ -163,17 +152,9 @@ export default function ContactCard({
     </div>
   )
 
-  /* Write opens this webmail's own composer rather than handing a mailto: to whatever the
-     operating system has registered — which on a machine with no mail client does nothing at all,
-     and on one with a client opens the wrong application to write from. Call stays a `tel:` link:
-     there is nothing here to place a call with. Neither is drawn when the contact holds nothing
-     to aim it at.
-
-     Directions is the same idea and the same reason it is phone-only: `geo:` hands the address to
-     whatever maps application the device already has, so nothing about this contact reaches a
-     third party — but no desktop browser registers a handler for the scheme, where the button
-     would be drawn, clicked, and do nothing at all with no way to say why. The first postal
-     address, as Call takes the first phone. */
+  // Write opens this webmail's composer, not the OS's mailto: handler (none, or the wrong app); Call
+  // stays `tel:`. Directions hands `geo:` to the device's maps app, so nothing reaches a third party,
+  // and is phone-only: no desktop browser handles it. Each is drawn only when it has a target.
   const primaryAddress = addresses[0]?.address
   const firstPhone = phones[0]?.number
   const geoHref = bottomActions ? geoLink(postals[0]) : null
@@ -324,10 +305,8 @@ function Row({ icon, label, value }: { icon: ReactNode; label: string; value: st
   )
 }
 
-/** RFC 5870's `geo:` with the de-facto `?q=` an address search rides on, or null when there is
-    nothing worth opening a map on. The gate is a street or a locality: a card carrying only a
-    country would open the map on a whole nation, and a control that disappoints once stops being
-    used. `0,0` is the required coordinate placeholder — the query is what actually resolves. */
+/** RFC 5870 `geo:` with the de-facto `?q=` search, or null without a street or a locality (a
+ * country alone opens a whole nation). `0,0` is the required placeholder; the query resolves. */
 function geoLink(postal: ContactDetailPostal | undefined): string | null {
   if (!postal) return null
   if (!postal.street?.trim() && !postal.locality?.trim()) return null

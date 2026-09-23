@@ -4,14 +4,8 @@ export type PageItem = number | 'gap'
 /** Beyond this many pages the strip is elided; below it, every page fits without gaps. */
 const ALWAYS_SHOWN = 7
 
-/**
- * The pages a numbered pager should offer, zero-indexed.
- *
- * The first and last are always reachable — they are the two destinations a user asks for by
- * name ("back to the top", "the oldest") — plus a window around wherever they are now, so
- * stepping is one click. Everything else collapses into gaps, because a folder with forty
- * pages cannot show forty buttons in a 380px column.
- */
+// Zero-indexed. The first and last pages are always offered, plus a window around the current one;
+// the rest collapse into gaps, since forty buttons cannot fit a 380px column.
 export function buildPageList(current: number, lastPage: number): PageItem[] {
   if (lastPage < 0) return []
   if (lastPage < ALWAYS_SHOWN) {

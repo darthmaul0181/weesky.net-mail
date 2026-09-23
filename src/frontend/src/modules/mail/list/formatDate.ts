@@ -1,15 +1,8 @@
 import { activeLocale, dateFormat, localDay } from '../../../lib/intl'
 
-/**
- * A list row has one line for the date, so precision shrinks as the message ages: a time
- * today, a day and month this year, a year beyond that.
- *
- * `today` is the local calendar day this one is measured against, and it is required: a clock read
- * in here is an input no prop carries, and a memoised row drawn against it goes stale overnight.
- *
- * `locale` defaults to the active one rather than to the browser's: an account whose browser is
- * English and whose choice is French must not read a French interface printing English months.
- */
+// Precision shrinks with age: a time today, day and month this year, a year beyond. `today` is
+// required, since a clock read in here would leave a memoised row stale overnight; `locale` defaults
+// to the active one, never the browser's.
 export function formatListDate(
   iso: string, today: string, locale: string = activeLocale(),
 ): string {

@@ -28,11 +28,8 @@ export interface CalendarSidebarProps {
   onToggleVisible: (calendar: Calendar, visible: boolean) => void
 }
 
-/**
- * The module's navigation column: the primary action, the month picker, then one row per
- * calendar. It runs no query of its own — the layout owns every one of them and hands the list
- * down, which is what lets this mount in a test with neither a router nor a query client.
- */
+/** The navigation column: the primary action, the month picker, one row per calendar. No query of
+ * its own, so it mounts in a test with neither a router nor a query client. */
 export default function CalendarSidebar({
   calendars, anchor, today, rules, locale, loading, failed, onPickDay, onNewEvent, onNewCalendar,
   onRename, onRecolour, onImport, onExport, onDelete, onToggleVisible,

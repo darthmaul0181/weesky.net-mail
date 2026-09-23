@@ -8,11 +8,7 @@ interface Props {
   onSelect: (page: number) => void
 }
 
-/**
- * Numbered pager. Page numbers are one-based on screen and zero-based in the props, because
- * that is the split the rest of the module already lives with: the API pages from zero, and
- * nobody reading a mailbox thinks of the first page as page 0.
- */
+// One-based on screen, zero-based in the props: the API pages from zero, readers count from one.
 export default function Pagination({ page, lastPage, onSelect }: Props) {
   const { t } = useTranslation('mail')
   if (lastPage < 1) return null

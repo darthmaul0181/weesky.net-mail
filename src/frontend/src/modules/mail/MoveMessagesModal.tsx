@@ -16,14 +16,8 @@ interface Props {
   onClose: () => void
 }
 
-/**
- * The picker behind "Move to…" and "Copy to…". Unusable rows stay listed and disabled: a list
- * where an expected folder is simply missing reads as a bug rather than as a rule.
- *
- * Shaped as the site's list filter (website-design.md, search shape 1): the .search-input sits in
- * the .admin-list-header carrying the matching/total count, the way Administration and the
- * contacts list do it. The dialog root is the form, so Enter commits.
- */
+// Unusable rows stay listed and disabled: a folder missing from the list reads as a bug, not a rule.
+// Shaped as the site's list filter (search shape 1); the dialog root is the form, so Enter commits.
 export default function MoveMessagesModal(
   { mode, folders, currentFolderPath, onPick, onClose }: Props) {
   const { t } = useTranslation('mail')

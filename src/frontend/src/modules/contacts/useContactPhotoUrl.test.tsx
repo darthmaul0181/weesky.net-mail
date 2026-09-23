@@ -8,7 +8,7 @@ import { useContactPhotoUrl } from './useContactPhotoUrl'
 vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'acc' }))
 
 beforeEach(() => {
-  // jsdom n'implémente pas l'API des URL objet.
+  // jsdom does not implement the object URL API.
   URL.createObjectURL = vi.fn(() => 'blob:photo')
   URL.revokeObjectURL = vi.fn()
 })
@@ -32,8 +32,8 @@ describe('useContactPhotoUrl', () => {
     expect(result.current).toBe('blob:photo')
   })
 
-  // Le retrait et le remplacement sont le même fait : la carte a changé, donc la clé aussi, donc
-  // il n'y a rien de périmé à servir (décision 10).
+  // Removal and replacement are the same fact: the card changed, so the key did too, so there is
+  // nothing stale left to serve.
   it('does not serve it under the next card hash', () => {
     const wrapper = withCache(c =>
       c.setQueryData(contactKeys.photo('acc', 'c1', 'h1'), new Blob(['x'])))

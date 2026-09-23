@@ -1,9 +1,5 @@
-/**
- * The uid to open once `uid`'s row departs. `departing` is the whole batch a bulk action removed
- * (the open uid alone for a single-row action): the survivor is the first loaded uid after the
- * open row that is not in the batch, else the nearest one before it, else null. Skipping only the
- * open uid would land the reader on a sibling the same action just dropped from the cache.
- */
+// The first loaded uid after the open row outside `departing`, else the nearest before, else null.
+// Skipping only the open uid would land the reader on a sibling the same batch just dropped.
 export function nextUidOf(uids: number[], uid: number, departing: number[] = [uid]): number | null {
   const index = uids.indexOf(uid)
   if (index === -1) return null

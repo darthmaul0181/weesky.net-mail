@@ -40,11 +40,8 @@ export interface ContactDetailPostal extends Omit<ContactDetailEmail, 'address'>
   country?: string
 }
 
-/** The whole card, which `GET /api/Contacts` does not carry: the list holds what a tile needs,
-    and dragging every contact's phones and notes through it would pay for the book to show a
-    column. Fetched per contact, by the card alone. The API serialises with `WhenWritingNull`, so
-    an absent value is omitted from the JSON rather than sent as `null` — every optional field is
-    therefore `?:`, never `| null`. */
+/** The whole card, fetched per contact by the card alone (the list carries what a tile needs). The
+ * API omits null fields, so optional fields are `?:`, never `| null`. */
 export interface ContactDetail {
   id: string
   firstName?: string

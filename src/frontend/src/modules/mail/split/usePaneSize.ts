@@ -1,9 +1,6 @@
 import { useCallback, useState } from 'react'
 
-/**
- * A pane size persisted per device — a 4K screen and a laptop have different ideal splits,
- * which is why this is localStorage and not a backend preference.
- */
+// Per device, in localStorage: a 4K screen and a laptop want different splits.
 export function usePaneSize(
   storageKey: string, defaultSize: number, min: number,
 ): [number, (next: number) => void] {

@@ -1,10 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
-/**
- * The house busy state: a centred spinner, never a bare "Loading…". One component so the
- * screens using it cannot drift, and so the announcement the text used to carry survives —
- * a spinner has no accessible name of its own.
- */
+/** The house busy state: a centred spinner, never a bare "Loading…". Its status role keeps the
+ * announcement the text used to make, since a spinner has no accessible name. */
 export default function LoadingBlock() {
   const { t } = useTranslation()
   return (

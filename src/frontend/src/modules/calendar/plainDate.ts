@@ -1,8 +1,5 @@
-/**
- * A day the way a calendar means it: `'2026-09-14'`, with no hour and no zone. Nothing here ever
- * builds a `Date` from local components — that reads the machine's own zone, and a Brussels
- * laptop would then answer what a CI runner in UTC does not.
- */
+/** A calendar day, `'2026-09-14'`: no hour, no zone. Never build a `Date` from local components:
+ * it reads the machine's zone, so a Brussels laptop and a UTC runner would disagree. */
 export type PlainDate = string
 
 export const DAY_MS = 86_400_000
@@ -61,7 +58,7 @@ export interface PlainDateParts { year: number; month: number; date: number }
 
 /** A PlainDate's year/month(1-12)/date, each NaN when the string is malformed rather than
     thrown — a stale or hand-edited value then propagates as an Invalid Date instead of
-    crashing. Shared by `utcMsOf` below and by `CalendarLayout`'s `addMonths`. */
+    crashing. Shared by `utcMsOf` below and by `useCalendarUrlState`'s `addMonths`. */
 export function splitPlainDate(value: PlainDate): PlainDateParts {
   const [year, month, date] = value.split('-').map(Number)
   return { year: year ?? NaN, month: month ?? NaN, date: date ?? NaN }
@@ -97,10 +94,9 @@ function offsetMsAt(instant: Date, tz: string): number {
   return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - instant.getTime()
 }
 
-/** The instant a wall clock reads in a zone. Iterated because an offset is only knowable at an
-    instant: the first pass guesses, the second corrects it on the days a transition moves it —
-    which is also why the minutes go in here rather than being added to midnight afterwards. The
-    day the clocks go back is 25 hours long, so midnight plus three hours is 02:00, not 03:00. */
+/** The instant a wall clock reads in a zone, iterated: an offset is only knowable at an instant.
+ * The minutes go in here, never added to midnight after: the day the clocks go back is 25 hours
+ * long, so midnight plus three hours is 02:00. */
 export function utcOfLocalTime(day: PlainDate, minute: number, tz: string): Date {
   const wanted = utcMsOf(day) + minute * 60_000
   let instant = wanted - offsetMsAt(new Date(wanted), tz)

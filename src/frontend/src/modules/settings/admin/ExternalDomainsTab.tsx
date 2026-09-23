@@ -19,11 +19,8 @@ interface Props {
   returnFocusRef?: RefObject<HTMLElement | null>
 }
 
-/**
- * The admin-curated external mail providers users may attach a connected account from — the
- * only source of external endpoints in the product. The mockups show name-only tiles: every
- * configuration detail lives in the dialog, not on the tile.
- */
+/** The admin-curated external providers a connected account may be attached from, the product's
+ * only source of external endpoints. Name-only tiles: every detail lives in the dialog. */
 export default function ExternalDomainsTab({ addToast, returnFocusRef }: Props) {
   const { t } = useTranslation('admin')
   const domainsQuery = useExternalDomains()

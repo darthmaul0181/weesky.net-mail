@@ -1,8 +1,5 @@
-/**
- * The client half of the folding rule, mirroring `IdentityResolver.Canonical` on the backend.
- * The table collates in binary, so the two sides must fold identically or an approved sender
- * quietly stops matching the message it was approved from.
- */
+/** The client half of the folding rule, mirroring the backend's `IdentityResolver.Canonical`: the
+ * table collates in binary, so both sides must fold alike or an approved sender stops matching. */
 export function canonicalAddress(address: string | null | undefined): string {
   return (address ?? '').trim().toLowerCase()
 }

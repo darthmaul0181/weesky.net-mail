@@ -10,7 +10,7 @@ import SearchIcon from '../../icons/SearchIcon'
 import TrashIcon from '../../icons/TrashIcon'
 import { useForwarders } from '../../hooks/useForwarders'
 import { useGridNav } from '../../hooks/useGridNav'
-import { buildDragPill, LIST_GLYPH } from '../mail/list/dragImage'
+import { buildDragPill, LIST_GLYPH, setDragPill } from '../mail/list/dragImage'
 import { useSelection } from '../mail/list/useSelection'
 import ContactTile from './ContactTile'
 import type { TileCallbacks } from './ContactTile'
@@ -18,11 +18,8 @@ import { filterContacts } from './contactSearch'
 import { CONTACT_DRAG_MIME, dragIds, serializeContactDrag } from './dragContacts'
 import type { Contact } from './contactTypes'
 
-/**
- * The tiles' container. It is a component of its own because `useGridNav`'s effect is keyed on the
- * ref alone: a grid that is absent when its owner first lays out never gets the hook at all, and
- * this element comes and goes with the rows — an empty book or an unmatched filter draws none.
- */
+/** Its own component because `useGridNav` keys its effect on the ref alone, and this element
+ * comes and goes with the rows (an empty book or an unmatched filter draws none). */
 function ContactGrid({ label, selecting, children }: {
   label: string
   selecting: boolean
@@ -62,22 +59,15 @@ interface Props {
       free of the action when there is no group to leave. Acts without a dialog: membership is what
       a drop restores, never a loss the way deleting the contact itself is. */
   onRemoveFromGroup?: (ids: string[]) => void
-  /** What the parent drags. Reported in screen order, never in click order. */
-  onSelectionChange?: (ids: string[]) => void
   /** The list column, where focus goes when a confirmed delete disables the band's own button. */
   regionRef?: RefObject<HTMLElement | null>
 }
 
-/**
- * The tiles, between a pinned heading band and nothing else — there is no pager: the whole book
- * is one cached list, so there is no page to go to.
- *
- * One tile skin, on two lines. The mail list carries two because three pane arrangements exist
- * there; here the list always sits beside the card, so a wide skin would be unreachable code.
- */
+/** The tiles under a pinned heading band, with no pager: the whole book is one cached list. One
+ * two-line skin, since the list always sits beside the card. */
 export default function ContactList({
   contacts, selectedId, scope, leading, actions,
-  onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, onRemoveFromGroup, onSelectionChange,
+  onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, onRemoveFromGroup,
   regionRef,
 }: Props) {
   const { t } = useTranslation('contacts')
@@ -113,22 +103,9 @@ export default function ContactList({
     const ids = dragIds(selectedIds, id)
     event.dataTransfer.setData(CONTACT_DRAG_MIME, serializeContactDrag({ ids }))
     event.dataTransfer.effectAllowed = 'copy'
-    const pill = buildDragPill(ids.length, t('list.dragLabel'), LIST_GLYPH)
-    pill.style.position = 'absolute'
-    pill.style.top = '-9999px'
-    document.body.appendChild(pill)
-    event.dataTransfer.setDragImage(pill, 12, 12)
-    setTimeout(() => pill.remove(), 0)
+    setDragPill(event.dataTransfer, buildDragPill(ids.length, t('list.dragLabel'), LIST_GLYPH))
     setDraggingIds(new Set(ids))
   }
-
-  // Joined rather than compared as an array: the identity changes on every render, so the effect
-  // would fire on every one of them and the parent would re-render in a loop.
-  const selectionKey = selectedIds.join(',')
-  useEffect(() => {
-    onSelectionChange?.(selectionKey === '' ? [] : selectionKey.split(','))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectionKey])
 
   // What a tile calls, as one object built once and never rebuilt: a tile handed a callback this
   // render created would redraw whenever anything did.
@@ -180,10 +157,8 @@ export default function ContactList({
           disabled={count === 0} onClick={() => setConfirming(true)}>
           <TrashIcon size={20} />
         </button>
-        {/* Only while the count holds the band: at rest the field is already there, and two doors
-            onto the same thing read as a fault. Searching drops the selection because the field is
-            what comes back — the mail's loupe stays lit through a selection for the same reason,
-            that the search must never become unreachable. */}
+        {/* Only while the count holds the band: at rest the field is already there. Searching drops
+            the selection because the field comes back, so the search is never unreachable. */}
         {count > 0 && (
           <button type="button" className="selection-btn"
             aria-label={t('list.searchLabel')} title={t('list.searchLabel')}

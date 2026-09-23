@@ -74,10 +74,8 @@ function ReenterPasswordDialog({ email, pending, error, onSubmit, onClose }: {
   )
 }
 
-/**
- * The mailboxes attached to this session. Every mutation invalidates the list under the key
- * AuthContext reads, so the account switcher follows without being told.
- */
+/** The mailboxes attached to this session. Every mutation invalidates the key AuthContext reads,
+ * so the account switcher follows on its own. */
 export default function ConnectedAccountsPage() {
   const { activeAccountId } = useAuth()
   const { t } = useTranslation('settings')
@@ -208,10 +206,8 @@ export default function ConnectedAccountsPage() {
                   )}
                 </span>
                 <div className="admin-list-item-actions">
-                  {/* Offered on every OAuth row, not only an invalid one: `credentialsValid` says
-                      the cipher still opens, never that the provider still honours the token, so a
-                      revoked consent leaves the row looking healthy while the mailbox refuses.
-                      Re-consenting is idempotent and keeps the row's id, identities and roles. */}
+                  {/* On every OAuth row: `credentialsValid` says the cipher opens, never that the provider
+                      still honours the token, so a revoked consent looks healthy here while the mailbox refuses. */}
                   {account.authMode === 'OAuth2'
                     ? (
                       <button type="button" className="btn btn-ghost" title={t('accounts.signInAgain')}

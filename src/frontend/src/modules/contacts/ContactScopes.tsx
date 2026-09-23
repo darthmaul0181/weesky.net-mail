@@ -86,22 +86,9 @@ function ScopeRow({
   )
 }
 
-/**
- * The module's navigation band, on the same surface as the mail folder tree and the settings
- * context pane. It marks its active row with a fill and heavier weight and **no accent bar**: the
- * bar belongs to content lists, and keeping the two languages apart is how a reader tells a
- * navigation pane from a list of rows at a glance.
- *
- * Two fixed scopes, then the groups, with CardDAV address books the next thing to land here — the
- * reason the module has a band at all rather than starting flush against the rail. The column ends
- * on these rows: import and export are one trigger up beside Add contact, not a footer under them.
- *
- * A row is also a drop target, under `canDropIntoScope`: All contacts is the complete view rather
- * than a group, so it never lights up — the refusal the mail's source folder makes.
- *
- * The « + » sits on the Groups heading rather than in `.column-actions` (decision 13): that row is
- * measured to the pixel for a French label, and a third 40px square there would re-open it.
- */
+/** The module's navigation band: active row by fill and weight, never an accent bar (that is a
+ * content list's). A row is a drop target unless it is All contacts. The group « + » sits on its
+ * heading: `.column-actions` is measured to the pixel for a French label. */
 export default function ContactScopes({
   scope, total, favorites, groups, onScope, onCreateGroup, onRenameGroup, onDeleteGroup,
   onWriteToGroup, groupHasAddresses, groupsError, onDropContacts,

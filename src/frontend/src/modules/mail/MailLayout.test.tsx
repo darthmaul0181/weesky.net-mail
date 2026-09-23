@@ -980,7 +980,7 @@ describe('searching from the layout', () => {
     fireEvent.click(within(modal).getByRole('button', { name: 'Search' }))
   }
 
-  // 1) Loupe → « x » → Entrée : la recherche part avec le dossier ouvert et ses résultats s'affichent.
+  // 1) Loupe → "x" → Enter: the search runs scoped to the open folder and its results show.
   it('runs a quick search scoped to the open folder and shows its results', async () => {
     searchYields([result({ subject: 'found' })])
     renderAt('/mail?folder=INBOX')
@@ -996,7 +996,8 @@ describe('searching from the layout', () => {
       { folderPath: 'INBOX', allFolders: false, quick: 'x' }, 0, 30, expect.anything())
   })
 
-  // 2) Résultat d'un autre dossier ouvert : le lecteur lit dans 'Archives', l'URL garde folder=INBOX.
+  // 2) A result from another folder is opened: the reader reads from 'Archives', the URL keeps
+  //    folder=INBOX.
   it('opens a cross-folder result in its own folder, keeping folder=INBOX in the URL', async () => {
     searchYields([result({ folderPath: 'Archives', subject: 'elsewhere' })])
     readerYields(20, 'Archives')
@@ -1011,7 +1012,7 @@ describe('searching from the layout', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('uid=20')
   })
 
-  // 3) Clear avec un résultat d'un autre dossier ouvert : le lecteur se ferme, retour au dossier.
+  // 3) Clear with a result from another folder open: the reader closes, back to the folder.
   it('closes the reader and returns to the folder when a cross-folder result is cleared', async () => {
     searchYields([result({ folderPath: 'Archives', subject: 'elsewhere' })])
     readerYields(20, 'Archives')
@@ -1072,8 +1073,8 @@ describe('searching from the layout', () => {
     await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('uid=20'))
   })
 
-  // 4) Changer de dossier dans l'arbre pendant une recherche : la liste redevient le dossier,
-  //    la recherche n'est pas rappelée et sa bannière disparaît.
+  // 4) Changing folder in the tree during a search: the list goes back to the folder, the search
+  //    is not recalled and its banner disappears.
   it('drops the search when the folder changes in the tree', async () => {
     searchYields([result({ subject: 'found' })])
     renderAt('/mail?folder=INBOX')

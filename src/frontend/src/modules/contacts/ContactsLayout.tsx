@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router'
-import { ApiError } from '../../api.js'
 import { newMessageSeed } from '../mail/compose/composeSeed'
 import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import FloatingAction from '../../components/FloatingAction'
-import Modal from '../../components/Modal'
 import Toasts from '../../components/Toasts'
 import { useToasts } from '../../hooks/useToasts'
 import { useViewport } from '../../hooks/useViewport'
@@ -15,7 +13,9 @@ import { apiErrorMessage } from '../../lib/apiErrorMessage'
 import PaneSplitter from '../mail/split/PaneSplitter'
 import { usePaneSize } from '../mail/split/usePaneSize'
 import ContactCard from './ContactCard'
+import ContactConflictDialog from './ContactConflictDialog'
 import ContactEditView from './ContactEditView'
+import { useContactActions } from './useContactActions'
 import { useContactPhotoUrl } from './useContactPhotoUrl'
 import ContactList from './ContactList'
 import { displayNameOf } from './contactName'
@@ -23,15 +23,11 @@ import { groupOptionsOf } from './contactSearch'
 import ContactScopes, { groupIdOf, type ContactScope } from './ContactScopes'
 import ContactsTransfer from './ContactsTransfer'
 import GroupNameModal from './GroupNameModal'
-import type { Contact, ContactDraft } from './contactTypes'
 import type { ContactGroup } from './contactGroupTypes'
 import {
-  useAddContactGroupMembers, useContact, useContacts, useContactGroups, useCreateContact,
-  useCreateContactGroup, useDeleteContact, useDeleteContactGroup, useDeleteContacts,
-  useRemoveContactGroupMembers, useRenameContactGroup, useSetContactFavorite,
-  useSetContactsFavorite, useUpdateContact,
+  useContact, useContacts, useContactGroups, useCreateContactGroup, useDeleteContactGroup,
+  useRenameContactGroup,
 } from './queries'
-import type { ContactDragPayload } from './dragContacts'
 
 /** The scope the URL names. Anything else — a stale name, a truncated value — is the whole book,
     the fallback an obsolete `?id=` already gets. */
@@ -46,23 +42,16 @@ function paramsForScope(scope: ContactScope, extra?: Record<string, string>) {
   return { ...(scope === 'all' ? {} : { scope }), ...extra }
 }
 
-/**
- * The contacts module's three columns. The shell hands a module one outlet, so the module builds
- * its own columns inside it — the same way the mail module and the settings section do.
- *
- * Each column is a band stack: `min-height: 0` on the one scrolling band is the load-bearing
- * part, without which the scroll escapes to the whole column and the pinned heading drifts away.
- */
+/** The contacts module's three columns inside the shell's one outlet, each a band stack whose one
+ * scrolling band carries `min-height: 0`, or the scroll escapes to the column. */
 export default function ContactsLayout() {
   const { t } = useTranslation('contacts')
   const [params, setParams] = useSearchParams()
   const { id: routeId } = useParams()
   const navigate = useNavigate()
 
-  /* The composer is a route, not a dialog, so writing to a contact is a navigation carrying a
-     seed — the shape a reply and a mailto: already arrive in. `backTo` sends the ✕ and the leave
-     guard back to where the writing started — a fiche, or the group it was written to — instead of
-     to a mailbox the reader never opened. */
+  // The composer is a route, so writing to a contact navigates with a seed. `backTo` sends the ✕
+  // and the leave guard back where writing started (a card, a group), not to an unopened mailbox.
   const writeTo = (addresses: string | string[]) => void navigate('/mail/compose', {
     state: {
       seed: newMessageSeed(Array.isArray(addresses) ? addresses : [addresses]),
@@ -80,18 +69,10 @@ export default function ContactsLayout() {
   const {
     data: detail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail,
   } = useContact(routeId ?? null)
-  const createContact = useCreateContact()
-  const updateContact = useUpdateContact()
-  const deleteContact = useDeleteContact()
-  const deleteMany = useDeleteContacts()
-  const setFavorite = useSetContactFavorite()
-  const setManyFavorite = useSetContactsFavorite()
   const groups = useContactGroups()
   const createGroup = useCreateContactGroup()
   const renameGroup = useRenameContactGroup()
   const deleteGroup = useDeleteContactGroup()
-  const addMembers = useAddContactGroupMembers()
-  const removeMembers = useRemoveContactGroupMembers()
 
   // The editor takes the two content columns and leaves the band standing, exactly as the
   // composer does inside the mail module. Two routes, one layout — not a layout of its own.
@@ -121,25 +102,14 @@ export default function ContactsLayout() {
   const listRegion = useRef<HTMLDivElement>(null)
   const scopesRegion = useRef<HTMLDivElement>(null)
   const [listWidth, setListWidth] = usePaneSize('contacts.split.right', 380, 240)
-  const [pendingDelete, setPendingDelete] = useState<Contact | null>(null)
   const [groupModal, setGroupModal] =
     useState<{ mode: 'create' } | { mode: 'rename'; group: ContactGroup } | null>(null)
   const [pendingGroupDelete, setPendingGroupDelete] = useState<ContactGroup | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [conflict, setConflict] = useState(false)
 
-  // A refusal belongs to the form it happened in: opening another contact's editor, or coming
-  // back to a fresh one, must not inherit it (render-time reset, the MailLayout pattern). The
-  // reload counter rides the key so recharging reseeds the form, which nothing else can do — the
-  // editor takes its values from its contact once, at mount.
+  // The reload counter rides the editor key so recharging reseeds the form, which nothing else can
+  // do — the editor takes its values from its contact once, at mount.
   const [reloads, setReloads] = useState(0)
   const editorKey = inEditor ? `${routeId ?? 'new'}#${reloads}` : null
-  const [errorKey, setErrorKey] = useState(editorKey)
-  if (editorKey !== errorKey) {
-    setErrorKey(editorKey)
-    setSaveError(null)
-    setConflict(false)
-  }
 
   // Resolved here rather than in the form: the editor stays free of queries, so its tests mount
   // it without an auth or a query provider.
@@ -154,12 +124,9 @@ export default function ContactsLayout() {
   const scoped = groupPending ? [] : (contacts ?? []).filter(contact =>
     scope === 'favorites' ? contact.isFavorite : members ? members.has(contact.id) : true)
 
-  /** The addresses writing to a group would actually reach — a member the book no longer holds,
-      or one carrying no address, brings nothing. Resolved by the function the composer's field
-      calls, so the menu entry and the dropdown row cannot disagree about who a group holds.
-      Keyed rather than scanned: every group row asks this on every render. */
-  // Same guard as the composer's: a book still in flight is not an empty one, so no group row
-  // should claim addresses it hasn't checked yet.
+  // The addresses writing to a group reaches, resolved by the composer field's own function so the
+  // two agree, and keyed since every group row asks. A book still loading is not an empty one, so
+  // no row claims addresses it has not checked.
   const groupOptions = useMemo(
     () => new Map(contacts
       ? groupOptionsOf(groups.data ?? [], contacts).map(one => [one.id, one])
@@ -179,10 +146,8 @@ export default function ContactsLayout() {
   // the card, without which the positions would arrive after the seed.
   const editorReady = (!routeId || (contacts != null && detail != null)) && !missing
 
-  // The hash of the card the open form was seeded from, captured at the render the editor mounts
-  // and held until it is reseeded. Never read live at save time: the invalidation every write
-  // fires reaches the card too, so a refused save would hand the retry the very version that
-  // refused it — a claim to have read what the user never saw.
+  // The seeded card's hash, held until reseeded and never read live: every write's invalidation
+  // reaches the card, so a refused save would retry with the very version that refused it.
   const [seededHash, setSeededHash] = useState<string | undefined>(undefined)
   const [hashKey, setHashKey] = useState<string | null>(null)
   if (editorReady && editorKey !== hashKey) {
@@ -231,89 +196,14 @@ export default function ContactsLayout() {
     setParams(previous => paramsForScope(scopeOf(previous.get('scope'))))
   }, [setParams])
 
-  async function save(draft: ContactDraft) {
-    setSaveError(null)
-    try {
-      // Spread rather than `cardHash: seededHash`: a card the backfill never reached has none, and
-      // the key present at undefined is a version claim the API cannot match.
-      if (edited) {
-        await updateContact.mutateAsync({
-          id: edited.id, contact: seededHash ? { ...draft, cardHash: seededHash } : draft,
-        })
-      } else await createContact.mutateAsync(draft)
-      void navigate('/contacts')
-      addToast(t('layout.saved'), 'success')
-    } catch (error) {
-      // Stay in the form carrying the reason: bouncing back to a list that kept nothing is how a
-      // user loses what they typed without being told why. A stale write gets the box instead of
-      // the banner — it has a way out to offer, and two messages read as two failures.
-      if (error instanceof ApiError && error.status === 409) setConflict(true)
-      else setSaveError(apiErrorMessage(error, t('layout.saveFailed')))
-    }
-  }
-
-  // Recharging is the user's choice and never a consequence of the refusal: the form stands
-  // untouched behind the box until this runs. A refetch that failed has nothing to seed, so the
-  // box stays open rather than closing over the same stale form.
-  async function reloadEdited() {
-    const { isError: failed } = await refetchDetail()
-    if (!failed) setReloads(previous => previous + 1)
-  }
-
-  async function confirmDelete() {
-    if (!pendingDelete) return
-    const name = displayNameOf(pendingDelete)
-    try {
-      await deleteContact.mutateAsync(pendingDelete.id)
-      // The open card must not survive its contact.
-      if (selectedId === pendingDelete.id) setParams(paramsForScope(scope))
-      addToast(t('layout.deleted', { name }), 'success')
-    } catch (error) {
-      addToast(apiErrorMessage(error, t('layout.deleteFailed')), 'error')
-    } finally {
-      setPendingDelete(null)
-    }
-  }
-
-  // One call for the whole batch: fifty contacts would otherwise be fifty requests, and a failure
-  // at the thirtieth leaves a half-state nobody can word. The list clears its own boxes on confirm.
-  function deleteSelection(ids: string[]) {
-    deleteMany.mutate(ids, {
-      onError: error => addToast(apiErrorMessage(error, t('layout.deleteManyFailed')), 'error'),
-    })
-  }
-
-  // The drop adds — the favourite, or the membership — and never removes: a gesture that added or
-  // removed per row would land a different result on each contact it carried.
-  function dropOnScope(target: ContactScope, payload: ContactDragPayload) {
-    const groupId = groupIdOf(target)
-    if (groupId) {
-      addMembers.mutate({ id: groupId, contactIds: payload.ids }, {
-        onError: error => addToast(apiErrorMessage(error, t('groups.addFailed')), 'error'),
-      })
-      return
-    }
-    if (target !== 'favorites') return
-    setManyFavorite.mutate({ ids: payload.ids, isFavorite: true }, {
-      onError: error => addToast(apiErrorMessage(error, t('layout.favouriteFailed')), 'error'),
-    })
-  }
-
-  // No dialog: a group's membership is what a drop restores, never a loss the way deleting the
-  // contact itself is.
-  function removeFromOpenGroup(ids: string[]) {
-    if (!openGroup) return
-    removeMembers.mutate({ id: openGroup.id, contactIds: ids }, {
-      onError: error => addToast(apiErrorMessage(error, t('groups.removeFailed')), 'error'),
-    })
-  }
-
-  function removeFromGroup(groupId: string) {
-    if (!selected) return
-    removeMembers.mutate({ id: groupId, contactIds: [selected.id] }, {
-      onError: error => addToast(apiErrorMessage(error, t('groups.removeFailed')), 'error'),
-    })
-  }
+  const contactActions = useContactActions({
+    edited, selected, openGroup, seededHash, editorKey, addToast,
+    onSaved: () => void navigate('/contacts'),
+    // The open card must not survive its contact.
+    onDeletedOpen: id => { if (selectedId === id) setParams(paramsForScope(scope)) },
+    onReloaded: () => setReloads(previous => previous + 1),
+    refetchDetail,
+  })
 
   async function submitGroupName(name: string) {
     if (!groupModal) return
@@ -349,16 +239,8 @@ export default function ContactsLayout() {
     }
   }
 
-  function toggleFavorite(contact: Contact) {
-    setFavorite.mutate({ id: contact.id, isFavorite: !contact.isFavorite }, {
-      onError: error => addToast(apiErrorMessage(error, t('layout.favouriteFailed')), 'error'),
-    })
-  }
-
-  // One instance, never two: it owns the hidden file input and the import report, and a second
-  // copy behind a media query would be a second modal nobody closed. Below 1024px the row it
-  // normally sits in is hidden — Add contact is the floating button there — so the trigger follows
-  // the same road Refresh takes out of the mail's folder column: into the list's own band.
+  // One instance only: it owns the hidden file input and the import report. Below 1024px its row is
+  // hidden, so the trigger moves into the list's own band (docs/architecture-contacts.md).
   const transfer = (className: string) => (
     <ContactsTransfer contacts={contacts} triggerClassName={className}
       onError={message => addToast(message, 'error')} />
@@ -375,7 +257,7 @@ export default function ContactsLayout() {
       </div>
       <div className="contacts-scopes-scroll">
         <ContactScopes scope={scope} total={total} favorites={favorites}
-          groups={groups.data ?? []} onScope={changeScope} onDropContacts={dropOnScope}
+          groups={groups.data ?? []} onScope={changeScope} onDropContacts={contactActions.dropOnScope}
           onCreateGroup={() => setGroupModal({ mode: 'create' })}
           onRenameGroup={group => setGroupModal({ mode: 'rename', group })}
           onDeleteGroup={setPendingGroupDelete}
@@ -403,9 +285,10 @@ export default function ContactsLayout() {
           {editorReady && (
             /* Keyed on the contact being edited so switching from one edit to another reseeds the
                form rather than carrying the previous contact's values into it. */
-            <ContactEditView key={editorKey} contact={detail ?? null} photo={editorPhoto} error={saveError}
-              saving={createContact.isPending || updateContact.isPending}
-              onSave={draft => void save(draft)} onCancel={() => void navigate('/contacts')} />
+            <ContactEditView key={editorKey} contact={detail ?? null} photo={editorPhoto}
+              error={contactActions.saveError} saving={contactActions.saving}
+              onSave={draft => void contactActions.save(draft)}
+              onCancel={() => void navigate('/contacts')} />
           )}
         </div>
       ) : (
@@ -426,9 +309,10 @@ export default function ContactsLayout() {
               <ContactList contacts={scoped} selectedId={selectedId} scope={scope} onSelect={select}
                 leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
                 actions={drawer.inDrawer ? transfer('selection-btn') : null}
-                onToggleFavorite={toggleFavorite} onDelete={setPendingDelete}
-                onDeleteMany={deleteSelection}
-                onRemoveFromGroup={openGroup ? removeFromOpenGroup : undefined}
+                onToggleFavorite={contactActions.toggleFavorite}
+                onDelete={contactActions.setPendingDelete}
+                onDeleteMany={contactActions.deleteSelection}
+                onRemoveFromGroup={openGroup ? contactActions.removeFromOpenGroup : undefined}
                 onEdit={id => void navigate(`/contacts/${id}/edit`)} regionRef={listRegion} />
             )}
           </div>
@@ -438,36 +322,29 @@ export default function ContactsLayout() {
           )}
           {!(phone && !selectedId) && (
             <div className="contacts-card" data-testid="contact-card">
-              <ContactCard contact={selected} onToggleFavorite={toggleFavorite}
+              <ContactCard contact={selected} onToggleFavorite={contactActions.toggleFavorite}
                 onBack={phone ? backToList : undefined}
                 bottomActions={phone}
-                onDelete={setPendingDelete} onEdit={id => void navigate(`/contacts/${id}/edit`)}
+                onDelete={contactActions.setPendingDelete}
+                onEdit={id => void navigate(`/contacts/${id}/edit`)}
                 onWrite={writeTo}
                 groups={selected ? groupsOf(selected.id) : undefined}
-                onRemoveFromGroup={removeFromGroup} />
+                onRemoveFromGroup={contactActions.removeFromGroup} />
             </div>
           )}
         </div>
       )}
 
-      {/* An alertdialog: it interrupts the save to say the card moved under it, and offers the one
-          way forward. */}
-      {conflict && (
-        <Modal role="alertdialog" title={t('layout.conflictTitle')}
-          onClose={() => setConflict(false)}>
-          <p>{t('layout.conflictBody')}</p>
-          <div className="modal-actions">
-            <button type="button" className="btn btn-primary" onClick={() => void reloadEdited()}>
-              {t('layout.conflictReload')}
-            </button>
-          </div>
-        </Modal>
+      {contactActions.conflict && (
+        <ContactConflictDialog onClose={contactActions.closeConflict}
+          onReload={() => void contactActions.reloadEdited()} />
       )}
 
-      {pendingDelete && (
-        <DeleteConfirmModal entityLabel={displayNameOf(pendingDelete)}
-          loading={deleteContact.isPending}
-          onConfirm={() => void confirmDelete()} onClose={() => setPendingDelete(null)}
+      {contactActions.pendingDelete && (
+        <DeleteConfirmModal entityLabel={displayNameOf(contactActions.pendingDelete)}
+          loading={contactActions.deleting}
+          onConfirm={() => void contactActions.confirmDelete()}
+          onClose={() => contactActions.setPendingDelete(null)}
           returnFocusRef={listRegion} />
       )}
 
@@ -488,10 +365,8 @@ export default function ContactsLayout() {
           returnFocusRef={scopesRegion} />
       )}
 
-      {/* Never over the editor: that surface already is the create form, and the button would
-          navigate out of a half-typed contact with nothing to ask about it. And never over an open
-          card on a phone, where it is anchored 73px up from an edge the action band now owns —
-          MailLayout drops it under the same condition for the same collision. */}
+      {/* Never over the editor, which is the create form and would be left half-typed, nor over an
+          open card on a phone, where it would sit on the action band (MailLayout does the same). */}
       {!inEditor && !(phone && selectedId) && (
         <FloatingAction label={t('layout.add')} onClick={() => void navigate('/contacts/new')}>
           <PersonPlusIcon size={22} />

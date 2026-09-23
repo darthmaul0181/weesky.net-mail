@@ -36,8 +36,8 @@ describe('SearchResults', () => {
     expect(screen.getByText('Only the first 200 results are shown')).toBeInTheDocument()
   })
 
-  // Decision 11: the click goes to that day *in the current view*, so the box is emptied on the
-  // way — results left standing would go on covering the grid they have just moved.
+  // The click goes to that day *in the current view*, so the box is emptied on the way — results
+  // left standing would go on covering the grid they have just moved.
   it('moves the grid to the day a result sits on, and clears the search', async () => {
     const setAnchor = vi.fn()
     const onOpen = vi.fn()

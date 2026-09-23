@@ -12,13 +12,8 @@ interface Props {
   children: ReactNode
 }
 
-/**
- * The context pane below 1024px: mail's folder tree, contacts' scopes, settings' navigation.
- * One component for all three — they differ in what they hold, never in how they open.
- *
- * Closed, it is display:none rather than unmounted, so the tree keeps its expand state and its
- * query while leaving the tab order and the accessibility tree alike.
- */
+/** The context pane below 1024px, one component for all three modules. Closed, it is display:none
+ * rather than unmounted: the tree keeps its state and query yet leaves the tab order. */
 export default function ContextDrawer({ open, onClose, children }: Props) {
   const { t } = useTranslation()
   const panel = useRef<HTMLDivElement>(null)
@@ -26,10 +21,8 @@ export default function ContextDrawer({ open, onClose, children }: Props) {
   // thing the drawer exists to do — moves search and leaves pathname alone.
   const { pathname, search } = useLocation()
 
-  // Held in a ref rather than depended on directly: three later tasks call this component, and
-  // an inline `onClose={() => setOpen(false)}` gets a new identity every render. Depending on it
-  // would re-run the route effect below on every toggle and close the drawer the instant it
-  // opened.
+  // In a ref: an inline `onClose` is new every render, and depending on it re-ran the route effect
+  // below and closed the drawer the instant it opened.
   const onCloseRef = useRef(onClose)
   useEffect(() => { onCloseRef.current = onClose })
 

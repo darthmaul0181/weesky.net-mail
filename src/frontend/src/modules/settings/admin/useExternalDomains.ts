@@ -1,12 +1,8 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
 
-/**
- * The admin-curated external mail providers users may attach a connected account from — the
- * only source of external hosts in the product, which is what `ExternalDomainDialog`'s
- * client-side validation exists to guard. The API omits a null field, so a domain without Sieve
- * or without OAuth2 simply lacks those fields.
- */
+/** An admin-curated external provider, the only source of external hosts (hence
+ * `ExternalDomainDialog`'s validation). The API omits null fields: no Sieve or OAuth2 means absent. */
 export interface ExternalDomain {
   id: string
   name: string

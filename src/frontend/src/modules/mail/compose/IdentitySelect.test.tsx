@@ -18,7 +18,7 @@ const alias = identity({ address: 'michel@weesky.be', displayName: 'Michel', isD
 describe('IdentitySelect', () => {
   beforeEach(() => {
     vi.mocked(useAuth).mockReturnValue({
-      identity: { email: 'mick@weesky.be', displayName: 'Mick', initials: 'MW', subDomains: [] },
+      identity: { email: 'mick@weesky.be', displayName: 'Mick', subDomains: [] },
     } as never)
   })
 
@@ -49,7 +49,7 @@ describe('IdentitySelect', () => {
 
   it('names the primary from the account display name, not its stored label', () => {
     vi.mocked(useAuth).mockReturnValue({
-      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', initials: 'MW', subDomains: [] },
+      identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', subDomains: [] },
     } as never)
     render(<IdentitySelect identities={[primary, alias]} value="mick@weesky.be" onChange={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'From identity' }))

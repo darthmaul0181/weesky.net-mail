@@ -6,21 +6,17 @@ export interface IdentityRow { address: string; displayName: string; isDefault: 
     inputs cap here so an over-long name costs a keystroke rather than a PUT and a rollback. */
 export const MAX_DISPLAY_NAME_LENGTH = 100
 
-/** The PUT payload from the displayed list. The primary is never sent — its label always follows
-    the account FullName (set from the Account tab), and absence of any marked row is what "the
-    primary is the default" looks like on the wire. A connected account's own address is the
-    opposite: `keepAccountAddress` sends it, since it carries an editable label and the server
-    refuses a set that does not name it. */
+/** The PUT payload. The primary is never sent: its label follows the account FullName, and no
+ * marked row means it is the default. `keepAccountAddress` sends a connected account's own address,
+ * which carries an editable label and which the server requires. */
 export function toRows(identities: SendingIdentity[], keepAccountAddress = false): IdentityRow[] {
   return identities
     .filter(i => keepAccountAddress || !i.isPrimary)
     .map(i => ({ address: i.address, displayName: i.displayName, isDefault: i.isDefault }))
 }
 
-/* The apply* family answers the resolved list rather than the payload. The page keeps showing
-   what came back while the PUT is in flight, so the next action builds on it instead of on a
-   server snapshot the invalidation has not refreshed yet — a whole-set PUT built on a stale
-   snapshot silently reverts the action before it. */
+// The apply* family answers the resolved list, not the payload, so the next action builds on what
+// came back rather than on a snapshot the invalidation has not refreshed, which would revert it.
 
 /** Tiles are ordered alphabetically by display name, case-insensitively — the same `localeCompare`
     the folder list and the rest of the site sort names with. Order is purely by name: the default
@@ -30,11 +26,8 @@ export function sortIdentities(identities: SendingIdentity[]): SendingIdentity[]
     a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }))
 }
 
-/**
- * Who holds the star. `marked` is the address of the live alias carrying the default, or null —
- * and null elects the primary, which is what "no marked row" means on the wire. Every path that
- * can leave the list without a default goes through here, so the rule is stated once.
- */
+/** Who holds the star: `marked`, the live alias carrying the default, or null, which elects the
+ * primary (no marked row on the wire). Every path that can lose the default goes through here. */
 function markDefault(identities: SendingIdentity[], marked: string | null): SendingIdentity[] {
   return identities.map(i => ({ ...i, isDefault: marked ? i.address === marked : i.isPrimary }))
 }

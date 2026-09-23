@@ -44,7 +44,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.getContact.mockResolvedValue(detail())
   api.getContactPhoto.mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))
-  // jsdom n'implémente pas l'API des URL objet ; la carte s'en sert pour l'avatar.
+  // jsdom does not implement the object URL API; the card uses it for the avatar.
   URL.createObjectURL = vi.fn(() => 'blob:photo')
   URL.revokeObjectURL = vi.fn()
 })
@@ -124,8 +124,8 @@ describe('ContactCard', () => {
     expect(screen.getByText('bru')).toBeInTheDocument()
   })
 
-  // Ce que la liste ne transporte pas : la fiche va le chercher, sans quoi une carte importée
-  // n'affiche que son nom et son adresse alors que le serveur en détient bien plus.
+  // What the list does not carry: the card fetches it, or an imported card shows only its name
+  // and its address while the server holds much more.
   it('shows the phone numbers the detail carries', async () => {
     api.getContact.mockResolvedValue(detail({
       phones: [{ position: 0, number: '+32 492 80 90 00', type: 'CELL', pref: 101, params: '', groupName: '' }],
@@ -266,8 +266,8 @@ describe('ContactCard', () => {
     expect(api.getContactPhoto).not.toHaveBeenCalled()
   })
 
-  // Le détail arrive après coup : la fiche doit peindre tout de suite avec ce que la liste sait,
-  // sinon chaque sélection passe par un vide.
+  // The detail arrives after the fact: the card has to paint at once with what the list knows,
+  // or every selection passes through a blank.
   it("paints the list's name and addresses before the detail lands", () => {
     api.getContact.mockReturnValue(new Promise(() => {}))
     setup()

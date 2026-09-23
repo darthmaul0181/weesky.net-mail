@@ -20,7 +20,7 @@ export interface EventChipProps {
   onOpenEditor: (o: Occurrence) => void
   selected?: boolean
   /** Lit by the view rather than by `:hover`: the two slices of an evening crossing midnight
-      carry one key and light together (decision 3). */
+      carry one key and light together. */
   hovered?: boolean
   onHover?: (key: string | null) => void
   /** The gesture belongs to the view: a chip only says it is under the pointer, and offers the
@@ -30,7 +30,7 @@ export interface EventChipProps {
   onResizeStart?: (o: Occurrence, event: PointerEvent) => void
 }
 
-/** The heights the second and the third line become legible at, read off the mockup. */
+/** The heights the second and the third line become legible at. */
 const TIME_MIN_PX = 40
 const PLACE_MIN_PX = 58
 
@@ -40,11 +40,8 @@ function heightOf(style: CSSProperties | undefined): number {
   return Number.parseFloat(String(value ?? '')) || 0
 }
 
-/**
- * One occurrence drawn, wherever it is drawn. Four variants rather than four components: the
- * rendering rules, the missing title and the key task 6 selects by are the same everywhere, and
- * a second copy of them is a second copy to keep in step.
- */
+/** One occurrence, wherever it is drawn. Four variants, not four components, so the rendering
+ * rules, the missing title and the selection key exist once. */
 export default function EventChip({
   occurrence, color, variant, style, showDate, onOpen, onOpenEditor, selected, hovered, onHover,
   dragging, onPointerDown, onResizeStart,
@@ -61,10 +58,8 @@ export default function EventChip({
   const clocks = occurrence.isAllDay ? null : wallClockOf(occurrence, tz)
   const at = (clock: WallClock) => formatTime(
     utcOfLocalTime(clock.day, clock.minute, tz), lang, cycle, tz, region)
-  // Both ends, never one: a `localStart` with no `localEnd` reads as an empty day and a NaN
-  // minute, and `Intl` on the Date that makes throws — which, with no ErrorBoundary anywhere in
-  // the app, whitens the whole screen rather than one chip. The chip draws the event without the
-  // hour it has not got.
+  // Both ends, never one: a missing end reads as an empty day and a NaN minute, and `Intl` throwing
+  // on it would whiten the whole screen (no ErrorBoundary). The chip then draws without the hour.
   const readable = (clock: WallClock) => clock.day !== '' && Number.isFinite(clock.minute)
   const times = clocks && readable(clocks[0]) && readable(clocks[1])
     ? ([at(clocks[0]), at(clocks[1])] as const) : null

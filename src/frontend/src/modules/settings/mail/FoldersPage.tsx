@@ -11,10 +11,7 @@ import FolderManager from '../../mail/folders/FolderManager'
 import { useFolders } from '../../mail/queries'
 import SystemFoldersModal from './SystemFoldersModal'
 
-/**
- * Everything about folders: the full list, plus the two dialogs acting across the whole set.
- * The mail column keeps its own New folder button; its Manage button leads here.
- */
+/** Everything about folders: the full list, plus the two dialogs acting across the whole set. */
 export default function FoldersPage() {
   const { t } = useTranslation('settings')
   const { data: folders, isLoading, isError } = useFolders()

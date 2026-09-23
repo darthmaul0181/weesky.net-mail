@@ -11,10 +11,7 @@ export interface CalendarToolbarProps {
   /** The week under the title, for the two views that sit inside one. */
   weekNumber: number | null
   query: string
-  /**
-   * The tier, handed down rather than read here. `MessageReader`'s rule: only the layout knows
-   * which panes are mounted, and a second `useViewport` is how the two fall out of step.
-   */
+  /** Handed down, never read here: only the layout knows which panes are mounted. */
   phone: boolean
   inDrawer: boolean
   onOpenDrawer: () => void
@@ -27,7 +24,7 @@ export interface CalendarToolbarProps {
 }
 
 /** Day is the phone's week: seven columns in 360px is six unreadable ones and a sideways scroll.
-    Month leads, as the mockup has it — a phone opens on the shape of the month. */
+    Month leads: a phone opens on the shape of the month. */
 const PHONE_VIEWS: View[] = ['month', 'day', 'list']
 const VIEWS: View[] = ['day', 'week', 'month', 'list']
 
@@ -84,11 +81,8 @@ export default function CalendarToolbar({
   )
 }
 
-/**
- * The one search box the module draws, in whichever band the tier puts it: this toolbar above
- * 640px, a band of its own at the head of the phone's list. Two copies of it would be two
- * placeholders, two labels and two Enter behaviours to keep in step.
- */
+/** The module's one search box, in whichever band the tier puts it (this toolbar, or the phone
+ * list's own band), so the placeholder, label and Enter behaviour cannot drift. */
 export function CalendarSearch({ className, query, onQuery, onCommitQuery }: {
   className: string
   query: string

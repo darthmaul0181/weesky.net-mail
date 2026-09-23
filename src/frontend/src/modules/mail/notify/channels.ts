@@ -51,15 +51,9 @@ function storedClaim(accountId: string): Claim | null {
   }
 }
 
-/**
- * Cross-tab guard for the sound, which has no equivalent of the notification tag. Not an
- * atomic lock: two tabs poll on independent clocks and practically never land in the same
- * millisecond, and the worst case is one duplicate beep.
- *
- * Scoped to the uidValidity it was banked under: a rebuilt mailbox restarts uidNext near 1, and
- * a bare number from the old numbering would refuse every genuine arrival, in every tab, for good.
- * Keyed by account for the same reason: uidValidity is unique per mailbox, never across servers.
- */
+// Cross-tab guard for the sound, which has no notification tag; not atomic, the worst case is one
+// duplicate beep. Scoped to uidValidity, or a rebuilt mailbox restarting near 1 would be refused for
+// good, and keyed by account since uidValidity means nothing across mailboxes.
 export function claimNotification(
   accountId: string, uidValidity: number, uidNext: number,
 ): boolean {
@@ -74,11 +68,8 @@ export function claimNotification(
   return true
 }
 
-/**
- * Dropped when a session ends: the claim is one mailbox's counter, and the next sign-in reaches
- * none of the mailboxes this one banked. Every key under the prefix goes, the legacy unscoped one
- * included — left in a browser by the release before this, it would gag the first arrival.
- */
+// Dropped when a session ends: the next sign-in reaches none of these mailboxes. Every key under the
+// prefix goes, the legacy unscoped one included, which would otherwise gag the first arrival.
 export function forgetNotificationClaim(): void {
   try {
     Object.keys(localStorage)

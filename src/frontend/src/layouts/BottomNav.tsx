@@ -6,10 +6,8 @@ function tabClass({ isActive }: { isActive: boolean }) {
   return isActive ? 'bottom-nav-item is-active' : 'bottom-nav-item'
 }
 
-/**
- * The rail, moved under the thumb. Phone only — CSS hides it from 640px up, where the rail
- * itself is back. Rendered unconditionally so nothing here depends on the viewport hook.
- */
+/** The rail, under the thumb. Phone only: CSS hides it from 640px up, so it renders
+ * unconditionally and depends on no viewport hook. */
 export default function BottomNav() {
   const { t } = useTranslation()
   const tab = ({ to, labelKey, Icon }: ModuleItem) => (

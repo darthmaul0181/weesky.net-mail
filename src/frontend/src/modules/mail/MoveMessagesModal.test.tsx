@@ -12,7 +12,7 @@ function node(partial: Partial<MailFolderNode>): MailFolderNode {
   }
 }
 
-// Seven folders, the mockup's mailbox: an inbox, a parent with two children, a junk folder
+// Seven folders: an inbox, a parent with two children, a junk folder
 // carrying an accent, and a container nobody can file into.
 const tree: MailFolderNode[] = [
   node({ path: 'INBOX', name: 'Inbox', specialUse: 'inbox' }),

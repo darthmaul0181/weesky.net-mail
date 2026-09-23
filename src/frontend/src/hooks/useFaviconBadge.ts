@@ -12,14 +12,9 @@ export function inboxIsUnread(folders: MailFolderNode[] | undefined): boolean {
   return (inbox?.unread ?? 0) > 0
 }
 
-/**
- * Marks the tab icon while the inbox holds unread mail.
- *
- * The query is asked for **disabled**: this reads whatever the tree already holds and never
- * fetches on its own account, so a tab that asked for no notifications keeps costing nothing.
- * The consequence is deliberate and worth knowing — in a background tab the badge only keeps up
- * while something else is polling, which is to say while a notification setting is on.
- */
+/** Marks the tab icon while the inbox holds unread mail. The query is disabled: it reads what the
+ * tree holds and never fetches, so in a background tab the badge keeps up only while a
+ * notification setting keeps something polling. */
 export function useFaviconBadge(): void {
   const { data: folders } = useFolders(false)
   const unread = inboxIsUnread(folders)

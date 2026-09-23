@@ -12,10 +12,9 @@ interface Props {
   onChange: (address: string) => void
 }
 
-/** The From line. One identity renders as plain text — the 2c1 look for whoever curated nothing;
-    several become a menu. A stale identity is never offered, but the chosen one keeps being named
-    when a refetch turns it stale mid-compose: the send would carry that address, so the line says
-    so, flagged `unavailable` the way the identities settings page flags it. */
+/** The From line: plain text for one identity, a menu for several. A stale identity is never
+ * offered, but a chosen one turning stale mid-compose stays named, flagged `unavailable`, since the
+ * send would carry that address. */
 export default function IdentitySelect({ identities, value, onChange }: Props) {
   const { t } = useTranslation('compose')
   const { identity } = useAuth()

@@ -102,7 +102,7 @@ describe('ContactList', () => {
 
   // `is-selected` is the hook the content-row paint hangs on — the selected fill plus an inset
   // accent bar, the opposite language from the navigation band. The paint itself is a CSS fact
-  // jsdom computes nothing about; it is measured in the browser pass, Task 15.
+  // jsdom computes nothing about; it is measured in the browser pass.
   it('marks the selected tile with the content-row class', () => {
     setup({ selectedId: 'b' })
 
@@ -258,7 +258,7 @@ describe('ContactList', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument()
   })
 
-  // Cocher n'ouvre pas la fiche : deux choses se produiraient sur un clic.
+  // Ticking does not open the card: one click would do two things.
   it('checking a contact does not open it', async () => {
     const props = setup()
 
@@ -267,7 +267,7 @@ describe('ContactList', () => {
     expect(props.onSelect).not.toHaveBeenCalled()
   })
 
-  // La case maîtresse porte sur ce qui est à l'écran, donc sur les lignes filtrées.
+  // The master box acts on what is on screen, so on the filtered rows.
   it('selects every filtered row from the master box', async () => {
     setup()
     await userEvent.type(screen.getByRole('searchbox'), 'alice')
@@ -276,8 +276,9 @@ describe('ContactList', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument()
   })
 
-  // Le champ cède la bande au décompte, donc la loupe est le seul chemin vers la recherche pendant
-  // une sélection : elle la vide et rend le champ, plutôt que de laisser la recherche inatteignable.
+  // The field gives the band to the count, so the loupe is the only road to the search during a
+  // selection: it clears the selection and gives the field back, rather than leaving the search
+  // unreachable.
   it('gives the search field back from the loupe, clearing the selection', async () => {
     setup()
     await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
@@ -289,15 +290,15 @@ describe('ContactList', () => {
     expect(screen.getByRole('searchbox')).toHaveFocus()
   })
 
-  // La loupe n'est offerte que quand elle sert : au repos le champ est déjà là, et deux portes vers
-  // la même chose se lisent comme un défaut.
+  // The loupe is offered only when it serves a purpose: at rest the field is already there, and
+  // two doors onto the same thing read as a defect.
   it('offers no loupe while the field itself is on the band', () => {
     setup()
 
     expect(screen.queryByRole('button', { name: 'Search contacts' })).not.toBeInTheDocument()
   })
 
-  // Choix assumé : resetKey inclut le scope, donc en changer vide la sélection.
+  // A deliberate choice: resetKey includes the scope, so changing it clears the selection.
   it('clears the selection when the scope changes', async () => {
     const { rerender } = render(
       <ContactList contacts={[alice, bruno]} selectedId={null} scope="all"
@@ -357,8 +358,8 @@ describe('ContactList', () => {
     expect(pill.textContent).not.toMatch(/favourites/i)
   })
 
-  // Une tuile non cochée part seule : glisser ne doit jamais déranger une sélection faite pour
-  // autre chose.
+  // An unchecked tile leaves alone: dragging it must never disturb a selection made for
+  // something else.
   it('drags an unchecked tile alone', () => {
     setup()
     fireEvent.click(screen.getByLabelText('Select Alice Dupont'))
@@ -370,19 +371,8 @@ describe('ContactList', () => {
     expect(JSON.parse(setData.mock.calls[0]![1])).toEqual({ ids: ['b'] })
   })
 
-  // Le parent a besoin de la sélection pour le glisser-déposer, et il la reçoit dans l'ordre de
-  // l'écran plutôt que dans celui des clics.
-  it('reports the selection to its parent', async () => {
-    const onSelectionChange = vi.fn()
-    setup({ onSelectionChange })
-    await userEvent.click(screen.getByLabelText('Select Bruno Mertens'))
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
-
-    expect(onSelectionChange).toHaveBeenLastCalledWith(['a', 'b'])
-  })
-
-  // Décision 14 : deux libellés distincts, Delete garde son dialogue et Remove from group n'en a
-  // pas — l'appartenance à un groupe se remet d'un simple drop, ce n'est pas une perte de données.
+  // Two distinct labels: Delete keeps its dialogue and Remove from group has none — group
+  // membership is restored by a simple drop, which is not a loss of data.
   it('shows Remove from group beside Delete only when the caller wires a group scope', () => {
     setup({ scope: 'group:g1', onRemoveFromGroup: vi.fn() })
 
@@ -408,7 +398,7 @@ describe('ContactList', () => {
     expect(screen.queryByText(/delete this contact/i)).not.toBeInTheDocument()
   })
 
-  /* The lot's headline change, measured rather than assumed: one tick cost 130ms at 2000 tiles
+  /* The headline change, measured rather than assumed: one tick cost 130ms at 2000 tiles
      because every tile redrew. Nothing is mocked — a getter counts the real memoised component. */
   it('does not re-render the other tiles when one checkbox changes', async () => {
     const one = watched(alice)

@@ -25,11 +25,8 @@ interface Props {
   onTrashed: () => void
 }
 
-/**
- * The card between the header and the body: the event as the organizer wrote it, and what to do
- * about it. Drawn from the block the message carried, redrawn from the answer the API hands back —
- * so the screen never has to guess what the calendar and the organizer now hold.
- */
+// Drawn from the block the message carried, then redrawn from the API's answer, so the screen
+// never has to guess what the calendar and the organizer now hold.
 export default function InvitationCard({ invitation: initial, folderPath, uid, onTrashed }: Props) {
   const { t, i18n } = useTranslation('mail')
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, [])
@@ -88,8 +85,8 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
     }
   }, [applyMutation, folderPath, uid, invitation.part, t])
 
-  // Once per mounting (décision 12): the reader's periodic refresh, StrictMode's second mount and
-  // the block the answer hands back all come through here again, and the ref turns them away.
+  // Once per mounting: the reader's periodic refresh, StrictMode's second mount and the block the
+  // answer hands back all come through here again, and the ref turns them away.
   const pending = replyPending(invitation)
   useEffect(() => {
     if (!pending || attempted.current) return
@@ -137,10 +134,8 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
     )
   }
 
-  // The label is passed already translated rather than as a key: a key reaching `t()` through a
-  // variable is invisible to both the typed `t` and `locales/keys.test.ts`.
-  // The mock-up's shapes: the answer the organizer hopes for is the primary button, the two
-  // others are ghosts, and every button is as wide as its label.
+  // The label arrives translated rather than as a key: a key reaching `t()` through a variable is
+  // invisible to both the typed `t` and `locales/keys.test.ts`.
   const answerButton = (value: InvitationAnswer, label: string, partStat: string, primary = false) => (
     <button
       type="button"
@@ -168,10 +163,8 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
       value={chosenCalendar} onChange={setCalendarId} />
   )
 
-  // The three answers a card can name, each in both voices: `filed` is what the organizer recorded
-  // ("accepted"), `own` what the user's own calendar entry says ("You accepted") — a refusal has no
-  // `own`, since declining deletes the entry. Anything else — `NEEDS-ACTION`, or a word this build
-  // has no sentence for — is null, and says nothing rather than printing a key.
+  // `filed` is the organizer's record ("accepted"), `own` the user's entry ("You accepted"); a refusal
+  // has no `own`, since declining deletes the entry. Any other value is null rather than a raw key.
   const wordsFor = (partStat: string | undefined) =>
     partStat === 'ACCEPTED'
       ? { filed: t('reader.invitation.partstat.ACCEPTED'), own: t('reader.invitation.answered.ACCEPTED') }

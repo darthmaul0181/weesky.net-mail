@@ -53,14 +53,8 @@ export function useAdminUserQuotas(userIds: readonly number[]) {
     userIds.flatMap((id, i) => { const quota = results[i]?.data; return quota ? [[id, quota]] : [] }))
 }
 
-/**
- * The admin tabs' own wrapper around `useListLoadState`, one list per call so the toast names
- * the list that failed. A failure stays failed until data arrives: one toast per episode.
- *
- * `primary`, when given, is the tab's other list: while it has also failed, this call's own
- * toast is withheld, since the primary's note already tells the story and a second toast would
- * name a list nothing on screen shows either. It still toasts on its own once the primary loads.
- */
+/** `useListLoadState` with one toast per failure episode, naming the list. While `primary` (the
+ * tab's other list) has failed too, this toast is withheld: the primary's note already says it. */
 export function useListLoad(
   query: ListQuery, addToast: AddToast, failedMessage: string, primary?: ListQuery,
 ) {

@@ -10,11 +10,8 @@ interface Props {
   onCancel: () => void
 }
 
-/**
- * Attaches a mailbox. The server list carries names only — hosts and ports are administrator
- * information the endpoint deliberately does not return — and the empty value is the local
- * server, which travels as a null domain.
- */
+/** Attaches a mailbox. The server list carries names only (hosts and ports stay administrator
+ * information), and the empty value is the local server, sent as a null domain. */
 export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
   const { t } = useTranslation('settings')
   const { data: domains } = useConnectableDomains()

@@ -16,7 +16,7 @@ const field = () => screen.getByLabelText('Name')
 const submit = () => screen.getByRole('button', { name: 'Save' })
 
 describe('GroupNameModal', () => {
-  // Un seul dialogue pour les deux gestes (décision 13) : c'est le titre qui les distingue.
+  // One dialog for the two gestures: it is the title that tells them apart.
   it('wears the title it is given', () => {
     renderModal({ title: 'Rename group' })
 
@@ -32,7 +32,7 @@ describe('GroupNameModal', () => {
     expect(onSubmit).toHaveBeenCalledWith('Friends')
   })
 
-  // Un nom vide n'est pas un nom, et un espace non plus.
+  // An empty name is no name, and neither is a space.
   it('refuses an empty name', async () => {
     renderModal()
 
@@ -42,8 +42,8 @@ describe('GroupNameModal', () => {
     expect(submit()).toBeDisabled()
   })
 
-  // Le bouton grisé n'est pas la seule route vers le submit : la garde se rejoue dans le
-  // gestionnaire, sinon une soumission du formulaire enverrait un nom vide à l'API.
+  // The greyed-out button is not the only road to submit: the guard is replayed in the handler,
+  // or a form submission would send an empty name to the API.
   it('refuses a form submit that bypasses the disabled button', () => {
     const { onSubmit } = renderModal({ initialName: 'Friends' })
 
@@ -64,8 +64,8 @@ describe('GroupNameModal', () => {
     expect(onSubmit).toHaveBeenCalledWith('Friends & family')
   })
 
-  // La colonne du serveur s'arrête à 255 : la refuser au clavier vaut mieux que la refuser après
-  // un aller-retour.
+  // The server column stops at 255: refusing it at the keyboard is better than refusing it after
+  // a round trip.
   it('stops the field at 255 characters', () => {
     renderModal()
 
@@ -79,8 +79,8 @@ describe('GroupNameModal', () => {
       .toHaveAttribute('aria-modal', 'true')
   })
 
-  // Le champ, pas la ✕ : une boîte ouverte pour être remplie ouvre sur son champ, et c'est le ref
-  // qui le dit maintenant — `autoFocus` est posé avant que la couche ne déplace le focus.
+  // The field, not the ✕: a box opened to be filled in opens on its field, and it is the ref that
+  // says so now — `autoFocus` is set before the layer moves the focus.
   it('opens on the name field', () => {
     renderModal()
 
@@ -101,9 +101,10 @@ describe('GroupNameModal', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  // Une requête en vol ne se relance pas d'un second clic. Le bouton porte alors un spinner,
-  // donc plus de nom accessible : il se retrouve par son type. Et les trois sorties sont inertes
-  // avec lui : renvoyer l'utilisateur sans lui dire si le groupe a été créé est le vrai défaut.
+  // A request in flight cannot be started a second time by a click. The button then wears a
+  // spinner, so it has no accessible name any more: it is found by its type instead. And the
+  // three ways out are inert with it: sending the user away with no word on whether the group
+  // was created is the real defect.
   it('withholds the submit and every way out while a write is in flight', () => {
     const { onClose } = renderModal({ initialName: 'Friends', saving: true })
 

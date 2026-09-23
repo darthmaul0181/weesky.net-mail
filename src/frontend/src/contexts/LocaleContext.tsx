@@ -25,10 +25,8 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const { data: preferences } = usePreferences({ enabled: isLoggedIn })
   const setPreferenceMutation = useSetPreference()
 
-  // The optimism lives in useSetPreference's onMutate, on the shared ['preferences'] cache — not
-  // here. This reads it back exactly the way every other consumer of usePreferences() does, so a
-  // refused write rolls back through the same cache this derives from, instead of through a
-  // second, provider-local notion of "pending" that a failure would have had to unwind by hand.
+  // The optimism lives in useSetPreference, on the shared ['preferences'] cache, so a refused write
+  // rolls back through the cache this derives from rather than a provider-local "pending".
   const preference = preferences ? languageOf(preferences) : 'auto'
   const [locale, setLocale] = useState<Locale>(
     () => resolveLocale(undefined, readLanguageMirror(), navigator.languages),
@@ -46,11 +44,9 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     if (preferences) writeLanguageMirror(preference)
     if (resolved === locale) return
 
-    // `current` guards against two rapid preference changes resolving out of order — without it,
-    // an earlier catalogue landing after a later one would leave `locale` behind what i18next
-    // actually holds. A rejected import — a deploy having rotated the chunk hashes out from under
-    // an open tab — reloads instead: the preference is already saved server-side and mirrored, so
-    // a fresh index.html fetches the current hashes and paints the language the user asked for.
+    // `current` stops two rapid changes resolving out of order. A rejected import (a deploy rotated
+    // the chunk hashes) reloads: the preference is saved and mirrored, so a fresh index.html paints
+    // the language asked for.
     let current = true
     void loadLocale(resolved)
       .then(() => { if (current) setLocale(resolved) })

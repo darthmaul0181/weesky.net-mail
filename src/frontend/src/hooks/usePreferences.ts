@@ -1,14 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
 
-/**
- * The account's webmail preferences.
- *
- * Shared rather than owned by the settings module, because the mail list reads them too. The
- * backend answers every known key with its default filled in, so there is no copy of the
- * defaults here — a consumer waits for the answer rather than guessing, which is why the
- * accessors below take the map and not an optional one.
- */
+/** The account's webmail preferences, shared because the mail list reads them. The backend fills
+ * every default, so none is copied here: the accessors take the map, not an optional one. */
 export const PREFERENCE_KEYS = {
   pageSize: 'mail.pageSize',
   showPreview: 'mail.showPreview',
@@ -46,10 +40,8 @@ export function useSetPreference() {
 
   return useMutation({
     mutationFn: ({ key, value }: { key: string; value: string }) => api.setPreference(key, value),
-    // Optimistic: every reader of usePreferences() — LocaleContext among them — sees the new
-    // value the instant the mutation fires, on the one shared cache entry, rather than after a
-    // round trip a stateless test double can't even simulate. onError is what makes a refused
-    // write behave like one: the write failed, so the cache has to go back to what it held.
+    // Optimistic on the one shared entry, so every reader (LocaleContext too) sees the value at
+    // once; onError restores it, since a refused write must look refused.
     onMutate: async ({ key, value }) => {
       await client.cancelQueries({ queryKey })
       const previous = client.getQueryData<Preferences>(queryKey)
@@ -129,11 +121,8 @@ export const ROW_ACTIONS: readonly RowAction[] = ['seen', 'archive', 'junk', 'de
 /** What the row carried before the setting existed. */
 export const DEFAULT_ROW_ACTIONS: readonly RowAction[] = ['seen', 'archive', 'delete']
 
-/**
- * An absent key is an older backend; the empty string is an account that switched every icon
- * off. Collapsing the two would strip the row bare on the first render against a build that
- * does not know the key yet, so only `undefined` falls back.
- */
+/** An absent key is an older backend; '' is every icon switched off. Only `undefined` falls back,
+ * or the row is stripped bare against a build that does not know the key yet. */
 export function rowActionsOf(preferences: Preferences): RowAction[] {
   const stored = preferences[PREFERENCE_KEYS.rowActions]
   if (stored === undefined) return [...DEFAULT_ROW_ACTIONS]

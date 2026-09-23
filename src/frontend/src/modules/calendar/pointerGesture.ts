@@ -15,21 +15,15 @@ function swallow(event: Event) {
   event.stopPropagation()
 }
 
-/**
- * The click the browser fires on the element a drag ended on. Without it the drop would reopen
- * the bubble over the block it has just moved — and it is disarmed on the next task rather than
- * left waiting, so a gesture that no click followed cannot swallow a later one.
- */
+/** Swallows the click fired where a drag ended, or the drop reopens the bubble; disarmed on the
+ * next task, so a gesture no click followed cannot swallow a later one. */
 function suppressClick(target: HTMLElement) {
   target.addEventListener('click', swallow, { capture: true, once: true })
   setTimeout(() => target.removeEventListener('click', swallow, { capture: true }), 0)
 }
 
-/**
- * The plumbing the grid's three gestures share: the threshold that keeps a click a click, pointer
- * capture, Escape and `pointercancel` as abandonment, and listeners that always come off. It
- * returns its own stopper, so a hook can drop a gesture that outlived its component.
- */
+/** The three gestures' shared plumbing: the click threshold, pointer capture, Escape and
+ * `pointercancel` as abandonment, listeners always removed. Returns a stopper for unmounts. */
 export function trackPointer(event: ReactPointerEvent, on: PointerTrack): () => void {
   const originX = event.clientX
   const originY = event.clientY

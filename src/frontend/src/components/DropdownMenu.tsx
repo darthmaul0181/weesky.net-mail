@@ -18,10 +18,8 @@ interface MenuAction extends MenuItemBase {
   href?: never
 }
 
-/** A row that navigates rather than acts. Always a new tab: middle-click, Ctrl+click and the
-    browser's own context menu all do nothing on a <button>, and a control that navigates while
-    looking like a command teaches the wrong thing about the menu. Never disabled — a greyed
-    link has no honest markup, and no caller needs one. */
+/** A row that navigates. Always a new tab, since a <button> loses middle-click, Ctrl+click and the
+ * context menu; never disabled, as a greyed link has no honest markup. */
 interface MenuLink extends MenuItemBase {
   href: string
   onSelect?: never
@@ -36,23 +34,12 @@ interface Props {
   trigger: ReactNode
   items: MenuEntry[]
   className?: string
-  /**
-   * Which way the menu opens relative to the trigger. Defaults to 'down'.
-   *
-   * 'auto' measures the open menu against the viewport and flips it up only when it would not
-   * fit below and fits better above. For a trigger that sits at the end of a column whose length
-   * the contact decides — the editor's "add a field" — neither fixed choice is right: measured on
-   * a 763px viewport the menu ran to 838, seventy-five pixels under the fold, and a contact with
-   * no postal address puts the same trigger high enough that opening upward would run off the top
-   * instead.
-   */
+  /** Defaults to 'down'. 'auto' flips up only when the menu fits better above than below, for a
+   * trigger whose height depends on content (the contact editor's "add a field"): measured, 'down'
+   * ran 75px under the fold, and 'up' would run off the top on a short contact. */
   direction?: 'down' | 'up' | 'auto'
-  /**
-   * Which edge the menu shares with its trigger, i.e. the direction it grows in. Right by
-   * default, which suits a trigger sitting against the right edge of its column — the reader
-   * kebab, the banner chevron, the account block. A trigger at the *left* of a wide row needs
-   * 'left', or the menu grows away from the space it has and slides under the column beside it.
-   */
+  /** The edge shared with the trigger. Right by default, for a trigger against its column's right
+   * edge; one at the left of a wide row needs 'left', or the menu slides under the next column. */
   align?: 'right' | 'left'
 }
 

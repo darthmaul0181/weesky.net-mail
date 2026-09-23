@@ -1,17 +1,6 @@
-/**
- * Recolours a message for dark mode by inverting each colour's *lightness* and leaving its hue
- * alone — the approach Dark Reader takes — under two bounds: a background is never lightened and
- * a text colour never darkened, and a saturated background is damped. Every pair therefore
- * converges on a dark background under light text, whichever half the sender declared.
- *
- * A CSS `filter: invert()` was tried first and is the cheap approximation of this. It inverts
- * in RGB, which drags hues across the wheel: a red button came back cyan until a hue-rotate was
- * bolted on, images had to be inverted a second time to survive, and every white became pure
- * black. Working on the colours themselves keeps a red button red, an Amazon yellow yellow, and
- * never touches a photograph at all.
- *
- * Runs before sanitising, so everything it writes is subject to the same pass as the rest.
- */
+// Inverts each colour's lightness and keeps its hue; a background is never lightened, a text colour
+// never darkened, and a saturated background is damped, so every pair ends dark under light.
+// Runs before sanitising, so what it writes faces the same pass as the rest.
 
 /** Attributes that carry a colour rather than a URL or a measurement. */
 const COLOUR_ATTRIBUTES = ['bgcolor', 'color', 'bordercolor']
@@ -19,17 +8,12 @@ const COLOUR_ATTRIBUTES = ['bgcolor', 'color', 'bordercolor']
 /** Declarations whose value is a colour. `background` is excluded: it is a shorthand. */
 const COLOUR_PROPERTIES = /(^|[\s;])(color|background-color|border(-[a-z]+)?-color|outline-color)\s*:\s*([^;]+)/gi
 
-/**
- * A gradient is a colour wearing an image's clothes, and mail tints a background image by laying
- * a flat one over it — so a message can paint itself white through a property no colour rule
- * would ever look at.
- */
+// A gradient is a colour in an image's clothes: mail tints a background image by laying a flat one
+// over it, so a message could paint itself white through a property no colour rule looks at.
 const IMAGE_PROPERTY = /(^|[\s;])(background-image)\s*:\s*([^;]+)/gi
 
-/**
- * A url() or a colour, url() first: matching it consumes the whole function, so a path that
- * spells a colour can never be read as one.
- */
+// url() first: matching it consumes the whole function, so a path that spells a colour is never
+// read as one.
 const URL_OR_COLOUR = /url\((?:"[^"]*"|'[^']*'|[^)]*)\)|#[\da-f]{3,8}\b|rgba?\([^)]*\)/gi
 
 // White lands here rather than on #000, and black lands on the top rather than #fff: the app's
@@ -37,21 +21,15 @@ const URL_OR_COLOUR = /url\((?:"[^"]*"|'[^']*'|[^)]*)\)|#[\da-f]{3,8}\b|rgba?\([
 const DARKEST = 0.13
 const LIGHTEST = 0.88
 
-/**
- * A slab of brand colour is what glows on a dark canvas — an Amazon button came back a vivid
- * gold. A background therefore keeps only part of its saturation and lands under a lower ceiling,
- * both in proportion to how saturated it was: a grey is untouched, so ordinary mail does not move.
- * Text is left at full strength, since a link that loses its colour stops reading as one.
- */
+// A saturated background slab glows on a dark canvas: it keeps part of its saturation under a lower
+// ceiling, in proportion to how saturated it was, so greys never move. Text keeps full strength.
 const BACKGROUND_SATURATION = 0.6
 const SATURATED_LIGHTEST = 0.55
 
 export type ColourRole = 'text' | 'background'
 
-/**
- * The dark-mode equivalent of a single colour, or null when the value is not one we can read —
- * `transparent`, `inherit`, a keyword. Null means "leave it alone", never "guess".
- */
+/** The dark-mode equivalent of one colour, or null for `transparent`, `inherit` or a keyword:
+ * null means "leave it alone", never "guess". */
 export function toDarkColour(value: string, role: ColourRole = 'text'): string | null {
   const rgba = parse(value.trim())
   if (!rgba) return null
@@ -104,11 +82,8 @@ export function darkenColours(html: string): string {
   return document.body.innerHTML
 }
 
-/**
- * `bgcolor="FFFFFF"` — no hash — is legal in a presentational attribute, and the browser's legacy
- * parsing paints it. Rescued here and nowhere else: CSS has no hash-less hex, so a style
- * declaration carrying one is ignored by the browser and must be ignored by us too.
- */
+// A hash-less hex is legal in a presentational attribute and painted by legacy parsing; CSS has none,
+// so it is rescued here only and a style declaration carrying one stays ignored.
 function withHash(value: string): string {
   return /^[\da-f]{3}$|^[\da-f]{6}$/i.test(value.trim()) ? `#${value.trim()}` : value
 }
@@ -128,11 +103,7 @@ function hex(channel: number): string {
   return channel.toString(16).padStart(2, '0')
 }
 
-/**
- * The sixteen names `bgcolor` was designed for, which mail still uses where a hex would do. The
- * full CSS list is not worth carrying: everything past these is vanishingly rare in mail, and an
- * unread colour is left alone rather than guessed at.
- */
+// The sixteen `bgcolor` names; any other name is left alone rather than guessed at.
 const NAMED: Record<string, string> = {
   white: '#ffffff', silver: '#c0c0c0', gray: '#808080', grey: '#808080', black: '#000000',
   red: '#ff0000', maroon: '#800000', yellow: '#ffff00', olive: '#808000',

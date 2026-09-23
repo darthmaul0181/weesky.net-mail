@@ -9,13 +9,8 @@ export interface Attribution { dateText: string; name: string; address: string }
 /** The caret lands on the first; the second keeps what gets typed off the attribution. */
 const CURSOR_LINES = '<div><br></div><div><br></div>'
 
-/**
- * Reply body: two empty lines, the attribution, then the original inside a visible blockquote.
- *
- * The attribution and the forward headers below are written into the user's own draft and read
- * back in the composer before anything is sent, so they follow the interface language. Both
- * operands are already HTML-escaped and `escapeValue` is off, so `t` inserts them verbatim.
- */
+// The attribution and forward headers land in the user's own draft, so they follow the interface
+// language. Both operands are already HTML-escaped and `escapeValue` is off: `t` inserts them as is.
 export function replyQuote(quotableHtml: string, attribution: Attribution): string {
   const { dateText, name, address } = attribution
   const line = i18next.t('compose:quote.attribution', {

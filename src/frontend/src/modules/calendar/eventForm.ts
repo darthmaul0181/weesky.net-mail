@@ -66,7 +66,7 @@ export function newEventForm(
     calendarId, title: '', isAllDay: allDay,
     startDate, startTime, endDate, endTime, timeZone: tz,
     // Born silent, whole day or not: a reminder is asked for with "+ Add a reminder", never
-    // handed out — décision 13's fifteen minutes were withdrawn by the owner on 2026-09-10.
+    // handed out — the default fifteen minutes were withdrawn by the owner on 2026-09-10.
     repeat: { kind: 'never' }, reminders: [],
     location: '', description: '',
     // A day off does not block a free/busy, and that is how Apple's clients write one.
@@ -143,10 +143,9 @@ export function formOf(
   }
 }
 
-/** The grid's rule, in the editor's words: the user's own answer is their availability once
-    there is one, so an acceptance shows busy — or free, the entry transparent — over any
-    STATUS:TENTATIVE the file kept, and « provisoire » shows tentative over a CONFIRMED. The
-    `Tentative` availability *is* the STATUS, which is what `isTentative` reads it as. */
+/** The grid's rule in the editor's words: the user's own answer is their availability once there
+ * is one (an acceptance shows busy or free over a kept TENTATIVE, « provisoire » tentative over a
+ * CONFIRMED), and `Tentative` availability *is* the STATUS. */
 function availabilityOf({ fields: { availability }, myPartStat }: EventDetail): Availability {
   if (isTentative(availability, myPartStat)) return 'Tentative'
   return availability === 'Tentative' ? 'Busy' : availability
@@ -181,11 +180,9 @@ function masterStartDay(detail: EventDetail): PlainDate {
   return f.isAllDay ? f.startDate ?? '' : splitWallClock(f.start ?? '')[0]
 }
 
-/** Scope All, saved from an occurrence that is not the first: the form was sown with THAT
-    occurrence's days, and written as they stand they would become the series' new DTSTART —
-    every occurrence before the one opened would vanish. What the whole series takes from the form
-    is the change, never the day: the clocks, the length, and the days the occurrence was moved
-    by, re-posed on the day the series actually starts. */
+/** Scope All from a later occurrence: written as sown, its day would become the series' DTSTART
+ * and erase every earlier occurrence. The series takes the change (clocks, length, days moved),
+ * re-posed on its own first day. */
 function rebasedOnMaster(
   form: EventFormState, detail: EventDetail, occurrence: Occurrence | null,
 ): EventFormState {
@@ -260,9 +257,9 @@ export function allowedScopes(
   return ['This', 'ThisAndFollowing', 'All']
 }
 
-/** An event is recurring on screen when the occurrence opened carries a RECURRENCE-ID (décision
-    8). A repeat the picker has just added is not one: the series has no other occurrence yet, so
-    the scope question would offer two answers the server cannot honour. */
+/** An event is recurring on screen when the occurrence opened carries a RECURRENCE-ID. A repeat
+    the picker has just added is not one: the series has no other occurrence yet, so the scope
+    question would offer two answers the server cannot honour. */
 export function isRecurring(occurrence: Occurrence | null): boolean {
   return Boolean(occurrence?.instanceId)
 }
@@ -338,12 +335,9 @@ function zoneOf(detail: EventDetail, occurrence: Occurrence): string {
 
 const localOf = (clock: WallClock) => `${clock.day}T${clockOf(clock.minute)}:00`
 
-/**
- * The occurrence a gesture leaves behind, for the window cache to draw until the server answers.
- * The shifted wall clock is re-posed in the event's own zone through `Intl` — a block dragged an
- * hour on the grid is an hour of clock face, and re-posing it anywhere else would land it on the
- * wrong minute the morning the clocks change.
- */
+/** The occurrence a gesture leaves in the window cache until the server answers. The shifted wall
+ * clock is re-posed in the event's own zone through `Intl`, or it lands on the wrong minute the
+ * morning the clocks change. */
 export function movedOccurrence(
   detail: EventDetail, occurrence: Occurrence, deltaMinutes: number,
   newDurationMinutes: number | null,

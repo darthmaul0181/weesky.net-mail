@@ -13,10 +13,7 @@ interface PaneSplitterProps {
 
 const NUDGE = 16
 
-/**
- * The draggable bar between two panes. It owns no size — the parent hands one in and hears
- * about changes — so the same bar serves the vertical and horizontal splits.
- */
+// Owns no size: the parent hands one in and hears changes, so one bar serves both orientations.
 export default function PaneSplitter(
   { orientation, size, defaultSize, min, reserve, onResize }: PaneSplitterProps,
 ) {
@@ -37,10 +34,8 @@ export default function PaneSplitter(
     return span ? Math.max(min, span - reserve) : Number.POSITIVE_INFINITY
   }, [vertical, min, reserve])
 
-  // aria-valuemax has to stay current on its own: a window resize or a sibling pane changing
-  // size re-renders neither this component nor its parent for any other reason, so nothing
-  // computed during render would ever learn about it. A ResizeObserver is the one thing that
-  // notices a size change with no cause of its own.
+  // A window resize or a sibling pane re-renders nothing here, so aria-valuemax is kept current by a
+  // ResizeObserver, the one thing that notices a size change with no cause of its own.
   useEffect(() => {
     if (!node?.parentElement || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(() => {

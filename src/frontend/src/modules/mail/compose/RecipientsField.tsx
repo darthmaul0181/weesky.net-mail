@@ -29,13 +29,9 @@ interface Props {
   isValid?: (token: string) => boolean
 }
 
-/**
- * Canonical address to the name its contact carries, if any. A token stays the bare address — the
- * wire format and every reader downstream depend on it — so naming it is a rendering step, and it
- * is exported because the folded summary on a phone names the same recipients: two callers naming
- * one person two different ways is the drift `displayNameOf` exists to prevent in contacts.
- * Sorted, and first-wins, so a shared address keeps the name the dropdown offered it under.
- */
+// Canonical address to its contact's name. A token stays the bare address (the wire format), so naming
+// is a rendering step, exported so the folded phone summary names people as the chips do. Sorted and
+// first-wins, so a shared address keeps the name the dropdown offered it under.
 export function namesByAddressOf(contacts: Contact[]): Map<string, string> {
   const names = new Map<string, string>()
   for (const contact of [...contacts].sort(compareContacts)) {

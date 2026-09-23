@@ -36,12 +36,8 @@ export function isEmptyCriteria(criteria: SearchCriteria): boolean {
     && !criteria.unread && !criteria.flagged && !criteria.hasAttachment
 }
 
-/**
- * What the list heading's star toggle writes on its own: this folder, starred, nothing else.
- * The lit star is the whole indication, so the heading keeps the folder name instead of handing
- * it to the results banner — until another criterion joins, or the search spans every folder,
- * where there is no folder name to keep and the count is worth showing.
- */
+// The star toggle alone: this folder, starred. The lit star is the whole indication, so the heading
+// keeps the folder name until another criterion joins or the search spans every folder.
 export function isStarredOnly(criteria: SearchCriteria): boolean {
   return criteria.flagged === true
     && !criteria.allFolders
@@ -72,11 +68,8 @@ export function criteriaFromForm(folderPath: string, form: AdvancedForm): Search
   return isEmptyCriteria(criteria) ? null : criteria
 }
 
-/**
- * "This year" as a day count, so the server still receives SinceDays, never a date.
- * Built from local Y/M/D via Date.UTC so a DST transition between Jan 1 and now can't
- * shave off an hour and swallow a day.
- */
+// The server receives SinceDays, never a date. Built via Date.UTC so a DST change since Jan 1 cannot
+// shave an hour and swallow a day.
 export function daysSinceYearStart(now: Date): number {
   const start = Date.UTC(now.getFullYear(), 0, 1)
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())

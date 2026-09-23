@@ -31,8 +31,8 @@ describe('AddressLabel', () => {
     expect(screen.getByRole('button', { name: 'Claude Team' })).toBeInTheDocument()
   })
 
-  // Fix round 1: the same Tooltip now gives its bubble a real id for the recipient case — the
-  // sender button beside it, wrapped by that same Tooltip, was left pointing at nothing.
+  // The same Tooltip now gives its bubble a real id for the recipient case — the sender button
+  // beside it, wrapped by that same Tooltip, was left pointing at nothing.
   it('describes the sender with its own bubble too, once it has one', () => {
     render(<AddressLabel sender name="Claude Team" address="no-reply@email.claude.com" />)
 

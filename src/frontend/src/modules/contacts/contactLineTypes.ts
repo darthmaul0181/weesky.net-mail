@@ -1,35 +1,20 @@
 import type { TFunction } from 'i18next'
 
-/** The type tokens the editor offers, and the labels they wear. The table is the CSV exporter's,
-    which is where the mapping between a vCard type and a human word already lives. */
-/** The parts of a TYPE that say nothing to a reader. `INTERNET` is what every vCard e-mail
-    carries and means only "this is an e-mail address"; `PREF` is the primary flag, which the card
-    already renders as its own badge beside the value. */
+// The editor's type tokens and their labels; the table is the CSV exporter's.
+/** Parts of a TYPE that say nothing: `INTERNET` rides on every e-mail, and `PREF` has its own badge. */
 const MUTE = new Set(['INTERNET', 'PREF'])
 
-/** What is left of a type token once the parts that name no kind are dropped, or '' when nothing
-    is. The card asks this before drawing a chip at all: an e-mail line's type is `INTERNET,PREF`
-    on essentially every imported card, and `typeLabel` has no word for it, so its `default` arm
-    put the raw vCard token on screen in capitals — measured on a real contact, reading
-    `INTERNET,PREF` where the phone beside it read `Mobile`.
-
-    The editor never showed this because it offers no type control for an address: only phones and
-    postal addresses have one. So the chip is where these tokens first became visible. */
+/** A type token minus the parts naming no kind, or ''. The card asks before drawing a chip: an
+ * imported e-mail line's `INTERNET,PREF` has no word, and its raw token once showed in capitals. */
 export function visibleType(token: string): string {
   return token.split(',').map(part => part.trim())
     .filter(part => part !== '' && !MUTE.has(part.toUpperCase()))
     .join(',')
 }
 
-/** The word a type token wears on screen. The editor puts it in a select and the card puts it in a
-    chip, so it lives here rather than in either: the two naming one token two ways is the bug.
-    An unknown token is shown verbatim — an imported card's own word beats a wrong guess, and
-    `typeOptions` keeps it selectable for the same reason.
-
-    `{ ns: 'contacts' }` is redundant to i18next, which reads the namespace off the TFunction, and
-    is not redundant to `locales/keys.test.ts`: that guard binds a file's namespace from its
-    `useTranslation(...)` call, and this file has none to bind from. Without it every key here is
-    checked against `common` and the build reddens. Do not tidy it away. */
+/** A type token's word on screen, shared by the editor's select and the card's chip; an unknown one
+ * shows verbatim. `{ ns: 'contacts' }` is for `keys.test.ts`, which finds no `useTranslation` here
+ * to bind a namespace from: do not tidy it away. */
 export function typeLabel(token: string, t: TFunction<'contacts'>): string {
   switch (token.trim().toUpperCase()) {
     case 'CELL': return t('editor.types.cell', { ns: 'contacts' })
@@ -56,16 +41,14 @@ export function typeOptions(known: readonly string[], current: string): string[]
   return [...known, token]
 }
 
-/** décision 4a's `ApplyType` strips PREF before it reaches the card's own type column, but a 3.0
-    round trip can still project it back in (`INTERNET,PREF,WORK`) — never offer it as a choice. */
+/** `ApplyType` strips PREF before it reaches the card's own type column, but a 3.0 round trip can
+    still project it back in (`INTERNET,PREF,WORK`) — never offer it as a choice. */
 export function stripPref(type: string): string {
   return type.split(',').filter(part => part.trim().toUpperCase() !== 'PREF').join(',')
 }
 
-/** `VCardProjector` unquotes a TYPE like `"Work Email"` without filtering, but the write-side
-    grammar (`ContactValidator.IsValidTypeToken`) only accepts `[A-Za-z0-9,-]`. Widening the
-    grammar would make the composer emit an unquoted, malformed TYPE; sending the token back
-    verbatim would leave the contact permanently unsaveable. Dropping it is the least-bad option. */
+/** Drops the parts `IsValidTypeToken` refuses: `VCardProjector` unquotes a TYPE like `"Work Email"`,
+ * and sent back it would leave the contact unsaveable (a wider grammar would emit a bad TYPE). */
 export function sanitizeTypeForSubmit(type: string): string {
   return type.split(',').filter(part => /^[A-Za-z0-9-]*$/.test(part.trim())).join(',')
 }

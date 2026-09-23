@@ -169,7 +169,7 @@ describe('useSetFlags', () => {
   })
 
   it('counts a uid duplicated across two stream blocks only once', async () => {
-    // dedupeByUid's raison d'être: an arrival between two fetches pushes a row into the next
+    // dedupeByUid's reason to exist: an arrival between two fetches pushes a row into the next
     // block, so the same uid legitimately sits in both.
     seed([summary(1, { seen: true })], [summary(5), summary(6)], [summary(5), summary(7)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
@@ -187,7 +187,7 @@ describe('useSetFlags', () => {
   })
 
   it('counts every uid of a batch, even split across two page caches', async () => {
-    // What 2b3's multi-select will send: uid 1 sits in the cached page 0, uid 2 only in page 1.
+    // What the multi-select sends: uid 1 sits in the cached page 0, uid 2 only in page 1.
     // Counting one cache's delta would move the badge by one instead of two.
     client.setQueryData(mailKeys.messages('primary', 'INBOX', 0, 50), pageOf([summary(1)]))
     client.setQueryData(mailKeys.messages('primary', 'INBOX', 1, 50), pageOf([summary(2)]))
