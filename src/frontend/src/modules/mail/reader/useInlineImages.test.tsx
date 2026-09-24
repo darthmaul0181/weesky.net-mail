@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
-import { settle } from '../../../test-utils'
+import { focusManager, type QueryClient } from '@tanstack/react-query'
+import { createTestQueryClient, settle, withQueryClient } from '../../../test-utils'
 import type { MailAttachmentInfo } from '../api/mailTypes'
 import { useInlineImages } from './useInlineImages'
 
@@ -28,9 +27,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
 beforeEach(() => { auth.activeAccountId = 'primary' })
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 const part = (over: Partial<MailAttachmentInfo> = {}): MailAttachmentInfo => ({
   part: '2', fileName: 'logo.png', contentType: 'image/png', size: 10,
@@ -59,7 +56,8 @@ function inlined(): Record<string, unknown> {
 describe('useInlineImages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('answers the referenced part as a data URI keyed by its cid', async () => {

@@ -1,7 +1,8 @@
-import { Fragment, useCallback, useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import LoadingBlock from '../../../components/LoadingBlock'
+import { useFocusReturnOnUnmount } from '../../../hooks/useFocusReturnOnUnmount'
 import RefreshIcon from '../../../icons/RefreshIcon'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
@@ -32,15 +33,7 @@ export default function DeliveryRepliesSection({ addToast }: Props) {
   const [shownKey, setShownKey] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<'regenerate' | 'delete' | null>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const cardNode = useRef<HTMLDivElement | null>(null)
-
-  // A card replaced while holding focus (its own icon buttons unmounting under a state change)
-  // would take the focus down with it. React detaches the ref before removing the node, so focus
-  // can still be seen inside and handed on — the same pattern as SchedulingAccountSection's.
-  const cardRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node && cardNode.current?.contains(document.activeElement)) headingRef.current?.focus()
-    cardNode.current = node
-  }, [])
+  const cardRef = useFocusReturnOnUnmount(headingRef)
 
   async function runGenerate() {
     try {
@@ -105,7 +98,6 @@ export default function DeliveryRepliesSection({ addToast }: Props) {
           {configured ? (
             // Keyed apart from the "empty" branch, or React reuses the node across this ternary and
             // useLayer's "is the opener still connected" check sees it connected under new content.
-            // SchedulingAccountSection's renderCard keys its branches for the same reason.
             <Fragment key="configured-actions">
               <button type="button" className="admin-icon-btn" title={t('deliveryReplies.regenerate')}
                 aria-label={t('deliveryReplies.regenerate')} onClick={() => setConfirming('regenerate')}>

@@ -1,10 +1,8 @@
 import { lazy, Suspense, type ComponentType } from 'react'
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import RequireAuth from './layouts/RequireAuth'
-import RequireAdmin from './layouts/RequireAdmin'
-import RequireAliases from './layouts/RequireAliases'
-import RequirePrimary from './layouts/RequirePrimary'
-import RequireSieve from './layouts/RequireSieve'
+import Gate from './layouts/Gate'
+import { allowAdmin, allowAliases, allowPrimary, allowSieve } from './layouts/gates'
 import AppShell from './layouts/AppShell'
 import LoginRoute from './pages/LoginRoute'
 import RouteError from './pages/RouteError'
@@ -68,12 +66,12 @@ export const routes: RouteObject[] = [
                 children: [
                   { index: true, element: <Navigate to="/settings/account" replace /> },
                   {
-                    element: <RequirePrimary />,
+                    element: <Gate allow={allowPrimary} redirect="/settings/general" />,
                     children: [
                       { path: 'account', element: <AccountPage /> },
                       { path: 'sync', element: loaded('sync', SyncPage) },
                       {
-                        element: <RequireAliases />,
+                        element: <Gate allow={allowAliases} redirect="/settings/general" />,
                         children: [
                           { path: 'aliases', element: loaded('aliases', AliasesPage) },
                         ],
@@ -89,11 +87,11 @@ export const routes: RouteObject[] = [
                   { path: 'identities', element: loaded('identities', IdentitiesPage) },
                   { path: 'about', element: loaded('about', AboutPage) },
                   {
-                    element: <RequireSieve />,
+                    element: <Gate allow={allowSieve} redirect="/settings/general" />,
                     children: [{ path: 'rules', element: loaded('rules', RulesPage) }],
                   },
                   {
-                    element: <RequireAdmin />,
+                    element: <Gate allow={allowAdmin} redirect="/settings/account" />,
                     children: [{ path: 'admin', element: loaded('admin', AdminPage) }],
                   },
                 ],

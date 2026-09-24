@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
+import { isValidAddress } from '../../../lib/emailAddress'
 import { contactNameOf } from '../../contacts/contactName'
 import { compareContacts, suggestionsFor } from '../../contacts/contactSearch'
 import type { ComposerSuggestion, GroupOption } from '../../contacts/contactSearch'
 import type { Contact } from '../../contacts/contactTypes'
-
-/** Paint-and-gate check only; the backend's MimeKit parse is the authority. */
-export function isValidAddress(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-}
 
 interface Props {
   id: string

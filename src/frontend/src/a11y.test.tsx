@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Routes, Route, createMemoryRouter, RouterProvider } from 'react-router'
 import { expectNoAxeViolations } from './a11y-test'
-import { resetViewport } from './test-utils'
+import { createTestQueryClient, resetViewport } from './test-utils'
 import LoginPage from './pages/LoginPage'
 import MailLayout from './modules/mail/MailLayout'
 import type { MailFolderNode } from './modules/mail/api/mailTypes'
@@ -81,7 +81,7 @@ afterEach(resetViewport)
 beforeEach(() => vi.clearAllMocks())
 
 function queryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return createTestQueryClient()
 }
 
 describe('accessibility sweep', () => {

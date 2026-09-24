@@ -173,7 +173,8 @@ describe('ReaderActions', () => {
 
     it('disables with its reason and fires nothing', () => {
       const onDelete = vi.fn()
-      render(<ReaderActions {...base} deleteDisabled onDelete={onDelete} />)
+      render(<ReaderActions {...base} deleteDisabled
+        deleteReason="Assign the trash folder in Settings → Folders" onDelete={onDelete} />)
 
       const button = screen.getByRole('button', { name: 'Delete' })
       expect(button).toBeDisabled()

@@ -7,8 +7,8 @@ import {
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
 import { hasOpenLayer } from '../../../lib/layerStack'
-import { rolePathsOf } from '../folders/folderNodes'
 import { useDeleteMessages, useFolders, useMoveMessages, useSetFlags } from '../queries'
+import { useRoleActions } from '../useRoleActions'
 import EmptyFolderBanner from './EmptyFolderBanner'
 import SearchBar from './SearchBar'
 import SearchResultsBanner from './SearchResultsBanner'
@@ -99,21 +99,14 @@ export default function MessageList(
   const deleteMessages = useDeleteMessages(onNotify)
   const { departing } = rowExit
   const { data: folders } = useFolders()
-  const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
+  const {
+    roles, inTrash, archiveOff, archiveReason, junkOff, junkReason, trashOff, trashReason, deleteLabel,
+  } = useRoleActions(folders, folderRole)
   // Named for the confirm dialog; the uids are the whole thread when the row is one.
   const [expunging, setExpunging] = useState<{ label: string; uids: number[] } | null>(null)
   // A Set, not the array: `includes` per row is quadratic across the page, and a drag carrying
   // the whole selection is exactly when the page is longest.
   const [draggingUids, setDraggingUids] = useState<Set<number> | null>(null)
-  const inTrash = folderRole === 'trash'
-  const archiveOff = !roles.archive || folderRole === 'archive'
-  const archiveReason = t(folderRole === 'archive' ? 'actions.alreadyArchived' : 'actions.noArchiveFolder')
-  const junkOff = !roles.junk || folderRole === 'junk'
-  const junkReason = t(folderRole === 'junk' ? 'actions.alreadyJunk' : 'actions.noJunkFolder')
-  const trashOff = !inTrash && !roles.trash
-  const trashReason = t('actions.noTrashFolder')
-  const deleteLabel = inTrash
-    ? t('actions.deletePermanently') : t('actions.delete', { ns: 'common' })
   const purges = folderRole === 'trash' || folderRole === 'junk'
   const emptyReason = total === 0
     ? t('list.alreadyEmpty')

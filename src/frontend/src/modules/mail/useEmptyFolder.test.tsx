@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import type { QueryClient } from '@tanstack/react-query'
 import { useEmptyFolder, mailKeys } from './queries'
-import { settle } from '../../test-utils'
+import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({ emptyFolder: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
@@ -16,7 +15,7 @@ vi.mock('../../hooks/usePreferences', () => ({
 
 const ACC = 'primary'
 function seededClient() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   client.setQueryData(mailKeys.messages(ACC, 'Trash', 0, 50), {
     messages: [{ uid: 5, seen: false }, { uid: 6, seen: true }], total: 2, page: 0, pageSize: 50,
   })
@@ -27,10 +26,7 @@ function seededClient() {
   return client
 }
 function wrapperFor(client: QueryClient) {
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  }
-  return wrapper
+  return withQueryClient(client)
 }
 
 beforeEach(() => { vi.clearAllMocks(); mocks.emptyFolder.mockResolvedValue(undefined) })

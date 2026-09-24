@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import type { QueryClient, InfiniteData } from '@tanstack/react-query'
 import type { MailFolderNode, MailFolderPage, MailMessageSummary } from '../api/mailTypes'
 import { mailKeys, useMoveMessages, useSetFlags } from '../queries'
 import { dedupeByUid } from './messageStream'
-import { settle } from '../../../test-utils'
+import { createTestQueryClient, settle, withQueryClient } from '../../../test-utils'
 import { useListRefresh } from './useListRefresh'
 
 const mocks = vi.hoisted(() => ({
@@ -18,9 +17,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
 }))
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 function inbox(overrides: Partial<MailFolderNode> = {}): MailFolderNode {
   return {
@@ -82,7 +79,8 @@ async function renderWithBaseline(pageSize: string, first: MailFolderNode, group
 describe('useListRefresh', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('does nothing on the baseline observation', async () => {

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import ChevronLeftIcon from '../../icons/ChevronLeftIcon'
 import ChevronRightIcon from '../../icons/ChevronRightIcon'
 import { DrawerToggle } from '../../layouts/ContextDrawer'
+import { PHONE_VIEWS, VIEWS } from './useCalendarUrlState'
 import type { View } from './windowOf'
 
 export interface CalendarToolbarProps {
@@ -22,11 +23,6 @@ export interface CalendarToolbarProps {
   onStep: (delta: 1 | -1) => void
   onView: (view: View) => void
 }
-
-/** Day is the phone's week: seven columns in 360px is six unreadable ones and a sideways scroll.
-    Month leads: a phone opens on the shape of the month. */
-const PHONE_VIEWS: View[] = ['month', 'day', 'list']
-const VIEWS: View[] = ['day', 'week', 'month', 'list']
 
 export default function CalendarToolbar({
   view, title, weekNumber, query, phone, inDrawer, onOpenDrawer, onQuery, onCommitQuery, onToday,

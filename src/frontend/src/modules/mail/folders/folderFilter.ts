@@ -1,10 +1,6 @@
-// Nobody reaches for the accent to find "Courrier indésirable": NFD splits off the diacritics
-// and \p{M} drops them.
-export function normalizeQuery(value: string): string {
-  return value.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
-}
+import { fold } from '../../../lib/fold'
 
 /** Substring match on the folder's own name — blind to case and accents both ways. */
 export function folderMatches(name: string, query: string): boolean {
-  return normalizeQuery(name).includes(normalizeQuery(query))
+  return fold(name).includes(fold(query))
 }

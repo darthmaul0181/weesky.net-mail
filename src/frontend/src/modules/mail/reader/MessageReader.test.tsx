@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router'
 import { useRef, useState, type ReactNode } from 'react'
 import userEvent from '@testing-library/user-event'
-import { mockViewport, resetViewport, settle } from '../../../test-utils'
+import { createTestQueryClient, mockViewport, resetViewport, settle } from '../../../test-utils'
 import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
 import type { Contact } from '../../contacts/contactTypes'
 import { mailKeys } from '../queries'
@@ -105,7 +105,7 @@ const noTrashTree = roleTree.filter(node => node.specialUse !== 'trash')
 // Folders are seeded fresh (staleTime Infinity), so roles resolve synchronously instead of
 // racing the message load — the reader reads them off the same cache the app does.
 function makeClient(tree: MailFolderNode[] = roleTree) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const client = createTestQueryClient({ queries: { staleTime: Infinity } })
   client.setQueryData(['mail', 'primary', 'folders'], tree)
   return client
 }

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useRef, useState } from 'react'
@@ -7,6 +7,7 @@ import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarnes
 import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import EventPreview from './EventPreview'
 import type { EventDetail, Occurrence } from './calendarTypes'
+import { createTestQueryClient } from '../../test-utils'
 
 vi.mock('../../api.js', () => ({
   api: { getEvent: vi.fn() },
@@ -72,7 +73,7 @@ function draw(fields: Partial<Occurrence> & { eventId: string } = DENTIST,
     onClose: () => void; onEdit: () => void; onDelete: () => void
   }> = {}) {
   const noop = () => {}
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   renderInCalendar(
     <QueryClientProvider client={client}>
       <EventPreview occurrence={occurrenceOf(fields)} calendar={calendarOf('a', '#3b82c4', 'Personal')}
@@ -268,7 +269,7 @@ describe('EventPreview', () => {
       stands for the layout closing it once a delete lands, and is clicked rather than pressed so
       the focus the bubble holds does not move first. */
   function drawWithRegion(anchor: HTMLElement) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const client = createTestQueryClient()
     function Host() {
       const region = useRef<HTMLDivElement>(null)
       const [open, setOpen] = useState(true)

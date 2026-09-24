@@ -3,6 +3,7 @@ import DropdownMenu from '../../../components/DropdownMenu'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import { useAuth } from '../../../contexts/AuthContext'
 import type { SendingIdentity } from '../api/mailTypes'
+import { usableIdentities } from './usableIdentities'
 
 interface Props {
   identities: SendingIdentity[]
@@ -22,7 +23,7 @@ export default function IdentitySelect({ identities, value, onChange }: Props) {
   const nameOf = (i: SendingIdentity) => (i.isPrimary ? identity?.displayName ?? i.displayName : i.displayName)
   const label = (i: SendingIdentity) => <><strong>{nameOf(i)}</strong> ({i.address})</>
 
-  const usable = identities.filter(i => !i.stale)
+  const usable = usableIdentities(identities)
   const current = identities.find(i => i.address === value)
   const caption = current ? label(current) : value
   const tag = !current || current.stale

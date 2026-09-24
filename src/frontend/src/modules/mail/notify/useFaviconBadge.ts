@@ -1,15 +1,13 @@
 import { useEffect } from 'react'
-import { setFaviconBadge } from '../lib/favicon'
-import { flatten } from '../modules/mail/folders/folderNodes'
-import { useFolders } from '../modules/mail/queries'
-import type { MailFolderNode } from '../modules/mail/api/mailTypes'
+import { setFaviconBadge } from '../../../lib/favicon'
+import type { MailFolderNode } from '../api/mailTypes'
+import { useFolders } from '../folders'
+import { inboxOf } from '../folders/folderNodes'
 
 /** Unread in the inbox alone: junk and trash carry counts nobody is behind on, the rule the
  *  folder tree already applies to its own badges. */
 export function inboxIsUnread(folders: MailFolderNode[] | undefined): boolean {
-  if (!folders) return false
-  const inbox = flatten(folders).find(entry => entry.node.specialUse === 'inbox')?.node
-  return (inbox?.unread ?? 0) > 0
+  return (inboxOf(folders)?.unread ?? 0) > 0
 }
 
 /** Marks the tab icon while the inbox holds unread mail. The query is disabled: it reads what the

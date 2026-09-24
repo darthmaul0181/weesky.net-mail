@@ -4,7 +4,7 @@ import { dateFormat } from '../../lib/intl'
 import ChevronLeftIcon from '../../icons/ChevronLeftIcon'
 import ChevronRightIcon from '../../icons/ChevronRightIcon'
 import { dayNames, monthGrid, weekNumberOf, type WeekRules } from './calendarLocale'
-import { type PlainDate, utcMidnightOf } from './plainDate'
+import { type PlainDate, shiftMonth, splitPlainDate, utcMidnightOf, type YearMonth } from './plainDate'
 
 export interface MiniMonthProps {
   /** The day the grid is showing, filled. The month follows it until the arrows move on. */
@@ -16,22 +16,16 @@ export interface MiniMonthProps {
   onPick: (day: PlainDate) => void
 }
 
-interface Cursor { year: number; month: number }
-
-function cursorOf(day: PlainDate): Cursor {
-  return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) }
-}
-
-function shift({ year, month }: Cursor, delta: number): Cursor {
-  const index = (year * 12 + month - 1) + delta
-  return { year: Math.floor(index / 12), month: (index % 12) + 1 }
+function cursorOf(day: PlainDate): YearMonth {
+  const { year, month } = splitPlainDate(day)
+  return { year, month }
 }
 
 /** The sidebar's month picker. Walking months never moves the anchor (looking ahead is not
  * choosing), but it follows the anchor, so it cannot show another month than the grid. */
 export default function MiniMonth({ anchor, today, rules, locale, onPick }: MiniMonthProps) {
   const { t } = useTranslation('calendar')
-  const [cursor, setCursor] = useState<Cursor>(() => cursorOf(anchor))
+  const [cursor, setCursor] = useState<YearMonth>(() => cursorOf(anchor))
   const [followed, setFollowed] = useState(anchor)
 
   if (followed !== anchor) {
@@ -51,9 +45,9 @@ export default function MiniMonth({ anchor, today, rules, locale, onPick }: Mini
       <div className="mini-month-head">
         <span className="mini-month-title">{heading}</span>
         <button type="button" className="mini-month-step" aria-label={t('sidebar.previousMonth')}
-          onClick={() => setCursor(shift(cursor, -1))}><ChevronLeftIcon size={14} /></button>
+          onClick={() => setCursor(shiftMonth(cursor, -1))}><ChevronLeftIcon size={14} /></button>
         <button type="button" className="mini-month-step" aria-label={t('sidebar.nextMonth')}
-          onClick={() => setCursor(shift(cursor, 1))}><ChevronRightIcon size={14} /></button>
+          onClick={() => setCursor(shiftMonth(cursor, 1))}><ChevronRightIcon size={14} /></button>
       </div>
 
       <div className="mini-month-names">

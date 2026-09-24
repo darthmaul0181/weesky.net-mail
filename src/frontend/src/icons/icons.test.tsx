@@ -62,6 +62,7 @@ import ClockIcon from './ClockIcon'
 import InfoIcon from './InfoIcon'
 import PlusIcon from './PlusIcon'
 import CloseIcon from './CloseIcon'
+import GlobeIcon from './GlobeIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -125,6 +126,7 @@ const icons = [
   { name: 'ClockIcon', Icon: ClockIcon, defaultSize: '16' },
   { name: 'PlusIcon', Icon: PlusIcon, defaultSize: '16' },
   { name: 'CloseIcon', Icon: CloseIcon, defaultSize: '16' },
+  { name: 'GlobeIcon', Icon: GlobeIcon, defaultSize: '15' },
 ]
 
 describe('icons', () => {

@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
-import { useAccountId } from '../../hooks/useAccountId'
+import { useAccountId, useComposeAccountId } from '../../hooks/useAccountId'
 import type {
   MailFolderNode, QuotePurpose, SaveDraftArgs, SendMessageArgs, SendMessageResult,
 } from './api/mailTypes'
-import { flatten } from './folders/folderNodes'
+import { folderByRole } from './folders/folderNodes'
 import { mailKeys } from './mailKeys'
 
 export type { SaveDraftArgs, SendMessageArgs, SendMessageResult }
@@ -12,8 +12,7 @@ export type { SaveDraftArgs, SendMessageArgs, SendMessageResult }
 // On success invalidates the tree (the Sent copy changes its counts) and the Sent folder's messages,
 // found in the cached tree by specialUse.
 export function useSendMessage(pinnedAccountId?: string) {
-  const activeAccountId = useAccountId()
-  const accountId = pinnedAccountId ?? activeAccountId
+  const accountId = useComposeAccountId(pinnedAccountId)
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -23,10 +22,10 @@ export function useSendMessage(pinnedAccountId?: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
       const folders = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
-      const sent = folders ? flatten(folders).find(entry => entry.node.specialUse === 'sent') : undefined
+      const sent = folderByRole(folders, 'sent')
       if (sent) {
-        void queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, sent.node.path) })
-        void queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, sent.node.path) })
+        void queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, sent.path) })
+        void queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, sent.path) })
       }
     },
   })
@@ -44,8 +43,7 @@ export function usePrepareQuote() {
 
 /** Files the draft under the drafts role; each success replaces the version before it. */
 export function useSaveDraft(pinnedAccountId?: string) {
-  const activeAccountId = useAccountId()
-  const accountId = pinnedAccountId ?? activeAccountId
+  const accountId = useComposeAccountId(pinnedAccountId)
   const queryClient = useQueryClient()
 
   return useMutation({

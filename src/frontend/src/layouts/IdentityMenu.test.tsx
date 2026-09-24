@@ -3,11 +3,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../contexts/AuthContext'
 import { registerLeaveGuard } from '../lib/leaveGuard'
 import ContextDrawer from './ContextDrawer'
 import IdentityMenu from './IdentityMenu'
+import { createTestQueryClient } from '../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
@@ -34,7 +35,7 @@ function Path() {
 
 function renderMenu() {
   return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={createTestQueryClient()}>
       <MemoryRouter>
         <AuthProvider><IdentityMenu /><Path /></AuthProvider>
       </MemoryRouter>
@@ -137,7 +138,7 @@ describe('IdentityMenu', () => {
   // its layer. One key must close the menu and leave the navigation column standing.
   function renderInDrawer(onDrawerClose: () => void) {
     return render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <QueryClientProvider client={createTestQueryClient()}>
         <MemoryRouter>
           <AuthProvider>
             <ContextDrawer open onClose={onDrawerClose}><IdentityMenu /></ContextDrawer>

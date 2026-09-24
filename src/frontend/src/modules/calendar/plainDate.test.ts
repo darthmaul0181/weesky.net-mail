@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addDays, plainDateOf, todayIn, utcOfLocalMidnight, utcOfLocalTime,
+  addDays, plainDateOf, shiftMonth, todayIn, utcOfLocalMidnight, utcOfLocalTime,
 } from './plainDate'
 
 describe('addDays', () => {
@@ -74,5 +74,13 @@ describe('utcOfLocalTime', () => {
       .toBe('2026-10-25T02:00:00.000Z')
     expect(utcOfLocalMidnight('2026-10-25', 'Europe/Brussels').getTime() + 180 * 60_000)
       .toBe(new Date('2026-10-25T01:00:00.000Z').getTime())
+  })
+})
+
+describe('shiftMonth', () => {
+  it('crosses a year boundary in both directions', () => {
+    expect(shiftMonth({ year: 2026, month: 12 }, 1)).toEqual({ year: 2027, month: 1 })
+    expect(shiftMonth({ year: 2026, month: 1 }, -1)).toEqual({ year: 2025, month: 12 })
+    expect(shiftMonth({ year: 2026, month: 5 }, -17)).toEqual({ year: 2024, month: 12 })
   })
 })

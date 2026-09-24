@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import { ApiError } from '../../api.js'
 import type { MailFolderNode } from './api/mailTypes'
-import { mockViewport, resetViewport, settle } from '../../test-utils'
+import { createTestQueryClient, mockViewport, resetViewport, settle } from '../../test-utils'
 import { DRAG_MIME, serializeDrag } from './list/dragMessages'
 
 const mocks = vi.hoisted(() => ({
@@ -114,7 +114,7 @@ function renderAt(
   mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': pane })
   mocks.getIdentities.mockReturnValue(Promise.resolve(identities))
 
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[initial]}>{children}<Where /></MemoryRouter>
@@ -485,7 +485,7 @@ describe('a message departing the folder', () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': 'right' })
     mocks.getIdentities.mockReturnValue(Promise.resolve({ identities: [] }))
 
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const client = createTestQueryClient()
     render(<MailLayout />, {
       wrapper: ({ children }) => (
         <QueryClientProvider client={client}>
@@ -820,7 +820,7 @@ describe('focus after the list expunges', () => {
       return {}
     })
     mocks.emptyFolder.mockImplementation(async () => { live = []; return {} })
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const client = createTestQueryClient()
     return render(<MailLayout />, {
       wrapper: ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={client}>

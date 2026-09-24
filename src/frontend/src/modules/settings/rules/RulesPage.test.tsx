@@ -4,10 +4,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Profiler } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import {
-  QueryClient, QueryClientProvider, defaultScheduler, focusManager, notifyManager, onlineManager,
+  QueryClientProvider, defaultScheduler, focusManager, notifyManager, onlineManager,
+  type QueryClient,
 } from '@tanstack/react-query'
 import { api } from '../../../api.js'
-import { holdNextCall, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
 import RulesPage from './RulesPage'
 import { RuleEditorModal } from './RuleEditorModal'
 import { ConvertConfirmModal } from './ConvertConfirmModal'
@@ -88,7 +89,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  queryClient = new QueryClient()
+  queryClient = createTestQueryClient()
   onCommit = null
   auth.activeAccountId = 'primary'
   vi.mocked(api.getMailFolders).mockResolvedValue([])

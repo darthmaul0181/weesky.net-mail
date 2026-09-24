@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderNode } from '../api/mailTypes'
 import { mailKeys } from '../queries'
 import { useMailNotifications } from './useMailNotifications'
-import { settle } from '../../../test-utils'
+import { createTestQueryClient, settle, withQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(), getMailMessages: vi.fn(), getPreferences: vi.fn(),
@@ -26,9 +26,7 @@ vi.mock('./channels', () => ({
 vi.mock('react-router', () => ({ useNavigate: () => mocks.navigate }))
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 /** What main.tsx actually renders into. Its dev double-invoke runs mount → cleanup → mount on
     the same refs, which is a different hook lifecycle, not a slower one. */
@@ -110,9 +108,8 @@ describe('useMailNotifications', () => {
     mocks.claimNotification.mockReturnValue(true)
     mocks.getMailMessages.mockResolvedValue(pageOf([11, 9]))
     // staleTime keeps the seeded tree from being refetched behind a tick and put back.
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-    })
+    client = createTestQueryClient({ queries: { staleTime: Infinity } })
+    wrapper = withQueryClient(client)
   })
 
   // Moving a message into the inbox appends it with a fresh uid, so uidNext advances exactly as
@@ -453,7 +450,8 @@ describe('useMailNotifications, from the shell', () => {
     auth.activeAccountId = 'primary'
     mocks.claimNotification.mockReturnValue(true)
     mocks.getMailFolders.mockResolvedValue([inbox()])
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('issues no folder request when both settings are off', async () => {

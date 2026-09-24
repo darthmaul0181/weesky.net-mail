@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAliases } from '../../mail/queries'
+import { isValidAddress } from '../../../lib/emailAddress'
 import { MAX_DISPLAY_NAME_LENGTH } from './identityRows'
 import Modal from '../../../components/Modal'
 import PersonPlusIcon from '../../../icons/PersonPlusIcon'
 import PencilIcon from '../../../icons/PencilIcon'
-
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 interface Props {
   mode: 'add' | 'edit'
@@ -47,7 +46,7 @@ export default function IdentityDialog({
 
   // A typed address validates itself; a picked alias is only ever set by the dropdown.
   const address = freeAddress
-    ? (EMAIL_SHAPE.test(needle) && !takenSet.has(needle) ? needle : null)
+    ? (isValidAddress(needle) && !takenSet.has(needle) ? needle : null)
     : selected
   const canSubmit = address !== null && name.trim() !== ''
   function submit() { if (canSubmit) onSubmit(address, name.trim()) }

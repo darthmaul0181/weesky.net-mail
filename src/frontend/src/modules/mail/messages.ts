@@ -1,7 +1,7 @@
 import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { ApiError, api } from '../../api.js'
-import { useAccountId } from '../../hooks/useAccountId'
+import { useAccountId, useComposeAccountId } from '../../hooks/useAccountId'
 import { calendarKeys } from '../calendar/queries'
 import type {
   ApplyReplyArgs, ApplyReplyResponse, InvitationResponse, MailFolderPage,
@@ -9,7 +9,7 @@ import type {
 } from './api/mailTypes'
 import {
   cancelLoaded, cancelListQueries, dropFolderCaches, patchTreeCounts, removeFromFolderCaches,
-  type Snapshot,
+  restoreSnapshots, type Snapshot,
 } from './cachePatches'
 import type { FolderCountDeltas } from './list/listPatch'
 import type { SearchCriteria } from './list/searchCriteria'
@@ -201,7 +201,7 @@ export function useMoveMessages(onError?: (message: string) => void) {
     },
 
     onError: (_error, _args, context) => {
-      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      restoreSnapshots(queryClient, context)
       onError?.(i18next.t(context?.copy ? 'mail:mutations.copyFailed' : 'mail:mutations.moveFailed'))
     },
 
@@ -222,8 +222,7 @@ export interface DeleteMessagesArgs {
 // A move with no receiving folder. `pinnedAccountId` is the composer's: a draft belongs to the mailbox
 // it was written in, so a switch under an open composer must not send its staged ids elsewhere.
 export function useDeleteMessages(onError?: (message: string) => void, pinnedAccountId?: string) {
-  const activeAccountId = useAccountId()
-  const accountId = pinnedAccountId ?? activeAccountId
+  const accountId = useComposeAccountId(pinnedAccountId)
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -246,7 +245,7 @@ export function useDeleteMessages(onError?: (message: string) => void, pinnedAcc
     },
 
     onError: (_error, _args, context) => {
-      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      restoreSnapshots(queryClient, context)
       onError?.(i18next.t('mail:mutations.deleteFailed'))
     },
 

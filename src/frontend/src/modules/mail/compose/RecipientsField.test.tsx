@@ -1,26 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import RecipientsField, { isValidAddress } from './RecipientsField'
+import RecipientsField from './RecipientsField'
 import type { GroupOption } from '../../contacts/contactSearch'
+import { contactOf } from '../../contacts/contactTestHarness'
 import type { Contact } from '../../contacts/contactTypes'
 
-function contact(fields: Partial<Contact> & { id: string }): Contact {
-  return {
-    isFavorite: false, addresses: [], ...fields,
-  }
-}
+const contact = contactOf
 
 function setup(tokens: string[] = []) {
   const onChange = vi.fn()
   render(<RecipientsField id="to" label="To" tokens={tokens} onChange={onChange} />)
   return { onChange }
 }
-
-describe('isValidAddress', () => {
-  it.each(['a@b.co', 'first.last@sub.domain.org'])('accepts %s', v => expect(isValidAddress(v)).toBe(true))
-  it.each(['nope', 'a@b', 'a b@c.d', '@x.y'])('refuses %s', v => expect(isValidAddress(v)).toBe(false))
-})
 
 describe('RecipientsField', () => {
   it('commits a token on Enter', () => {

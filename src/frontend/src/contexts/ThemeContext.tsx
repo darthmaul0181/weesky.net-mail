@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { readStored, writeStored } from '../lib/safeStorage'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
@@ -22,12 +23,12 @@ const THEME_KEY = 'appearance_theme'
 const PALETTE_KEY = 'appearance_palette'
 
 function readTheme(): ThemePreference {
-  const v = localStorage.getItem(THEME_KEY)
+  const v = readStored(THEME_KEY)
   return v === 'light' || v === 'dark' ? v : 'system'
 }
 
 function readPalette(): Palette {
-  const stored = localStorage.getItem(PALETTE_KEY)
+  const stored = readStored(PALETTE_KEY)
   return PALETTE_IDS.includes(stored as Palette) ? stored as Palette : 'night'
 }
 
@@ -55,12 +56,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [palette])
 
   function setTheme(t: ThemePreference) {
-    localStorage.setItem(THEME_KEY, t)
+    writeStored(THEME_KEY, t)
     setThemeState(t)
   }
 
   function setPalette(p: Palette) {
-    localStorage.setItem(PALETTE_KEY, p)
+    writeStored(PALETTE_KEY, p)
     setPaletteState(p)
   }
 

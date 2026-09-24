@@ -64,6 +64,15 @@ export function splitPlainDate(value: PlainDate): PlainDateParts {
   return { year: year ?? NaN, month: month ?? NaN, date: date ?? NaN }
 }
 
+export interface YearMonth { year: number; month: number }
+
+/** `delta` months on, month 1-12: December plus one is January of the next year. */
+export function shiftMonth({ year, month }: YearMonth, delta: number): YearMonth {
+  const index = year * 12 + month - 1 + delta
+  const next = Math.floor(index / 12)
+  return { year: next, month: index - next * 12 + 1 }
+}
+
 /** The day as an instant in a zone that never shifts, so day arithmetic is plain milliseconds. */
 function utcMsOf(day: PlainDate): number {
   const { year, month, date } = splitPlainDate(day)

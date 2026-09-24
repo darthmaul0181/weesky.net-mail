@@ -1,23 +1,9 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { api } from '../../../api.js'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
-
-/** How a row authenticates to its mail server. Frozen at creation on the backend. */
-export type MailAuthMode = 'Password' | 'OAuth2'
-
-export interface ConnectedAccount {
-  id: string
-  email: string
-  displayName: string
-  /** Absent for a local shared mailbox. */
-  domainId?: string
-  domainName?: string
-  sieveSupported: boolean
-  credentialsValid: boolean
-  creationDate: string
-  authMode: MailAuthMode
-}
+import type { ConnectedAccount, MailAuthMode } from '../../../types/connectedAccount'
+import { invalidateOnSettled } from '../invalidateOnSettled'
 
 export interface ConnectableDomain {
   id: string
@@ -80,12 +66,6 @@ export function useConnectableDomains() {
   })
 }
 
-// onSettled, not onSuccess: a refused write must leave the screen on server state rather than
-// on an optimistic lie.
-function refreshList(client: QueryClient) {
-  return () => { void client.invalidateQueries({ queryKey: CONNECTED_ACCOUNTS_KEY }) }
-}
-
 export function useConnectAccount() {
   const client = useQueryClient()
 
@@ -93,7 +73,7 @@ export function useConnectAccount() {
     mutationFn: ({ domainId, email, password }: {
       domainId: string | null; email: string; password: string
     }) => api.connectAccount(domainId, email, password),
-    onSettled: refreshList(client),
+    onSettled: invalidateOnSettled(client, CONNECTED_ACCOUNTS_KEY),
   })
 }
 
@@ -103,7 +83,7 @@ export function useUpdateConnectedAccountPassword() {
   return useMutation({
     mutationFn: ({ id, password }: { id: string; password: string }) =>
       api.updateConnectedAccountPassword(id, password),
-    onSettled: refreshList(client),
+    onSettled: invalidateOnSettled(client, CONNECTED_ACCOUNTS_KEY),
   })
 }
 
@@ -121,7 +101,7 @@ export function useCompleteOAuthConnect() {
 
   return useMutation({
     mutationFn: (state: string): Promise<ConnectedAccount> => api.completeOAuthConnect(state),
-    onSettled: refreshList(client),
+    onSettled: invalidateOnSettled(client, CONNECTED_ACCOUNTS_KEY),
   })
 }
 
@@ -133,6 +113,6 @@ export function useDeleteConnectedAccount() {
 
   return useMutation({
     mutationFn: (id: string) => api.deleteConnectedAccount(id),
-    onSettled: refreshList(client),
+    onSettled: invalidateOnSettled(client, CONNECTED_ACCOUNTS_KEY),
   })
 }

@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
 import { withTimeout } from '../../../lib/withTimeout'
+import { invalidateOnSettled } from '../invalidateOnSettled'
 
 export type SchedulingSecurity = 'None' | 'StartTls' | 'SslOnConnect'
 
@@ -49,19 +50,13 @@ export function useSchedulingAccount() {
   })
 }
 
-// onSettled, not onSuccess: a refused write must leave the screen on server state rather than
-// on an optimistic lie.
-function refreshAccount(client: QueryClient) {
-  return () => { void client.invalidateQueries({ queryKey: SCHEDULING_ACCOUNT_KEY }) }
-}
-
 export function useSaveSchedulingAccount() {
   const client = useQueryClient()
   return useMutation({
     ...FORGET_PASSWORD,
     mutationFn: (account: SchedulingAccountPayload) =>
       withTimeout(signal => api.adminSaveSchedulingAccount(account, { signal }), SAVE_TIMEOUT_MS),
-    onSettled: refreshAccount(client),
+    onSettled: invalidateOnSettled(client, SCHEDULING_ACCOUNT_KEY),
   })
 }
 
@@ -69,7 +64,7 @@ export function useDeleteSchedulingAccount() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: () => api.adminDeleteSchedulingAccount(),
-    onSettled: refreshAccount(client),
+    onSettled: invalidateOnSettled(client, SCHEDULING_ACCOUNT_KEY),
   })
 }
 
@@ -82,6 +77,6 @@ export function useTestSchedulingAccount() {
     ...FORGET_PASSWORD,
     mutationFn: (account?: SchedulingAccountPayload) =>
       api.adminTestSchedulingAccount(account),
-    onSettled: (_data, _error, account) => { if (!account) refreshAccount(client)() },
+    onSettled: (_data, _error, account) => { if (!account) invalidateOnSettled(client, SCHEDULING_ACCOUNT_KEY)() },
   })
 }

@@ -1,7 +1,7 @@
 import { Outlet, useMatch, useSearchParams } from 'react-router'
+import { useFaviconBadge } from '../modules/mail/notify/useFaviconBadge'
 import { useMailNotifications } from '../modules/mail/notify/useMailNotifications'
 import { useTabTitle } from '../hooks/useTabTitle'
-import { useFaviconBadge } from '../hooks/useFaviconBadge'
 import AppRail from './AppRail'
 import BottomNav from './BottomNav'
 import TopBar from './TopBar'

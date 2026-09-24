@@ -1,6 +1,8 @@
 import i18next from 'i18next'
 import logo from '../../../assets/logo-192.png'
 import newMailSound from '../../../assets/new-mail.mp3'
+import { onSessionEnd } from '../../../contexts/sessionEvents'
+import { readStored, removeStored, storedKeys, writeStored } from '../../../lib/safeStorage'
 
 const CLAIM_PREFIX = 'mail.lastNotifiedUidNext'
 const claimKey = (accountId: string) => `${CLAIM_PREFIX}.${accountId}`
@@ -42,7 +44,7 @@ interface Claim {
 
 function storedClaim(accountId: string): Claim | null {
   try {
-    const claim = JSON.parse(localStorage.getItem(claimKey(accountId)) ?? 'null') as Claim | null
+    const claim = JSON.parse(readStored(claimKey(accountId)) ?? 'null') as Claim | null
     return typeof claim?.uidValidity === 'number' && typeof claim.uidNext === 'number'
       ? claim
       : null
@@ -60,22 +62,16 @@ export function claimNotification(
   const claim = storedClaim(accountId)
   if (claim && claim.uidValidity === uidValidity && claim.uidNext >= uidNext) return false
 
-  try {
-    localStorage.setItem(claimKey(accountId), JSON.stringify({ uidValidity, uidNext }))
-  } catch {
-    // Storage denied (private mode, blocked cookies): notify rather than stay silent.
-  }
+  writeStored(claimKey(accountId), JSON.stringify({ uidValidity, uidNext }))
   return true
 }
 
 // Dropped when a session ends: the next sign-in reaches none of these mailboxes. Every key under the
 // prefix goes, the legacy unscoped one included, which would otherwise gag the first arrival.
 export function forgetNotificationClaim(): void {
-  try {
-    Object.keys(localStorage)
-      .filter(key => key.startsWith(CLAIM_PREFIX))
-      .forEach(key => localStorage.removeItem(key))
-  } catch {
-    // Storage denied: nothing was banked to begin with.
-  }
+  storedKeys()
+    .filter(key => key.startsWith(CLAIM_PREFIX))
+    .forEach(key => removeStored(key))
 }
+
+onSessionEnd(forgetNotificationClaim)

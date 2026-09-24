@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { inboxIsUnread } from './useFaviconBadge'
-import type { MailFolderNode } from '../modules/mail/api/mailTypes'
+import type { MailFolderNode } from '../api/mailTypes'
 
 function node(over: Partial<MailFolderNode> = {}): MailFolderNode {
   return {

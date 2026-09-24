@@ -1,8 +1,8 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CALENDAR_COLORS, isHexColor } from './calendarColors'
+import { CALENDAR_COLORS } from './calendarColors'
 import type { Calendar } from './calendarTypes'
-import ColorSwatches from './ColorSwatches'
+import CalendarNameColourFields, { isSubmittableCalendar } from './CalendarNameColourFields'
 import { calendarHeaderOf } from './icsHeader'
 import Modal from '../../components/Modal'
 
@@ -53,9 +53,8 @@ export default function ImportDialog({
     if (header.color) setColor(header.color)
   }
 
-  const trimmedName = name.trim()
   const submittable = file !== null && !saving
-    && (mode === 'existing' ? id !== '' : trimmedName !== '' && isHexColor(color))
+    && (mode === 'existing' ? id !== '' : isSubmittableCalendar(name, color))
 
   return (
     <Modal title={t('import.title')} onClose={onClose} busy={saving} initialFocusRef={fileRef}>
@@ -64,7 +63,7 @@ export default function ImportDialog({
         if (!submittable || !file) return
         onImport(mode === 'existing'
           ? { mode: 'existing', id, file }
-          : { mode: 'new', file, displayName: trimmedName, color: color.trim() })
+          : { mode: 'new', file, displayName: name.trim(), color: color.trim() })
       }}>
         <div className="field-h">
           <label htmlFor="calendar-import-file">{t('import.file')}</label>
@@ -101,23 +100,9 @@ export default function ImportDialog({
             </select>
           </div>
         ) : (
-          <>
-            <div className="field-h">
-              <label htmlFor="calendar-import-name">{t('import.name')}</label>
-              <input id="calendar-import-name" type="text" maxLength={255} value={name}
-                onChange={event => setName(event.target.value)} />
-            </div>
-            <div className="field-h is-swatches">
-              <label htmlFor="calendar-import-hex">{t('import.colour')}</label>
-              <div className="calendar-colour-field">
-                <ColorSwatches value={color} onPick={setColor} />
-                <input id="calendar-import-hex" type="text" maxLength={7} value={color}
-                  className={isHexColor(color) ? undefined : 'is-error'}
-                  aria-label={t('dialogs.hex')}
-                  onChange={event => setColor(event.target.value)} />
-              </div>
-            </div>
-          </>
+          <CalendarNameColourFields nameId="calendar-import-name" hexId="calendar-import-hex"
+            nameLabel={t('import.name')} colourLabel={t('import.colour')}
+            name={name} color={color} onName={setName} onColor={setColor} />
         )}
 
         <div className="modal-actions">

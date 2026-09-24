@@ -10,6 +10,7 @@ import type { Contact } from '../../contacts/contactTypes'
 import type { MailPriority, SendingIdentity } from '../api/mailTypes'
 import IdentitySelect from './IdentitySelect'
 import RecipientsField, { namesByAddressOf } from './RecipientsField'
+import { usableIdentities } from './usableIdentities'
 
 const PRIORITIES: MailPriority[] = ['high', 'normal', 'low']
 
@@ -58,7 +59,7 @@ export default function ComposeFields({
   const nameOf = (token: string) => recipientNames.get(canonicalAddress(token)) ?? token
   // The sender is named only where it can be wrong: `IdentitySelect` shows a menu on exactly this
   // condition, so the summary and the field cannot disagree about whether there is a choice.
-  const choosableFrom = (identityList ?? []).filter(i => !i.stale).length > 1
+  const choosableFrom = usableIdentities(identityList).length > 1
   const summary = [
     ...(choosableFrom && effectiveFrom ? [`${t('fields.from')} : ${effectiveFrom}`] : []),
     // Send is disabled without a recipient, so a folded line that stayed silent would leave a dead

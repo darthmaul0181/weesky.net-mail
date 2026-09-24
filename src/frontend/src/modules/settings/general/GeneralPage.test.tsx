@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import GeneralPage from './GeneralPage'
+import { createTestQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('../../../modules/mail/notify/channels', () => ({
 }))
 
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 

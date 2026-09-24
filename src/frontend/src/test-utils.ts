@@ -1,6 +1,24 @@
 import { act, fireEvent } from '@testing-library/react'
+import { QueryClient, QueryClientProvider, type DefaultOptions } from '@tanstack/react-query'
+import { createElement, type ReactNode } from 'react'
 import type { Mock } from 'vitest'
 import type { Viewport } from './hooks/useViewport'
+
+/** The one query client every test builds: retries off by default (a mocked rejection would
+    otherwise sit behind TanStack's own backoff), any other default named explicitly. */
+export function createTestQueryClient(defaultOptions: DefaultOptions = {}): QueryClient {
+  return new QueryClient({
+    defaultOptions: { ...defaultOptions, queries: { retry: false, ...defaultOptions.queries } },
+  })
+}
+
+/** A `wrapper` for `render`/`renderHook` around one client, so a test that needs the instance
+    (`setQueryData`, a spy, a rerender) still shares this one construction. */
+export function withQueryClient(client: QueryClient = createTestQueryClient()) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children)
+  }
+}
 
 /** A dismissing press on a dialog's backdrop, both halves landing on it. Queried by class, not
  * role: `ContextDrawer`'s scrim and `MessageList`'s root also carry `role="presentation"`. */

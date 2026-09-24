@@ -1,14 +1,17 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi, beforeEach, type Mock } from 'vitest'
 import ContactsLayout from './ContactsLayout'
+import { contactOf } from './contactTestHarness'
 import type { Contact, ContactDetail } from './contactTypes'
 import type { ContactGroup } from './contactGroupTypes'
 import type { api as realApi } from '../../api'
 import { CONTACT_DRAG_MIME } from './dragContacts'
-import { fireEscape, mockViewport, pressBackdrop, resetViewport, settle } from '../../test-utils'
+import {
+  createTestQueryClient, fireEscape, mockViewport, pressBackdrop, resetViewport, settle,
+} from '../../test-utils'
 
 afterEach(resetViewport)
 
@@ -48,11 +51,7 @@ const { ApiError } = await import('../../api.js') as unknown as {
   ApiError: new (message: string, status: number) => Error
 }
 
-function contact(fields: Partial<Contact> & { id: string }): Contact {
-  return {
-    isFavorite: false, addresses: [], ...fields,
-  }
-}
+const contact = contactOf
 
 /** The editor reads the card, never the tile: the list row carries neither line positions nor
     the nine scalars, which is what makes the detail a mount condition for it. */
@@ -88,7 +87,7 @@ function serveGroups(groups: ContactGroup[]) {
 }
 
 function renderAt(path: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
@@ -114,7 +113,7 @@ const routes = [
 /** Both edit routes are the same route object, so the layout is not remounted between them —
     which is what makes the editor's own key the only thing that can reseed the form. */
 function renderRouter(path: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
   return router

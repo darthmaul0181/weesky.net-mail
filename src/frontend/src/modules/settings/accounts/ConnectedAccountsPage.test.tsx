@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation } from 'react-router'
 import ConnectedAccountsPage from './ConnectedAccountsPage'
 import { leaveTo } from './useConnectedAccounts'
+import { createTestQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getConnectedAccounts: vi.fn(),
@@ -68,7 +69,7 @@ function renderPage(accounts = [WORK, SHARED], domains = [ACME], url = '/setting
 }
 
 function renderAt(url: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[url]}>

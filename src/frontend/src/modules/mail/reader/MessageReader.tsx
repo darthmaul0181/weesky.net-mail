@@ -20,7 +20,7 @@ import {
   useAccountId, useAliases, useDeleteMessages, useFolders, useIdentities, useMessage,
   useMoveMessages, usePrepareQuote, useSetFlags, useTrustSender, useTrustedSenders,
 } from '../queries'
-import { rolePathsOf } from '../folders/folderNodes'
+import { useRoleActions } from '../useRoleActions'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
 import type { MailAttachmentInfo, SpecialUse } from '../api/mailTypes'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
@@ -102,7 +102,9 @@ export default function MessageReader(
   const moveMessages = useMoveMessages(onNotify)
   const deleteMessages = useDeleteMessages(onNotify)
   const leave = depart ?? ((_uids: number[], fire: () => void) => fire())
-  const roles = useMemo(() => rolePathsOf(folders ?? []), [folders])
+  const {
+    roles, inTrash, archiveOff, archiveReason, junkOff, junkReason, trashOff, trashReason, deleteLabel,
+  } = useRoleActions(folders, folderRole)
   const navigate = useNavigate()
   const { identity, activeAccount } = useAuth()
   const { data: identityList } = useIdentities()
@@ -199,16 +201,6 @@ export default function MessageReader(
     }
   }
 
-  // Delete outside the trash is a move to it — the trash is the undo, so nothing to confirm.
-  const inTrash = folderRole === 'trash'
-  const deleteLabel = inTrash
-    ? t('actions.deletePermanently') : t('actions.delete', { ns: 'common' })
-  const deleteDisabled = !inTrash && !roles.trash
-  const archiveOff = !roles.archive || folderRole === 'archive'
-  const archiveReason = t(folderRole === 'archive' ? 'actions.alreadyArchived' : 'actions.noArchiveFolder')
-  const junkOff = !roles.junk || folderRole === 'junk'
-  const junkReason = t(folderRole === 'junk' ? 'actions.alreadyJunk' : 'actions.noJunkFolder')
-
   function moveTo(target: string | null, copy: boolean) {
     if (!target) return
     const fire = () =>
@@ -219,6 +211,7 @@ export default function MessageReader(
     onDeparted?.(uid!)
   }
 
+  // Delete outside the trash is a move to it — the trash is the undo, so nothing to confirm.
   function onDelete() {
     if (inTrash) setConfirmDelete(true)
     else moveTo(roles.trash, false)
@@ -292,7 +285,8 @@ export default function MessageReader(
       onToggleFlagged={() =>
         setFlags.mutate({ folderPath: folderPath!, uids: [uid], flag: 'flagged', value: !flagged })}
       deleteLabel={deleteLabel}
-      deleteDisabled={deleteDisabled}
+      deleteDisabled={trashOff}
+      deleteReason={trashReason}
       onDelete={onDelete}
       actions={actions}
       onReply={() => void openCompose('reply')}

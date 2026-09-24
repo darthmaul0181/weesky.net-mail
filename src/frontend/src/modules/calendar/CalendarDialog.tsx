@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { isHexColor } from './calendarColors'
-import ColorSwatches from './ColorSwatches'
+import CalendarNameColourFields, { isSubmittableCalendar } from './CalendarNameColourFields'
 import Modal from '../../components/Modal'
 
 export interface CalendarValues {
@@ -30,37 +29,21 @@ export default function CalendarDialog({
   const nameRef = useRef<HTMLInputElement>(null)
   const hexRef = useRef<HTMLInputElement>(null)
 
-  const trimmedName = name.trim()
-  const trimmedColor = color.trim()
-  const submittable = trimmedName !== '' && isHexColor(trimmedColor) && !saving
+  const submittable = isSubmittableCalendar(name, color) && !saving
 
   return (
     <Modal title={title} onClose={onClose} busy={saving}
       initialFocusRef={focus === 'colour' ? hexRef : nameRef}>
-      {/* Replayed here: a disabled submit does not stop Enter in every browser, and neither an
-          empty name nor a half-typed colour must reach the API. */}
+      {/* Replayed here: a disabled submit does not stop Enter in every browser. */}
       <form onSubmit={event => {
         event.preventDefault()
         if (!submittable) return
-        onSubmit({ displayName: trimmedName, color: trimmedColor })
+        onSubmit({ displayName: name.trim(), color: color.trim() })
       }}>
-        <div className="field-h">
-          <label htmlFor="calendar-name">{t('dialogs.name')}</label>
-          <input id="calendar-name" type="text" maxLength={255} value={name} ref={nameRef}
-            onChange={event => setName(event.target.value)} />
-        </div>
-
-        <div className="field-h is-swatches">
-          <label htmlFor="calendar-hex">{t('dialogs.colour')}</label>
-          <div className="calendar-colour-field">
-            <ColorSwatches value={color} onPick={setColor} />
-            {/* The way out of the twelve: a calendar imported from a phone keeps its own hue. */}
-            <input id="calendar-hex" type="text" maxLength={7} value={color} ref={hexRef}
-              className={isHexColor(color) ? undefined : 'is-error'}
-              aria-label={t('dialogs.hex')}
-              onChange={event => setColor(event.target.value)} />
-          </div>
-        </div>
+        <CalendarNameColourFields nameId="calendar-name" hexId="calendar-hex"
+          nameLabel={t('dialogs.name')} colourLabel={t('dialogs.colour')}
+          name={name} color={color} onName={setName} onColor={setColor}
+          nameRef={nameRef} hexRef={hexRef} />
 
         <div className="modal-actions">
           <button type="submit" className="btn btn-primary" disabled={!submittable}>

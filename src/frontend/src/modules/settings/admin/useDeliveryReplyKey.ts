@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
+import { invalidateOnSettled } from '../invalidateOnSettled'
 
 /** The key the mail server presents to apply guests' replies at delivery, and the switch that
     opens that door — Administration > Application, `api/DeliveryReplyKey`. The key itself is
@@ -28,17 +29,12 @@ export function useDeliveryReplyKey() {
   })
 }
 
-// onSettled, not onSuccess: a refused write must leave the screen on server state.
-function refresh(client: QueryClient) {
-  return () => { void client.invalidateQueries({ queryKey: DELIVERY_KEY }) }
-}
-
 export function useGenerateDeliveryKey() {
   const client = useQueryClient()
   return useMutation({
     ...FORGET_KEY,
     mutationFn: () => api.adminGenerateDeliveryReplyKey(),
-    onSettled: refresh(client),
+    onSettled: invalidateOnSettled(client, DELIVERY_KEY),
   })
 }
 
@@ -46,7 +42,7 @@ export function useSetDeliveryReplies() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (enabled: boolean) => api.adminSetDeliveryReplies({ enabled }),
-    onSettled: refresh(client),
+    onSettled: invalidateOnSettled(client, DELIVERY_KEY),
   })
 }
 
@@ -54,6 +50,6 @@ export function useDeleteDeliveryKey() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: () => api.adminDeleteDeliveryReplyKey(),
-    onSettled: refresh(client),
+    onSettled: invalidateOnSettled(client, DELIVERY_KEY),
   })
 }

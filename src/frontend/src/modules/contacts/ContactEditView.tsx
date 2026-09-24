@@ -1,22 +1,16 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import DropdownMenu from '../../components/DropdownMenu'
-import CheckIcon from '../../icons/CheckIcon'
 import PencilIcon from '../../icons/PencilIcon'
 import CalendarIcon from '../../icons/CalendarIcon'
-import MailIcon from '../../icons/MailIcon'
-import MapPinIcon from '../../icons/MapPinIcon'
 import PersonPlusIcon from '../../icons/PersonPlusIcon'
-import PhoneIcon from '../../icons/PhoneIcon'
 import StarIcon from '../../icons/StarIcon'
-import TrashIcon from '../../icons/TrashIcon'
 import { birthdayToInput, inputToBirthday } from './contactBirthday'
 import { PHOTO_TOO_LARGE, PHOTO_UNREADABLE, reducePhoto, type PhotoErrorKey } from './contactPhoto'
-import { PHONE_TYPES, POSTAL_TYPES, sanitizeTypeForSubmit, stripPref, typeLabel, typeOptions } from './contactLineTypes'
+import { EmailLines, PhoneLines, POSTAL_PARTS, PostalLines, useContactLines } from './ContactLineFields'
+import { sanitizeTypeForSubmit } from './contactLineTypes'
 import { initialsOf } from './contactName'
-import type {
-  ContactDetail, ContactDraft, ContactDraftEmail, ContactDraftPhone, ContactDraftPostal,
-} from './contactTypes'
+import type { ContactDetail, ContactDraft, ContactDraftEmail } from './contactTypes'
 
 interface Props {
   /** null in create mode. One component for both, because "Add" has no selected contact and a
@@ -32,21 +26,9 @@ interface Props {
   onCancel: () => void
 }
 
-/** The column widths the backend also enforces (VARCHAR(100) on the three names, VARCHAR(320) on
-    the address): stopping the typing is what spares the user a round trip ending in a banner. */
+/** The column width the backend also enforces (VARCHAR(100) on the three names): stopping the
+    typing is what spares the user a round trip ending in a banner. */
 const NAME_MAX = 100
-const ADDRESS_MAX = 320
-
-/** `ContactValidator.MaxAddressesPerContact` / `MaxPhonesPerContact` /
-    `MaxPostalAddressesPerContact`: the add button disappears at the cap rather than
-    letting the save fail on a banner. */
-const EMAIL_MAX = 50
-const PHONE_MAX = 10
-const POSTAL_MAX = 10
-
-const POSTAL_PARTS = [
-  'poBox', 'extended', 'street', 'locality', 'region', 'postalCode', 'country',
-] as const
 
 /** The ten optional fields; `group` says which side of the form a revealed one joins. A field the
  * card fills is rendered, never offered: the menu hides emptiness, not content. `displayName`'s
@@ -99,13 +81,6 @@ function scalarsToDraft(
   ])) as Record<OptionalKey, string | null>
 }
 
-const emptyRow = (): ContactDraftEmail => ({ position: null, address: '', type: '', pref: null })
-const emptyPhone = (): ContactDraftPhone => ({ position: null, number: '', type: '' })
-const emptyPostal = (): ContactDraftPostal => ({
-  position: null, type: '', poBox: null, extended: null, street: null,
-  locality: null, region: null, postalCode: null, country: null,
-})
-
 /** What the user did to the photo, not what it is worth: the seeded picture arrives asynchronously
     (the layout resolves it from a query), so a value frozen at mount would read `null` and turn a
     removal into "unchanged". */
@@ -137,29 +112,7 @@ export default function ContactEditView({
   // Grows with the menu, never shrinks: a field emptied by the user stays on screen.
   const [revealed, setRevealed] = useState<Set<OptionalKey>>(() =>
     new Set(OPTIONAL.filter(f => blank(contact?.[f.key]) != null).map(f => f.key)))
-  // The card's own rank per line, never the array index: a deleted address leaves a hole, and a
-  // line arriving without its position is rebuilt by the composer, group and X- parameters lost.
-  const [addresses, setAddresses] = useState<ContactDraftEmail[]>(() =>
-    contact && contact.addresses.length > 0
-      ? contact.addresses.map(line => ({
-          position: line.position, address: line.address, type: stripPref(line.type), pref: null,
-        }))
-      : [emptyRow()])
-
-  // No seeded empty row here, unlike addresses: neither family is required, so an empty list is a
-  // valid, final answer rather than a state the user must first fill something into.
-  const [phones, setPhones] = useState<ContactDraftPhone[]>(() =>
-    contact
-      ? contact.phones.map(line => ({ position: line.position, number: line.number, type: stripPref(line.type) }))
-      : [])
-  const [postalAddresses, setPostalAddresses] = useState<ContactDraftPostal[]>(() =>
-    contact
-      ? contact.postalAddresses.map(line => ({
-          position: line.position, type: stripPref(line.type), poBox: line.poBox, extended: line.extended,
-          street: line.street, locality: line.locality, region: line.region,
-          postalCode: line.postalCode, country: line.country,
-        }))
-      : [])
+  const { addresses, phones, postals } = useContactLines(contact)
 
   const [choice, setChoice] = useState<PhotoChoice>({ kind: 'kept' })
   const [photoError, setPhotoError] = useState<PhotoErrorKey | null>(null)
@@ -179,58 +132,14 @@ export default function ContactEditView({
   const revealedIn = (group: 'name' | 'other') =>
     OPTIONAL.filter(f => f.group === group && revealed.has(f.key))
 
-  const kept = addresses.filter(line => line.address.trim() !== '')
+  const kept = addresses.lines.filter(line => line.address.trim() !== '')
   // The same gate the backend enforces, so the user never spends a round trip to be told.
   const valid = blank(firstName) != null || blank(lastName) != null
     || blank(scalars.nickname) != null || kept.length > 0
   // Ranked on the rows the submit designates from, never on the blank ones it drops: designating
   // a row and then emptying its text would otherwise badge a line the save promotes past.
-  const ranked = kept.length > 0 ? kept : addresses
+  const ranked = kept.length > 0 ? kept : addresses.lines
   const primary = ranked[primaryIndexOf(ranked)]
-
-  function change(index: number, value: string) {
-    setAddresses(previous =>
-      previous.map((line, i) => (i === index ? { ...line, address: value } : line)))
-  }
-
-  function remove(index: number) {
-    setAddresses(previous => {
-      const next = previous.filter((_, i) => i !== index)
-      // Never zero rows: an address list with no box to type in offers no way back.
-      return next.length > 0 ? next : [emptyRow()]
-    })
-  }
-
-  // The preference is a property of the line, not its rank: moving the line would change nothing
-  // now that the composer puts it back at its own position.
-  function makePrimary(index: number) {
-    setAddresses(previous => previous.map((line, i) => ({ ...line, pref: i === index ? 1 : 101 })))
-  }
-
-  function changePhone(index: number, value: string) {
-    setPhones(previous => previous.map((line, i) => (i === index ? { ...line, number: value } : line)))
-  }
-
-  function changePhoneType(index: number, value: string) {
-    setPhones(previous => previous.map((line, i) => (i === index ? { ...line, type: value } : line)))
-  }
-
-  function removePhone(index: number) {
-    setPhones(previous => previous.filter((_, i) => i !== index))
-  }
-
-  function changePostalType(index: number, value: string) {
-    setPostalAddresses(previous => previous.map((line, i) => (i === index ? { ...line, type: value } : line)))
-  }
-
-  function changePostalPart(index: number, part: (typeof POSTAL_PARTS)[number], value: string) {
-    setPostalAddresses(previous =>
-      previous.map((line, i) => (i === index ? { ...line, [part]: value } : line)))
-  }
-
-  function removePostal(index: number) {
-    setPostalAddresses(previous => previous.filter((_, i) => i !== index))
-  }
 
   function changeScalar(key: OptionalKey, value: string) {
     setScalars(previous => ({ ...previous, [key]: value }))
@@ -283,14 +192,14 @@ export default function ContactEditView({
         // 101 is the erasure: without it, designating B primary would leave A claiming it too.
         pref: line === primary ? 1 : 101,
       })),
-      phones: phones
+      phones: phones.lines
         .filter(line => line.number.trim() !== '')
         .map(line => ({
           position: line.position, number: line.number.trim(), type: sanitizeTypeForSubmit(line.type),
         })),
       // An address whose seven components are all blank says nothing, whatever its type: the
       // validator finds it meaningful on the type alone and would pose an empty ADR in the card.
-      postalAddresses: postalAddresses
+      postalAddresses: postals.lines
         .filter(line => POSTAL_PARTS.some(part => (line[part] ?? '').trim() !== ''))
         .map(line => ({
           ...line,
@@ -382,171 +291,13 @@ export default function ContactEditView({
         <div className="contact-editor-cols">
         <div className="contact-editor-col">
 
-        <div className="field-v contact-editor-addresses">
-          <span className="field-v-label"><MailIcon size={15} />{t('fields.addresses')}</span>
-          <div className="contact-address-list">
-            {addresses.map((line, index) => (
-              <div key={index} className="contact-address-row" data-testid={`address-row-${index}`}>
-                <label className="visually-hidden" htmlFor={`contact-address-${index}`}>
-                  {t('editor.addressLabel', { index: index + 1 })}
-                </label>
-                <input id={`contact-address-${index}`} type="email" value={line.address}
-                  placeholder={t('editor.addressPlaceholder')} maxLength={ADDRESS_MAX}
-                  onChange={event => change(index, event.target.value)} />
-                {line === primary
-                  ? <span className="contact-address-primary">{t('fields.primary')}</span>
-                  : (
-                    // Text content, not aria-label: an aria-label containing "address N" is also
-                    // picked up by getByLabelText(/address N/i), which collides with the field.
-                    // The name says which row it acts on, the tooltip does not have to.
-                    <button type="button" className="admin-icon-btn" title={t('editor.makePrimary')}
-                      onClick={() => makePrimary(index)}>
-                      <CheckIcon size={14} />
-                      <span className="visually-hidden">
-                        {t('editor.makePrimaryLine', { index: index + 1 })}
-                      </span>
-                    </button>
-                  )}
-                <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
-                  onClick={() => remove(index)}>
-                  <TrashIcon size={14} />
-                  <span className="visually-hidden">{t('editor.removeAddress', { index: index + 1 })}</span>
-                </button>
-              </div>
-            ))}
-            {addresses.length < EMAIL_MAX && (
-              <button type="button" className="contact-address-add"
-                onClick={() => setAddresses(previous => [...previous, emptyRow()])}>
-                {t('editor.addAddress')}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="field-v contact-editor-addresses">
-          <span className="field-v-label"><PhoneIcon size={15} />{t('fields.phones')}</span>
-          <div className="contact-address-list">
-            {phones.map((line, index) => (
-              <div key={index} className="contact-address-row" data-testid={`phone-row-${index}`}>
-                <label className="visually-hidden" htmlFor={`contact-phone-${index}`}>
-                  {t('editor.phoneLabel', { index: index + 1 })}
-                </label>
-                <input id={`contact-phone-${index}`} type="tel" value={line.number}
-                  placeholder={t('editor.phonePlaceholder')}
-                  onChange={event => changePhone(index, event.target.value)} />
-                <label className="visually-hidden" htmlFor={`contact-phone-type-${index}`}>
-                  {t('editor.phoneType', { index: index + 1 })}
-                </label>
-                <select id={`contact-phone-type-${index}`} value={line.type}
-                  onChange={event => changePhoneType(index, event.target.value)}>
-                  {typeOptions(PHONE_TYPES, line.type).map(option => (
-                    <option key={option} value={option}>{typeLabel(option, t)}</option>
-                  ))}
-                </select>
-                <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
-                  onClick={() => removePhone(index)}>
-                  <TrashIcon size={14} />
-                  <span className="visually-hidden">{t('editor.removePhone', { index: index + 1 })}</span>
-                </button>
-              </div>
-            ))}
-            {phones.length < PHONE_MAX && (
-              <button type="button" className="contact-address-add"
-                onClick={() => setPhones(previous => [...previous, emptyPhone()])}>
-                {t('editor.addPhone')}
-              </button>
-            )}
-          </div>
-        </div>
+        <EmailLines addresses={addresses} primary={primary} />
+        <PhoneLines phones={phones} />
 
         </div>
         <div className="contact-editor-col is-aside">
 
-        <div className="field-v contact-editor-addresses">
-          <span className="field-v-label"><MapPinIcon size={15} />{t('fields.postal')}</span>
-          <div className="contact-address-list">
-            {postalAddresses.map((line, index) => (
-              <div key={index} className="contact-postal-item" data-testid={`postal-row-${index}`}>
-                {/* Street with its type, then the city line, then region and country. PO box
-                    and extended only when the card carries them: all seven stay editable, without
-                    two empty boxes on every address. */}
-                {(line.poBox ?? '') !== '' || (line.extended ?? '') !== '' ? (
-                  <div className="contact-postal-row">
-                    <label className="visually-hidden" htmlFor={`contact-postal-pobox-${index}`}>
-                      {t('editor.postal.poBox')}
-                    </label>
-                    <input id={`contact-postal-pobox-${index}`} type="text" value={line.poBox ?? ''}
-                      placeholder={t('editor.postal.poBox')}
-                      onChange={event => changePostalPart(index, 'poBox', event.target.value)} />
-                    <label className="visually-hidden" htmlFor={`contact-postal-extended-${index}`}>
-                      {t('editor.postal.extended')}
-                    </label>
-                    <input id={`contact-postal-extended-${index}`} type="text" value={line.extended ?? ''}
-                      placeholder={t('editor.postal.extended')}
-                      onChange={event => changePostalPart(index, 'extended', event.target.value)} />
-                  </div>
-                ) : null}
-                <div className="contact-postal-row">
-                  <label className="visually-hidden" htmlFor={`contact-postal-street-${index}`}>
-                    {t('editor.postal.street')}
-                  </label>
-                  <input id={`contact-postal-street-${index}`} type="text" value={line.street ?? ''}
-                    placeholder={t('editor.postal.street')} className="contact-postal-full"
-                    onChange={event => changePostalPart(index, 'street', event.target.value)} />
-                  <label className="visually-hidden" htmlFor={`contact-postal-type-${index}`}>
-                    {t('editor.postalType', { index: index + 1 })}
-                  </label>
-                  <select id={`contact-postal-type-${index}`} value={line.type}
-                    className="contact-postal-type"
-                    onChange={event => changePostalType(index, event.target.value)}>
-                    {typeOptions(POSTAL_TYPES, line.type).map(option => (
-                      <option key={option} value={option}>{typeLabel(option, t)}</option>
-                    ))}
-                  </select>
-                  <button type="button" className="admin-icon-btn is-danger" title={t('actions.remove', { ns: 'common' })}
-                    onClick={() => removePostal(index)}>
-                    <TrashIcon size={14} />
-                    <span className="visually-hidden">{t('editor.removePostal', { index: index + 1 })}</span>
-                  </button>
-                </div>
-                <div className="contact-postal-row">
-                  <label className="visually-hidden" htmlFor={`contact-postal-postalcode-${index}`}>
-                    {t('editor.postal.postalCode')}
-                  </label>
-                  <input id={`contact-postal-postalcode-${index}`} type="text" value={line.postalCode ?? ''}
-                    placeholder={t('editor.postal.postalCode')} className="contact-postal-short"
-                    onChange={event => changePostalPart(index, 'postalCode', event.target.value)} />
-                  <label className="visually-hidden" htmlFor={`contact-postal-locality-${index}`}>
-                    {t('editor.postal.locality')}
-                  </label>
-                  <input id={`contact-postal-locality-${index}`} type="text" value={line.locality ?? ''}
-                    placeholder={t('editor.postal.locality')}
-                    onChange={event => changePostalPart(index, 'locality', event.target.value)} />
-                </div>
-                <div className="contact-postal-row">
-                  <label className="visually-hidden" htmlFor={`contact-postal-region-${index}`}>
-                    {t('editor.postal.region')}
-                  </label>
-                  <input id={`contact-postal-region-${index}`} type="text" value={line.region ?? ''}
-                    placeholder={t('editor.postal.region')}
-                    onChange={event => changePostalPart(index, 'region', event.target.value)} />
-                  <label className="visually-hidden" htmlFor={`contact-postal-country-${index}`}>
-                    {t('editor.postal.country')}
-                  </label>
-                  <input id={`contact-postal-country-${index}`} type="text" value={line.country ?? ''}
-                    placeholder={t('editor.postal.country')}
-                    onChange={event => changePostalPart(index, 'country', event.target.value)} />
-                </div>
-              </div>
-            ))}
-            {postalAddresses.length < POSTAL_MAX && (
-              <button type="button" className="contact-address-add"
-                onClick={() => setPostalAddresses(previous => [...previous, emptyPostal()])}>
-                {t('editor.addPostal')}
-              </button>
-            )}
-          </div>
-        </div>
+        <PostalLines postals={postals} />
 
         {/* Text, not a date picker: the vCard admits partial dates a picker cannot express. The
             field goes through contactBirthday (`19930621T115900Z` shows as a date, `27/10/1979`

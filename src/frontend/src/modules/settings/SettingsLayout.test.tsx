@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../contexts/AuthContext'
 import { LocaleProvider } from '../../contexts/LocaleContext'
 import { ThemeProvider } from '../../contexts/ThemeContext'
 import { routes } from '../../routes'
-import { mockViewport, resetViewport, settle } from '../../test-utils'
+import { createTestQueryClient, mockViewport, resetViewport, settle } from '../../test-utils'
 
 afterEach(resetViewport)
 
@@ -49,7 +49,7 @@ vi.mock('../../api.js', () => ({
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
@@ -160,7 +160,7 @@ describe('settings section', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'))
   })
 
-  it('renders AdminPage for admins at /settings/admin (RequireAdmin happy path)', async () => {
+  it('renders AdminPage for admins at /settings/admin (allowAdmin happy path)', async () => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
     const router = renderAt('/settings/admin')
     expect(await screen.findByRole('button', { name: 'Accounts' })).toBeInTheDocument()

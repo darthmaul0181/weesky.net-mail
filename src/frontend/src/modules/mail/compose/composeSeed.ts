@@ -12,6 +12,7 @@ import {
 import { threadingHeaders } from './threadingHeaders'
 import { forwardQuote, replyQuote } from './quote'
 import { absolutizeStagedUrls } from './stagedUrls'
+import { usableIdentities } from './usableIdentities'
 
 export type ComposeAction = 'reply' | 'replyAll' | 'forward' | 'editAsNew' | 'draft'
 
@@ -153,7 +154,7 @@ export function buildComposeSeed(
 export function buildDraftSeed(
   opened: OpenedDraft, identities: SendingIdentity[], ref: DraftRef, accountId: string,
 ): ComposeSeed {
-  const usable = identities.filter(i => !i.stale)
+  const usable = usableIdentities(identities)
   const owned = opened.fromAddress
     ? usable.find(i => i.address.toLowerCase() === opened.fromAddress!.toLowerCase())
     : undefined

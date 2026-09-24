@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import i18next from 'i18next'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../../contexts/AuthContext'
 import AccountPage from './AccountPage'
+import { createTestQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
@@ -35,7 +36,7 @@ vi.mock('../../../api.js', () => ({
 
 function renderPage() {
   return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={createTestQueryClient()}>
       <MemoryRouter>
         <AuthProvider><AccountPage /></AuthProvider>
       </MemoryRouter>

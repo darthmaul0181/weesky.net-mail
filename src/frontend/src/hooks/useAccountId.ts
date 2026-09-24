@@ -6,3 +6,9 @@ import { useAuth } from '../contexts/AuthContext'
 export function useAccountId(): string {
   return useAuth().activeAccountId
 }
+
+/** The composer's account when it pinned one, the active account otherwise. */
+export function useComposeAccountId(pinnedAccountId?: string | null): string {
+  const activeAccountId = useAccountId()
+  return pinnedAccountId ?? activeAccountId
+}

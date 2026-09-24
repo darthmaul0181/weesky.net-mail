@@ -1,5 +1,6 @@
 import {
-  keepPreviousData, skipToken, useMutation, useQuery, useQueryClient, type QueryClient,
+  keepPreviousData, queryOptions, skipToken, useMutation, useQuery, useQueryClient,
+  type QueryClient,
 } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { api, ApiError } from '../../api.js'
@@ -57,14 +58,17 @@ export function useWindow(
   })
 }
 
-export function useEvent(id: string | null) {
-  const accountId = useAccountId()
-
-  return useQuery({
-    queryKey: calendarKeys.event(accountId, id ?? ''),
-    queryFn: id === null ? skipToken : () => api.getEvent(id),
+export function eventQueryOptions(accountId: string, id: string) {
+  return queryOptions({
+    queryKey: calendarKeys.event(accountId, id),
+    queryFn: () => api.getEvent(id),
     staleTime: 60_000,
   })
+}
+
+export function useEvent(id: string | null) {
+  const options = eventQueryOptions(useAccountId(), id ?? '')
+  return useQuery(id === null ? { ...options, queryFn: skipToken } : options)
 }
 
 /** A search answers one occurrence per matching event — its next one, or its last once it is

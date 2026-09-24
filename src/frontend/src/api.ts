@@ -30,13 +30,13 @@ import type {
 import type {
   DeliveryReplyKey, DeliveryReplyKeyGenerated,
 } from './modules/settings/admin/useDeliveryReplyKey'
-import type {
-  ConnectableDomain, ConnectedAccount, OAuthStart,
-} from './modules/settings/accounts/useConnectedAccounts'
+import type { ConnectableDomain, OAuthStart } from './modules/settings/accounts/useConnectedAccounts'
+import type { ConnectedAccount } from './types/connectedAccount'
 import type {
   CompatibilityCheckResult, RuleProvider, SieveRawScript, SieveRuleSet, SieveRuleWrite,
 } from './modules/settings/rules/rulesTypes'
 import type { ServerVersion } from './modules/settings/about/aboutTypes'
+import { readStored, removeStored, writeStored } from './lib/safeStorage'
 
 const BASE: string = import.meta.env.VITE_API_BASE
 const SESSION_KEY = 'sessionActive'
@@ -57,15 +57,15 @@ export interface UploadOptions extends RequestOptions {
 let unauthorizedHandler: (() => void) | null = null
 
 export function markLoggedIn(): void {
-  localStorage.setItem(SESSION_KEY, '1')
+  writeStored(SESSION_KEY, '1')
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY)
+  removeStored(SESSION_KEY)
 }
 
 export function hasSession(): boolean {
-  return localStorage.getItem(SESSION_KEY) === '1'
+  return readStored(SESSION_KEY) === '1'
 }
 
 export function setUnauthorizedHandler(fn: (() => void) | null): void {

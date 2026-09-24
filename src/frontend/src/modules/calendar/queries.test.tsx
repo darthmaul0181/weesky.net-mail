@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import type { QueryClient } from '@tanstack/react-query'
 import type { Occurrence, OccurrenceListResponse } from './calendarTypes'
 import i18next from 'i18next'
+import { occurrenceOf } from './calendarTestHarness'
 import {
   calendarKeys, isConflict, useCalendars, useCreateEvent, useDeleteEvent, useEvent,
   useMoveOccurrence, useSearch, useSetCalendarVisible, useUpdateEvent, useWindow,
 } from './queries'
 import type { Window } from './windowOf'
+import { createTestQueryClient, withQueryClient } from '../../test-utils'
 
 // The class lives in the hoisted block with the mocks: `vi.mock`'s factory runs before any
 // module-level declaration of the test file itself.
@@ -39,18 +40,14 @@ const WINDOW: Window = {
 }
 
 function occurrence(overrides: Partial<Occurrence> = {}): Occurrence {
-  return {
-    eventId: 'e1', calendarId: 'c1', uid: 'u1', instanceId: '20260914T080000', isOverride: false,
-    isAllDay: false, isFloating: false, timeZone: TZ,
-    startUtc: '2026-09-14T06:00:00Z', endUtc: '2026-09-14T07:00:00Z',
-    transparency: 'OPAQUE', hasAlarm: false, ...overrides,
-  }
+  return occurrenceOf({
+    eventId: 'e1', calendarId: 'c1', uid: 'u1', instanceId: '20260914T080000', timeZone: TZ,
+    startUtc: '2026-09-14T06:00:00Z', endUtc: '2026-09-14T07:00:00Z', ...overrides,
+  })
 }
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 function windowKey() {
   return calendarKeys.window('primary', WINDOW.from, WINDOW.to, TZ)
@@ -88,7 +85,8 @@ describe('calendarKeys', () => {
 describe('the queries', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('asks for the calendars in the screen zone and answers the list', async () => {
@@ -120,7 +118,8 @@ describe('the queries', () => {
 describe('the mutations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('resyncs the screen once a write lands', async () => {
@@ -158,7 +157,8 @@ describe('the language of the invitation mails', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('sends the screen language with a creation, an update and a deletion', async () => {
@@ -196,7 +196,8 @@ describe('the language of the invitation mails', () => {
 describe('the version a next save proves it read', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('reads the event again once an update lands', async () => {
@@ -218,7 +219,8 @@ describe('the version a next save proves it read', () => {
 describe('useMoveOccurrence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
     client.setQueryData(windowKey(), {
       occurrences: [
         occurrence(),

@@ -1,4 +1,5 @@
 import type { AliasInfo, MailAddressInfo, MailMessageDetail, SendingIdentity } from '../api/mailTypes'
+import { usableIdentities } from './usableIdentities'
 
 export interface Recipients { to: string[]; cc: string[] }
 
@@ -12,7 +13,7 @@ export function myAddresses(
   const mine = new Set<string>()
   for (const address of own) if (address) mine.add(address.toLowerCase())
   for (const alias of aliases) mine.add(`${alias.name}@${alias.domain}`.toLowerCase())
-  for (const identity of identities) if (!identity.stale) mine.add(identity.address.toLowerCase())
+  for (const identity of usableIdentities(identities)) mine.add(identity.address.toLowerCase())
   return mine
 }
 
@@ -68,7 +69,7 @@ export function subjectFor(purpose: 'reply' | 'forward', subject: string): strin
 // The first usable identity among the original's To then Cc (an owned address with no identity
 // cannot be in the From menu), else the default.
 export function preselectIdentity(detail: MailMessageDetail, identities: SendingIdentity[]): string | null {
-  const usable = identities.filter(i => !i.stale)
+  const usable = usableIdentities(identities)
   const byAddress = new Map(usable.map(i => [i.address.toLowerCase(), i.address]))
   for (const recipient of [...detail.to, ...detail.cc]) {
     const found = byAddress.get(recipient.address.toLowerCase())
@@ -79,7 +80,7 @@ export function preselectIdentity(detail: MailMessageDetail, identities: Sending
 
 /** Edit-as-new opens from the original's From when it is one of my identities, else the default. */
 export function editAsNewFrom(detail: MailMessageDetail, identities: SendingIdentity[]): string | null {
-  const usable = identities.filter(i => !i.stale)
+  const usable = usableIdentities(identities)
   const match = usable.find(i => i.address.toLowerCase() === detail.fromAddress.toLowerCase())
   return match?.address ?? usable.find(i => i.isDefault)?.address ?? null
 }

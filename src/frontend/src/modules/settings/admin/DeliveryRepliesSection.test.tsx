@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../../api.js'
 import DeliveryRepliesSection from './DeliveryRepliesSection'
+import { createTestQueryClient } from '../../../test-utils'
 
 vi.mock('../../../api.js', () => ({ api: {
   adminGetDeliveryReplyKey: vi.fn(), adminGenerateDeliveryReplyKey: vi.fn(),
@@ -13,7 +14,7 @@ vi.mock('../../../api.js', () => ({ api: {
 // The client is handed back for the one test that forces a refetch itself.
 function mountExposingClient() {
   const addToast = vi.fn()
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   render(<QueryClientProvider client={client}><DeliveryRepliesSection addToast={addToast} /></QueryClientProvider>)
   return { addToast, client }
 }

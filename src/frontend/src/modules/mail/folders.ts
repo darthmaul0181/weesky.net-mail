@@ -6,9 +6,10 @@ import { useAccountId } from '../../hooks/useAccountId'
 import { notifiesOf, usePreferences } from '../../hooks/usePreferences'
 import type { FolderRoleEntry, MailFolderNode } from './api/mailTypes'
 import {
-  blankFolderCaches, cancelListQueries, dropFolderCaches, patchTreeCounts, type Snapshot,
+  blankFolderCaches, cancelListQueries, dropFolderCaches, patchTreeCounts, restoreSnapshots,
+  type Snapshot,
 } from './cachePatches'
-import { flatten } from './folders/folderNodes'
+import { folderByPath } from './folders/folderNodes'
 import type { FolderCountDeltas } from './list/listPatch'
 import { mailKeys } from './mailKeys'
 
@@ -136,7 +137,7 @@ export function useEmptyFolder(onError?: (message: string) => void) {
 
       // The source folder's own counts drive both the zeroing and, on a move, the target's gain.
       const tree = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
-      const node = tree ? flatten(tree).find(entry => entry.node.path === folderPath)?.node : undefined
+      const node = folderByPath(tree, folderPath)
       const source = { total: node?.total ?? 0, unread: node?.unread ?? 0 }
 
       const patches: [string, FolderCountDeltas][] = [
@@ -155,7 +156,7 @@ export function useEmptyFolder(onError?: (message: string) => void) {
     },
 
     onError: (_error, _args, context) => {
-      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      restoreSnapshots(queryClient, context)
       onError?.(i18next.t('mail:mutations.emptyFailed'))
     },
   })
