@@ -1,23 +1,24 @@
 import type { TFunction } from 'i18next'
 import { canonicalAddress } from '../../lib/canonicalAddress'
 import type { AttendeeProjection, AttendeeWrite } from './calendarTypes'
+import { partStatOf } from './partStat'
 
 /** What a guest answered, in the organizer's calendar — where the answers actually arrive.
     Anything but the three answers is "no answer yet". */
 export function guestAnswerOf(partStat: string | undefined, t: TFunction<'calendar'>): string {
-  switch (partStat?.toUpperCase()) {
-    case 'ACCEPTED': return t('guestAnswer.accepted', { ns: 'calendar' })
-    case 'TENTATIVE': return t('guestAnswer.tentative', { ns: 'calendar' })
-    case 'DECLINED': return t('guestAnswer.declined', { ns: 'calendar' })
+  switch (partStatOf(partStat)) {
+    case 'accepted': return t('guestAnswer.accepted', { ns: 'calendar' })
+    case 'tentative': return t('guestAnswer.tentative', { ns: 'calendar' })
+    case 'declined': return t('guestAnswer.declined', { ns: 'calendar' })
     default: return t('guestAnswer.pending', { ns: 'calendar' })
   }
 }
 
 export function dotClassOf(partStat: string | undefined): 'is-accepted' | 'is-tentative' | 'is-declined' | 'is-pending' {
-  switch (partStat?.toUpperCase()) {
-    case 'ACCEPTED': return 'is-accepted'
-    case 'TENTATIVE': return 'is-tentative'
-    case 'DECLINED': return 'is-declined'
+  switch (partStatOf(partStat)) {
+    case 'accepted': return 'is-accepted'
+    case 'tentative': return 'is-tentative'
+    case 'declined': return 'is-declined'
     default: return 'is-pending'
   }
 }

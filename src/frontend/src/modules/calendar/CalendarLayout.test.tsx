@@ -1,14 +1,16 @@
-import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { onlineManager, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import CalendarLayout from './CalendarLayout'
 import { calendarKeys } from './queries'
+import { calendarOf, occurrenceOf } from './calendarTestHarness'
 import type { Calendar, EventUpdated, OccurrenceListResponse } from './calendarTypes'
 import type { api as realApi } from '../../api'
 import {
-  fireEscape, firePointer, installPointerEvents, mockViewport, pressBackdrop, resetViewport, settle,
+  createTestQueryClient, fireEscape, firePointer, installPointerEvents, mockViewport, pressBackdrop,
+  resetViewport, settle,
 } from '../../test-utils'
 
 afterEach(resetViewport)
@@ -54,10 +56,7 @@ const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
 const UPDATED: EventUpdated = { scheduling: { sent: 0 } }
 
 function calendar(id: string, displayName: string, isDefault = false): Calendar {
-  return {
-    id, davName: id, displayName, description: '', color: '#3b82c4', order: 0,
-    timeZone: BROWSER_TZ, isVisible: true, isDefault,
-  }
+  return calendarOf(id, undefined, displayName, { isDefault, timeZone: BROWSER_TZ })
 }
 
 const CALENDARS = [calendar('a', 'Personal', true), calendar('b', 'Work')]
@@ -75,11 +74,9 @@ beforeEach(() => {
 })
 
 function occurrence(eventId: string, summary: string) {
-  return {
-    eventId, calendarId: 'a', uid: eventId, instanceId: '', isOverride: false, isAllDay: false,
-    isFloating: false, transparency: 'OPAQUE', hasAlarm: false, summary,
-    startUtc: '2026-09-16T07:00:00Z', endUtc: '2026-09-16T08:00:00Z',
-  }
+  return occurrenceOf({
+    eventId, summary, startUtc: '2026-09-16T07:00:00Z', endUtc: '2026-09-16T08:00:00Z',
+  })
 }
 
 /** Floating on purpose: a wall clock is read as it is written, so the seeded hour is the same
@@ -115,7 +112,7 @@ const routes = [
 
 /** `previous` puts an entry under `path`, so a test can press the browser's own Back. */
 function mount(path = '/calendar', previous?: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   const router = createMemoryRouter(routes, {
     initialEntries: previous ? [previous, path] : [path],
     initialIndex: previous ? 1 : 0,
@@ -1010,7 +1007,7 @@ describe('CalendarLayout', () => {
     const first = askedFrom()
 
     await userEvent.click(screen.getByRole('button', { name: 'Next period' }))
-    await waitFor(() => expect(params(router).get('date')).toBe('2026-10-16'))
+    await waitFor(() => expect(params(router).get('date')).toBe('2026-10-17'))
     await waitFor(() => expect(askedFrom()).not.toBe(first))
   })
 

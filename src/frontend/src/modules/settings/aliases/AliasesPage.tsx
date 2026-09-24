@@ -7,6 +7,7 @@ import { useAccountId } from '../../../hooks/useAccountId'
 import { useListLoadState } from '../../../hooks/useListLoadState'
 import { useToasts } from '../../../hooks/useToasts'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import { readStored, writeStored } from '../../../lib/safeStorage'
 import Toasts from '../../../components/Toasts'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import TrashIcon from '../../../icons/TrashIcon'
@@ -46,11 +47,11 @@ export default function AliasesPage() {
   const [deletingKey, setDeletingKey] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
-  const [alphaMode, setAlphaMode] = useState(() => localStorage.getItem('alias_alpha_mode') === 'true')
+  const [alphaMode, setAlphaMode] = useState(() => readStored('alias_alpha_mode') === 'true')
 
   function handleAlphaModeChange(value: boolean) {
     setAlphaMode(value)
-    localStorage.setItem('alias_alpha_mode', String(value))
+    writeStored('alias_alpha_mode', String(value))
   }
 
   const scrollRef = useRef<HTMLDivElement>(null)

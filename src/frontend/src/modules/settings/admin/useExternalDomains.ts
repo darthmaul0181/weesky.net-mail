@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
+import { invalidateOnSettled } from '../invalidateOnSettled'
 
 /** An admin-curated external provider, the only source of external hosts (hence
  * `ExternalDomainDialog`'s validation). The API omits null fields: no Sieve or OAuth2 means absent. */
@@ -44,17 +45,11 @@ export function useExternalDomains() {
   })
 }
 
-// onSettled, not onSuccess: a refused write must leave the screen on server state rather than
-// on an optimistic lie.
-function refreshList(client: QueryClient) {
-  return () => { void client.invalidateQueries({ queryKey: EXTERNAL_DOMAINS_KEY }) }
-}
-
 export function useCreateExternalDomain() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (domain: ExternalDomainPayload) => api.adminCreateExternalDomain(domain),
-    onSettled: refreshList(client),
+    onSettled: invalidateOnSettled(client, EXTERNAL_DOMAINS_KEY),
   })
 }
 
@@ -63,7 +58,7 @@ export function useUpdateExternalDomain() {
   return useMutation({
     mutationFn: ({ id, domain }: { id: string; domain: ExternalDomainPayload }) =>
       api.adminUpdateExternalDomain(id, domain),
-    onSettled: refreshList(client),
+    onSettled: invalidateOnSettled(client, EXTERNAL_DOMAINS_KEY),
   })
 }
 
@@ -71,6 +66,6 @@ export function useDeleteExternalDomain() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api.adminDeleteExternalDomain(id),
-    onSettled: refreshList(client),
+    onSettled: invalidateOnSettled(client, EXTERNAL_DOMAINS_KEY),
   })
 }

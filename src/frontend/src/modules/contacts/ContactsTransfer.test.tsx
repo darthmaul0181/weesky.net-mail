@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ContactsTransfer from './ContactsTransfer'
 import type { Contact } from './contactTypes'
+import { createTestQueryClient } from '../../test-utils'
 
 vi.mock('../../api.js', () => ({
   api: { importContacts: vi.fn(), exportContacts: vi.fn() },
@@ -27,7 +28,7 @@ const book: Contact[] = [
 ]
 
 function renderTransfer(contacts: Contact[] | undefined, onError = vi.fn()) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  const client = createTestQueryClient({ mutations: { retry: false } })
   render(
     <QueryClientProvider client={client}>
       <ContactsTransfer contacts={contacts} onError={onError}

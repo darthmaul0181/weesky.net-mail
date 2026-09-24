@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
-import { settle } from '../../test-utils'
+import { focusManager } from '@tanstack/react-query'
+import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
 import { POLL_INTERVAL, mailKeys, useApplyInvitationReply, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useReplaceIdentities, useSearchMessages, useSendMessage, useSetFlags } from './queries'
 import type { MailFolderNode, MailInvitation, MailMessageDetail } from './api/mailTypes'
 
@@ -57,13 +56,8 @@ function pageOf(uids: number[], total: number) {
 }
 
 function createWrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return {
-    client,
-    wrapper: ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  }
+  const client = createTestQueryClient()
+  return { client, wrapper: withQueryClient(client) }
 }
 
 describe('mailKeys', () => {

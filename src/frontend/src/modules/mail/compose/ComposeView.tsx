@@ -12,6 +12,7 @@ import { useCaptureContacts } from '../../contacts/useCaptureContacts'
 import { displayNameOf } from '../../contacts/contactName'
 import { captureRecipientsOf, composeFormatOf, usePreferences, type Preferences } from '../../../hooks/usePreferences'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import { isValidAddress } from '../../../lib/emailAddress'
 import { useAccountId, useDeleteMessages, useIdentities, useSaveDraft, useSendMessage } from '../queries'
 import DropdownMenu from '../../../components/DropdownMenu'
 import Modal from '../../../components/Modal'
@@ -23,7 +24,6 @@ import { htmlToText, losesFormatting, textToHtml } from './bodyFormat'
 import EditorToolbar from './EditorToolbar'
 import ComposeFields from './ComposeFields'
 import { mailtoSeedFrom } from './mailtoSeed'
-import { isValidAddress } from './RecipientsField'
 import SquireEditor, { type ActiveFormats, type EditorHandle } from './SquireEditor'
 import { applyComposeFormat, type ComposeAction, type ComposeSeed } from './composeSeed'
 import LoadingBlock from '../../../components/LoadingBlock'
@@ -32,6 +32,7 @@ import { useStagedAttachments } from './useStagedAttachments'
 import { useComposeDropZone } from './useComposeDropZone'
 import { useInlineUploads, type InsertedInline } from './useInlineUploads'
 import { useLeaveGuard } from './useLeaveGuard'
+import { usableIdentities } from './usableIdentities'
 import LeaveDialog from './LeaveDialog'
 
 const NO_FORMATS: ActiveFormats = {
@@ -174,10 +175,10 @@ function ComposeForm({ onNotify, preferences }: Props & { preferences: Preferenc
     [seedInlineIds, insertedInline])
   const [draftRef, setDraftRef] = useState(seed?.draftRef ?? null)
 
-  const usableIdentities = (identityList ?? []).filter(i => !i.stale)
+  const usable = usableIdentities(identityList)
   const effectiveFrom = fromAddress
-    ?? usableIdentities.find(i => i.isDefault)?.address
-    ?? usableIdentities[0]?.address ?? null
+    ?? usable.find(i => i.isDefault)?.address
+    ?? usable[0]?.address ?? null
 
   // The non-empty clause only applies where no version is filed: emptying a draft is a change too.
   // An inserted inline image counts on its own rather than resting on Squire having fired `input`.

@@ -1,14 +1,14 @@
+import Icon from './Icon'
 // The 24 grid is Feather's own: cropped to 20 it would match the pencil but outgrow the message
 // row's cluster, the reference every list aligns to.
 export default function TrashIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <Icon size={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6l-1 14H6L5 6" />
       <path d="M10 11v6" />
       <path d="M14 11v6" />
       <path d="M9 6V4h6v2" />
-    </svg>
+    </Icon>
   )
 }

@@ -1,5 +1,5 @@
 import { collator } from '../../../lib/intl'
-import type { MailFolderNode } from '../api/mailTypes'
+import type { MailFolderNode, SpecialUse } from '../api/mailTypes'
 
 /** Where the row and reader actions file a message. Null is "no folder holds that role". */
 export interface RolePaths {
@@ -11,6 +11,30 @@ export interface RolePaths {
 /** Flattens the tree so a parent picker or a flat list can show every folder. */
 export function flatten(nodes: MailFolderNode[], depth = 0): Array<{ node: MailFolderNode; depth: number }> {
   return nodes.flatMap(node => [{ node, depth }, ...flatten(node.children, depth + 1)])
+}
+
+/** The first folder in tree order that `match` accepts, anywhere in the tree. */
+export function findFolder(
+  nodes: readonly MailFolderNode[] | undefined, match: (node: MailFolderNode) => boolean,
+): MailFolderNode | undefined {
+  for (const node of nodes ?? []) {
+    const found = match(node) ? node : findFolder(node.children, match)
+    if (found) return found
+  }
+  return undefined
+}
+
+export function folderByPath(nodes: readonly MailFolderNode[] | undefined, path: string | null) {
+  return findFolder(nodes, node => node.path === path)
+}
+
+export function folderByRole(nodes: readonly MailFolderNode[] | undefined, role: SpecialUse) {
+  return findFolder(nodes, node => node.specialUse === role)
+}
+
+/** Found by role, never by the name "INBOX", which a server is free to spell otherwise. */
+export function inboxOf(nodes: readonly MailFolderNode[] | undefined) {
+  return folderByRole(nodes, 'inbox')
 }
 
 // Strips the leaf name, so any separator works: the backend rejects names containing one.

@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 import type { InvitationReply, MailInvitation } from '../api/mailTypes'
 import { dateLocaleOf, formatLongDay, formatLongDayRange, formatTime } from '../../calendar/calendarLocale'
+import { partStatOf } from '../../calendar/partStat'
 import { addDays, plainDateOf } from '../../calendar/plainDate'
 
 /** What the card is for, in the reader's own terms: a date to answer, one already answered, one
@@ -38,9 +39,10 @@ export const replyPending = (i: MailInvitation): boolean =>
     older version, rather than leaving a bare tail. */
 export function replySentenceOf(reply: InvitationReply, t: TFunction<'mail'>): string {
   const name = reply.name || reply.email
-  const answer = reply.partStat === 'ACCEPTED' ? t('reader.invitation.reply.answer.ACCEPTED', { name, ns: 'mail' })
-    : reply.partStat === 'TENTATIVE' ? t('reader.invitation.reply.answer.TENTATIVE', { name, ns: 'mail' })
-      : reply.partStat === 'DECLINED' ? t('reader.invitation.reply.answer.DECLINED', { name, ns: 'mail' })
+  const said = partStatOf(reply.partStat)
+  const answer = said === 'accepted' ? t('reader.invitation.reply.answer.ACCEPTED', { name, ns: 'mail' })
+    : said === 'tentative' ? t('reader.invitation.reply.answer.TENTATIVE', { name, ns: 'mail' })
+      : said === 'declined' ? t('reader.invitation.reply.answer.DECLINED', { name, ns: 'mail' })
         : null
   switch (reply.status) {
     case 'UnknownUid': return t('reader.invitation.reply.unknownUid', { ns: 'mail' })

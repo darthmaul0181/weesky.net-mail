@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { ApiError } from '../../../api.js'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import LoadingBlock from '../../../components/LoadingBlock'
+import { useFocusReturnOnUnmount } from '../../../hooks/useFocusReturnOnUnmount'
 import PencilIcon from '../../../icons/PencilIcon'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
 import ShieldCheckIcon from '../../../icons/ShieldCheckIcon'
@@ -37,14 +38,7 @@ export default function SchedulingAccountSection({ addToast }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const cardNode = useRef<HTMLDivElement | null>(null)
-
-  // A card replaced by another state (keyed below) would take the focus down with it. React
-  // detaches the ref before removing the node, so focus can still be seen inside and handed on.
-  const cardRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node && cardNode.current?.contains(document.activeElement)) headingRef.current?.focus()
-    cardNode.current = node
-  }, [])
+  const cardRef = useFocusReturnOnUnmount(headingRef)
 
   async function handleTest() {
     try {

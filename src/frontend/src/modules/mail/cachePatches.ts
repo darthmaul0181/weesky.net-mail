@@ -24,6 +24,11 @@ export interface SetFlagsArgs {
 
 export type Snapshot = [readonly unknown[], unknown]
 
+/** Puts back every cache an optimistic write patched; a mutation that never got that far has none. */
+export function restoreSnapshots(queryClient: QueryClient, context: { snapshots: Snapshot[] } | undefined) {
+  for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+}
+
 // Only caches holding data: cancelling a first load reverts it to pending with no data and no
 // observer retries, so a deep link whose detail beat the folder listing read "No messages" for good.
 export function cancelLoaded(queryClient: QueryClient, queryKey: QueryKey) {
@@ -122,7 +127,7 @@ export function useSetFlags(onError?: (message: string) => void) {
     },
 
     onError: (_error, _args, context) => {
-      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data)
+      restoreSnapshots(queryClient, context)
       onError?.(i18next.t('mail:mutations.updateFailed'))
     },
   })

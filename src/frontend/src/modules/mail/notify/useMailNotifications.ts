@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { api } from '../../../api.js'
+import { useAccountId } from '../../../hooks/useAccountId'
 import {
   notifiesOf, notifyDesktopOf, notifySoundOf, requestSizeOf, usePreferences,
 } from '../../../hooks/usePreferences'
-import { flatten } from '../folders/folderNodes'
+import { useFolders } from '../folders'
+import { inboxOf } from '../folders/folderNodes'
 import { snapshotOf, uidValidityBroke, type FolderSnapshot } from '../list/folderDelta'
-import { useAccountId, useFolders } from '../queries'
 import { claimNotification, playNewMailSound, showDesktopNotification } from './channels'
 import { newSince, notifyBody, notifyDecision, silentBatch } from './notifyDecision'
 
@@ -88,7 +89,7 @@ export function useMailNotifications(): void {
     }
     if (!folders || !preferences) return
 
-    const inbox = flatten(folders).find(entry => entry.node.specialUse === 'inbox')?.node
+    const inbox = inboxOf(folders)
     if (!inbox) return
 
     const snapshot = snapshotOf(inbox)

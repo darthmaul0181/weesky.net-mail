@@ -4,9 +4,10 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, hasSession, clearSession, setUnauthorizedHandler } from '../api.js'
 import { deriveIdentity, type Account, type AccountIdentity } from '../lib/accountIdentity'
-import { forgetNotificationClaim } from '../modules/mail/notify/channels'
-import type { ConnectedAccount, MailAuthMode } from '../modules/settings/accounts/useConnectedAccounts'
+import { readStored, removeStored, writeStored } from '../lib/safeStorage'
 import type { Capabilities } from '../types/capabilities'
+import type { ConnectedAccount, MailAuthMode } from '../types/connectedAccount'
+import { notifySessionEnd } from './sessionEvents'
 
 const ACTIVE_ACCOUNT_KEY = 'mail.activeAccount'
 /** The account every session starts on; the one id that can never turn out to be stale. */
@@ -28,7 +29,7 @@ export interface ActiveAccount {
   authMode: MailAuthMode
 }
 
-interface AuthContextValue {
+export interface AuthContextValue {
   isLoggedIn: boolean
   isAdmin: boolean
   account: Account | null
@@ -84,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountLoaded, setAccountLoaded] = useState(false)
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null)
   const [activeAccountId, setActiveAccountId] = useState<string>(
-    () => localStorage.getItem(ACTIVE_ACCOUNT_KEY) ?? PRIMARY_ACCOUNT_ID)
+    () => readStored(ACTIVE_ACCOUNT_KEY) ?? PRIMARY_ACCOUNT_ID)
   const queryClient = useQueryClient()
 
   // The key is shared with the Connected accounts settings page, whose mutations invalidate it —
@@ -147,8 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (wasLoggedIn.current) {
         void queryClient.resetQueries()
         queryClient.getMutationCache().clear()
-        forgetNotificationClaim()
-        localStorage.removeItem(ACTIVE_ACCOUNT_KEY)
+        notifySessionEnd()
+        removeStored(ACTIVE_ACCOUNT_KEY)
         setActiveAccountId(PRIMARY_ACCOUNT_ID)
       }
       wasLoggedIn.current = false
@@ -191,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!connectedRows || activeAccountId === PRIMARY_ACCOUNT_ID) return
     if (connectedRows.find(row => row.id === activeAccountId)?.credentialsValid) return
-    localStorage.removeItem(ACTIVE_ACCOUNT_KEY)
+    removeStored(ACTIVE_ACCOUNT_KEY)
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored id is only known stale once the account list arrives, and it is corrected in storage too
     setActiveAccountId(PRIMARY_ACCOUNT_ID)
   }, [connectedRows, activeAccountId])
@@ -204,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // previous mailbox's folders and messages in the cache behind it.
     queryClient.removeQueries({ queryKey: ['mail', activeAccountId] })
     setActiveAccountId(id)
-    localStorage.setItem(ACTIVE_ACCOUNT_KEY, id)
+    writeStored(ACTIVE_ACCOUNT_KEY, id)
   }
 
   return (

@@ -4,6 +4,7 @@ import type { NavigateFunction } from 'react-router'
 import type { TFunction } from 'i18next'
 import type { AddToast } from '../../hooks/useToasts'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
+import { readStored, writeStored } from '../../lib/safeStorage'
 import type { WeekRules } from './calendarLocale'
 import type { Calendar, Occurrence } from './calendarTypes'
 import { formOf, newEventForm, type EventFormState } from './eventForm'
@@ -17,17 +18,11 @@ const HOUR_MS = 3_600_000
 /** The calendar the last save chose, so the next new event opens on it rather than on the one the
     server calls default — the device's memory, like the stored view. */
 function storedCalendar(): string | null {
-  try {
-    return localStorage.getItem(LAST_USED_KEY)
-  } catch {
-    return null
-  }
+  return readStored(LAST_USED_KEY)
 }
 
 export function rememberCalendar(id: string) {
-  try {
-    localStorage.setItem(LAST_USED_KEY, id)
-  } catch { /* a private window refuses the write; the choice still stands on this event */ }
+  writeStored(LAST_USED_KEY, id)
 }
 
 /** The day a RECURRENCE-ID falls on, in the two shapes iCalendar writes one: `2026-09-16T09:00:00`

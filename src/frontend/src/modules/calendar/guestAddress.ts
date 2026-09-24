@@ -1,4 +1,4 @@
-import { isValidAddress } from '../mail/compose/RecipientsField'
+import { isValidAddress } from '../../lib/emailAddress'
 
 /** The server's column and the characters a plain `mailto:` value carries unescaped. */
 const MAX_LENGTH = 320

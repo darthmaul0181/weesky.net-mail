@@ -18,7 +18,7 @@ const SLACK_DAYS = 1
 
 /** The list is thirty-one days from the day it is anchored on, and it is its own window: it
     shows exactly what it asks for, so slack would only draw days the screen has no room for. */
-const LIST_DAYS = 31
+export const LIST_DAYS = 31
 
 function visibleOf(
   view: View, anchor: PlainDate, rules: WeekRules,

@@ -6,6 +6,7 @@ import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { ApiError } from '../../../api.js'
 import CalendarSelect from '../../calendar/CalendarSelect'
 import { hourCycleOf } from '../../calendar/calendarLocale'
+import { partStatOf, type PartStat } from '../../calendar/partStat'
 import { useCalendars } from '../../calendar/queries'
 import type { InvitationAnswer, InvitationResponse, MailInvitation, MailMessageDetail } from '../api/mailTypes'
 import { mailKeys, useAccountId, useApplyInvitationReply, useRespondInvitation } from '../queries'
@@ -136,20 +137,21 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
 
   // The label arrives translated rather than as a key: a key reaching `t()` through a variable is
   // invisible to both the typed `t` and `locales/keys.test.ts`.
-  const answerButton = (value: InvitationAnswer, label: string, partStat: string, primary = false) => (
+  const saved = partStatOf(invitation.savedPartStat)
+  const answerButton = (value: InvitationAnswer, label: string, partStat: PartStat, primary = false) => (
     <button
       type="button"
       className={primary ? 'btn btn-primary btn-auto' : 'btn btn-ghost'}
       disabled={busy}
       onClick={() => void answer(value)}
-      aria-pressed={state === 'updated' && invitation.savedPartStat === partStat ? true : undefined}
+      aria-pressed={state === 'updated' && saved === partStat ? true : undefined}
     >
       {label}
     </button>
   )
-  const accept = () => answerButton('Accepted', t('reader.invitation.accept'), 'ACCEPTED', true)
-  const tentative = () => answerButton('Tentative', t('reader.invitation.tentative'), 'TENTATIVE')
-  const decline = () => answerButton('Declined', t('reader.invitation.decline'), 'DECLINED')
+  const accept = () => answerButton('Accepted', t('reader.invitation.accept'), 'accepted', true)
+  const tentative = () => answerButton('Tentative', t('reader.invitation.tentative'), 'tentative')
+  const decline = () => answerButton('Declined', t('reader.invitation.decline'), 'declined')
   const three = <>{accept()}{tentative()}{decline()}</>
   const addOnlyButton = (
     <button type="button" className="btn btn-primary btn-auto" disabled={busy} onClick={() => void answer('AddOnly')}>
@@ -165,14 +167,16 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
 
   // `filed` is the organizer's record ("accepted"), `own` the user's entry ("You accepted"); a refusal
   // has no `own`, since declining deletes the entry. Any other value is null rather than a raw key.
-  const wordsFor = (partStat: string | undefined) =>
-    partStat === 'ACCEPTED'
-      ? { filed: t('reader.invitation.partstat.ACCEPTED'), own: t('reader.invitation.answered.ACCEPTED') }
-      : partStat === 'TENTATIVE'
-        ? { filed: t('reader.invitation.partstat.TENTATIVE'), own: t('reader.invitation.answered.TENTATIVE') }
-        : partStat === 'DECLINED'
-          ? { filed: t('reader.invitation.partstat.DECLINED'), own: null }
-          : null
+  const wordsFor = (partStat: string | undefined) => {
+    switch (partStatOf(partStat)) {
+      case 'accepted':
+        return { filed: t('reader.invitation.partstat.ACCEPTED'), own: t('reader.invitation.answered.ACCEPTED') }
+      case 'tentative':
+        return { filed: t('reader.invitation.partstat.TENTATIVE'), own: t('reader.invitation.answered.TENTATIVE') }
+      case 'declined': return { filed: t('reader.invitation.partstat.DECLINED'), own: null }
+      default: return null
+    }
+  }
   const filedAnswer = wordsFor(invitation.filePartStat)?.filed ?? null
 
   const people = invitation.reply ? [invitation.reply] : invitation.attendees
@@ -221,8 +225,8 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
           {/* Only an attendee can change an answer: a forwarded invitation has nobody to tell. */}
           {invitation.addressedTo && (
             <span className="invitation-card-others">
-              {invitation.savedPartStat !== 'ACCEPTED' && accept()}
-              {invitation.savedPartStat !== 'TENTATIVE' && tentative()}
+              {saved !== 'accepted' && accept()}
+              {saved !== 'tentative' && tentative()}
               {decline()}
             </span>
           )}

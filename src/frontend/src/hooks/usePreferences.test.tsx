@@ -1,25 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import type { QueryClient } from '@tanstack/react-query'
 import {
   BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
   languageOf, notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf,
   showFolderIconsOf, showPreviewOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
+import { createTestQueryClient, withQueryClient } from '../test-utils'
 
 const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
 vi.mock('../api.js', () => ({ api: mocks }))
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 describe('usePreferences', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('reads the map the backend answers', async () => {

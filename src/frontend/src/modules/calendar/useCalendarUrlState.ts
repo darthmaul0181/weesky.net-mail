@@ -1,9 +1,13 @@
 import { useCallback, useEffect } from 'react'
 import { useMatch, useSearchParams } from 'react-router'
-import { addDays, isPlainDate, splitPlainDate, type PlainDate } from './plainDate'
-import type { View } from './windowOf'
+import { readStored, writeStored } from '../../lib/safeStorage'
+import { addDays, isPlainDate, shiftMonth, splitPlainDate, type PlainDate } from './plainDate'
+import { LIST_DAYS, type View } from './windowOf'
 
-const VIEWS: View[] = ['day', 'week', 'month', 'list']
+export const VIEWS: View[] = ['day', 'week', 'month', 'list']
+/** Day is the phone's week: seven columns in 360px is six unreadable ones and a sideways scroll.
+    Month leads: a phone opens on the shape of the month. */
+export const PHONE_VIEWS: View[] = ['month', 'day', 'list']
 const VIEW_KEY = 'calendar.view'
 
 function isView(value: string | null): value is View {
@@ -13,31 +17,23 @@ function isView(value: string | null): value is View {
 /** The device remembers the view, never the account: a 4K screen and a laptop want different
     ones, exactly as the splitter sizes do. A blocked store leaves the default standing. */
 function storedView(): View | null {
-  try {
-    const stored = localStorage.getItem(VIEW_KEY)
-    return isView(stored) ? stored : null
-  } catch {
-    return null
-  }
+  const stored = readStored(VIEW_KEY)
+  return isView(stored) ? stored : null
 }
 
 function rememberView(view: View) {
-  try {
-    localStorage.setItem(VIEW_KEY, view)
-  } catch { /* a private window refuses the write; the URL still carries the choice */ }
+  writeStored(VIEW_KEY, view)
 }
 
 /** Same day of the month, clamped: 31 January plus a month is the last day of February. */
 function addMonths(day: PlainDate, delta: number): PlainDate {
   const { year, month, date } = splitPlainDate(day)
-  const index = (year * 12 + month - 1) + delta
-  const target = new Date(Date.UTC(Math.floor(index / 12), index % 12, 1))
-  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
-  target.setUTCDate(Math.min(date, last))
-  return target.toISOString().slice(0, 10)
+  const next = shiftMonth({ year, month }, delta)
+  const last = new Date(Date.UTC(next.year, next.month, 0)).getUTCDate()
+  return new Date(Date.UTC(next.year, next.month - 1, Math.min(date, last))).toISOString().slice(0, 10)
 }
 
-const STEP_DAYS: Record<Exclude<View, 'month'>, number> = { day: 1, week: 7, list: 30 }
+const STEP_DAYS: Record<Exclude<View, 'month'>, number> = { day: 1, week: 7, list: LIST_DAYS }
 
 export function stepAnchor(view: View, anchor: PlainDate, delta: number): PlainDate {
   return view === 'month' ? addMonths(anchor, delta) : addDays(anchor, STEP_DAYS[view] * delta)

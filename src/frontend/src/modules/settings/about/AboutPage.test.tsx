@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AboutPage from './AboutPage'
 import { api } from '../../../api.js'
 import { BUILT_AT, WEB_COMMIT, WEB_VERSION } from '../../../lib/appVersion'
+import { withQueryClient } from '../../../test-utils'
 
 vi.mock('../../../api.js', async importOriginal => ({
   ...await importOriginal<typeof import('../../../api.js')>(),
@@ -12,10 +11,7 @@ vi.mock('../../../api.js', async importOriginal => ({
 }))
 
 function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const wrapper = ({ children }: { children: ReactNode }) =>
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  return render(<AboutPage />, { wrapper })
+  return render(<AboutPage />, { wrapper: withQueryClient() })
 }
 
 beforeEach(() => {

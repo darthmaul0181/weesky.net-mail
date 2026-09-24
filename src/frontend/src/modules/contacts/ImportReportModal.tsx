@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type { ContactImportReport } from './contactTypes'
-import Modal from '../../components/Modal'
+import ImportReportShell from '../../components/ImportReportShell'
 
 interface Props {
   report: ContactImportReport
@@ -43,40 +43,23 @@ function reasonText(reason: string, t: TFunction<'contacts'>): string {
  * the file's data rows. */
 export default function ImportReportModal({ report, onClose }: Props) {
   const { t } = useTranslation('contacts')
-  const counters: [string, number, string][] = [
-    ['created', report.created, t('import.added', { count: report.created })],
-    ['merged', report.merged, t('import.updated', { count: report.merged })],
-    ['skipped', report.skipped, t('import.skipped', { count: report.skipped })],
-    ['failed', report.failed, t('import.refused', { count: report.failed })],
-  ]
-  const hidden = report.totalErrors - report.errors.length
 
   return (
-    <Modal title={t('import.title')} onClose={onClose}>
-      <div className="import-counters">
-        {counters.map(([key, value, label]) => (
-          <div className="import-counter" key={key}>
-            <span className="import-counter-value">{value}</span>
-            <span className="import-counter-label">{label}</span>
-          </div>
-        ))}
-      </div>
-
-      {report.errors.length > 0 && (
-        <ul className="import-errors">
-          {/* Keyed by position: one line can carry the same reason twice, and the list never reorders. */}
-          {report.errors.map((error, index) => (
-            <li key={index}>
-              <span className="import-error-line">{t('import.line', { line: error.line })}</span>
-              {' '}
-              {reasonText(error.reason, t)}
-            </li>
-          ))}
-          {hidden > 0 && (
-            <li className="import-errors-more">{t('import.more', { count: hidden })}</li>
-          )}
-        </ul>
+    <ImportReportShell title={t('import.title')} onClose={onClose}
+      counters={[
+        { value: report.created, label: t('import.added', { count: report.created }) },
+        { value: report.merged, label: t('import.updated', { count: report.merged }) },
+        { value: report.skipped, label: t('import.skipped', { count: report.skipped }) },
+        { value: report.failed, label: t('import.refused', { count: report.failed }) },
+      ]}
+      errors={report.errors} totalErrors={report.totalErrors}
+      renderError={error => (
+        <>
+          <span className="import-error-line">{t('import.line', { line: error.line })}</span>
+          {' '}
+          {reasonText(error.reason, t)}
+        </>
       )}
-    </Modal>
+      moreLabel={count => t('import.more', { count })} />
   )
 }

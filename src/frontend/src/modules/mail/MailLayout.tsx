@@ -8,7 +8,7 @@ import { PRIMARY_ACCOUNT_ID, useAuth } from '../../contexts/AuthContext'
 import LoadingBlock from '../../components/LoadingBlock'
 import Toasts from '../../components/Toasts'
 import { useToasts } from '../../hooks/useToasts'
-import { flatten } from './folders/folderNodes'
+import { folderByPath, inboxOf } from './folders/folderNodes'
 import FolderTree from './folders/FolderTree'
 import RocketIcon from '../../icons/RocketIcon'
 import IdentityMenu from '../../layouts/IdentityMenu'
@@ -125,9 +125,7 @@ export default function MailLayout() {
   // The list heading shows the same label as the tree: the role label when the folder has a
   // role, the leaf name otherwise — never the full path, which reads "INBOX.Linux server"
   // under a '.' separator.
-  const folderNode = folders && folder
-    ? flatten(folders).find(entry => entry.node.path === folder)?.node
-    : undefined
+  const folderNode = folderByPath(folders, folder)
   const folderName = folderNode
     ? (folderNode.specialUse ? roleLabel(folderNode.specialUse, t) : folderNode.name)
     : undefined
@@ -138,8 +136,8 @@ export default function MailLayout() {
   useEffect(() => {
     if (composing || folder || !folders) return
 
-    const inbox = flatten(folders).find(entry => entry.node.specialUse === 'inbox')
-    if (inbox) setParams({ folder: inbox.node.path }, { replace: true })
+    const inbox = inboxOf(folders)
+    if (inbox) setParams({ folder: inbox.path }, { replace: true })
   }, [composing, folder, folders, setParams])
 
   function selectFolder(path: string) {
@@ -292,9 +290,11 @@ export default function MailLayout() {
 
   // The reader follows the open cross-folder result, if any, back to the URL folder otherwise.
   const readerFolder = resultFolder ?? folder
-  const readerNode = folders && readerFolder
-    ? flatten(folders).find(entry => entry.node.path === readerFolder)?.node
-    : undefined
+  const readerNode = folderByPath(folders, readerFolder)
+  const readerProps = {
+    folderPath: readerFolder, uid, folderRole: readerNode?.specialUse ?? null,
+    onDeparted: departed, depart: rowExit.depart, onNotify: addToast,
+  }
 
   if (settling) return <div className="mail-full-pane"><LoadingBlock /></div>
 
@@ -366,9 +366,7 @@ export default function MailLayout() {
                 />
               )}
               <div className="mail-reader">
-                <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast}
-                  regionRef={listRegion} />
+                <MessageReader {...readerProps} regionRef={listRegion} />
               </div>
             </div>
           )}
@@ -381,9 +379,7 @@ export default function MailLayout() {
                 onResize={setListHeight}
               />
               <div className="mail-reader">
-                <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                  onDeparted={departed} depart={rowExit.depart} onNotify={addToast}
-                  regionRef={listRegion} />
+                <MessageReader {...readerProps} regionRef={listRegion} />
               </div>
             </div>
           )}
@@ -395,9 +391,8 @@ export default function MailLayout() {
               {listColumn(null, undefined, uid !== null)}
               {uid !== null && (
                 <div className="mail-reader" ref={readerRegion} tabIndex={-1}>
-                  <MessageReader folderPath={readerFolder} uid={uid} folderRole={readerNode?.specialUse ?? null}
-                    bottomActions={viewport === 'phone'} regionRef={noSplitRegion}
-                    onBack={closeMessage} onDeparted={departed} depart={rowExit.depart} onNotify={addToast} />
+                  <MessageReader {...readerProps} bottomActions={viewport === 'phone'} regionRef={noSplitRegion}
+                    onBack={closeMessage} />
                 </div>
               )}
             </>

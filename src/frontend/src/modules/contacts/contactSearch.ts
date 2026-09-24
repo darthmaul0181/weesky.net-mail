@@ -1,4 +1,5 @@
 import { canonicalAddress } from '../../lib/canonicalAddress'
+import { fold } from '../../lib/fold'
 import { collator } from '../../lib/intl'
 import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
@@ -8,12 +9,6 @@ const DEFAULT_LIMIT = 10
 /** Three, against the addresses' ten: the two budgets are independent, so a matched group never
     costs the field an address it would otherwise have offered. */
 const GROUP_LIMIT = 3
-
-/** Diacritics stripped, lower-cased, so an accented contact matches a plain query and back. \p{M},
- * not \p{Diacritic}, which also strips ASCII '^' and '`' (as in `folderFilter.ts`). */
-export function fold(value: string): string {
-  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-}
 
 /** Case- and accent-insensitive substring across every field a user would search by. Shared by
     the page's filter and the composer's dropdown — one rule, so the two can never disagree about

@@ -2,16 +2,14 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import CalendarSidebar from './CalendarSidebar'
+import { calendarOf } from './calendarTestHarness'
 import type { Calendar } from './calendarTypes'
 import type { WeekRules } from './calendarLocale'
 
 const RULES: WeekRules = { firstDay: 1, minimalDays: 4 }
 
 function calendar(id: string, displayName: string, isDefault = false): Calendar {
-  return {
-    id, davName: id, displayName, description: '', color: '#3b82c4', order: 0,
-    timeZone: 'Europe/Brussels', isVisible: true, isDefault,
-  }
+  return calendarOf(id, undefined, displayName, { isDefault })
 }
 
 const CALENDARS = [calendar('a', 'Personal', true), calendar('b', 'Work')]

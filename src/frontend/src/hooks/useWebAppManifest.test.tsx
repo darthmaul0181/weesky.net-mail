@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import type { QueryClient } from '@tanstack/react-query'
 import { useAppSettings } from './useAppSettings'
 import { useWebAppManifest } from './useWebAppManifest'
+import { createTestQueryClient, withQueryClient } from '../test-utils'
 
 const mocks = vi.hoisted(() => ({ getAppSettings: vi.fn(), setAppSetting: vi.fn() }))
 vi.mock('../api.js', () => ({ api: mocks }))
@@ -11,9 +11,7 @@ vi.mock('../api.js', () => ({ api: mocks }))
 // Hoisted like the sibling useAppSettings.test.tsx: the change tests have to reach the very client
 // the hook reads, to drive a settings change through setQueryData.
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 const enabled = {
   'app.installable': 'true',
@@ -44,7 +42,8 @@ describe('useWebAppManifest', () => {
   // instead of reading one constant that stands for both.
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
     let issued = 0
     URL.createObjectURL = vi.fn(() => `blob:mock-${++issued}`)
     URL.revokeObjectURL = vi.fn()

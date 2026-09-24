@@ -9,10 +9,12 @@ import { windowOf } from './windowOf'
 export const TZ = 'Europe/Brussels'
 export const RULES = { firstDay: 1, minimalDays: 4 } as const
 
-export function calendarOf(id: string, color = '#3b82c4', displayName = id): Calendar {
+export function calendarOf(
+  id: string, color = '#3b82c4', displayName = id, overrides: Partial<Calendar> = {},
+): Calendar {
   return {
     id, davName: id, displayName, description: '', color, order: 0,
-    timeZone: TZ, isVisible: true, isDefault: false,
+    timeZone: TZ, isVisible: true, isDefault: false, ...overrides,
   }
 }
 

@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type {
   MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
 } from './api/mailTypes'
 import { mailKeys, useDeleteMessages, useMoveMessages, useSearchMessages } from './queries'
-import { settle } from '../../test-utils'
+import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   moveMessages: vi.fn(), copyMessages: vi.fn(), deleteMessages: vi.fn(), searchMessages: vi.fn(),
@@ -17,9 +16,7 @@ vi.mock('../../contexts/AuthContext', () => ({
 }))
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
   uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-07-22T10:00:00Z',
@@ -100,9 +97,8 @@ const uidsOf = (messages: MailMessageSummary[]) => messages.map(message => messa
 describe('useMoveMessages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    })
+    client = createTestQueryClient({ mutations: { retry: false } })
+    wrapper = withQueryClient(client)
   })
 
   it('takes the rows out of every source cache and drops the target caches', async () => {
@@ -448,9 +444,8 @@ describe('useMoveMessages', () => {
 describe('useDeleteMessages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    })
+    client = createTestQueryClient({ mutations: { retry: false } })
+    wrapper = withQueryClient(client)
   })
 
   it('empties the source caches and touches no other folder', async () => {

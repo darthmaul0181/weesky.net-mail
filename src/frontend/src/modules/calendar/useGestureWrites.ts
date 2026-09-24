@@ -1,7 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
 import type { AddToast } from '../../hooks/useToasts'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
@@ -9,7 +8,7 @@ import type { CalendarContextValue } from './calendarContext'
 import type { EditScope, Occurrence } from './calendarTypes'
 import { movedBody, movedOccurrence } from './eventForm'
 import { MINUTES_PER_DAY } from './plainDate'
-import { calendarKeys, type useMoveOccurrence } from './queries'
+import { eventQueryOptions, type useMoveOccurrence } from './queries'
 import { recurrenceSummary } from './recurrenceSummary'
 
 interface GestureWritesInput {
@@ -33,11 +32,8 @@ export function useGestureWrites({
       and always a request when another write on this event has just landed. */
   const loadDetail = useCallback(async (id: string, refresh: boolean) => {
     try {
-      return await queryClient.fetchQuery({
-        queryKey: calendarKeys.event(accountId, id),
-        queryFn: () => api.getEvent(id),
-        staleTime: refresh ? 0 : 60_000,
-      })
+      const options = eventQueryOptions(accountId, id)
+      return await queryClient.fetchQuery(refresh ? { ...options, staleTime: 0 } : options)
     } catch (error) {
       addToast(apiErrorMessage(error, t('errors.load')), 'error')
       return null

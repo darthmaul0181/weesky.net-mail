@@ -1,11 +1,11 @@
 import { act, render as rtlRender, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement, ReactNode } from 'react'
 import Toasts from '../../../components/Toasts'
 import { useToasts } from '../../../hooks/useToasts'
-import { holdNextCall, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
 import AdminPage from './AdminPage'
 import { AddEditUserModal } from './AddEditUserModal'
 import { AddEditDomainModal } from './AddEditDomainModal'
@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../api.js', () => ({ api: mocks, clearSession: vi.fn() }))
 
 function newClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return createTestQueryClient()
 }
 
 // Every tab and dialog reads and writes through TanStack Query: each render gets a fresh cache,
@@ -980,7 +980,7 @@ describe('AdminPage', () => {
   // 30 s staleTime holds. A quota that failed has nothing cached, so it is asked again, as before.
   it('issues no request on the way back to Accounts while the cache is fresh', async () => {
     mocks.adminGetUserQuota.mockResolvedValue({ storageBytesUsed: 50 * MB, storageBytesLimit: 200 * MB })
-    render(<AdminPage />, new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } }))
+    render(<AdminPage />, createTestQueryClient({ queries: { staleTime: 30_000 } }))
     const calls = () => [mocks.adminGetUsers, mocks.adminGetDomains, mocks.adminGetVirtualDomains, mocks.adminGetUserQuota]
       .map(f => f.mock.calls.length)
     await screen.findByText('alice@weesky.be')

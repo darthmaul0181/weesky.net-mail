@@ -37,9 +37,10 @@ Files under `src/modules/calendar/`:
   rendering/colour/key of one occurrence
 - `eventForm.ts` — the pure form layer: `formOf`, `newEventForm`, `writeOf`, `updateBodyOf`,
   `movedBody`, `movedOccurrence`, `allowedScopes`, `isRecurring`, `validate`
-- `recurrenceSummary.ts`, `reminderPresets.ts`, `icsHeader.ts`, `calendarColors.ts` — a rule in
-  words, the reminder menu, `X-WR-CALNAME`/`X-APPLE-CALENDAR-COLOR` off an uploaded file, the
-  twelve palette swatches
+- `recurrenceSummary.ts`, `reminderPresets.ts`, `icsHeader.ts`, `calendarColors.ts`, `partStat.ts` —
+  a rule in words, the reminder menu, `X-WR-CALNAME`/`X-APPLE-CALENDAR-COLOR` off an uploaded file,
+  the twelve palette swatches, and the guest `PARTSTAT` normalisation the invitation card and the
+  attendee helpers read through
 - `CalendarSidebar.tsx` + `MiniMonth.tsx` + `ColorSwatches.tsx` — the column, its month picker and
   the swatch grid two dialogs draw
 - `CalendarToolbar.tsx` — Today, the two chevrons, the heading, `CalendarSearch` and the `.seg`
@@ -50,8 +51,9 @@ Files under `src/modules/calendar/`:
 - `EventPreview.tsx` + `usePopoverPosition.ts` — the bubble a click opens, and where it hangs
 - `EventEditor.tsx` + `RecurrenceEditor.tsx` + `ReminderList.tsx` + `ScopeModal.tsx` — the form,
   the custom-recurrence panel, the reminder rows and the three-way scope question
-- `CalendarDialog.tsx`, `ImportDialog.tsx`, `CalendarImportReportModal.tsx` — the calendar
-  create/rename/recolour dialogue, the import chooser and its report
+- `CalendarDialog.tsx`, `ImportDialog.tsx`, `CalendarImportReportModal.tsx`,
+  `CalendarNameColourFields.tsx` — the calendar create/rename/recolour dialogue, the import
+  chooser and its report, and the name/colour fields the first two share
 - `gridGestures.ts`, `pointerGesture.ts`, `useDragEvent.ts`, `useResizeEvent.ts`,
   `useCreateByDrag.ts` — the three pointer gestures over the grid
 - `phone/PhoneMonth.tsx`, `phone/DayStrip.tsx` — the two screens that exist only below 640px

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { ApiError, api } from '../../api.js'
-import { useAccountId } from '../../hooks/useAccountId'
+import { useAccountId, useComposeAccountId } from '../../hooks/useAccountId'
 import type { IdentityWrite, SendingIdentity } from './api/mailTypes'
 import { mailKeys } from './mailKeys'
 
@@ -17,8 +17,7 @@ export const identitiesQueryOptions = (accountId: string) => ({
 /** `pinnedAccountId` is the composer's — the From list has to be the bound account's, or the
     picker offers an address the send's account does not own and every attempt is refused. */
 export function useIdentities(pinnedAccountId?: string) {
-  const activeAccountId = useAccountId()
-  const accountId = pinnedAccountId ?? activeAccountId
+  const accountId = useComposeAccountId(pinnedAccountId)
 
   return useQuery({
     ...identitiesQueryOptions(accountId),

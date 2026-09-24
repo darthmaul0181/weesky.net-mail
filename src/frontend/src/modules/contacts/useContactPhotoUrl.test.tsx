@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { renderHook } from '@testing-library/react'
 import { useLayoutEffect, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { contactKeys } from './queries'
 import { useContactPhotoUrl } from './useContactPhotoUrl'
+import { createTestQueryClient } from '../../test-utils'
 
 vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'acc' }))
 
@@ -14,7 +15,7 @@ beforeEach(() => {
 })
 
 function withCache(seed: (client: QueryClient) => void) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } })
+  const client = createTestQueryClient({ queries: { enabled: false } })
   seed(client)
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>

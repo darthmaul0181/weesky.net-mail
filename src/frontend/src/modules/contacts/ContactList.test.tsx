@@ -3,13 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { focusablesIn, tabbablesIn } from '../../lib/layerStack'
 import ContactList from './ContactList'
+import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
 
-function contact(fields: Partial<Contact> & { id: string }): Contact {
-  return {
-    isFavorite: false, addresses: [], ...fields,
-  }
-}
+const contact = contactOf
 
 const alice = contact({
   id: 'a', firstName: 'Alice', lastName: 'Dupont', isFavorite: true, addresses: ['alice@x.be'],

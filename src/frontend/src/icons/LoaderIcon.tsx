@@ -1,8 +1,9 @@
+import Icon from './Icon'
 /** Eight rays with graduated opacity. They span r=3.6..8 so the painted extent at 16px (14.2px)
  * matches RocketIcon's 13.4px; the fade stops at 0.6, below which the trailing rays vanished. */
 export default function LoaderIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false">
+    <Icon size={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
       <g strokeLinecap="round">
         <path d="M10 2v4.4" />
         <path d="M15.66 4.34l-3.11 3.11" opacity="0.95" />
@@ -13,6 +14,6 @@ export default function LoaderIcon({ size = 16 }: { size?: number }) {
         <path d="M4.34 15.66l3.11-3.11" opacity="0.68" />
         <path d="M10 13.6V18" opacity="0.6" />
       </g>
-    </svg>
+    </Icon>
   )
 }

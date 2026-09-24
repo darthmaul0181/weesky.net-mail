@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import VirtualDomainsTab from './VirtualDomainsTab'
 import type { AdminUser } from './adminTypes'
-import { settle } from '../../../test-utils'
+import { createTestQueryClient, settle } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getVirtualDomains: vi.fn(),
@@ -29,7 +29,7 @@ const user = (id: number, userName: string, fullName: string): AdminUser => ({
 const users = [user(1, 'ada', 'Ada Lovelace'), user(2, 'grace', 'Grace Hopper'), user(3, 'alan', 'Alan Turing')]
 
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 

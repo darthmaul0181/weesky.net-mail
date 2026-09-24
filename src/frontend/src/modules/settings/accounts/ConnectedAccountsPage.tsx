@@ -16,8 +16,9 @@ import ConnectAccountForm from './ConnectAccountForm'
 import {
   errorText, leaveTo, oauthCompleteErrorText, providerRefused, useCompleteOAuthConnect,
   useConnectedAccounts, useDeleteConnectedAccount, useStartOAuthConnect,
-  useUpdateConnectedAccountPassword, type ConnectedAccount,
+  useUpdateConnectedAccountPassword,
 } from './useConnectedAccounts'
+import type { ConnectedAccount } from '../../../types/connectedAccount'
 
 /** An account on our own server has no external domain row to name, so the tile names the
  *  mailbox's own domain — the same kind of thing an external tile shows, spelled the same way. */

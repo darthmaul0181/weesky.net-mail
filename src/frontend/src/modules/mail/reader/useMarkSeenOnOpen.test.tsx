@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
+import { QueryClientProvider, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
 import { mailKeys, useSetFlags } from '../queries'
-import { settle } from '../../../test-utils'
+import { createTestQueryClient, settle } from '../../../test-utils'
 import { findCachedSummary, useCachedSummaryFlags, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
 const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn() }))
@@ -85,9 +85,7 @@ describe('useMarkSeenOnOpen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.setMessageFlags.mockResolvedValue(undefined)
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    })
+    client = createTestQueryClient({ mutations: { retry: false } })
   })
 
   it('fires once when the detail arrives on an unread message', async () => {
@@ -337,7 +335,7 @@ describe('useMarkSeenOnOpen', () => {
 
 describe('findCachedSummary', () => {
   beforeEach(() => {
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
   })
 
   it('finds a message in the paged cache', () => {
@@ -369,7 +367,7 @@ describe('findCachedSummary', () => {
 
 describe('useCachedSummaryFlags', () => {
   beforeEach(() => {
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
   })
 
   function FlagsHost() {

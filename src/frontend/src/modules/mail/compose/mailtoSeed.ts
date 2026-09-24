@@ -1,7 +1,7 @@
 import type { ComposeSeed } from './composeSeed'
 import { newMessageSeed } from './composeSeed'
 import { textToHtml } from './bodyFormat'
-import { isValidAddress } from './RecipientsField'
+import { isValidAddress } from '../../../lib/emailAddress'
 
 /** A malformed escape is a link somebody typed by hand, not a reason to open no composer at all. */
 function decode(value: string): string {

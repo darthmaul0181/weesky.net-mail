@@ -23,6 +23,8 @@ interface Props {
   onToggleFlagged: () => void
   deleteLabel: string
   deleteDisabled: boolean
+  /** Shown as the delete button's title while it is disabled; the reader's own reason to give. */
+  deleteReason?: string
   onDelete: () => void
   actions: MenuEntry[]
   onReply: () => void
@@ -39,10 +41,11 @@ interface Props {
     state instead is the rejected alternative, not a bug. */
 export default function ReaderActions({
   showColourToggle, originalColours, onToggleColours, seen, flagged, onToggleSeen, onToggleFlagged,
-  deleteLabel, deleteDisabled, onDelete, actions,
+  deleteLabel, deleteDisabled, deleteReason, onDelete, actions,
   onReply, onReplyAll, onForward, preparing, bar = false,
 }: Props) {
   const { t } = useTranslation('mail')
+  const deleteTitle = deleteDisabled ? deleteReason : undefined
 
   const colourEntry: MenuEntry = {
     label: t(originalColours ? 'reader.matchTheme' : 'reader.originalColours'),
@@ -95,7 +98,7 @@ export default function ReaderActions({
         {/* The visible word stays generic where the accessible name does not: inside the trash
             this expunges, and one cell has no room to say so twice. */}
         {cell(t('reader.bar.delete'), deleteLabel, <TrashIcon size={21} />, onDelete, deleteDisabled,
-          true, deleteDisabled ? t('actions.noTrashFolder') : undefined)}
+          true, deleteTitle)}
         <DropdownMenu
           direction="up"
           ariaLabel={t('reader.messageActions')}
@@ -145,7 +148,7 @@ export default function ReaderActions({
         className="action-btn is-danger"
         aria-label={deleteLabel}
         disabled={deleteDisabled}
-        title={deleteDisabled ? t('actions.noTrashFolder') : undefined}
+        title={deleteTitle}
         onClick={onDelete}
       >
         <TrashIcon size={18} />

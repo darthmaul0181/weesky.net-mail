@@ -1,11 +1,13 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import ContactCard from './ContactCard'
 import Modal from '../../components/Modal'
-import type { Contact, ContactDetail } from './contactTypes'
+import { contactOf } from './contactTestHarness'
+import type { ContactDetail } from './contactTypes'
+import { createTestQueryClient } from '../../test-utils'
 
 vi.mock('../../api.js', () => ({
   api: { getContact: vi.fn(), getContactPhoto: vi.fn() },
@@ -15,12 +17,6 @@ vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'primary' }))
 
 const { api } = await import('../../api.js') as unknown as {
   api: Record<'getContact' | 'getContactPhoto', ReturnType<typeof vi.fn>>
-}
-
-function contact(fields: Partial<Contact> & { id: string }): Contact {
-  return {
-    isFavorite: false, addresses: [], ...fields,
-  }
 }
 
 function detail(fields: Partial<ContactDetail> = {}): ContactDetail {
@@ -35,7 +31,7 @@ function detail(fields: Partial<ContactDetail> = {}): ContactDetail {
   }
 }
 
-const bruno = contact({
+const bruno = contactOf({
   id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: 'bru',
   addresses: ['bruno@x.be', 'b.mertens@wk.be'],
 })
@@ -54,7 +50,7 @@ function setup(overrides: Partial<Parameters<typeof ContactCard>[0]> = {}, extra
     contact: bruno, onEdit: vi.fn(), onDelete: vi.fn(), onToggleFavorite: vi.fn(),
     onWrite: vi.fn(), ...overrides,
   }
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return {
     ...props,
     ...render(
@@ -278,13 +274,13 @@ describe('ContactCard', () => {
 
   // A field that does not exist renders nothing at all — an empty labelled row reads as data lost.
   it('renders no nickname row when there is none', () => {
-    setup({ contact: contact({ id: 'n', firstName: 'Alice', addresses: ['a@x.be'] }) })
+    setup({ contact: contactOf({ id: 'n', firstName: 'Alice', addresses: ['a@x.be'] }) })
 
     expect(screen.queryByText(/nickname/i)).not.toBeInTheDocument()
   })
 
   it('renders no address section when the contact carries none', () => {
-    setup({ contact: contact({ id: 'n', firstName: 'Alice' }) })
+    setup({ contact: contactOf({ id: 'n', firstName: 'Alice' }) })
 
     expect(screen.queryByTestId('card-address')).not.toBeInTheDocument()
   })
@@ -401,7 +397,7 @@ describe('ContactCard', () => {
   it('renders two identical addresses without a duplicate-key warning', () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      setup({ contact: contact({ id: 'd', addresses: ['same@x.be', 'same@x.be'] }) })
+      setup({ contact: contactOf({ id: 'd', addresses: ['same@x.be', 'same@x.be'] }) })
 
       expect(screen.getAllByTestId('card-address')).toHaveLength(2)
       expect(warn.mock.calls.some(c => String(c[0]).includes('same key'))).toBe(false)

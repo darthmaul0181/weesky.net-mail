@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import type { QueryClient } from '@tanstack/react-query'
 import { useMessageList } from './useMessageList'
+import { createTestQueryClient, withQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({ getMailMessages: vi.fn(), getPreferences: vi.fn() }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
@@ -11,9 +11,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
 }))
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 function pageOf(uids: number[], total: number) {
   return {
@@ -38,7 +36,8 @@ function groupedPageOf(threads: number[][], total: number, totalThreads: number)
 describe('useMessageList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
+    wrapper = withQueryClient(client)
   })
 
   it('pages when a size is chosen', async () => {

@@ -1,3 +1,5 @@
+import { readStored, writeStored } from './safeStorage'
+
 /** The interface language: stored preference → localStorage mirror → browser → English. `auto` and
  * any unknown value fall through alike: an unknown one taken as an answer would strand an account
  * on a locale the build cannot render. */
@@ -25,9 +27,9 @@ export function resolveLocale(
 }
 
 export function readLanguageMirror(): string | undefined {
-  return localStorage.getItem(LANGUAGE_MIRROR_KEY) ?? undefined
+  return readStored(LANGUAGE_MIRROR_KEY) ?? undefined
 }
 
 export function writeLanguageMirror(value: string): void {
-  localStorage.setItem(LANGUAGE_MIRROR_KEY, value)
+  writeStored(LANGUAGE_MIRROR_KEY, value)
 }

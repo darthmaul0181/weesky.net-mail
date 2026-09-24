@@ -1,15 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeQuery, folderMatches } from './folderFilter'
-
-describe('normalizeQuery', () => {
-  it('lowercases and strips the accents', () => {
-    expect(normalizeQuery('Courrier Indésirable')).toBe('courrier indesirable')
-  })
-
-  it('leaves an already-plain string alone', () => {
-    expect(normalizeQuery('archive')).toBe('archive')
-  })
-})
+import { folderMatches } from './folderFilter'
 
 describe('folderMatches', () => {
   // The whole point of the normalisation: nobody types the accent to find the folder.

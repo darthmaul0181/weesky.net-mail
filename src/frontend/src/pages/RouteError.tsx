@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRouteError } from 'react-router'
+import { readStored, writeStored } from '../lib/safeStorage'
 
 const RELOADED_AT = 'chunkReloadAt'
 
@@ -22,10 +23,12 @@ export default function RouteError() {
 
   useEffect(() => {
     if (!stale || offline) return
-    try {
-      if (Date.now() - Number(sessionStorage.getItem(RELOADED_AT)) < 10_000) return
-      sessionStorage.setItem(RELOADED_AT, String(Date.now()))
-    } catch { return }
+    if (Date.now() - Number(readStored(RELOADED_AT, 'session')) < 10_000) return
+    const marker = String(Date.now())
+    writeStored(RELOADED_AT, marker, 'session')
+    // Blocked storage can't hold the guard: only a read-back that matches what was just
+    // written proves it will stop the next reload.
+    if (readStored(RELOADED_AT, 'session') !== marker) return
     window.location.reload()
   }, [stale, offline])
 

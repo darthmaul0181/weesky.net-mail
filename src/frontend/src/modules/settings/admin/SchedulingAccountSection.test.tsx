@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { StrictMode, type ReactNode } from 'react'
 import SchedulingAccountSection from './SchedulingAccountSection'
 import type { SchedulingAccount } from './useSchedulingAccount'
 import { ApiError } from '../../../api.js'
+import { createTestQueryClient } from '../../../test-utils'
 import enAdmin from '../../../locales/en/admin.json'
 import frAdmin from '../../../locales/fr/admin.json'
 
@@ -24,7 +25,7 @@ vi.mock('../../../api.js', async importOriginal => ({
 }))
 
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
@@ -726,7 +727,7 @@ describe('SchedulingAccountSection — accessibility', () => {
 
 describe('SchedulingAccountSection — typed password in memory', () => {
   it('leaves no typed password in the mutation cache once the dialog has closed', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const client = createTestQueryClient()
     mocks.adminGetSchedulingAccount.mockResolvedValue(CONFIGURED)
     mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: true })
     mocks.adminSaveSchedulingAccount.mockResolvedValue(undefined)

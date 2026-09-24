@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './AuthContext'
+import { onSessionEnd } from './sessionEvents'
+// Registers the claim's cleanup, as AppShell's import graph does in the app.
+import '../modules/mail/notify/channels'
 
 import { useAccountId } from '../hooks/useAccountId'
 import { useWebAppManifest } from '../hooks/useWebAppManifest'
+import { createTestQueryClient } from '../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
@@ -96,7 +100,7 @@ describe('AuthContext', () => {
     mocks.logout.mockResolvedValue(null)
     mocks.getAppSettings.mockResolvedValue(appSettings)
     mocks.getConnectedAccounts.mockResolvedValue(connected)
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client = createTestQueryClient()
     // jsdom implements neither; installed here and removed afterwards rather than globally.
     URL.createObjectURL = vi.fn(() => 'blob:mock')
     URL.revokeObjectURL = vi.fn()
@@ -188,6 +192,26 @@ describe('AuthContext', () => {
     await waitFor(() => expect(localStorage.getItem('mail.lastNotifiedUidNext')).toBeNull())
     expect(localStorage.getItem('mail.lastNotifiedUidNext.primary')).toBeNull()
     expect(localStorage.getItem('mail.lastNotifiedUidNext.acct-1')).toBeNull()
+  })
+
+  it('ends the session for its listeners after the caches and before the active account', async () => {
+    mocks.hasSession.mockReturnValue(true)
+    localStorage.setItem('mail.activeAccount', 'acct-1')
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
+    client.getMutationCache().build(client, { mutationFn: () => Promise.resolve() })
+    const seen: Array<{ mutations: number; stored: string | null }> = []
+    const off = onSessionEnd(() => {
+      seen.push({ mutations: client.getMutationCache().getAll().length, stored: localStorage.getItem('mail.activeAccount') })
+    })
+
+    try {
+      fireEvent.click(screen.getByText('out'))
+      await waitFor(() => expect(seen).toEqual([{ mutations: 0, stored: 'acct-1' }]))
+      expect(localStorage.getItem('mail.activeAccount')).toBeNull()
+    } finally {
+      off()
+    }
   })
 
   // Flushing is for a session *ending*. On a logged-out first mount nothing is cached to flush,

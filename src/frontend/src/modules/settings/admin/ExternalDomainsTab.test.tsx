@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { holdNextCall, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
 import ExternalDomainsTab from './ExternalDomainsTab'
 import type { ExternalDomain } from './useExternalDomains'
 
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../api.js', () => ({ api: mocks }))
 
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
@@ -105,7 +105,7 @@ describe('ExternalDomainsTab — list', () => {
   // tab keeps its failure text rather than a spinner, and the failure is not news a second time.
   it('draws no spinner and no second toast when the failed list is refetched', async () => {
     mocks.adminGetExternalDomains.mockRejectedValue(new Error('Server error'))
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const client = createTestQueryClient()
     render(<QueryClientProvider client={client}><ExternalDomainsTab addToast={addToast} /></QueryClientProvider>)
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load external domains', 'error'))
     const refetch = holdNextCall(mocks.adminGetExternalDomains)

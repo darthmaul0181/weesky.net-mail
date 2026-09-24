@@ -1,10 +1,9 @@
 import { useEffect } from 'react'
-import {
-  useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey,
-} from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
 import type { AddToast } from '../../../hooks/useToasts'
 import { useListLoadState, type ListQuery } from '../../../hooks/useListLoadState'
+import { invalidateOnSettled } from '../invalidateOnSettled'
 import type { Quota } from '../../../types/account'
 import type {
   AdminDomain, AdminDomainPayload, AdminUser, AdminUserPayload, VirtualDomain,
@@ -66,17 +65,11 @@ export function useListLoad(
   return firstLoad
 }
 
-// onSettled, not onSuccess: a refused write must leave the screen on server state rather than
-// on an optimistic lie.
-function refresh(client: QueryClient, queryKey: QueryKey) {
-  return () => { void client.invalidateQueries({ queryKey }) }
-}
-
 // A user's domain name, a deleted owner, the domains the user dialog offers: one write changes
 // what several lists draw, so it refreshes them all. Only the lists on screen are refetched.
 function useAdminWrite<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
   const client = useQueryClient()
-  return useMutation({ mutationFn, onSettled: refresh(client, ADMIN_KEY) })
+  return useMutation({ mutationFn, onSettled: invalidateOnSettled(client, ADMIN_KEY) })
 }
 
 export const useCreateAdminUser = () =>
@@ -113,7 +106,7 @@ function useOwnerWrite<TData>(
       client.setQueryData<VirtualDomain[]>(VIRTUAL_DOMAINS_KEY, list =>
         list?.map(d => (d.domainId === change.domainId ? apply(d, change, data) : d)))
     },
-    onSettled: refresh(client, VIRTUAL_DOMAINS_KEY),
+    onSettled: invalidateOnSettled(client, VIRTUAL_DOMAINS_KEY),
   })
 }
 

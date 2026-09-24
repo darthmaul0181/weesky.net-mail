@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { readStored, writeStored } from '../lib/safeStorage'
 import { APP_SETTING_KEYS, useAppSettings } from './useAppSettings'
 
 /** Mirrors the instance's application name, so `index.html` can paint the tab before React runs —
@@ -12,11 +13,7 @@ export function tabTitle(email: string | null, base: string): string {
 }
 
 function remembered(): string | null {
-  try {
-    return localStorage.getItem(APP_NAME_STORAGE_KEY)
-  } catch {
-    return null
-  }
+  return readStored(APP_NAME_STORAGE_KEY)
 }
 
 /** Names the mailbox in the tab, under the administrator's application name; mounted in the shell
@@ -30,11 +27,7 @@ export function useTabTitle(): void {
   const base = configured || remembered() || window.location.hostname
 
   useEffect(() => {
-    if (configured) {
-      try {
-        localStorage.setItem(APP_NAME_STORAGE_KEY, configured)
-      } catch { /* a private window keeps the name for this load only */ }
-    }
+    if (configured) writeStored(APP_NAME_STORAGE_KEY, configured)
   }, [configured])
 
   useEffect(() => {

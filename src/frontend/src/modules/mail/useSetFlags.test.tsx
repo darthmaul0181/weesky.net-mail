@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type {
   MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
 } from './api/mailTypes'
 import { mailKeys, useSearchMessages, useSetFlags } from './queries'
-import { settle } from '../../test-utils'
+import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn(), searchMessages: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
@@ -15,9 +14,7 @@ vi.mock('../../contexts/AuthContext', () => ({
 }))
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
   uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-07-22T10:00:00Z',
@@ -81,9 +78,8 @@ function deferred<T>() {
 describe('useSetFlags', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    })
+    client = createTestQueryClient({ mutations: { retry: false } })
+    wrapper = withQueryClient(client)
   })
 
   it('patches pages, stream blocks and the folder unread count optimistically', async () => {

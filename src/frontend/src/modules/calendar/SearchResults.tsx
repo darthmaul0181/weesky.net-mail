@@ -5,6 +5,7 @@ import type { Occurrence } from './calendarTypes'
 import EventChip from './EventChip'
 import { dayOf } from './multiDay'
 import { colorOf, occurrenceKey } from './occurrenceStyle'
+import { SEARCH_MIN } from './useCalendarSearch'
 
 export interface SearchResultsProps {
   occurrences: Occurrence[]
@@ -21,7 +22,6 @@ export interface SearchResultsProps {
 /** What the server stops at; said out loud, because a list silently cut at 200 reads as the
     whole answer. Kept beside the band that would otherwise claim exactly 200 matches. */
 const CAP = 200
-const MIN_QUERY = 2
 
 /** The stage while a search stands: a band saying what came back, then one row per result,
     each carrying its own date since nothing above it names the day. */
@@ -40,7 +40,7 @@ export default function SearchResults({
     onOpen(occurrence, anchor)
   }
 
-  const heading = tooShort ? t('views.searchTooShort', { min: MIN_QUERY })
+  const heading = tooShort ? t('views.searchTooShort', { min: SEARCH_MIN })
     : loading ? t('views.loading')
       : failed ? t('errors.load')
         : t('views.results', { count: occurrences.length })

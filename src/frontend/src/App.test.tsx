@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { routes } from './routes'
+import { createTestQueryClient } from './test-utils'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
@@ -37,7 +38,7 @@ vi.mock('./api.js', () => ({
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const queryClient = createTestQueryClient()
   render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -152,5 +153,27 @@ describe('App composition', () => {
     expect(await screen.findByPlaceholderText('Email address')).toBeInTheDocument()
     await waitFor(() =>
       expect(document.head.querySelector('link[rel="manifest"]')).not.toBeNull())
+  })
+
+  // A browser that blocks storage (private mode, a locked-down profile) must still open on the
+  // login page rather than crash white: every localStorage/sessionStorage read a mounting
+  // provider makes has to degrade to "nothing stored" instead of throwing.
+  it('opens on the login page when storage throws on every access', async () => {
+    mocks.hasSession.mockReturnValue(false)
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('blocked') })
+    const onError = vi.fn()
+    window.addEventListener('error', onError)
+
+    try {
+      render(<StrictMode><App /></StrictMode>)
+
+      expect(await screen.findByPlaceholderText('Email address')).toBeInTheDocument()
+      expect(onError).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('error', onError)
+      vi.restoreAllMocks()
+    }
   })
 })

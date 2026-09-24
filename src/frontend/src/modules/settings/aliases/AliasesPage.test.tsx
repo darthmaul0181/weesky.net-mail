@@ -2,8 +2,8 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { holdNextCall, settle } from '../../../test-utils'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
 import { mailKeys } from '../../mail/queries'
 import AliasesPage from './AliasesPage'
 
@@ -39,7 +39,7 @@ beforeEach(() => {
   localStorage.clear()
   mocks.getAccount.mockResolvedValue(ACCOUNT)
   mocks.getAliases.mockResolvedValue(ALIASES)
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  queryClient = createTestQueryClient()
 })
 
 // ── AliasesPage ───────────────────────────────────────────────

@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { StrictMode } from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { calendarOf } from '../../calendar/calendarTestHarness'
 import type { Calendar } from '../../calendar/calendarTypes'
 import type { MailInvitation, ReplyStatus } from '../api/mailTypes'
 import { useMessage } from '../queries'
 import InvitationCard from './InvitationCard'
+import { createTestQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   respondInvitation: vi.fn(),
@@ -55,10 +57,7 @@ const base: MailInvitation = {
 }
 
 function calendar(partial: Partial<Calendar>): Calendar {
-  return {
-    id: 'c1', davName: 'default', displayName: 'Personnel', description: '', color: '#3450a3',
-    order: 0, timeZone: 'Europe/Brussels', isVisible: true, isDefault: true, ...partial,
-  }
+  return calendarOf('c1', '#3450a3', 'Personnel', { davName: 'default', isDefault: true, ...partial })
 }
 
 const calendars = [calendar({})]
@@ -67,9 +66,7 @@ const twoCalendars = [...calendars, calendar({ id: 'c2', davName: 'work', displa
 const onTrashed = vi.fn()
 
 function renderCard(invitation: MailInvitation = base) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  })
+  const client = createTestQueryClient({ mutations: { retry: false } })
   const view = render(
     <QueryClientProvider client={client}>
       <InvitationCard invitation={invitation} folderPath="INBOX" uid={7} onTrashed={onTrashed} />
@@ -170,6 +167,26 @@ describe('InvitationCard', () => {
     expect(screen.getByRole('button', { name: 'Tentative' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  })
+
+  // The server passes the PARTSTAT through as the file spells it, and RFC 5545 values are
+  // case-insensitive.
+  it('reads an answer written in lower case', async () => {
+    renderCard(answered('accepted'))
+
+    await waitFor(() => expect(document.querySelector('.invitation-card-answer')?.textContent)
+      .toBe('✓You accepted · in Personnel'))
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  })
+
+  it('reads a filed answer and presses the previous one whatever their case', async () => {
+    renderCard(answered('tentative', 'Outdated'))
+
+    expect(screen.getByRole('button', { name: 'Tentative' })).toHaveAttribute('aria-pressed', 'true')
+    cleanup()
+    renderCard({ ...base, filePartStat: 'accepted' })
+    expect(screen.getByText('The organiser recorded you as having accepted.')).toBeInTheDocument()
+    await waitFor(() => expect(mocks.getCalendars).toHaveBeenCalled())
   })
 
   it('a decline that trashed the mail calls onTrashed; one that did not stays', async () => {
@@ -343,7 +360,7 @@ describe('InvitationCard', () => {
   it('a reply applies itself once, then says what the guest answered', async () => {
     let resolve!: (value: unknown) => void
     mocks.applyInvitationReply.mockReturnValue(new Promise(r => { resolve = r }))
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const client = createTestQueryClient({ mutations: { retry: false } })
     // StrictMode mounts twice in development: the one call has to survive that too.
     const card = (invitation: MailInvitation) => (
       <StrictMode>
@@ -425,7 +442,7 @@ describe('InvitationCard', () => {
   // The card beside the reader's own query on its message, as MessageReader mounts them: Reload
   // refetches that query, and only a refetch that answered may redraw the card.
   async function renderWithMessage(invitation: MailInvitation) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const client = createTestQueryClient({ mutations: { retry: false } })
     function MessageQuery() { useMessage('INBOX', 7); return null }
     render(
       <QueryClientProvider client={client}>

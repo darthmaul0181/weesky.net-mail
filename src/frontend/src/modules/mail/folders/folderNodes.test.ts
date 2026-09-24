@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { flatten, indent, isSystemFolder, parentOf, rolePathsOf, sortFolders } from './folderNodes'
+import {
+  findFolder, flatten, folderByPath, folderByRole, inboxOf, indent, isSystemFolder, parentOf, rolePathsOf,
+  sortFolders,
+} from './folderNodes'
 import type { MailFolderNode } from '../api/mailTypes'
 
 function node(partial: Partial<MailFolderNode>): MailFolderNode {
@@ -149,5 +152,24 @@ describe('isSystemFolder', () => {
     expect(isSystemFolder(node({ specialUse: 'inbox' }))).toBe(true)
     expect(isSystemFolder(node({ specialUse: 'trash' }))).toBe(true)
     expect(isSystemFolder(node({}))).toBe(false)
+  })
+})
+
+describe('findFolder', () => {
+  it('finds a nested folder by path, and nothing for a path no folder holds', () => {
+    expect(folderByPath(tree, 'Projects/Alpha')?.name).toBe('Alpha')
+    expect(folderByPath(tree, 'Nowhere')).toBeUndefined()
+    expect(folderByPath(tree, null)).toBeUndefined()
+    expect(folderByPath(undefined, 'INBOX')).toBeUndefined()
+  })
+
+  it('finds a folder by role, the first in tree order winning', () => {
+    const nested = [node({ path: 'A', children: [node({ path: 'A/Bin', specialUse: 'trash' })] }),
+      node({ path: 'Bin', specialUse: 'trash' })]
+
+    expect(folderByRole(nested, 'trash')?.path).toBe('A/Bin')
+    expect(folderByRole(tree, 'sent')).toBeUndefined()
+    expect(inboxOf(tree)?.path).toBe('INBOX')
+    expect(findFolder(tree, folder => !folder.subscribed)?.path).toBe('Projects/Alpha')
   })
 })

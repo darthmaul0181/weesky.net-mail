@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type {
   InvitationResponse, MailFolderNode, MailFolderPage, MailInvitation, MailMessageSummary,
 } from './api/mailTypes'
 import { mailKeys, useRespondInvitation } from './queries'
+import { createTestQueryClient, withQueryClient } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({ respondInvitation: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
@@ -14,9 +14,7 @@ vi.mock('../../contexts/AuthContext', () => ({
 }))
 
 let client: QueryClient
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
-}
+let wrapper: ReturnType<typeof withQueryClient>
 
 const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
   uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-09-12T10:00:00Z',
@@ -62,9 +60,8 @@ const inbox = () => client.getQueryData<MailFolderNode[]>(foldersKey)![0]!
 describe('useRespondInvitation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    })
+    client = createTestQueryClient({ mutations: { retry: false } })
+    wrapper = withQueryClient(client)
   })
 
   it('a decline the server trashed takes the row out of every list cache and moves the counts', async () => {

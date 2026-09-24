@@ -48,6 +48,10 @@ describe('replySentenceOf', () => {
     expect(said('Superseded', 'TENTATIVE')).toBe('reader.invitation.reply.answer.TENTATIVE · reader.invitation.reply.superseded')
   })
 
+  it('reads the answer whatever its case', () => {
+    expect(said('Applicable', 'declined')).toBe('reader.invitation.reply.answer.DECLINED')
+  })
+
   // An older reply can also say something the calendar does not take: it never prints a bare tail.
   it('an answer outside the three is said as such, even on an older version', () => {
     expect(said('Stale', 'DELEGATED')).toBe('reader.invitation.reply.unsupportedAnswer')

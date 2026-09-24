@@ -5,7 +5,7 @@ import {
   BLOCK_SIZE, groupConversationsOf, isStreaming, usePreferences,
 } from '../../../hooks/usePreferences'
 import type { MailFolderPage } from '../api/mailTypes'
-import { flatten } from '../folders/folderNodes'
+import { folderByPath } from '../folders/folderNodes'
 import { mailKeys, useAccountId, useFolders } from '../queries'
 import { folderChanged, snapshotOf, uidValidityBroke, type FolderSnapshot } from './folderDelta'
 import { dedupeByUid } from './messageStream'
@@ -59,7 +59,7 @@ export function useListRefresh(folderPath: string | null, enabled = true): void 
 
   useEffect(() => {
     if (!folderPath || !folders || !preferences) return
-    const node = flatten(folders).find(entry => entry.node.path === folderPath)?.node
+    const node = folderByPath(folders, folderPath)
     if (!node) return
 
     const snapshot = snapshotOf(node)
