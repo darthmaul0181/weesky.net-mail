@@ -74,7 +74,7 @@ export function EmailLines({ addresses, primary }: {
     <LineList icon={<MailIcon size={15} />} label={t('fields.addresses')} addLabel={t('editor.addAddress')}
       list={addresses}>
       {(line, index) => (
-        <LineRow className="contact-address-row" testId={`address-row-${index}`}
+        <LineRow className="contact-address-row is-email" testId={`address-row-${index}`}
           removeLabel={t('editor.removeAddress', { index: index + 1 })} onRemove={() => addresses.remove(index)}>
           <label className="visually-hidden" htmlFor={`contact-address-${index}`}>
             {t('editor.addressLabel', { index: index + 1 })}

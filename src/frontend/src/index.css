@@ -2880,6 +2880,12 @@ body {
 }
 .contact-address-add:hover { text-decoration: underline; }
 .contact-address-row select { flex: none; }
+/* The email rows share their columns, so the primary's label and another row's tick
+   leave every address box the same width. */
+.contact-address-list:has(> .is-email) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+.contact-address-row.is-email { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.contact-address-row.is-email .contact-address-primary { justify-self: center; }
+.contact-address-list:has(> .is-email) > .contact-address-add { grid-column: 1 / -1; justify-self: start; }
 
 /* One postal address: the type row on the .contact-address-row pattern, then its RFC 6350
    components on their own grid rows — gap, never per-element margins. */
