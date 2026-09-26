@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { shouldRetry } from './retryPolicy'
+import { RequestTimeoutError } from './withTimeout'
 
 describe('shouldRetry', () => {
   it('retries an ordinary failure twice and then gives up', () => {
@@ -17,6 +18,11 @@ describe('shouldRetry', () => {
   // The account's stored password no longer decrypts; no round trip changes that.
   it('never retries a credentials conflict', () => {
     expect(shouldRetry(0, Object.assign(new Error('nope'), { status: 409 }))).toBe(false)
+  })
+
+  // The server already went 30 s without a word: a retry would triple the spinner before saying so.
+  it('never retries a timed-out read', () => {
+    expect(shouldRetry(0, new RequestTimeoutError())).toBe(false)
   })
 
   it('tolerates an error carrying no status', () => {

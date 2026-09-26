@@ -37,6 +37,7 @@ import type {
 } from './modules/settings/rules/rulesTypes'
 import type { ServerVersion } from './modules/settings/about/aboutTypes'
 import { readStored, removeStored, writeStored } from './lib/safeStorage'
+import { anySignal, withTimeout } from './lib/withTimeout'
 
 const BASE: string = import.meta.env.VITE_API_BASE
 const SESSION_KEY = 'sessionActive'
@@ -47,7 +48,16 @@ export interface RequestOptions {
   /** A connected account's id; 'primary', null or absent all mean the session's own mailbox. */
   accountId?: string | null
   signal?: AbortSignal
+  /** A read's wait for the response headers; writes have no deadline, as one cut may have landed. */
+  timeoutMs?: number
 }
+
+/** A frozen backend otherwise spins forever. The body is not timed: a big download may be slow. */
+const READ_TIMEOUT_MS = 30_000
+/** The backend builds a whole file (an IMAP part, an export, a message source) before its first byte. */
+const LARGE_READ_TIMEOUT_MS = 120_000
+const largeRead = (options?: RequestOptions): RequestOptions =>
+  ({ ...options, timeoutMs: options?.timeoutMs ?? LARGE_READ_TIMEOUT_MS })
 
 export interface UploadOptions extends RequestOptions {
   onProgress?: (fraction: number) => void
@@ -125,6 +135,13 @@ function carriesAccount(accountId: string | null | undefined): accountId is stri
   return Boolean(accountId) && accountId !== 'primary'
 }
 
+function send(path: string, init: RequestInit, { signal, timeoutMs }: RequestOptions): Promise<Response> {
+  if (init.method !== 'GET') return fetch(`${BASE}${path}`, { ...init, signal })
+  return withTimeout(deadline => fetch(`${BASE}${path}`, {
+    ...init, signal: signal ? anySignal([signal, deadline]) : deadline,
+  }), timeoutMs ?? READ_TIMEOUT_MS)
+}
+
 /** `T` is the DTO the route answers; a route that can answer 204 names `| null` in it. */
 export async function request<T>(
   method: HttpMethod, path: string, body?: unknown, options: RequestOptions = {},
@@ -136,13 +153,12 @@ export async function request<T>(
   if (body && !isForm) headers['Content-Type'] = 'application/json'
   if (carriesAccount(options.accountId)) headers['X-Account-Id'] = options.accountId
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await send(path, {
     method,
     headers,
     credentials: 'include',
     body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
-    signal: options.signal,
-  })
+  }, options)
 
   if (res.status === 401) {
     const { code } = await readError(res)
@@ -171,12 +187,7 @@ export async function requestBlob(
   const headers: Record<string, string> = {}
   if (carriesAccount(options.accountId)) headers['X-Account-Id'] = options.accountId
 
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'GET',
-    headers,
-    credentials: 'include',
-    signal: options.signal,
-  })
+  const res = await send(path, { method: 'GET', headers, credentials: 'include' }, largeRead(options))
 
   if (res.status === 401) {
     clearSession()
@@ -486,7 +497,8 @@ export const api = {
     request<ApplyReplyResponse>('POST', '/api/Calendar/Invitations/ApplyReply', body, options),
 
   getMessageSource: (folder: string, uid: number, options?: RequestOptions) =>
-    request<MailMessageSource>('GET', `/api/Mail/Messages/Source?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
+    request<MailMessageSource>('GET', `/api/Mail/Messages/Source?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined,
+      largeRead(options)),
 
   setMessageFlags: (folder: string, uids: number[], flag: MailFlagName, value: boolean, options?: RequestOptions) =>
     request<null>('PUT', '/api/Mail/Messages/Flags', { folderPath: folder, uids, flag, value }, options),
@@ -648,7 +660,8 @@ export function uploadAttachment(
       if (event.lengthComputable) onProgress?.(event.loaded / event.total)
     }
 
-    const onAbort = () => { detachAbort(); xhr.abort(); reject(new ApiError('Aborted', 0, null)) }
+    const rejectAborted = () => { detachAbort(); reject(new ApiError('Aborted', 0, null)) }
+    const onAbort = () => { xhr.abort(); rejectAborted() }
     const detachAbort = () => signal?.removeEventListener('abort', onAbort)
 
     xhr.onload = () => {
@@ -661,19 +674,25 @@ export function uploadAttachment(
         return
       }
       if (xhr.status >= 200 && xhr.status < 300) {
-        // The wire contract: the upload route answers a StagedAttachmentInfo, unchecked here.
-        const staged: unknown = JSON.parse(xhr.responseText)
-        resolve(staged as StagedAttachmentInfo)
+        // The wire contract: the upload route answers a StagedAttachmentInfo, unchecked here. A 2xx
+        // that is not JSON (a proxy's page) must still settle the promise.
+        try {
+          const staged: unknown = JSON.parse(xhr.responseText)
+          resolve(staged as StagedAttachmentInfo)
+        } catch {
+          reject(new ApiError('Invalid response', xhr.status, null))
+        }
         return
       }
       const { message, code } = parseErrorEnvelope(xhr.responseText, xhr.statusText)
       reject(new ApiError(message || xhr.statusText, xhr.status, code))
     }
     xhr.onerror = () => { detachAbort(); reject(new ApiError('Network error', 0, null)) }
+    xhr.onabort = rejectAborted
 
     // fetch rejects synchronously for a pre-aborted signal; XHR needs the same check up front.
     if (signal?.aborted) {
-      reject(new ApiError('Aborted', 0, null))
+      rejectAborted()
       return
     }
 

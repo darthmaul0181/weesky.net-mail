@@ -4,7 +4,8 @@ import Modal from './Modal'
 
 interface DeleteConfirmModalProps {
   entityLabel?: ReactNode
-  onConfirm: () => void
+  /** A returned promise closes the dialog itself once it settles, whatever it settles to. */
+  onConfirm: () => void | Promise<unknown>
   onClose: () => void
   loading?: boolean
   message?: ReactNode
@@ -38,7 +39,11 @@ export default function DeleteConfirmModal({
       </p>
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
         <button className="btn btn-danger-solid"
-          onClick={() => { confirmed.current = true; onConfirm() }} disabled={loading}>
+          onClick={() => {
+            confirmed.current = true
+            const result = onConfirm()
+            if (result) void result.finally(onClose)
+          }} disabled={loading}>
           {loading ? <span className="spinner" /> : confirmLabel ?? t('actions.delete')}
         </button>
       </div>

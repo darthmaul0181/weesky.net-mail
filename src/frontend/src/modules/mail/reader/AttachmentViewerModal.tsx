@@ -27,7 +27,8 @@ interface Props {
 }
 
 // requestBlob because the API cookie is Lax and cross-origin: a plain <img src> would go out
-// without it. The object URL is revoked on navigation and on close; the arrows do not wrap.
+// without it. The download is aborted and the object URL revoked on navigation and on close;
+// the arrows do not wrap.
 export default function AttachmentViewerModal({ images, initialIndex, onDownload, onClose }: Props) {
   const { t } = useTranslation('mail')
   const [index, setIndex] = useState(initialIndex)
@@ -46,7 +47,8 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
     if (!src) return undefined
     let url: string | null = null
     let cancelled = false
-    requestBlob(src)
+    const controller = new AbortController()
+    requestBlob(src, { signal: controller.signal })
       .then((result: { blob: Blob }) => {
         if (cancelled) return
         url = URL.createObjectURL(result.blob)
@@ -57,6 +59,7 @@ export default function AttachmentViewerModal({ images, initialIndex, onDownload
       })
     return () => {
       cancelled = true
+      controller.abort()
       if (url) URL.revokeObjectURL(url)
     }
   }, [src, setLoaded])

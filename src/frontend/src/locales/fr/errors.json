@@ -38,6 +38,7 @@
   "smtpAuthFailed": "Le serveur a refusé l’identifiant ou le mot de passe.",
   "smtpAuthUnsupported": "Le serveur ne propose aucun mode d’authentification compatible.",
   "smtpTlsFailed": "La connexion sécurisée n’a pas pu être établie.",
+  "requestTimeout": "Le serveur ne répond pas. Réessayez dans un instant.",
   "smtpTimeout": "Le serveur n’a pas répondu à temps.",
   "passwordUnreadable": "Le mot de passe enregistré ne peut plus être lu : ressaisissez-le.",
   "storedAccountInvalid": "Le compte enregistré n’est plus valide : enregistrez-le à nouveau.",

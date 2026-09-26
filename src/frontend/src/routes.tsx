@@ -6,12 +6,6 @@ import { allowAdmin, allowAliases, allowPrimary, allowSieve } from './layouts/ga
 import AppShell from './layouts/AppShell'
 import LoginRoute from './pages/LoginRoute'
 import RouteError from './pages/RouteError'
-import SettingsLayout from './modules/settings/SettingsLayout'
-import AccountPage from './modules/settings/account/AccountPage'
-import ConnectedAccountsPage from './modules/settings/accounts/ConnectedAccountsPage'
-import AppearancePage from './modules/settings/appearance/AppearancePage'
-import FoldersPage from './modules/settings/mail/FoldersPage'
-import GeneralPage from './modules/settings/general/GeneralPage'
 import { hasSession } from './api.js'
 
 const mailChunk = () => import('./modules/mail/MailLayout')
@@ -21,6 +15,12 @@ if (hasSession()) void mailChunk()
 const MailLayout = lazy(mailChunk)
 const ContactsLayout = lazy(() => import('./modules/contacts/ContactsLayout'))
 const CalendarLayout = lazy(() => import('./modules/calendar/CalendarLayout'))
+const SettingsLayout = lazy(() => import('./modules/settings/SettingsLayout'))
+const AccountPage = lazy(() => import('./modules/settings/account/AccountPage'))
+const ConnectedAccountsPage = lazy(() => import('./modules/settings/accounts/ConnectedAccountsPage'))
+const AppearancePage = lazy(() => import('./modules/settings/appearance/AppearancePage'))
+const FoldersPage = lazy(() => import('./modules/settings/mail/FoldersPage'))
+const GeneralPage = lazy(() => import('./modules/settings/general/GeneralPage'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage'))
 const IdentitiesPage = lazy(() => import('./modules/settings/identities/IdentitiesPage'))
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage'))
@@ -67,13 +67,13 @@ export const routes: RouteObject[] = [
               { path: 'contacts/:id/edit', element: loaded('contacts', ContactsLayout) },
               {
                 path: 'settings',
-                element: <SettingsLayout />,
+                element: loaded('settings', SettingsLayout),
                 children: [
                   { index: true, element: <Navigate to="/settings/account" replace /> },
                   {
                     element: <Gate allow={allowPrimary} redirect="/settings/general" />,
                     children: [
-                      { path: 'account', element: <AccountPage /> },
+                      { path: 'account', element: loaded('account', AccountPage) },
                       { path: 'sync', element: loaded('sync', SyncPage) },
                       {
                         element: <Gate allow={allowAliases} redirect="/settings/general" />,
@@ -83,10 +83,10 @@ export const routes: RouteObject[] = [
                       },
                     ],
                   },
-                  { path: 'general', element: <GeneralPage /> },
-                  { path: 'accounts', element: <ConnectedAccountsPage /> },
-                  { path: 'appearance', element: <AppearancePage /> },
-                  { path: 'folders', element: <FoldersPage /> },
+                  { path: 'general', element: loaded('general', GeneralPage) },
+                  { path: 'accounts', element: loaded('accounts', ConnectedAccountsPage) },
+                  { path: 'appearance', element: loaded('appearance', AppearancePage) },
+                  { path: 'folders', element: loaded('folders', FoldersPage) },
                   // The folders page grew out of the old system-folders one; keep its URL working.
                   { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
                   { path: 'identities', element: loaded('identities', IdentitiesPage) },

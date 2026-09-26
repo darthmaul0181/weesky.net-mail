@@ -121,6 +121,23 @@ describe('MonthView', () => {
     expect(hourOf(createAt.mock.calls[1]![0].toISOString())).toBe(7)   // 09:00, ending at 10
   })
 
+  // Its end is on the next day, so its own clock (01:00) says nothing about this one.
+  it('opens at the last hour under an evening crossing midnight', () => {
+    const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
+    month([occurrenceOf({
+      eventId: 'p1', summary: 'Party',
+      startUtc: '2026-09-16T20:00:00Z', endUtc: '2026-09-16T23:00:00Z',
+    })], { createAt })
+    const cell = cellOf16()
+    pin(cell.querySelector('.event-chip')!, 40, 60)
+
+    fireEvent.click(cell, { clientY: 80 })
+    expect(createAt.mock.calls[0]![0].toISOString()).toBe('2026-09-16T21:00:00.000Z')  // 23:00
+    cell.focus()
+    press('Enter')
+    expect(createAt.mock.calls[1]![0].toISOString()).toBe('2026-09-16T21:00:00.000Z')
+  })
+
   it('leaves a click on a chip to the chip, and spends one on an empty cell closing a bubble', async () => {
     const createAt = vi.fn<(start: Date, end: Date, allDay: boolean) => void>()
     const onOpen = vi.fn()

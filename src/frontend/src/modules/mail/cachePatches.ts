@@ -252,6 +252,23 @@ export function dropFolderCaches(queryClient: QueryClient, accountId: string, fo
   return snapshots
 }
 
+// dropFolderCaches, unless the folder is open right now: removing an observed query blanks it for a
+// render before a refetch could refill it, so an open folder is invalidated instead — pages only,
+// never the stream (would replay every loaded block); the caller's own tree invalidation refreshes it.
+export function dropOrRefreshFolderCaches(
+  queryClient: QueryClient, accountId: string, folderPath: string,
+) {
+  const [pagesKey, streamKey] = listKeysOf(accountId, folderPath)
+  const observed = [pagesKey, streamKey].some(
+    queryKey => queryClient.getQueryCache().findAll({ queryKey, type: 'active' }).length > 0)
+
+  if (observed) {
+    void queryClient.invalidateQueries({ queryKey: pagesKey })
+    return
+  }
+  dropFolderCaches(queryClient, accountId, folderPath)
+}
+
 /** One read, one write: two patches of the same tree would snapshot an already-patched one. */
 export function patchTreeCounts(
   queryClient: QueryClient, accountId: string,

@@ -61,9 +61,9 @@ export default function IdentityMenu() {
   }
 
   const bandLabel = activeAccount ? labelOf(activeAccount) : null
-  const bandSub = !activeAccount || activeAccount.isPrimary
+  const bandSub = !activeAccount || activeAccount.isPrimary || !activeAccount.domainName
     ? activeAccount?.email
-    : `${activeAccount.email} · ${activeAccount.domainName ?? 'Weesky'}`
+    : `${activeAccount.email} · ${activeAccount.domainName}`
   const pillClass = !activeAccount
     ? 'identity-pill is-pending'
     : activeAccount.isPrimary ? 'identity-pill' : 'identity-pill is-connected'

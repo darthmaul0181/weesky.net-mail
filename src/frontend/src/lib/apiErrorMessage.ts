@@ -1,4 +1,5 @@
 import i18next from 'i18next'
+import { RequestTimeoutError } from './withTimeout'
 
 // A backend failure in the reader's language: a stable `code` is translated, anything else falls
 // back to the caller's own message; server prose stays on the error for the logs. `as const` keeps
@@ -64,6 +65,7 @@ export function messageForCode(code: string | undefined | null, fallback: string
 }
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof RequestTimeoutError) return i18next.t('errors:requestTimeout')
   const code = error instanceof Error ? (error as { code?: string }).code : undefined
   return messageForCode(code, fallback)
 }

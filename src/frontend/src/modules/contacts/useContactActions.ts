@@ -21,7 +21,7 @@ interface Options {
   seededHash: string | undefined
   editorKey: string | null
   addToast: AddToast
-  onSaved: () => void
+  onSaved: (id: string) => void
   onDeletedOpen: (id: string) => void
   onReloaded: () => void
   refetchDetail: () => Promise<{ isError: boolean }>
@@ -65,8 +65,11 @@ export function useContactActions({
         await updateContact.mutateAsync({
           id: edited.id, contact: seededHash ? { ...draft, cardHash: seededHash } : draft,
         })
-      } else await createContact.mutateAsync(draft)
-      onSaved()
+        onSaved(edited.id)
+      } else {
+        const created = await createContact.mutateAsync(draft)
+        onSaved(created.id)
+      }
       addToast(t('layout.saved'), 'success')
     } catch (error) {
       // Stay in the form carrying the reason: bouncing back to a list that kept nothing is how a
@@ -100,12 +103,17 @@ export function useContactActions({
     }
   }
 
-  // One call for the whole batch: fifty contacts would otherwise be fifty requests, and a failure
-  // at the thirtieth leaves a half-state nobody can word. The list clears its own boxes on confirm.
-  function deleteSelection(ids: string[]) {
-    deleteMany.mutate(ids, {
-      onError: error => addToast(apiErrorMessage(error, t('layout.deleteManyFailed')), 'error'),
-    })
+  // One call for the whole batch: fifty requests could fail at the thirtieth, a half-state nobody
+  // can word. Settles, never rejects: the confirm stays busy until then; `false` (refused) tells
+  // the list to keep its selection for a retry.
+  async function deleteSelection(ids: string[]): Promise<boolean> {
+    try {
+      await deleteMany.mutateAsync(ids)
+      return true
+    } catch (error) {
+      addToast(apiErrorMessage(error, t('layout.deleteManyFailed')), 'error')
+      return false
+    }
   }
 
   function toggleFavorite(contact: Contact) {
@@ -150,6 +158,7 @@ export function useContactActions({
     save, saving: createContact.isPending || updateContact.isPending, saveError,
     conflict, closeConflict: () => setConflict(false), reloadEdited,
     pendingDelete, setPendingDelete, confirmDelete, deleting: deleteContact.isPending,
-    deleteSelection, toggleFavorite, dropOnScope, removeFromOpenGroup, removeFromGroup,
+    deleteSelection, deletingMany: deleteMany.isPending,
+    toggleFavorite, dropOnScope, removeFromOpenGroup, removeFromGroup,
   }
 }

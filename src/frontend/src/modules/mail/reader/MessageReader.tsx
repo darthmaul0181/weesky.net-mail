@@ -138,8 +138,10 @@ export default function MessageReader(
   // Two booleans, not one: senderApproved is the explicit list and is what the revoke entry acts
   // on, while contactTrusted is computed and has nothing to revoke.
   const senderApproved = senderAddress !== '' && trustedSenders?.has(senderAddress) === true
-  const contactTrusted = trustContacts && senderAddress !== ''
-    && (contacts ?? []).some(c => c.addresses.some(a => canonicalAddress(a) === senderAddress))
+  // A set built once per contacts answer, not a nested walk of every address on every render.
+  const contactAddresses = useMemo(
+    () => new Set((contacts ?? []).flatMap(c => c.addresses.map(canonicalAddress))), [contacts])
+  const contactTrusted = trustContacts && senderAddress !== '' && contactAddresses.has(senderAddress)
   const alwaysShow = !!preferences && alwaysShowImagesOf(preferences)
   const showImages = imagesShown || alwaysShow || senderApproved || contactTrusted
   // Recolour before sanitising, so everything darkenColours writes faces the same pass as the

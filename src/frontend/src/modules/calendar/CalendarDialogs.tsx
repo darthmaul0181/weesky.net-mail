@@ -27,7 +27,8 @@ interface Props {
   pendingEvent: PendingEvent | null
   onPendingEventClosed: () => void
   deletingEvent: boolean
-  onDeleteEvent: (id: string) => void
+  /** Settles, never rejects: a refusal is told by a toast of its own. */
+  onDeleteEvent: (id: string) => Promise<void>
   inEditor: boolean
   discarding: boolean
   onDiscard: () => void
@@ -59,11 +60,7 @@ export default function CalendarDialogs({
         <DeleteConfirmModal
           message={t('dialogs.deleteEventMessage', { name: pendingEvent.name })}
           loading={deletingEvent}
-          onConfirm={() => {
-            const { id } = pendingEvent
-            onPendingEventClosed()
-            onDeleteEvent(id)
-          }}
+          onConfirm={() => onDeleteEvent(pendingEvent.id)}
           onClose={onPendingEventClosed} returnFocusRef={returnFocusRef} />
       )}
 

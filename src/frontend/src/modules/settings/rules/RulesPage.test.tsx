@@ -10,6 +10,7 @@ import {
 import { api } from '../../../api.js'
 import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
 import RulesPage from './RulesPage'
+import { RequestTimeoutError } from '../../../lib/withTimeout'
 import { RuleEditorModal } from './RuleEditorModal'
 import { ConvertConfirmModal } from './ConvertConfirmModal'
 import { RuleCard } from './RuleCard'
@@ -1081,6 +1082,12 @@ describe('RulesPage — initial load', () => {
     vi.mocked(api.getRules).mockRejectedValue(new Error('network failure'))
     renderPage()
     await screen.findByText('network failure')
+  })
+
+  it('words a timed-out load in the reader’s language, not in the error’s', async () => {
+    vi.mocked(api.getRules).mockRejectedValue(new RequestTimeoutError())
+    renderPage()
+    await screen.findByText('The server is not responding. Try again in a moment.')
   })
 
   it('shows empty state when rules list is empty', async () => {

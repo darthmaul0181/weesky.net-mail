@@ -38,6 +38,7 @@
   "smtpAuthFailed": "The server refused the login or password.",
   "smtpAuthUnsupported": "The server offers no compatible way to authenticate.",
   "smtpTlsFailed": "A secure connection could not be established.",
+  "requestTimeout": "The server is not responding. Try again in a moment.",
   "smtpTimeout": "The server did not answer in time.",
   "passwordUnreadable": "The stored password can no longer be read: enter it again.",
   "storedAccountInvalid": "The stored account is no longer valid: save it again.",

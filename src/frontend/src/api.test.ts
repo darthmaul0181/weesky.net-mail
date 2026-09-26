@@ -576,23 +576,141 @@ describe('ApiError', () => {
 })
 
 describe('abort support', () => {
-  it('passes the signal through to fetch', async () => {
+  it('lets a caller abort reach fetch', async () => {
     mockFetch(200, { json: [] })
     const { api } = await import('./api.js')
     const controller = new AbortController()
 
     await api.getMailFolders({ signal: controller.signal })
+    controller.abort()
 
-    expect(fetchCall()[1].signal).toBe(controller.signal)
+    expect(fetchCall()[1].signal?.aborted).toBe(true)
   })
 
-  it('sends no signal when none is given', async () => {
-    mockFetch(200, { json: [] })
+  it('sends no signal on a write when none is given', async () => {
+    mockFetch(200, { json: 'INBOX/New' })
     const { api } = await import('./api.js')
 
-    await api.getMailFolders()
+    await api.createMailFolder('INBOX', 'New')
 
     expect(fetchCall()[1].signal).toBeUndefined()
+  })
+})
+
+describe('read deadline', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  /** A fetch that settles only when its signal aborts, as a frozen backend would. */
+  const hungFetch = () => vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error))
+  }))
+
+  it('rejects a hung GET with RequestTimeoutError once 30 s have passed, and aborts it', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', hungFetch())
+    const { api } = await import('./api.js')
+    const { RequestTimeoutError } = await import('./lib/withTimeout')
+
+    const pending = api.getMailFolders()
+    const settled = expect(pending).rejects.toBeInstanceOf(RequestTimeoutError)
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(fetchCall()[1].signal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+
+    await settled
+    expect(fetchCall()[1].signal?.aborted).toBe(true)
+  })
+
+  // The backend builds the whole file before its first byte: an attachment, an export.
+  it.each([
+    ['requestBlob', (m: typeof import('./api.js')) => m.requestBlob('/api/Contacts/Export')],
+    ['the message source', (m: typeof import('./api.js')) => m.api.getMessageSource('INBOX', 1)],
+  ])('gives %s two minutes', async (_name, run) => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', hungFetch())
+    const api = await import('./api.js')
+    const { RequestTimeoutError } = await import('./lib/withTimeout')
+
+    const settled = expect(run(api)).rejects.toBeInstanceOf(RequestTimeoutError)
+    await vi.advanceTimersByTimeAsync(119_999)
+    expect(fetchCall()[1].signal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+
+    await settled
+  })
+
+  it('takes a per-call deadline', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', hungFetch())
+    const { request } = await import('./api.js')
+    const { RequestTimeoutError } = await import('./lib/withTimeout')
+
+    const settled = expect(request('GET', '/api/Account', undefined, { timeoutMs: 5_000 }))
+      .rejects.toBeInstanceOf(RequestTimeoutError)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    await settled
+  })
+
+  it('lets a caller abort win, as an abort and not a timeout', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', hungFetch())
+    const { api } = await import('./api.js')
+    const controller = new AbortController()
+
+    const pending = api.getMailFolders({ signal: controller.signal })
+    const settled = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.advanceTimersByTimeAsync(10_000)
+    controller.abort()
+
+    await settled
+  })
+
+  it('combines the signals by hand where AbortSignal.any is missing', async () => {
+    vi.stubGlobal('AbortSignal', Object.assign(Object.create(AbortSignal) as object, { any: undefined }))
+    vi.stubGlobal('fetch', hungFetch())
+    const { api } = await import('./api.js')
+    const controller = new AbortController()
+
+    const pending = api.getMailFolders({ signal: controller.signal })
+    const settled = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+
+    await settled
+  })
+
+  it('never cuts a write', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', hungFetch())
+    const { api } = await import('./api.js')
+    let outcome = 'pending'
+    void api.sendMessage({} as never).then(() => { outcome = 'resolved' }, () => { outcome = 'rejected' })
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+
+    expect(outcome).toBe('pending')
+    expect(fetchCall()[1].signal).toBeUndefined()
+  })
+
+  it('does not cut a slow body once the headers are in', async () => {
+    vi.useFakeTimers()
+    let deliver: (blob: Blob) => void = () => {}
+    let signal: AbortSignal | null | undefined
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => {
+      signal = init.signal
+      return Promise.resolve({
+        status: 200, ok: true, headers: { get: () => null },
+        blob: () => new Promise<Blob>(resolve => { deliver = resolve }),
+      })
+    }))
+    const { requestBlob } = await import('./api.js')
+
+    const pending = requestBlob('/api/Calendars/1/Export')
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(signal?.aborted).toBe(false)
+    deliver(new Blob(['ics']))
+
+    await expect(pending).resolves.toMatchObject({ fileName: 'attachment' })
   })
 })
 
@@ -1088,6 +1206,7 @@ describe('uploadAttachment', () => {
     withCredentials = false
     onload = () => {}
     onerror = () => {}
+    onabort = () => {}
     open(method: string, url: string) { this.method = method; this.url = url }
     setRequestHeader(name: string, value: string) { this.headers = { ...this.headers, [name]: value } }
     send(form: FormData) { sent = { xhr: this, form } }
@@ -1154,6 +1273,26 @@ describe('uploadAttachment', () => {
     xhr().responseText = '{"id":"i"}'
     xhr().onload()
     await done
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
+  it('rejects with an ApiError when a 2xx body is not JSON', async () => {
+    const { uploadAttachment, ApiError } = await import('./api.js')
+    const done = uploadAttachment(new File(['x'], 'a.txt'), {})
+    xhr().status = 200
+    xhr().responseText = '<html>proxy page</html>'
+    expect(() => xhr().onload()).not.toThrow()
+    await expect(done).rejects.toBeInstanceOf(ApiError)
+    await expect(done).rejects.toMatchObject({ status: 200 })
+  })
+
+  it('rejects as aborted when the xhr itself is aborted', async () => {
+    const { uploadAttachment } = await import('./api.js')
+    const controller = new AbortController()
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener')
+    const done = uploadAttachment(new File(['x'], 'a.txt'), { signal: controller.signal })
+    xhr().onabort()
+    await expect(done).rejects.toMatchObject({ message: 'Aborted', status: 0 })
     expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function))
   })
 

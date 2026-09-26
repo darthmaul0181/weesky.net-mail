@@ -202,3 +202,16 @@ export function patchFolderCounts(
 export function patchFolderUnread(tree: MailFolderNode[], folderPath: string, delta: number): MailFolderNode[] {
   return patchFolderCounts(tree, folderPath, { total: 0, unread: delta })
 }
+
+/** The switch's own field, patched the way patchFolderCounts patches the badges: one node, found
+    anywhere in the tree, everything else returned unchanged. */
+export function patchFolderSubscription(
+  tree: MailFolderNode[], folderPath: string, subscribed: boolean,
+): MailFolderNode[] {
+  return tree.map(node => {
+    if (node.path === folderPath) return node.subscribed === subscribed ? node : { ...node, subscribed }
+    return node.children.length
+      ? { ...node, children: patchFolderSubscription(node.children, folderPath, subscribed) }
+      : node
+  })
+}

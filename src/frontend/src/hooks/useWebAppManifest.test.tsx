@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { QueryClient } from '@tanstack/react-query'
+import i18next from 'i18next'
 import { useAppSettings } from './useAppSettings'
 import { useWebAppManifest } from './useWebAppManifest'
 import { createTestQueryClient, withQueryClient } from '../test-utils'
@@ -114,6 +115,22 @@ describe('useWebAppManifest', () => {
 
     await waitFor(() => expect(manifestLink()!.getAttribute('href')).toBe('blob:mock-2'))
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1')
+  })
+
+  // The shortcuts are named in the UI language: a switch has to post them anew.
+  it('posts a new manifest when the language changes', async () => {
+    mocks.getAppSettings.mockResolvedValue(enabled)
+
+    renderHook(() => useWebAppManifest(), { wrapper })
+    await waitFor(() => expect(manifestLink()).not.toBeNull())
+
+    try {
+      await act(() => i18next.changeLanguage('fr'))
+      await waitFor(() => expect(manifestLink()!.getAttribute('href')).toBe('blob:mock-2'))
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1')
+    } finally {
+      await act(() => i18next.changeLanguage('en'))
+    }
   })
 
   // Without revocation, every pass would leave a Blob alive for the lifetime of the document.

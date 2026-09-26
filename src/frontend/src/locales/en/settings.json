@@ -22,6 +22,7 @@
     "primaryEmail": "Primary email",
     "otherDomains": "Other domains",
     "storage": "Storage",
+    "quotaFailed": "Could not load storage usage.",
     "password": "Password",
     "passwordChanged": "Password changed",
     "currentPassword": "Current password",

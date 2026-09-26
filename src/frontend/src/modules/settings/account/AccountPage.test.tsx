@@ -68,6 +68,17 @@ describe('AccountPage', () => {
     await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
   })
 
+  // R9: a `.catch(() => {})` used to swallow this forever, with no error and no retry — an empty
+  // quota block for the rest of the session on a single blip.
+  it('shows a short error line when the quota fails to load', async () => {
+    mocks.getQuota.mockRejectedValue(new Error('boom'))
+    const { container } = renderPage()
+    await screen.findByText('mick@weesky.be')
+
+    expect(await screen.findByText(/could not load storage usage/i)).toBeInTheDocument()
+    expect(container.querySelector('.panel-quota')).toBeNull()
+  })
+
   // CheckIcon/XIcon are ad hoc svgs local to this file, in the name-edit row only — the icon
   // sweep's glob over src/icons/ structurally cannot see them.
   it('hides the name-edit row\'s Check/X icons from assistive tech', async () => {

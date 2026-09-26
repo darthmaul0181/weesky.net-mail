@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
+import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import type { AddToast } from '../../../hooks/useToasts'
 import type {
   CompatibilityCheckResult, IncompatibleRule, SieveRuleSet, SieveRuleWrite,
@@ -20,6 +21,8 @@ const rulesKey = (accountId: string) => ['rules', accountId] as const
 
 function extractError(err: unknown): string {
   if (!err) return ''
+  const mapped = apiErrorMessage(err, '')
+  if (mapped) return mapped
   const msg = (typeof err === 'object' && 'message' in err && typeof err.message === 'string' && err.message)
     || (typeof err === 'string' ? err : '')
   try {

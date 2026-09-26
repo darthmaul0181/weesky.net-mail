@@ -59,10 +59,23 @@ export default function ContactsLayout() {
     },
   })
 
-  function backToHere() {
-    const query = new URLSearchParams(
-      paramsForScope(scope, selectedId ? { id: selectedId } : {})).toString()
+  // The `/contacts` URL for the scope this render is showing, plus whatever `extra` overrides —
+  // `{ id }` to open a particular contact, `{}` to leave the selection as the scope alone reads it.
+  function contactsUrl(extra: Record<string, string>) {
+    const query = new URLSearchParams(paramsForScope(scope, extra)).toString()
     return query ? `/contacts?${query}` : '/contacts'
+  }
+
+  function backToHere() {
+    return contactsUrl(selectedId ? { id: selectedId } : {})
+  }
+
+  // The editor is a route of its own, so navigating to it would otherwise drop the scope and the
+  // open card it was reached from; carrying the current query string is what `backToHere` and a
+  // save's own `contactsUrl` read back once the editor closes.
+  function openEditor(path: string) {
+    const query = params.toString()
+    void navigate(query ? `${path}?${query}` : path)
   }
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const { data: contacts, isLoading, isError } = useContacts()
@@ -198,7 +211,10 @@ export default function ContactsLayout() {
 
   const contactActions = useContactActions({
     edited, selected, openGroup, seededHash, editorKey, addToast,
-    onSaved: () => void navigate('/contacts'),
+    // The scope the editor was opened under, with the saved contact now open in it. Replace: a
+    // pushed entry would let Back reopen the editor — a blank "New contact" form after a create,
+    // where a second Save fabricates a duplicate, the way CalendarLayout's `backToGrid` guards.
+    onSaved: id => void navigate(contactsUrl({ id }), { replace: true }),
     // The open card must not survive its contact.
     onDeletedOpen: id => { if (selectedId === id) setParams(paramsForScope(scope)) },
     onReloaded: () => setReloads(previous => previous + 1),
@@ -250,7 +266,7 @@ export default function ContactsLayout() {
     <div className="contacts-scopes-column" ref={scopesRegion} tabIndex={-1}>
       <div className="column-actions">
         <button type="button" className="btn btn-primary column-actions-main"
-          onClick={() => void navigate('/contacts/new')}>
+          onClick={() => openEditor('/contacts/new')}>
           {t('layout.add')}
         </button>
         {!drawer.inDrawer && transfer('btn btn-primary column-actions-square')}
@@ -288,7 +304,8 @@ export default function ContactsLayout() {
             <ContactEditView key={editorKey} contact={detail ?? null} photo={editorPhoto}
               error={contactActions.saveError} saving={contactActions.saving}
               onSave={draft => void contactActions.save(draft)}
-              onCancel={() => void navigate('/contacts')} />
+              // Replace, for the same reason as onSaved: Back must leave the editor, not reopen it.
+              onCancel={() => void navigate(backToHere(), { replace: true })} />
           )}
         </div>
       ) : (
@@ -304,7 +321,9 @@ export default function ContactsLayout() {
             {/* A group scope waits for its group too: filtered on nothing, the list would say the
                 book is empty for as long as that query is in flight. */}
             {(isLoading || groupPending) && <p className="contacts-empty">{t('layout.loading')}</p>}
-            {isError && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
+            {/* Only when there is nothing to show for it: a refetch failing behind a book already
+                on screen must not print this line above a list that still works. */}
+            {isError && !contacts && <p className="contacts-empty">{t('layout.loadFailed')}</p>}
             {contacts && !groupPending && (
               <ContactList contacts={scoped} selectedId={selectedId} scope={scope} onSelect={select}
                 leading={drawer.inDrawer ? <DrawerToggle onClick={drawer.toggle} /> : null}
@@ -312,8 +331,9 @@ export default function ContactsLayout() {
                 onToggleFavorite={contactActions.toggleFavorite}
                 onDelete={contactActions.setPendingDelete}
                 onDeleteMany={contactActions.deleteSelection}
+                deletingMany={contactActions.deletingMany}
                 onRemoveFromGroup={openGroup ? contactActions.removeFromOpenGroup : undefined}
-                onEdit={id => void navigate(`/contacts/${id}/edit`)} regionRef={listRegion} />
+                onEdit={id => openEditor(`/contacts/${id}/edit`)} regionRef={listRegion} />
             )}
           </div>
           {!phone && (
@@ -326,7 +346,7 @@ export default function ContactsLayout() {
                 onBack={phone ? backToList : undefined}
                 bottomActions={phone}
                 onDelete={contactActions.setPendingDelete}
-                onEdit={id => void navigate(`/contacts/${id}/edit`)}
+                onEdit={id => openEditor(`/contacts/${id}/edit`)}
                 onWrite={writeTo}
                 groups={selected ? groupsOf(selected.id) : undefined}
                 onRemoveFromGroup={contactActions.removeFromGroup} />
@@ -368,7 +388,7 @@ export default function ContactsLayout() {
       {/* Never over the editor, which is the create form and would be left half-typed, nor over an
           open card on a phone, where it would sit on the action band (MailLayout does the same). */}
       {!inEditor && !(phone && selectedId) && (
-        <FloatingAction label={t('layout.add')} onClick={() => void navigate('/contacts/new')}>
+        <FloatingAction label={t('layout.add')} onClick={() => openEditor('/contacts/new')}>
           <PersonPlusIcon size={22} />
         </FloatingAction>
       )}
