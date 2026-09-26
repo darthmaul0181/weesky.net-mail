@@ -77,7 +77,7 @@ describe('DeleteConfirmModal', () => {
 
   it('disables the confirm button while loading', () => {
     const { container } = render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={vi.fn()} loading={true} />)
-    expect(container.querySelector('.btn-primary')).toBeDisabled()
+    expect(container.querySelector('.btn-danger-solid')).toBeDisabled()
   })
 
   // The delete is already on the wire and no dismissal cancels it: a confirm that closed under it

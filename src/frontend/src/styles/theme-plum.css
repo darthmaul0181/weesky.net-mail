@@ -12,6 +12,7 @@
   --action-primary:#3a2140; --action-primary-hover:#4d2e54; --action-primary-fg:#ffffff;
   --icon-hover-accent:#d9b04a; --icon-hover-danger:#f87171;
   --danger:#dc2626; --danger-hover:#b91c1c; --success:#16a34a;
+  --warning:#b45309; --status-fg:#ffffff; --scrim:rgba(0, 0, 0, 0.35);
 }
 /* Deliberate: --action-primary shifts hue between modes (aubergine in light,
    gold in dark) — aubergine would dissolve into a dark background. The ROLE
@@ -28,4 +29,5 @@
   --reader-header-border:#322b38; --quote-text:#8b8290;
   --action-primary:#d9b04a; --action-primary-hover:#e3bf63; --action-primary-fg:#ffffff;
   --danger:#f87171; --danger-hover:#ef4444; --success:#4ade80;
+  --warning:#d97706; --status-fg:#17141a; --scrim:rgba(0, 0, 0, 0.35);
 }

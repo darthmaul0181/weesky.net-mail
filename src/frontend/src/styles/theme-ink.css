@@ -12,6 +12,7 @@
   --action-primary:#131315; --action-primary-hover:#2b2b30; --action-primary-fg:#ffffff;
   --icon-hover-accent:#5b8cf7; --icon-hover-danger:#f87171;
   --danger:#dc2626; --danger-hover:#b91c1c; --success:#16a34a;
+  --warning:#b45309; --status-fg:#ffffff; --scrim:rgba(0, 0, 0, 0.35);
 }
 [data-palette='ink'][data-theme='dark'] {
   --bg:#121214; --folders-bg:#121214; --folders-item-hover:#202024; --surface:#1a1a1d; --surface-raised:#202024; --surface-sunken:#161618;
@@ -25,4 +26,5 @@
   --reader-header-border:#2a2a2f; --quote-text:#85858d;
   --action-primary:#5b8cf7; --action-primary-hover:#799ff9; --action-primary-fg:#ffffff;
   --danger:#f87171; --danger-hover:#ef4444; --success:#4ade80;
+  --warning:#d97706; --status-fg:#121214; --scrim:rgba(0, 0, 0, 0.35);
 }

@@ -12,8 +12,13 @@ import ConnectedAccountsPage from './modules/settings/accounts/ConnectedAccounts
 import AppearancePage from './modules/settings/appearance/AppearancePage'
 import FoldersPage from './modules/settings/mail/FoldersPage'
 import GeneralPage from './modules/settings/general/GeneralPage'
+import { hasSession } from './api.js'
 
-const MailLayout = lazy(() => import('./modules/mail/MailLayout'))
+const mailChunk = () => import('./modules/mail/MailLayout')
+// A returning session almost always lands on mail; starting the fetch here, at module
+// evaluation, beats waiting for the router to match /mail and Suspense to trigger it.
+if (hasSession()) void mailChunk()
+const MailLayout = lazy(mailChunk)
 const ContactsLayout = lazy(() => import('./modules/contacts/ContactsLayout'))
 const CalendarLayout = lazy(() => import('./modules/calendar/CalendarLayout'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage'))

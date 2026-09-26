@@ -32,7 +32,7 @@ describe('the palette stylesheets', () => {
   // Vitest mocks CSS imports to '' unless vite.config's test.css.include matches; that empties
   // every token list and makes each parity check pass vacuously.
   it('reads the stylesheets, not empty mocks', () => {
-    expect(reference.light).toHaveLength(36)
+    expect(reference.light).toHaveLength(39)
   })
   // Derived, not a second hand-maintained list: what matters is that the stylesheets on disk and
   // the ids the module offers are the same set, which is also what the two checks below assert
@@ -48,16 +48,8 @@ describe('the palette stylesheets', () => {
     expect(blocks(file).light).toEqual(reference.light)
   })
 
-  // classic's dark block is the one deliberate gap: it omits --danger, --danger-hover and
-  // --success, inheriting them from its own light block. Recorded rather than hidden.
-  const CLASSIC_INHERITS = ['--danger', '--danger-hover', '--success']
-
   it.each(files)('%s declares every role in its dark block', file => {
-    const expected = idOf(file) === 'classic'
-      ? reference.dark.filter(t => !CLASSIC_INHERITS.includes(t))
-      : reference.dark
-
-    expect(blocks(file).dark).toEqual(expected)
+    expect(blocks(file).dark).toEqual(reference.dark)
   })
 })
 

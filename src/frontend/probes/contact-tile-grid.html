@@ -4,17 +4,17 @@
   as it was? The star left the name's flex line for a cell of its own, which is the move that cost
   the message row 9px a row in lot 2c task 3 — here it is the line's own height that is at stake.
 
-  It loads the REAL stylesheets (tokens + palette + index.css) and builds three tiles side by side
+  It loads the REAL stylesheets (tokens + palette + index.css + contacts.css) and builds three tiles side by side
   in a 380px column, the width `usePaneSize('contacts.split.right', 380, 240)` draws by default:
 
     legacy     — the markup before the rewrite: star inside `.contact-tile-line`, no cells
     grid       — the markup after: [select] [content] [flag] [actions], four gridcells
     grid-stop  — the same, with `tabindex="0"` on a cluster button, which is what the roving stop
                  puts there. The cluster is `visibility: hidden` at rest and a hidden button is
-                 focusable by nothing, so the `[tabindex="0"]` reveal in index.css is what keeps
+                 focusable by nothing, so the `[tabindex="0"]` reveal in contacts.css is what keeps
                  the whole list reachable by Tab. `clusterVisibility` is that rule, read.
 
-  Run it twice to compare: once with index.css as it stood before the change (the `legacy` case is
+  Run it twice to compare: once with the stylesheets as they stood before the change (the `legacy` case is
   then the real "before"), once after (the `grid` case is the real "after"). Read `tileHeight`,
   `nameWidth` and the star's rect: those three are what a moved star moves.
 
@@ -36,6 +36,7 @@
   <link rel="stylesheet" href="/src/styles/tokens.css" />
   <link rel="stylesheet" href="/src/styles/theme-night.css" />
   <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/contacts.css" />
   <style>
     body { margin: 0; font: var(--font, 14px system-ui); }
     /* The contacts list column at its own default width. */

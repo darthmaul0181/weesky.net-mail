@@ -1,10 +1,6 @@
 /* ── Calendar module ───────────────────────────────────────────────────────────
-   Two band-stack columns inside the shell's single content area, the arrangement the mail and
-   contacts modules already use. `min-height: 0` on the scrolling band is the load-bearing part:
-   without it the scroll escapes to the column and the pinned toolbar drifts away.
-
-   Every colour here is a role token but one — a calendar's own, which is data rather than theme
-   and travels as the inline `--cal` custom property the swatch and the row read. */
+   Two band-stack columns (min-height: 0 on the scroller is load-bearing, see architecture-
+   shell.md). Colours are role tokens except the calendar's own, carried as inline `--cal`. */
 
 .calendar-layout {
   display: flex; height: 100%; min-height: 0; overflow: hidden;
@@ -19,7 +15,7 @@
   overflow: hidden; background: var(--folders-bg); border-right: 1px solid var(--border);
 }
 .calendar-sidebar-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
-.calendar-sidebar-error { margin: 0; padding: 2px 10px 6px; color: var(--danger); font-size: 12px; }
+.calendar-sidebar-error { margin: 0; padding: 2px 10px 6px; --status-tone: var(--danger); font-size: 12px; }
 
 /* The Calendars heading carries the « + », the road ContactScopes' Groups heading takes: the row
    above is measured to the pixel for a French label and a second square there would re-open it. */
@@ -54,8 +50,8 @@
   box-shadow: inset 0 0 0 2px var(--cal);
 }
 .calendar-row-label:has(input:checked) .calendar-swatch { background: var(--cal); }
-/* --action-primary-fg is the app's one "foreground over a filled colour" token, white in all
-   twelve blocks; a swatch is that surface, painted from data rather than from the accent. */
+/* --action-primary-fg is the foreground over a filled colour, white in all sixteen blocks (a
+   status fill takes --status-fg); a swatch is that surface, painted from data, not the accent. */
 .calendar-row-label:has(input:checked) .calendar-swatch::after {
   /* A 4x8 box turned 45° keeps its centre: 6/3.5 puts it on the swatch's 8/8 with the ink's
      long arm a hair high, which is where a tick reads centred. Measured at 6x; 5/2 sat up-left. */
@@ -149,14 +145,13 @@
    `.calendar-editor` sizes itself the way every other dialog does — the width lives
    in modal.css and never here. */
 .calendar-editor-screen {
-  position: absolute; inset: 0; z-index: 60; display: flex; flex-direction: column;
+  position: absolute; inset: 0; z-index: var(--z-floating); display: flex; flex-direction: column;
   background: var(--surface);
 }
 
 /* ── The hour grid: week and day ───────────────────────────────────────────────
    One component draws both — a day is a week one column wide. 56px an hour is
-   `gridGeometry.HOUR_PX`'s number; it is written here once and read there once, and the two
-   must move together. The scroll is the body's alone, the head and the band staying put. */
+   `gridGeometry.HOUR_PX`'s number, written here and read there; the scroll is the body's alone. */
 /* The gutter is a token because two boxes and one inline grid template all measure it, and the
    phone narrows it: a number written in WeekView.tsx could not be narrowed by a media query. */
 .week-view {
@@ -225,7 +220,7 @@
     transparent 28px);
 }
 
-.now-line { position: absolute; left: var(--cal-gutter); right: 0; height: 2px; z-index: 3; }
+.now-line { position: absolute; left: var(--cal-gutter); right: 0; height: 2px; z-index: var(--z-grid-now); }
 /* Everywhere but today the line is a shadow of itself: it says the hour without claiming the
    column is the one the clock is in. */
 .now-line::before {
@@ -245,7 +240,7 @@
   padding: 3px 6px 3px 8px; border: 0; border-radius: 4px; cursor: pointer;
   color: var(--text); font: inherit; font-size: 12px; text-align: left; overflow: hidden;
 }
-.event-chip.is-column { position: absolute; z-index: 2; }
+.event-chip.is-column { position: absolute; z-index: var(--z-grid-chip); }
 .event-chip-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Not --text-muted: measured on the 18% fill it is 4.19:1 in the light theme and 4.32 in dark,
    under the 4.5 a 12px line needs. The role loses its margin the moment the surface behind it is
@@ -256,10 +251,9 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* The left bar is the calendar's signature: its own colour in three renderings, and --border on
-   a cancelled one, where the event is no longer that calendar's business. What changes behind it
-   is the fill. The bar's own edge is straight — the radius stays on the right corners only —
-   so it reads as the stripe the list draws beside its rows, not as a rounded pill. */
+/* The left bar is the calendar's signature: its own colour, --border once cancelled. Its edge is
+   straight — radius stays on the right corners only — so it reads as a stripe beside the list's
+   rows, not a rounded pill. */
 .event-chip.is-column,
 .event-chip.is-band { box-shadow: inset 3px 0 0 var(--cal); border-radius: 0 4px 4px 0; }
 .event-chip.is-busy { background: color-mix(in oklab, var(--cal) 18%, var(--surface)); }
@@ -285,7 +279,7 @@
 /* ── The pointer gestures ──────────────────────────────────────────────────────
    A block under the pointer is translucent and over its neighbours, so what is underneath the
    slot it is heading for stays readable. */
-.event-chip.is-dragging { opacity: 0.7; z-index: 10; }
+.event-chip.is-dragging { opacity: 0.7; z-index: var(--z-grid-drag); }
 /* The whole grid stops selecting while a gesture is live: a drag across chips would otherwise
    paint their titles blue behind the block being moved. */
 .week-view.is-gesturing .week-body,
@@ -312,7 +306,7 @@
 /* What a creation drag is tracing: an outline rather than a fill, since nothing has been written
    yet and a solid block would read as an event that already exists. */
 .event-ghost {
-  position: absolute; left: 0; right: 0; z-index: 4; border-radius: 4px; pointer-events: none;
+  position: absolute; left: 0; right: 0; z-index: var(--z-grid-ghost); border-radius: 4px; pointer-events: none;
   border: 1px dashed var(--action-primary);
   background: color-mix(in oklab, var(--action-primary) 10%, transparent);
 }
@@ -327,10 +321,9 @@
 }
 .month-cell > .event-chip.is-band { height: 18px; }
 .event-chip.is-month .event-chip-title { font-weight: 500; }
-/* A month cell paints no fill, so the whole of the four-way distinction has to live in the dot:
-   solid for busy, a ring for free, a ring cut on the hatching's own 135deg for tentative, and
-   --border for cancelled beside its struck title. The plain ring is free's, which is why
-   tentative is half-filled rather than simply hollow. */
+/* A month cell paints no fill, so the four-way distinction lives entirely in the dot: solid for
+   busy, a ring for free, half-filled (the hatching's own 135deg) for tentative, and --border for
+   cancelled beside its struck title. */
 .event-dot {
   flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--cal);
 }
@@ -373,10 +366,9 @@
   flex: none; align-self: flex-start; display: inline-flex; align-items: center;
   justify-content: center; min-width: 18px; height: 18px; border-radius: 50%;
   color: var(--text); font-size: 12px;
-  /* Proportional figures, not the tabular ones the rest of the grid aligns on: a number alone
-     in a disc aligns no column, and a tabular "1" carries its cell's blank with it — "10"
-     drew its ink 0.7px off centre, more under a fractional device scale. Measured at 6x on
-     10, 11, 28 and 5: proportional ink sits within 0.3px of the disc's centre. */
+  /* Proportional figures, not tabular: a lone number in a disc aligns no column, and tabular's
+     fixed-width padding drew "10" 0.7px off centre. Measured at 6x: proportional keeps every
+     digit within 0.3px of the disc's centre. */
   font-variant-numeric: normal;
   /* The line box is centred; the digits are not — the face leaves more room under its
      baseline than above its cap, so a centred line box draws the number a pixel high in the
@@ -476,11 +468,10 @@
 .import-counters.is-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
 
 /* ── The preview bubble ────────────────────────────────────────────────────────
-   `position: fixed`, so the scroller it was opened from is none of its business — it closes on a
-   scroll rather than following one, and `usePopoverPosition` owns the two coordinates. The shadow
-   is the dropdown's, read off shell.css rather than invented here. */
+   `position: fixed`: the scroller it opened from is not its business — it closes on scroll
+   rather than following it. Shadow is the dropdown's, read off shell.css, not invented here. */
 .event-preview {
-  position: fixed; z-index: 80; width: 300px;
+  position: fixed; z-index: var(--z-bubble); width: 300px;
   display: flex; flex-direction: column; gap: 6px;
   padding: 14px 16px 12px;
   border: 1px solid var(--border); border-radius: 4px;
@@ -519,11 +510,9 @@
 .calendar-editor-screen > .calendar-editor-form {
   flex: 1; min-height: 0; overflow-y: auto; padding: 16px 14px;
 }
-/* The calendar picker is a dropdown drawn as the select it replaces: the same box as every
-   text control in the row (index.css's .field-h rule), the swatch inside it, and it takes the
-   row like the Title box above it does. The swatch is 16px in a 20px line, so `flex: 1` on the
-   root and `width: 100%` on the button are both needed: the root is the flex item, the button
-   is what is seen. */
+/* The calendar picker is a dropdown drawn as the select it replaces — see architecture-
+   calendar.md. `flex: 1` on the root plus `width: 100%` on the button are both needed: the
+   root is the flex item, the button is what is seen. */
 .calendar-editor-form .field-h > .dropdown-root { flex: 1; min-width: 0; }
 .calendar-select {
   display: flex; align-items: center; gap: 8px; width: 100%;
@@ -544,11 +533,9 @@
 /* The All-day switch and its word, after the Start time, where it acts. */
 .editor-allday { display: inline-flex; align-items: center; gap: 8px; margin-left: 4px; }
 .editor-allday-text { font-size: 13px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
-/* The dialog's width must not move under the Repeats switch, and the recurrence block is what
-   a content-sized dialog would grow for. The measure is therefore the form's, declared on the
-   contract's own variable and carried by the Title box that every state draws: wide enough for
-   the block's widest line in French and in English (measured in probes/recurrence-editor.html),
-   so opening the block changes the dialog's height and nothing else. */
+/* The dialog's width must not move under the Repeats switch; the measure is the form's, wide
+   enough for the recurrence block's widest FR/EN line (measured in probes/recurrence-editor.html,
+   see architecture-calendar.md), so opening it only changes height. */
 .calendar-editor-form { --field-w: 66ch; }
 
 /* Under the row it explains, in that row's own control column. */
@@ -654,10 +641,9 @@
 .scope-choices > .btn { width: 100%; }
 
 
-/* The phone's two screens. A 360px screen draws a month as a PICKER — a number and a hint of
-   what the day holds — with the day's own events listed under it, and a day as a scroll-snap
-   strip of whole weeks over the one-column grid. Both are mounted by `useViewport` rather than
-   hidden by a query: a screen that is not drawn must not sit in the tab order either. */
+/* The phone's two screens — a month PICKER and a day scroll-snap strip — are mounted by
+   `useViewport` rather than hidden by a query: a screen that is not drawn must not sit in the
+   tab order either. See architecture-calendar.md for the picker/strip shapes. */
 .phone-month { padding: 4px 6px 8px; }
 .phone-month-names,
 .phone-month-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -730,18 +716,13 @@
 
 @media (max-width: 639px) {
   .calendar-toolbar { flex-wrap: wrap; padding: 8px 10px; }
-  /* Two rows and not three, measured rather than reasoned: the title on a line of its own put
-     the bar at 170px of a 640px screen, and the month picker under it left the day's list one
-     row. The title shares the first line with the ☰ and the stepper; the segments take the
-     second whole, because three of them cannot fit beside 218px of buttons at any width a phone
-     has. The ☰ leads it, which is why it needs an order of its own rather than the heading's. */
+  /* Two rows, not three (measured — see architecture-calendar.md): title shares line one with
+     the ☰ and stepper, segments take line two whole. The ☰ needs an order of its own here
+     rather than riding the heading's. */
   .calendar-toolbar .drawer-toggle { order: -2; }
-  /* The heading keeps the base rule's `flex: 1` (a zero base) and only takes an order here: an
-     `auto` base would put its own title in charge of where the line breaks, and a 390px screen
-     then fitted the segments onto line one and crushed them to 35px, `clipped: 20`, where 360 did
-     not. The segments' own 100% basis is what always gives them the second line whole — three of
-     them cannot share a row with 218px of buttons at any width a phone has, so letting them try
-     is the same defect waiting for a shorter month name. */
+  /* Keeps the base rule's `flex: 1` (zero base) and only takes an order here: an `auto` base let
+     the title decide where the line breaks, which crushed the segments at 390px (see
+     architecture-calendar.md). Their own 100% basis is what always gives them line two whole. */
   .calendar-heading { order: -1; }
   .calendar-views { flex: 1 1 100%; justify-content: center; }
   /* A radio group taking the width divides it evenly rather than by label length: `Month` and
@@ -770,15 +751,9 @@
   .calendar-stage > .calendar-results,
   .phone-month-stage > .upcoming-list { overflow-y: auto; }
 
-  /* The label goes above its control the way index.css's phone block already puts it there, but
-     the ROW comes back — and that direction is the load-bearing half. index.css turns every
-     `.field-h` into a `flex-direction: column`, which is right for a settings row's
-     sentence-length caption and wrong for Start and End: in a column a `flex-basis: 100%`
-     measures the CROSS axis, `flex-wrap` has no main size to break, and the date and the time end
-     up stacked — measured, 332x44 over 332x44, a 116px row where the pair on one line is 68. Two
-     of those rows cost the phone editor 96px of scrolling for nothing. With the direction back,
-     the label's 100% basis takes the first line whole and the date grows beside the 8em time box
-     the base file already fixes. Measured after the fix at 320, 360 and 390: one line, escape 0. */
+  /* The label goes above its control (index.css's phone .field-h rule) but the ROW direction
+     comes back — Start/End need one line, not a stacked column. Measured before/after in
+     architecture-calendar.md's closing paragraph. */
   .calendar-editor-screen .field-h {
     flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px;
   }
