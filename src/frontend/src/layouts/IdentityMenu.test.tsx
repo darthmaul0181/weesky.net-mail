@@ -323,15 +323,16 @@ describe('IdentityMenu', () => {
     await waitFor(() => expect(localStorage.getItem('mail.activeAccount')).toBe('g1'))
   })
 
-  // A shared mailbox carries no external domain; the band still has to say where it lives.
-  it('falls back to Weesky on the band when the account has no domain', async () => {
+  // A shared mailbox carries no external domain: the address alone, no made-up product name.
+  it('shows the address alone on the band when the account has no domain', async () => {
     mocks.getConnectedAccounts.mockResolvedValue([connected({ domainId: undefined, domainName: undefined })])
     renderMenu()
     await openMenu()
 
     fireEvent.click(await screen.findByRole('menuitem', { name: /support@acme\.com/ }))
 
-    await waitFor(() => expect(screen.getByText('support@acme.com · Weesky')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('support@acme.com', { selector: '.identity-email' }))
+      .toBeInTheDocument())
   })
 
   // switchAccount refuses such a target, so a row that looked like a switch would do nothing.

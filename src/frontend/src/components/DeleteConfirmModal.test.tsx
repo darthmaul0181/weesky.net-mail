@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useRef, useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
@@ -73,6 +73,28 @@ describe('DeleteConfirmModal', () => {
     render(<DeleteConfirmModal entityLabel="x" onConfirm={onConfirm} onClose={vi.fn()} loading={false} />)
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(onConfirm).toHaveBeenCalledOnce()
+  })
+
+  it('does not close itself when onConfirm returns void', async () => {
+    const onClose = vi.fn()
+    render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={onClose} loading={false} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // The settle-then-close pattern each of CalendarDialogs, ContactList and SyncPage used to
+  // write by hand: the caller hands back its own promise and the modal closes on settle.
+  it('closes itself once a promise-returning onConfirm settles', async () => {
+    const onClose = vi.fn()
+    let settle = () => {}
+    const onConfirm = vi.fn(() => new Promise<void>(resolve => { settle = resolve }))
+    render(<DeleteConfirmModal entityLabel="x" onConfirm={onConfirm} onClose={onClose} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(onClose).not.toHaveBeenCalled()
+
+    settle()
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
   it('disables the confirm button while loading', () => {

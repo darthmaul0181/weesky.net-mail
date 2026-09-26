@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useMatch, useSearchParams } from 'react-router'
 import { readStored, writeStored } from '../../lib/safeStorage'
 import { addDays, isPlainDate, shiftMonth, splitPlainDate, type PlainDate } from './plainDate'
@@ -58,6 +58,20 @@ export function useCalendarUrlState(phone: boolean, today: PlainDate) {
       return next
     }, { replace: true })
   }, [rawView, rawDate, view, anchor, setParams])
+
+  // A date still on the day that just ended is the one the normalisation wrote, or one the user
+  // left on today: it moves on with the day, in place. Any other date was chosen, and stays.
+  const shownToday = useRef(today)
+  useEffect(() => {
+    const ended = shownToday.current
+    shownToday.current = today
+    if (ended === today || rawDate !== ended) return
+    setParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.set('date', today)
+      return next
+    }, { replace: true })
+  }, [today, rawDate, setParams])
 
   const creating = useMatch('/calendar/new') != null
   const editMatch = useMatch('/calendar/:id/edit')

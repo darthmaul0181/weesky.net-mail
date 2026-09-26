@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import SyncPage from './SyncPage'
@@ -29,6 +29,13 @@ beforeEach(() => {
   vi.mocked(api.setDavCalDav).mockResolvedValue({ ...ON, calDavEnabled: true })
   vi.mocked(api.regenerateDavSecret).mockResolvedValue({ ...ON, password: 'TSRQPONMLKJIHGFEDCBA' })
 })
+
+// R7's confirm is now the shared DeleteConfirmModal: its confirm button carries the same text
+// ("Regenerate") as the trigger that opened it, so a case that clicks it scopes to the dialog.
+function confirmRegenerate() {
+  const modal = screen.getByText('Regenerate the sync password?').closest('.modal') as HTMLElement
+  return userEvent.click(within(modal).getByRole('button', { name: 'Regenerate' }))
+}
 
 describe('SyncPage', () => {
   it('shows the address the server gave, not one composed here', async () => {
@@ -131,9 +138,31 @@ describe('SyncPage', () => {
     render(<SyncPage />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Regenerate the sync password?' }))
+    await confirmRegenerate()
 
     expect(await screen.findByText('TSRQPONMLKJIHGFEDCBA')).toBeInTheDocument()
+  })
+
+  // R7: the confirm used to close the instant the click fired, ahead of the request it asked
+  // about. It has to stay open — busy — until the regenerate settles.
+  it('keeps the regenerate confirm busy until the request settles', async () => {
+    vi.mocked(api.getDavCredentials).mockResolvedValue(ON)
+    let resolveRegenerate: ((value: typeof ON & { password: string }) => void) | undefined
+    vi.mocked(api.regenerateDavSecret).mockReturnValue(
+      new Promise(resolve => { resolveRegenerate = resolve }))
+    render(<SyncPage />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+
+    await confirmRegenerate()
+
+    const modal = screen.getByText('Regenerate the sync password?').closest('.modal') as HTMLElement
+    const confirmButton = modal.querySelector('.btn-danger-solid') as HTMLButtonElement
+    expect(confirmButton).toBeDisabled()
+    expect(confirmButton.querySelector('.spinner')).not.toBeNull()
+
+    resolveRegenerate?.({ ...ON, password: 'ZZZZZZZZZZZZZZZZZZZZ' })
+    await waitFor(() => expect(screen.queryByText('Regenerate the sync password?')).not.toBeInTheDocument())
+    expect(await screen.findByText('ZZZZZZZZZZZZZZZZZZZZ')).toBeInTheDocument()
   })
 
   it('says never used rather than leaving the line blank', async () => {

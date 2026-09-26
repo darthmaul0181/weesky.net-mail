@@ -9,7 +9,7 @@ import type { Occurrence } from './calendarTypes'
 import EventChip from './EventChip'
 import { itemsByDay, placeAll, wallClockOf } from './multiDay'
 import { colorOf, occurrenceKey } from './occurrenceStyle'
-import { type PlainDate, utcOfLocalTime } from './plainDate'
+import { MINUTES_PER_DAY, type PlainDate, utcOfLocalTime } from './plainDate'
 
 export interface MonthViewProps {
   onOpen: (o: Occurrence, anchor: HTMLElement) => void
@@ -35,9 +35,17 @@ function startMinuteBetween(above: number | null, below: number | null): number 
   return DEFAULT_START
 }
 
+/** When a chip of `day` ends there: an evening running past midnight ends with the day itself. */
+function endMinuteOn(o: Occurrence, day: PlainDate, tz: string): number {
+  const [, end] = wallClockOf(o, tz)
+  return end.day > day ? MINUTES_PER_DAY : end.minute
+}
+
 /** A month cell names a day and no hour, but its chips are stacked in order, so where the click
     lands among them is the one hint there is. Bands carry no hour and are skipped. */
-function startMinuteOf(cell: HTMLElement, clientY: number, timed: Occurrence[], tz: string): number {
+function startMinuteOf(
+  cell: HTMLElement, clientY: number, day: PlainDate, timed: Occurrence[], tz: string,
+): number {
   const chips = [...cell.querySelectorAll<HTMLElement>('.event-chip.is-month')]
   let above: number | null = null
   let below: number | null = null
@@ -46,18 +54,17 @@ function startMinuteOf(cell: HTMLElement, clientY: number, timed: Occurrence[], 
     const o = timed[index]
     if (!o) return
     const rect = chip.getBoundingClientRect()
-    const [start, end] = wallClockOf(o, tz)
-    if (rect.bottom <= clientY) above = end.minute
-    else if (rect.top >= clientY && below === null) below = start.minute
+    if (rect.bottom <= clientY) above = endMinuteOn(o, day, tz)
+    else if (rect.top >= clientY && below === null) below = wallClockOf(o, tz)[0].minute
   })
   return startMinuteBetween(above, below)
 }
 
 /** The same rule with no pointer to read it against: a key creates below every chip the cell
     drew, which is the empty part of it a click would have had to aim at anyway. */
-function startMinuteBelowAll(timed: Occurrence[], tz: string): number {
+function startMinuteBelowAll(day: PlainDate, timed: Occurrence[], tz: string): number {
   const last = timed[timed.length - 1]
-  return startMinuteBetween(last ? wallClockOf(last, tz)[1].minute : null, null)
+  return startMinuteBetween(last ? endMinuteOn(last, day, tz) : null, null)
 }
 
 /** The month, always six rows (`monthGrid`): a grid changing height between months would move
@@ -96,7 +103,7 @@ export default function MonthView({
   const onCellClick = (day: PlainDate, timed: Occurrence[], event: MouseEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('.event-chip, .month-more')) return
     if (previewOpen) return
-    createOn(day, startMinuteOf(event.currentTarget, event.clientY, timed, tz))
+    createOn(day, startMinuteOf(event.currentTarget, event.clientY, day, timed, tz))
   }
 
   /** Enter creates, where the pattern would also enter the cell: creating is a day's primary
@@ -105,7 +112,7 @@ export default function MonthView({
   const onCellKey = (day: PlainDate, timed: Occurrence[], event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' || event.target !== event.currentTarget || previewOpen) return
     event.preventDefault()
-    createOn(day, startMinuteBelowAll(timed, tz))
+    createOn(day, startMinuteBelowAll(day, timed, tz))
   }
 
   return (

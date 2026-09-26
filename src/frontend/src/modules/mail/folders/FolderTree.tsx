@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { CSSProperties, DragEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
+import { collator } from '../../../lib/intl'
 import { roleLabel } from '../roleLabel'
 import type { MailFolderNode } from '../api/mailTypes'
 import { DRAG_MIME, canDropInto, parseDrag, type DragPayload } from '../list/dragMessages'
@@ -21,9 +22,10 @@ interface Props {
 /** The well-known folders, in the order a reader reaches for them. */
 const SPECIAL_ORDER = ['inbox', 'drafts', 'sent', 'archive', 'junk', 'trash']
 
-/** localeCompare, or every accented name files after "Z"; case-insensitive for "e-commerce". */
+// The same collator call as folderNodes.sortFolders, so the tree and the settings list never
+// disagree: localeCompare(undefined, …) reads the browser's language, not the UI's.
 function byName(a: MailFolderNode, b: MailFolderNode): number {
-  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+  return collator({ sensitivity: 'base', numeric: true }).compare(a.name, b.name)
 }
 
 // Role folders in reading order, then the rest by name. Not `sortFolders`: `folderNodes.sortFolders`

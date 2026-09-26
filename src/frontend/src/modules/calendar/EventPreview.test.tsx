@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -43,13 +43,14 @@ beforeEach(() => {
   api.getEvent.mockResolvedValue(detailOf({ id: 'e1' }))
 })
 
-// The window's width and the anchors are global state; a file that left either behind would make
-// every case after it depend on the order they run in.
+// The window's width, the anchors and a stubbed global are global state; a file that left any
+// behind would make every case after it depend on the order they run in.
 afterEach(() => {
   window.innerWidth = WIDTH
   window.innerHeight = HEIGHT
   anchors.splice(0).forEach(node => node.remove())
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function anchorAt(left: number, right: number): HTMLElement {
@@ -204,6 +205,25 @@ describe('EventPreview', () => {
     window.innerWidth = 1200
     window.innerHeight = 140
     expect(draw(DENTIST, anchorAt(100, 1150))).toHaveStyle({ left: '100px', top: '92px' })
+  })
+
+  // The detail lands after the bubble was placed and makes it taller: it must climb back on screen.
+  it('moves up when it grows past the bottom of the screen', () => {
+    let resized: (() => void) | undefined
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resized = callback }
+      observe() {}
+      disconnect() {}
+    })
+    window.innerWidth = 1200
+    window.innerHeight = 300
+    const bubble = draw(DENTIST, anchorAt(200, 300))
+    expect(bubble).toHaveStyle({ top: '100px' })
+
+    Object.defineProperty(bubble, 'offsetHeight', { value: 250, configurable: true })
+    act(() => resized?.())
+
+    expect(bubble).toHaveStyle({ top: '42px' })  // 300 − 250 − 8
   })
 
   it('closes on Escape', async () => {

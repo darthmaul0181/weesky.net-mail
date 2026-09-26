@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useState, type JSX } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../api.js'
@@ -8,7 +8,7 @@ import Toasts from '../../../components/Toasts'
 import PencilIcon from '../../../icons/PencilIcon'
 import UserIcon from '../../../icons/UserIcon'
 import ChangePasswordSection from './ChangePasswordSection'
-import type { Quota } from '../../../types/account'
+import { useQuota } from './useQuota'
 
 function CheckIcon(): JSX.Element {
   return (
@@ -37,14 +37,10 @@ export default function AccountPage() {
   const canEditProfile = capabilities?.profileEditing !== false
   const canChangePassword = capabilities?.passwordChange !== false
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
-  const [quota, setQuota] = useState<Quota | null>(null)
+  const { data: quota, isError: quotaError } = useQuota()
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    api.getQuota().then(setQuota).catch(() => {})
-  }, [])
 
   function startEdit() {
     setNameValue(account?.fullName ?? '')
@@ -143,7 +139,8 @@ export default function AccountPage() {
 
       <section className="account-section">
         <h2>{t('account.storage')}</h2>
-        <QuotaBlock quota={quota} />
+        <QuotaBlock quota={quota ?? null} />
+        {quotaError && <div className="alert alert-error" role="alert">{t('account.quotaFailed')}</div>}
       </section>
 
       {canChangePassword && (

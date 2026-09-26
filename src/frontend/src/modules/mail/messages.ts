@@ -65,6 +65,10 @@ export function useMessage(folderPath: string | null, uid: number | null) {
     queryFn: folderPath === null || uid === null
       ? skipToken
       : ({ signal }) => api.getMailMessage(folderPath, uid, { signal, accountId }),
+    // Read/unread and flagged are patched into the list caches and read live from there
+    // (useCachedSummaryFlags), never off this detail — so a stale reload here is the user's own
+    // call, the same rule useMessageSource and useInlineImages follow.
+    staleTime: Infinity,
   })
 }
 

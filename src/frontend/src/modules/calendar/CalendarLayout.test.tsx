@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import CalendarLayout from './CalendarLayout'
 import { calendarKeys } from './queries'
 import { calendarOf, occurrenceOf } from './calendarTestHarness'
+import { utcOfLocalMidnight } from './plainDate'
 import type { Calendar, EventUpdated, OccurrenceListResponse } from './calendarTypes'
 import type { api as realApi } from '../../api'
 import {
@@ -150,6 +151,38 @@ describe('CalendarLayout', () => {
     const router = renderAt()
     await waitFor(() => expect(params(router).get('view')).toBe('week'))
     expect(params(router).get('date')).toBe(today())
+  })
+
+  describe('across midnight', () => {
+    // Five seconds before Thursday 17 September, in the zone the layout reads.
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      vi.setSystemTime(utcOfLocalMidnight('2026-09-17', BROWSER_TZ).getTime() - 5_000)
+    })
+    afterEach(() => { vi.useRealTimers() })
+
+    const todayHead = () => document.querySelector('.day-column.is-today')?.getAttribute('data-day')
+
+    // The date the layout wrote itself was never chosen: it moves on with the day, in place.
+    it('moves a view left on today on to the new day', async () => {
+      const router = renderAt()
+      await waitFor(() => expect(params(router).get('date')).toBe('2026-09-16'))
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+
+      await waitFor(() => expect(params(router).get('date')).toBe('2026-09-17'))
+      expect(router.state.historyAction).toBe('REPLACE')
+    })
+
+    it('leaves a day the user went to, and moves only the highlight', async () => {
+      const router = renderAt('/calendar?view=week&date=2026-09-15')
+      await waitFor(() => expect(todayHead()).toBe('2026-09-16'))
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+
+      await waitFor(() => expect(todayHead()).toBe('2026-09-17'))
+      expect(params(router).get('date')).toBe('2026-09-15')
+    })
   })
 
   // Seven columns in 360px is six unreadable ones and a scroll: a phone reads a week as days.
@@ -609,6 +642,38 @@ describe('CalendarLayout', () => {
     await userEvent.click(within(box).getByRole('button', { name: 'Delete' }))
     await waitFor(() =>
       expect(api.deleteEvent).toHaveBeenCalledWith('e1', 'All', undefined, 'en'))
+  })
+
+  it('keeps the confirm open and busy until the delete lands', async () => {
+    let answer: (value: null) => void = () => {}
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.deleteEvent.mockReturnValue(new Promise(resolve => { answer = resolve }))
+    renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    const box = await screen.findByRole('alertdialog')
+    await userEvent.click(within(box).getByRole('button', { name: 'Delete' }))
+
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(box.querySelector('.btn-danger-solid')).toBeDisabled()
+    expect(box.querySelector('.spinner')).not.toBeNull()
+
+    await act(async () => { answer(null) })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  })
+
+  // The toast says why; the confirm has nothing left to ask, so it closes like the calendar's.
+  it('closes the confirm on a refused delete and says so', async () => {
+    api.getOccurrences.mockResolvedValue({ occurrences: [floating('e1', 'Dentist')] })
+    api.deleteEvent.mockRejectedValue(new ApiError('boom', 500))
+    renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    const box = await screen.findByRole('alertdialog')
+    await userEvent.click(within(box).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(await screen.findByText('Could not delete the event')).toBeInTheDocument()
   })
 
   it('asks the scope before deleting a recurring event', async () => {

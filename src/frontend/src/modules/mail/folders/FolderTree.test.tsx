@@ -160,6 +160,29 @@ describe('FolderTree', () => {
       .toEqual(['e-commerce', 'Éléments', 'English', 'Zebra'])
   })
 
+  // M20: `sortFolders` orders by the UI language through `collator`; `localeCompare(undefined, …)`
+  // reads the browser's own language instead, so the two screens could disagree on one mailbox.
+  // This component must never call `localeCompare` itself, the same as `sortFolders`.
+  it('sorts with the same collator sortFolders uses, not localeCompare', () => {
+    const localeCompareSpy = vi.spyOn(String.prototype, 'localeCompare')
+    try {
+      render(
+        <FolderTree
+          folders={[
+            node({ path: 'Zebra', name: 'Zebra' }),
+            node({ path: 'Alpha', name: 'Alpha' }),
+          ]}
+          selectedPath={null}
+          onSelect={vi.fn()}
+        />)
+
+      expect(localeCompareSpy).not.toHaveBeenCalled()
+      expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['Alpha', 'Zebra'])
+    } finally {
+      localeCompareSpy.mockRestore()
+    }
+  })
+
   // Regression: Dovecot reports INBOX as subscribed=false, because the subscription flag is
   // meaningless for a folder that is always available. Filtering on subscription alone hid the
   // inbox entirely. Found against a live server, not by the mocks — every fixture here used to

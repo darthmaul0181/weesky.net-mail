@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { focusablesIn, tabbablesIn } from '../../lib/layerStack'
@@ -19,7 +19,8 @@ function setup(overrides: Partial<Parameters<typeof ContactList>[0]> = {}) {
   const props = {
     contacts: [alice, bruno], selectedId: null, scope: 'all',
     onSelect: vi.fn(), onToggleFavorite: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(),
-    onDeleteMany: vi.fn(),
+    onDeleteMany: vi.fn().mockResolvedValue(true),
+    deletingMany: false,
     ...overrides,
   }
   render(<ContactList {...props} />)
@@ -300,14 +301,14 @@ describe('ContactList', () => {
     const { rerender } = render(
       <ContactList contacts={[alice, bruno]} selectedId={null} scope="all"
         onSelect={vi.fn()} onToggleFavorite={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()}
-        onDeleteMany={vi.fn()} />)
+        onDeleteMany={vi.fn().mockResolvedValue(true)} deletingMany={false} />)
     await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
     expect(screen.getByText('1 selected')).toBeInTheDocument()
 
     rerender(
       <ContactList contacts={[alice, bruno]} selectedId={null} scope="favorites"
         onSelect={vi.fn()} onToggleFavorite={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()}
-        onDeleteMany={vi.fn()} />)
+        onDeleteMany={vi.fn().mockResolvedValue(true)} deletingMany={false} />)
 
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
   })
@@ -320,6 +321,54 @@ describe('ContactList', () => {
     expect(props.onDeleteMany).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(props.onDeleteMany).toHaveBeenCalledWith(['a'])
+  })
+
+  // A19: the confirm used to close the moment the click fired, ahead of the delete it asked about.
+  // It has to stay open — busy — until the promise it was handed settles, success or refusal alike.
+  it('keeps the confirm open until the delete settles, then closes it', async () => {
+    let resolveDelete: ((ok: boolean) => void) | undefined
+    const onDeleteMany = vi.fn(() => new Promise<boolean>(resolve => { resolveDelete = resolve }))
+    setup({ onDeleteMany })
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await userEvent.click(screen.getByLabelText('Delete selection'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(onDeleteMany).toHaveBeenCalledWith(['a'])
+    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
+
+    resolveDelete?.(true)
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument())
+    // The selection is cleared with the same settle, not with the click that started it.
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
+  })
+
+  // The `loading` prop is the caller's own pending flag (a mutation's `isPending`), not something
+  // this list derives: it has to reach the shared modal so the button shows busy rather than idle.
+  it('shows the confirm as busy while the caller reports the delete pending', async () => {
+    setup({ deletingMany: true })
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await userEvent.click(screen.getByLabelText('Delete selection'))
+
+    const modal = screen.getByText('Confirm deletion').closest('.modal') as HTMLElement
+    const confirmButton = modal.querySelector('.btn-danger-solid') as HTMLButtonElement
+
+    expect(confirmButton).toBeDisabled()
+    expect(confirmButton.querySelector('.spinner')).not.toBeNull()
+  })
+
+  // A refused batch must leave the selection standing: reselecting the same contacts by hand to
+  // retry is a second chore the toast already told the user was needed once.
+  it('closes the confirm on a refused delete but keeps the selection', async () => {
+    const onDeleteMany = vi.fn().mockResolvedValue(false)
+    setup({ onDeleteMany })
+    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await userEvent.click(screen.getByLabelText('Delete selection'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument())
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
   })
 
   it('leaves the delete action disabled while nothing is checked', () => {

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { buildManifest } from '../lib/webAppManifest'
 import { useAppSettings } from './useAppSettings'
 
@@ -7,9 +8,11 @@ import { useAppSettings } from './useAppSettings'
  * say "enabled": posting then withdrawing made the install icon flash. */
 export function useWebAppManifest(): void {
   const { data } = useAppSettings()
+  // A new `t` on each language change: the shortcuts are posted again under their new names.
+  const { t } = useTranslation(['mail', 'common'])
 
   useEffect(() => {
-    const manifest = buildManifest(data, window.location.origin)
+    const manifest = buildManifest(data, window.location.origin, t)
     if (!manifest) return
 
     const url = URL.createObjectURL(
@@ -23,5 +26,5 @@ export function useWebAppManifest(): void {
       link.remove()
       URL.revokeObjectURL(url)
     }
-  }, [data])
+  }, [data, t])
 }

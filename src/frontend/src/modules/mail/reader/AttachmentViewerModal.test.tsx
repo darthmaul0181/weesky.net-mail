@@ -8,6 +8,9 @@ import { requestBlob } from '../../../api.js'
 
 vi.mock('../../../api.js', () => ({ requestBlob: vi.fn() }))
 
+const signal: unknown = expect.any(AbortSignal)
+const withSignal = { signal }
+
 const IMAGES = [
   { part: '2', src: '/u/2', fileName: 'photo.png', size: 12345 },
   { part: '3', src: '/u/3', fileName: 'diagram.png', size: 200 },
@@ -42,7 +45,7 @@ describe('AttachmentViewerModal', () => {
     const img = await screen.findByRole('img', { name: 'photo.png' })
     expect(img).toHaveAttribute('src', 'blob:mock-url')
     expect(screen.getByText('photo.png')).toBeInTheDocument()
-    expect(requestBlob).toHaveBeenCalledWith('/u/2')
+    expect(requestBlob).toHaveBeenCalledWith('/u/2', withSignal)
   })
 
   it('revokes the object URL on unmount', async () => {
@@ -58,6 +61,21 @@ describe('AttachmentViewerModal', () => {
     renderModal()
     await screen.findByText('Could not load the image')
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('aborts the previous download on navigation and on close, without an error', async () => {
+    vi.mocked(requestBlob).mockImplementation((_path, options) => new Promise((_resolve, reject) => {
+      options!.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    }))
+    const { unmount } = renderModal({ images: IMAGES })
+    fireEvent.click(screen.getByLabelText('Next image'))
+
+    const signals = vi.mocked(requestBlob).mock.calls.map(([, options]) => options!.signal!)
+    expect(signals.map(s => s.aborted)).toEqual([true, false])
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    unmount()
+    expect(signals[1]!.aborted).toBe(true)
   })
 
   it('wires Download and the close button', async () => {
@@ -87,7 +105,7 @@ describe('AttachmentViewerModal', () => {
 
     fireEvent.click(screen.getByLabelText('Next image'))
     await screen.findByRole('img', { name: 'diagram.png' })
-    expect(requestBlob).toHaveBeenCalledWith('/u/3')
+    expect(requestBlob).toHaveBeenCalledWith('/u/3', withSignal)
     expect(screen.getByText('2 / 3')).toBeInTheDocument()
     expect(screen.getByLabelText('Previous image')).toBeEnabled()
     // Moving on revoked the previous image's URL — the src-change path, not just unmount.

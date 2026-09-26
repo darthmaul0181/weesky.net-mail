@@ -14,7 +14,8 @@ import type { Window } from './windowOf'
     rather than reading the first one's out of the cache. */
 export const calendarKeys = {
   all: (accountId: string) => ['calendar', accountId] as const,
-  calendars: (accountId: string) => ['calendar', accountId, 'calendars'] as const,
+  /** Zoned like the window: a calendar created on this first read takes the zone it was asked in. */
+  calendars: (accountId: string, tz: string) => ['calendar', accountId, 'calendars', tz] as const,
   /** The zone is part of the key: it decides which day a floating instance falls on, so the same
       bounds read in another zone are a different answer, not the same one. */
   window: (accountId: string, from: string, to: string, tz: string) =>
@@ -33,7 +34,7 @@ export function useCalendars(tz: string) {
   const accountId = useAccountId()
 
   return useQuery({
-    queryKey: calendarKeys.calendars(accountId),
+    queryKey: calendarKeys.calendars(accountId, tz),
     queryFn: () => api.getCalendars(tz),
     staleTime: 5 * 60_000,
     select: (data): Calendar[] => data.calendars,
@@ -86,23 +87,33 @@ export function useSearch(q: string) {
   })
 }
 
+type Invalidate = (queryClient: QueryClient, accountId: string) => void
+
 // Settled, not success: a refused write must leave the screen on server state rather than on an
-// optimistic lie. One root key, so a single invalidation reaches the grid, the sidebar, the open
-// event and any search at once — every one of them can be changed by any one of these writes.
+// optimistic lie. A calendar write can change anything under the root, the sidebar included; an
+// event write changes every screen of events and never the calendar list.
 function useCalendarMutation<TArgs, TResult = unknown>(
-  mutationFn: (args: TArgs) => Promise<TResult>,
+  mutationFn: (args: TArgs) => Promise<TResult>, invalidate: Invalidate = invalidateAll,
 ) {
   const accountId = useAccountId()
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn,
-    onSettled: () => invalidateAll(queryClient, accountId),
+    onSettled: () => invalidate(queryClient, accountId),
   })
 }
 
 function invalidateAll(queryClient: QueryClient, accountId: string) {
   void queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) })
+}
+
+const EVENT_KEYS = ['window', 'event', 'search'] as const
+
+function invalidateEvents(queryClient: QueryClient, accountId: string) {
+  for (const scope of EVENT_KEYS) {
+    void queryClient.invalidateQueries({ queryKey: [...calendarKeys.all(accountId), scope] })
+  }
 }
 
 /** The language the server writes the invitation mails in: the screen's, never a guess. */
@@ -115,18 +126,18 @@ const updateEvent = (id: string, body: EventUpdateBody) =>
 
 export function useCreateEvent() {
   return useCalendarMutation((event: EventWrite) =>
-    api.createEvent({ ...event, language: mailLanguage() }))
+    api.createEvent({ ...event, language: mailLanguage() }), invalidateEvents)
 }
 
 export function useUpdateEvent() {
   return useCalendarMutation(
-    ({ id, body }: { id: string; body: EventUpdateBody }) => updateEvent(id, body))
+    ({ id, body }: { id: string; body: EventUpdateBody }) => updateEvent(id, body), invalidateEvents)
 }
 
 export function useDeleteEvent() {
   return useCalendarMutation(
     ({ id, scope, instanceId }: { id: string; scope: EditScope; instanceId?: string }) =>
-      api.deleteEvent(id, scope, instanceId, mailLanguage()))
+      api.deleteEvent(id, scope, instanceId, mailLanguage()), invalidateEvents)
 }
 
 export function useCreateCalendar() {
@@ -194,6 +205,6 @@ export function useMoveOccurrence(window: Window, tz: string) {
     onError: (_error, _variables, context) => {
       if (context?.previous) queryClient.setQueryData(key, context.previous)
     },
-    onSettled: () => invalidateAll(queryClient, accountId),
+    onSettled: () => invalidateEvents(queryClient, accountId),
   })
 }

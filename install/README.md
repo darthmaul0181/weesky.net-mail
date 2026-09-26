@@ -271,6 +271,7 @@ these do:
 | On | The web server must |
 |---|---|
 | Both addresses | Serve HTTPS. |
+| Both addresses | Speak HTTP/2. The application loads about ten files when it opens; HTTP/2 fetches them all at once over one connection instead of a few at a time. |
 | `mail.example.net` | Answer any address that is not a file with `/index.html`. The application draws its pages itself: without this, reloading any page but the first one shows "Not Found". |
 | `mail.example.net` | Keep a real "Not Found" under `/assets/`. A missing script served as a page breaks the application with an error that points nowhere. |
 | `api.example.net` | Pass every request to `http://127.0.0.1:5000`, adding the `X-Forwarded-For` and `X-Forwarded-Proto` headers. They tell the service who is asking, and that the visitor came over HTTPS. |
@@ -283,8 +284,11 @@ Replace the names and certificate paths with your own.
 Turn on the modules it needs (Debian and Ubuntu; on the Red Hat family they are already loaded):
 
 ```bash
-a2enmod ssl proxy proxy_http headers
+a2enmod ssl proxy proxy_http headers http2
 ```
+
+HTTP/2 needs Apache's `event` or `worker` mode, the default on current systems. If `apachectl -V`
+shows `prefork`, the sites still work, over the older HTTP/1.1.
 
 Create `/etc/apache2/sites-available/scotty.conf` (Red Hat family: `/etc/httpd/conf.d/scotty.conf`):
 
@@ -292,6 +296,7 @@ Create `/etc/apache2/sites-available/scotty.conf` (Red Hat family: `/etc/httpd/c
 # The web interface
 <VirtualHost *:443>
     ServerName mail.example.net
+    Protocols h2 http/1.1
     DocumentRoot /var/www/scotty
 
     SSLEngine on
@@ -311,6 +316,7 @@ Create `/etc/apache2/sites-available/scotty.conf` (Red Hat family: `/etc/httpd/c
 # The API
 <VirtualHost *:443>
     ServerName api.example.net
+    Protocols h2 http/1.1
 
     SSLEngine on
     SSLCertificateFile    /etc/letsencrypt/live/api.example.net/fullchain.pem
@@ -332,12 +338,14 @@ apachectl configtest && systemctl reload apache2     # Red Hat family: httpd
 
 #### With nginx
 
-Create `/etc/nginx/conf.d/scotty.conf`:
+Create `/etc/nginx/conf.d/scotty.conf` (`http2 on;` needs nginx 1.25.1 or later; on an older one,
+remove that line and write `listen 443 ssl http2;` instead):
 
 ```nginx
 # The web interface
 server {
     listen 443 ssl;
+    http2 on;
     server_name mail.example.net;
 
     ssl_certificate     /etc/letsencrypt/live/mail.example.net/fullchain.pem;
@@ -356,6 +364,7 @@ server {
 # The API
 server {
     listen 443 ssl;
+    http2 on;
     server_name api.example.net;
 
     ssl_certificate     /etc/letsencrypt/live/api.example.net/fullchain.pem;

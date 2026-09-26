@@ -10,7 +10,7 @@ import {
   type Snapshot,
 } from './cachePatches'
 import { folderByPath } from './folders/folderNodes'
-import type { FolderCountDeltas } from './list/listPatch'
+import { patchFolderSubscription, type FolderCountDeltas } from './list/listPatch'
 import { mailKeys } from './mailKeys'
 
 // Every call below carries `{ accountId }`, read at render rather than at fire time: a write
@@ -106,10 +106,31 @@ export const useRenameFolder = () =>
 export const useDeleteFolder = () =>
   useFolderMutation<{ path: string }>(({ path }, options) => api.deleteMailFolder(path, options))
 
-export const useSetFolderSubscription = () =>
-  useFolderMutation<{ path: string; subscribed: boolean }>(
-    ({ path, subscribed }, options) =>
-      api.setMailFolderSubscription(path, subscribed, options))
+// Optimistic, unlike the other folder mutations: the switch is bound straight to the tree's own
+// `subscribed`, so with no patch it flips back while the request is in flight and a second click
+// before it lands sends the same value again. Snapshot + rollback, like useSetFlags.
+export function useSetFolderSubscription() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ path, subscribed }: { path: string; subscribed: boolean }) =>
+      api.setMailFolderSubscription(path, subscribed, { accountId }),
+
+    onMutate: ({ path, subscribed }: { path: string; subscribed: boolean }) => {
+      const foldersKey = mailKeys.folders(accountId)
+      const tree = queryClient.getQueryData<MailFolderNode[]>(foldersKey)
+      if (!tree) return { snapshots: [] as Snapshot[] }
+
+      queryClient.setQueryData(foldersKey, patchFolderSubscription(tree, path, subscribed))
+      return { snapshots: [[foldersKey, tree]] as Snapshot[] }
+    },
+
+    onError: (_error, _args, context) => restoreSnapshots(queryClient, context),
+
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) }),
+  })
+}
 
 export interface EmptyFolderArgs {
   folderPath: string

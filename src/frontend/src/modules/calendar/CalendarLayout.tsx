@@ -25,7 +25,7 @@ import { itemsByDay, placeAll } from './multiDay'
 import { colorOf, occurrenceKey } from './occurrenceStyle'
 import DayStrip from './phone/DayStrip'
 import PhoneMonth from './phone/PhoneMonth'
-import { addDays, daysBetween, todayIn, type PlainDate } from './plainDate'
+import { addDays, daysBetween, type PlainDate } from './plainDate'
 import {
   useCalendars, useCreateEvent, useDeleteEvent, useMoveOccurrence, useUpdateEvent, useWindow,
 } from './queries'
@@ -38,6 +38,7 @@ import { useCalendarWrites } from './useCalendarWrites'
 import { useEditorSeed } from './useEditorSeed'
 import { useEventWrites } from './useEventWrites'
 import { useGestureWrites } from './useGestureWrites'
+import { useToday } from './useToday'
 import WeekView from './WeekView'
 import { windowOf, type Window } from './windowOf'
 
@@ -80,7 +81,7 @@ export default function CalendarLayout() {
   const lang = i18n.language
   const locale = useMemo(() => dateLocaleOf(lang, region), [lang, region])
 
-  const today = todayIn(tz)
+  const today = useToday(tz)
   const {
     params, view, anchor, routeId, inEditor, instanceParam, searchWith, setView, setAnchor,
   } = useCalendarUrlState(phone, today)
@@ -382,7 +383,7 @@ export default function CalendarLayout() {
 
         <CalendarDialogs scopeAsk={scopeAsk} onScopeAskClosed={() => setScopeAsk(null)}
           pendingEvent={pendingEvent} onPendingEventClosed={() => setPendingEvent(null)}
-          deletingEvent={removeEvent.isPending} onDeleteEvent={id => void runDelete(id, 'All')}
+          deletingEvent={removeEvent.isPending} onDeleteEvent={id => runDelete(id, 'All')}
           inEditor={inEditor} discarding={discarding} onDiscard={backToGrid}
           onDiscardClosed={() => setDiscarding(false)} calendars={calendars}
           writes={calendarWrites} returnFocusRef={mainRef} />

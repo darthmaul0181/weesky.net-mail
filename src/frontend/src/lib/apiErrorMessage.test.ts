@@ -1,6 +1,7 @@
 import i18next from 'i18next'
 import { afterEach, describe, expect, it } from 'vitest'
 import { apiErrorMessage } from './apiErrorMessage'
+import { RequestTimeoutError } from './withTimeout'
 
 class ApiErrorStub extends Error {
   constructor(public code: string, message: string) { super(message) }
@@ -37,5 +38,11 @@ describe('apiErrorMessage', () => {
   it('matches on the message when it is one of the stable strings', () => {
     expect(apiErrorMessage(new ApiErrorStub('Message not found', 'Message not found'), 'nope'))
       .toBe('This message no longer exists.')
+  })
+
+  it('says a request timed out, in the active language', async () => {
+    expect(apiErrorMessage(new RequestTimeoutError(), 'nope')).toBe('The server is not responding. Try again in a moment.')
+    await i18next.changeLanguage('fr')
+    expect(apiErrorMessage(new RequestTimeoutError(), 'nope')).toBe('Le serveur ne répond pas. Réessayez dans un instant.')
   })
 })

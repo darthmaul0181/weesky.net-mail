@@ -54,7 +54,11 @@ interface Props {
   onToggleFavorite: (contact: Contact) => void
   onEdit: (id: string) => void
   onDelete: (contact: Contact) => void
-  onDeleteMany: (ids: string[]) => void
+  /** Settles, never rejects: a refusal is told by a toast of its own. The confirm dialog stays
+      open — busy — until this resolves, closing either way; the boolean says whether to clear the
+      selection — not on a refusal, so retrying does not mean reselecting by hand. */
+  onDeleteMany: (ids: string[]) => Promise<boolean>
+  deletingMany: boolean
   /** Only under a group scope — the layout withholds it elsewhere, which is what keeps this band
       free of the action when there is no group to leave. Acts without a dialog: membership is what
       a drop restores, never a loss the way deleting the contact itself is. */
@@ -67,7 +71,7 @@ interface Props {
  * two-line skin, since the list always sits beside the card. */
 export default function ContactList({
   contacts, selectedId, scope, leading, actions,
-  onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, onRemoveFromGroup,
+  onSelect, onToggleFavorite, onEdit, onDelete, onDeleteMany, deletingMany, onRemoveFromGroup,
   regionRef,
 }: Props) {
   const { t } = useTranslation('contacts')
@@ -200,8 +204,9 @@ export default function ContactList({
       {confirming && (
         <DeleteConfirmModal
           message={t('list.deleteSelectedConfirm', { count })}
+          loading={deletingMany}
           onClose={() => setConfirming(false)}
-          onConfirm={() => { onDeleteMany(selectedIds); selection.clear(); setConfirming(false) }}
+          onConfirm={() => onDeleteMany(selectedIds).then(ok => { if (ok) selection.clear() })}
           returnFocusRef={regionRef} />
       )}
     </>

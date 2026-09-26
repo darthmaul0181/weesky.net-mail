@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { focusManager } from '@tanstack/react-query'
 import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
-import { POLL_INTERVAL, mailKeys, useApplyInvitationReply, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useReplaceIdentities, useSearchMessages, useSendMessage, useSetFlags } from './queries'
+import { POLL_INTERVAL, mailKeys, useApplyInvitationReply, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useReplaceIdentities, useSaveDraft, useSearchMessages, useSendMessage, useSetFlags } from './queries'
 import type { MailFolderNode, MailInvitation, MailMessageDetail } from './api/mailTypes'
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
   searchMessages: vi.fn(),
   sendMessage: vi.fn(),
+  saveDraft: vi.fn(),
   setMessageFlags: vi.fn(),
   putIdentities: vi.fn(),
   applyInvitationReply: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('../../api.js', () => ({
     getPreferences: mocks.getPreferences,
     searchMessages: mocks.searchMessages,
     sendMessage: mocks.sendMessage,
+    saveDraft: mocks.saveDraft,
     setMessageFlags: mocks.setMessageFlags,
     putIdentities: mocks.putIdentities,
     applyInvitationReply: mocks.applyInvitationReply,
@@ -392,6 +394,7 @@ describe('useMessages', () => {
 
 describe('useMessage', () => {
   beforeEach(() => vi.clearAllMocks())
+  afterEach(() => focusManager.setFocused(undefined))
 
   it('does not fetch without a uid', () => {
     const { wrapper } = createWrapper()
@@ -409,6 +412,25 @@ describe('useMessage', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.subject).toBe('Hello')
+  })
+
+  // staleTime: Infinity, like useMessageSource and useInlineImages: flag changes are patched into
+  // the list caches and read live from there, never off this detail, so a stale reload here is the
+  // user's own call — returning to the tab must not refetch the open message.
+  it('does not refetch on window focus', async () => {
+    mocks.getMailMessage.mockResolvedValue({ uid: 42, subject: 'Hello' })
+    const { wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useMessage('INBOX', 42), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    await act(async () => {
+      focusManager.setFocused(false)
+      focusManager.setFocused(true)
+      await Promise.resolve()
+    })
+
+    expect(mocks.getMailMessage).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -550,6 +572,14 @@ describe('useSendMessage', () => {
     to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [],
     priority: 'normal' as const,
   }
+  const sentTree: MailFolderNode[] = [
+    {
+      path: 'Sent', name: 'Sent', specialUse: 'sent', selectable: true, subscribed: true,
+      total: 1, unread: 0, uidValidity: 1, uidNext: 2, children: [],
+    },
+  ]
+  const sentPagesKey = mailKeys.messages('primary', 'Sent', 0, 30)
+  const sentStreamKey = mailKeys.messageStream('primary', 'Sent', 100)
 
   it('calls api.sendMessage with the composed args', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
@@ -561,27 +591,19 @@ describe('useSendMessage', () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith(sendArgs, { accountId: 'primary' })
   })
 
-  it('invalidates the folders and the sent folder lists when the tree has a sent node', async () => {
+  it('invalidates the folder tree when the tree has a sent node', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
     const { client, wrapper } = createWrapper()
-    const tree: MailFolderNode[] = [
-      {
-        path: 'Sent', name: 'Sent', specialUse: 'sent', selectable: true, subscribed: true,
-        total: 1, unread: 0, uidValidity: 1, uidNext: 2, children: [],
-      },
-    ]
-    client.setQueryData(mailKeys.folders('primary'), tree)
+    client.setQueryData(mailKeys.folders('primary'), sentTree)
     const invalidate = vi.spyOn(client, 'invalidateQueries')
 
     const { result } = renderHook(() => useSendMessage(), { wrapper })
     await result.current.mutateAsync(sendArgs)
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.messagesIn('primary', 'Sent') })
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.messageStreamIn('primary', 'Sent') })
   })
 
-  it('does not invalidate any sent-folder key when the tree holds no sent node', async () => {
+  it('does not touch any sent-folder key when the tree holds no sent node', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: false })
     const { client, wrapper } = createWrapper()
     const tree: MailFolderNode[] = [
@@ -598,6 +620,110 @@ describe('useSendMessage', () => {
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
     expect(invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  // M10: a folder with N loaded stream blocks must not replay all N on every send — the common
+  // case is that Sent is not even open, so its caches are dropped outright, cold, and cost
+  // nothing until it is opened again.
+  it("drops the sent folder's list caches instead of invalidating them, when nobody is viewing it", async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    const { client, wrapper } = createWrapper()
+    client.setQueryData(mailKeys.folders('primary'), sentTree)
+    client.setQueryData(sentPagesKey, pageOf([1], 1))
+    client.setQueryData(sentStreamKey, { pages: [pageOf([1], 1)], pageParams: [0] })
+
+    const { result } = renderHook(() => useSendMessage(), { wrapper })
+    await result.current.mutateAsync(sendArgs)
+
+    expect(client.getQueryData(sentPagesKey)).toBeUndefined()
+    expect(client.getQueryData(sentStreamKey)).toBeUndefined()
+  })
+
+  // The other half of M10: a folder actually on screen must refresh, not blank — so its query
+  // stays in the cache (never removed) and is invalidated in place instead.
+  it("keeps the sent folder's list alive and refetches it when it is open", async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
+    const { client, wrapper } = createWrapper()
+    client.setQueryData(mailKeys.folders('primary'), sentTree)
+
+    const list = renderHook(() => useMessages('Sent', 0, 30), { wrapper })
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true))
+    mocks.getMailMessages.mockClear()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    const send = renderHook(() => useSendMessage(), { wrapper })
+    await send.result.current.mutateAsync(sendArgs)
+
+    // Never blanked: the query the list is observing is still in the cache with its rows.
+    expect(client.getQueryData(sentPagesKey)).toBeDefined()
+    expect(list.result.current.data).toBeDefined()
+    await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalled())
+    // Never the stream: an invalidate there would replay every loaded block.
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: sentStreamKey })
+  })
+
+  // The stream itself must never be invalidated even while it is the one being observed.
+  it('never invalidates the sent stream when it is the one open', async () => {
+    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
+    const { client, wrapper } = createWrapper()
+    client.setQueryData(mailKeys.folders('primary'), sentTree)
+
+    const stream = renderHook(() => useMessageStream('Sent', 100, true), { wrapper })
+    await waitFor(() => expect(stream.result.current.isSuccess).toBe(true))
+    mocks.getMailMessages.mockClear()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    const send = renderHook(() => useSendMessage(), { wrapper })
+    await send.result.current.mutateAsync(sendArgs)
+
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: sentStreamKey })
+    expect(client.getQueryData(sentStreamKey)).toBeDefined()
+  })
+})
+
+describe('useSaveDraft', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const draftArgs = {
+    to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [],
+    priority: 'normal' as const,
+  }
+
+  it('invalidates the folder tree and drops the drafts folder caches when nobody is viewing it', async () => {
+    mocks.saveDraft.mockResolvedValue({ uid: 9, folderPath: 'Drafts' })
+    const { client, wrapper } = createWrapper()
+    const draftsPagesKey = mailKeys.messages('primary', 'Drafts', 0, 30)
+    const draftsStreamKey = mailKeys.messageStream('primary', 'Drafts', 100)
+    client.setQueryData(draftsPagesKey, pageOf([1], 1))
+    client.setQueryData(draftsStreamKey, { pages: [pageOf([1], 1)], pageParams: [0] })
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    const { result } = renderHook(() => useSaveDraft(), { wrapper })
+    await result.current.mutateAsync(draftArgs)
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
+    expect(client.getQueryData(draftsPagesKey)).toBeUndefined()
+    expect(client.getQueryData(draftsStreamKey)).toBeUndefined()
+  })
+
+  it("keeps the drafts folder's list alive and refetches it when it is open", async () => {
+    mocks.saveDraft.mockResolvedValue({ uid: 9, folderPath: 'Drafts' })
+    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
+    const { client, wrapper } = createWrapper()
+    const draftsPagesKey = mailKeys.messages('primary', 'Drafts', 0, 30)
+
+    const list = renderHook(() => useMessages('Drafts', 0, 30), { wrapper })
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true))
+    mocks.getMailMessages.mockClear()
+
+    const save = renderHook(() => useSaveDraft(), { wrapper })
+    await save.result.current.mutateAsync(draftArgs)
+
+    expect(client.getQueryData(draftsPagesKey)).toBeDefined()
+    expect(list.result.current.data).toBeDefined()
+    await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalled())
   })
 })
 

@@ -22,6 +22,7 @@
     "primaryEmail": "Adresse principale",
     "otherDomains": "Autres domaines",
     "storage": "Stockage",
+    "quotaFailed": "Impossible de charger l’espace de stockage.",
     "password": "Mot de passe",
     "passwordChanged": "Mot de passe modifié",
     "currentPassword": "Mot de passe actuel",

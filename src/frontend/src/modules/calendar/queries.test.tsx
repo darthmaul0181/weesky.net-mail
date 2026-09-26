@@ -67,13 +67,18 @@ describe('calendarKeys', () => {
     const root = calendarKeys.all('primary')
 
     for (const key of [
-      calendarKeys.calendars('primary'),
+      calendarKeys.calendars('primary', TZ),
       calendarKeys.window('primary', WINDOW.from, WINDOW.to, TZ),
       calendarKeys.event('primary', 'e1'),
       calendarKeys.search('primary', 'dentist'),
     ]) {
       expect(key.slice(0, root.length)).toEqual([...root])
     }
+  })
+
+  // The server answers the list in the zone it is asked in, so another zone is another answer.
+  it('gives each zone its own calendar list', () => {
+    expect(calendarKeys.calendars('primary', TZ)).not.toEqual(calendarKeys.calendars('primary', 'UTC'))
   })
 
   it('gives each window its own entry, zone included', () => {
@@ -133,7 +138,26 @@ describe('the mutations', () => {
     })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: calendarKeys.all('primary') })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [...calendarKeys.all('primary'), 'window'] })
+  })
+
+  // An event write changes no calendar, so the list is left alone rather than fetched again.
+  it('resyncs what an event write changes, and not the calendar list', async () => {
+    mocks.deleteEvent.mockResolvedValue(null)
+    const keys = {
+      calendars: calendarKeys.calendars('primary', TZ), window: windowKey(),
+      event: calendarKeys.event('primary', 'e1'), search: calendarKeys.search('primary', 'dentist'),
+    }
+    for (const key of Object.values(keys)) client.setQueryData(key, {})
+
+    const { result } = renderHook(() => useDeleteEvent(), { wrapper })
+    await result.current.mutateAsync({ id: 'e1', scope: 'All' })
+
+    const invalidated = (key: readonly unknown[]) => client.getQueryState(key)?.isInvalidated
+    expect(invalidated(keys.calendars)).toBe(false)
+    expect(invalidated(keys.window)).toBe(true)
+    expect(invalidated(keys.event)).toBe(true)
+    expect(invalidated(keys.search)).toBe(true)
   })
 
   // Settled, never success: a refused write must leave the screen on server state.
@@ -279,7 +303,7 @@ describe('useMoveOccurrence', () => {
     result.current.mutate({ id: 'e1', body, moved })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: calendarKeys.all('primary') })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [...calendarKeys.all('primary'), 'window'] })
   })
 })
 

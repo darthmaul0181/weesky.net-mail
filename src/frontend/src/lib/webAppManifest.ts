@@ -26,7 +26,7 @@ const BACKGROUND_COLOR = '#f6f3ef'
 /** The manifest, or null when nothing should be posted. Every URL is absolute (a blob: has an
  * opaque path), built from the current origin so it holds on every deployment. */
 export function buildManifest(
-  settings: AppSettings | undefined, origin: string,
+  settings: AppSettings | undefined, origin: string, t: (key: 'mail:layout.newMessage' | 'common:rail.contacts') => string,
 ): WebAppManifest | null {
   if (!settings || !installableOf(settings)) return null
 
@@ -48,8 +48,8 @@ export function buildManifest(
       { src: `${origin}/icon-512.png`, sizes: '512x512', type: 'image/png' },
     ],
     shortcuts: [
-      { name: 'New message', url: `${origin}/mail/compose` },
-      { name: 'Contacts', url: `${origin}/contacts` },
+      { name: t('mail:layout.newMessage'), url: `${origin}/mail/compose` },
+      { name: t('common:rail.contacts'), url: `${origin}/contacts` },
     ],
     protocol_handlers: [{ protocol: 'mailto', url: `${origin}/mail/compose?mailto=%s` }],
   }

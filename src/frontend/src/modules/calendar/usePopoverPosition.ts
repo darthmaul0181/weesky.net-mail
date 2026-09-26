@@ -18,27 +18,34 @@ export interface PopoverPosition {
  * rect, not the chip: a search result leaves the screen in the commit that opens its bubble. */
 export function usePopoverPosition(rect: DOMRect): PopoverPosition {
   const [node, setNode] = useState<HTMLElement | null>(null)
-  const [position, setPosition] = useState({ left: 0, top: 0 })
+  const [height, setHeight] = useState(0)
 
+  // The detail lands after the bubble is placed and makes it taller: the height is followed.
   useLayoutEffect(() => {
-    const height = node?.offsetHeight ?? 0
-    const right = rect.right + GAP
-    const fitsRight = right + POPOVER_WIDTH <= window.innerWidth
-    const fitsLeft = rect.left - GAP - POPOVER_WIDTH >= EDGE
-    if (fitsRight || fitsLeft) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- measures the node, which exists only after commit
-      setPosition({
-        left: fitsRight ? right : rect.left - POPOVER_WIDTH - GAP,
-        top: Math.max(EDGE, Math.min(rect.top, window.innerHeight - height - EDGE)),
-      })
-      return
-    }
-    const below = rect.bottom + GAP
-    setPosition({
-      left: Math.max(EDGE, Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - EDGE)),
-      top: Math.max(EDGE, below + height + EDGE <= window.innerHeight ? below : rect.top - GAP - height),
-    })
-  }, [rect, node])
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- measures the node, which exists only after commit
+    setHeight(node?.offsetHeight ?? 0)
+    if (!node || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => setHeight(node.offsetHeight))
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [node])
 
-  return { ref: setNode, ...position }
+  return { ref: setNode, ...placeOf(rect, height) }
+}
+
+function placeOf(rect: DOMRect, height: number): { left: number; top: number } {
+  const right = rect.right + GAP
+  const fitsRight = right + POPOVER_WIDTH <= window.innerWidth
+  const fitsLeft = rect.left - GAP - POPOVER_WIDTH >= EDGE
+  if (fitsRight || fitsLeft) {
+    return {
+      left: fitsRight ? right : rect.left - POPOVER_WIDTH - GAP,
+      top: Math.max(EDGE, Math.min(rect.top, window.innerHeight - height - EDGE)),
+    }
+  }
+  const below = rect.bottom + GAP
+  return {
+    left: Math.max(EDGE, Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - EDGE)),
+    top: Math.max(EDGE, below + height + EDGE <= window.innerHeight ? below : rect.top - GAP - height),
+  }
 }

@@ -20,6 +20,8 @@ export const I18N_OPTIONS = {
   defaultNS: 'common' as const,
   // React escapes for us; i18next doing it again turns an apostrophe into an entity.
   interpolation: { escapeValue: false },
+  // Silences the vendor's promotional banner in the console.
+  showSupportNotice: false,
 }
 
 export async function initI18n(locale: Locale): Promise<void> {

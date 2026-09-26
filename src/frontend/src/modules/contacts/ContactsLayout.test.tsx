@@ -233,6 +233,28 @@ describe('ContactsLayout', () => {
     expect(await screen.findByText(/could not be deleted/i)).toBeInTheDocument()
   })
 
+  // K3: a background refetch failing must not print "Could not load contacts." above a list that
+  // still shows the book it already has — the client keeps the stale data on an error, on purpose.
+  it('keeps the list on screen when a refetch fails behind it, without the load-failed line', async () => {
+    const client = createTestQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/contacts']}>
+          <Routes><Route path="/contacts" element={<ContactsLayout />} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
+
+    api.getContacts.mockRejectedValueOnce(new Error('boom'))
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['contacts', 'primary'] }).catch(() => {})
+    })
+
+    expect(screen.getByText('Bruno')).toBeInTheDocument()
+    expect(screen.queryByText(/could not load contacts/i)).not.toBeInTheDocument()
+  })
+
   // The tile's trash goes with the tile, and the band's own button is disabled the moment the
   // selection it acts on is cleared: neither is reachable when the confirm closes.
   it('hands focus to the tile list when a deleted contact takes its trash button', async () => {
@@ -298,6 +320,73 @@ describe('ContactsLayout', () => {
     // Saved is only half of it: a save that left the editor standing would strand the user in a
     // form whose contact already exists.
     await waitFor(() => expect(screen.getByTestId('contact-list')).toBeInTheDocument())
+    expect(screen.queryByTestId('contact-editor')).not.toBeInTheDocument()
+  })
+
+  // K4: the editor's Save used to land on bare `/contacts`, dropping the scope it was opened
+  // under and leaving nothing open. It has to keep the scope and open what was just saved.
+  it('keeps the scope and opens the saved contact after Save', async () => {
+    api.createContact.mockResolvedValue({ id: 'n' })
+    const router = renderRouter('/contacts?scope=favorites')
+    await waitFor(() => expect(scopeButton(/favourites/i)).toHaveClass('is-active'))
+
+    await userEvent.click(screen.getAllByRole('button', { name: /add contact/i })[0]!)
+    await waitFor(() => expect(screen.getByRole('heading', { name: /new contact/i })).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText(/first name/i), 'Chloé')
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/contacts'))
+    expect(router.state.location.search).toBe('?scope=favorites&id=n')
+  })
+
+  // K4 fix: Save navigates with `replace`, so Back after it lands on the list rather than
+  // reopening the editor — a blank "New contact" form after a create, where a second Save
+  // fabricates a duplicate.
+  it('does not let Back reopen the editor after Save', async () => {
+    api.createContact.mockResolvedValue({ id: 'n' })
+    const router = renderRouter('/contacts')
+    await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
+
+    await userEvent.click(screen.getAllByRole('button', { name: /add contact/i })[0]!)
+    await waitFor(() => expect(screen.getByRole('heading', { name: /new contact/i })).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText(/first name/i), 'Chloé')
+    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await waitFor(() => expect(screen.queryByTestId('contact-editor')).not.toBeInTheDocument())
+
+    await act(async () => { await router.navigate(-1) })
+
+    expect(screen.queryByTestId('contact-editor')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /new contact/i })).not.toBeInTheDocument()
+  })
+
+  // K4: Cancel used to do the same. It has to return to the card that was open before the editor,
+  // not to whichever contact the editor happened to be editing.
+  it('returns to the previously open card and scope after Cancel', async () => {
+    const router = renderRouter('/contacts?scope=favorites&id=a')
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Alice' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /edit carla/i }))
+    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Carla'))
+
+    await userEvent.click(screen.getByRole('button', { name: /close the editor/i }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/contacts'))
+    expect(router.state.location.search).toBe('?scope=favorites&id=a')
+    expect(screen.getByRole('heading', { name: 'Alice' })).toBeInTheDocument()
+  })
+
+  // K4 fix: Cancel navigates with `replace` too, for the same Back-button reason as Save.
+  it('does not let Back reopen the editor after Cancel', async () => {
+    const router = renderRouter('/contacts')
+    await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /edit bruno/i }))
+    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
+    await userEvent.click(screen.getByRole('button', { name: /close the editor/i }))
+    await waitFor(() => expect(screen.queryByTestId('contact-editor')).not.toBeInTheDocument())
+
+    await act(async () => { await router.navigate(-1) })
+
     expect(screen.queryByTestId('contact-editor')).not.toBeInTheDocument()
   })
 

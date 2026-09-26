@@ -4,13 +4,14 @@ import { useAccountId, useComposeAccountId } from '../../hooks/useAccountId'
 import type {
   MailFolderNode, QuotePurpose, SaveDraftArgs, SendMessageArgs, SendMessageResult,
 } from './api/mailTypes'
+import { dropOrRefreshFolderCaches } from './cachePatches'
 import { folderByRole } from './folders/folderNodes'
 import { mailKeys } from './mailKeys'
 
 export type { SaveDraftArgs, SendMessageArgs, SendMessageResult }
 
-// On success invalidates the tree (the Sent copy changes its counts) and the Sent folder's messages,
-// found in the cached tree by specialUse.
+// On success invalidates the tree (the Sent copy changes its counts) and drops or refreshes the
+// Sent folder's own lists, found in the cached tree by specialUse.
 export function useSendMessage(pinnedAccountId?: string) {
   const accountId = useComposeAccountId(pinnedAccountId)
   const queryClient = useQueryClient()
@@ -23,10 +24,7 @@ export function useSendMessage(pinnedAccountId?: string) {
       void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
       const folders = queryClient.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
       const sent = folderByRole(folders, 'sent')
-      if (sent) {
-        void queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, sent.path) })
-        void queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, sent.path) })
-      }
+      if (sent) dropOrRefreshFolderCaches(queryClient, accountId, sent.path)
     },
   })
 }
@@ -51,8 +49,7 @@ export function useSaveDraft(pinnedAccountId?: string) {
     mutationFn: (args: SaveDraftArgs) => api.saveDraft(args, { accountId }),
     onSuccess: (saved) => {
       void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
-      void queryClient.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, saved.folderPath) })
-      void queryClient.invalidateQueries({ queryKey: mailKeys.messageStreamIn(accountId, saved.folderPath) })
+      dropOrRefreshFolderCaches(queryClient, accountId, saved.folderPath)
     },
   })
 }
