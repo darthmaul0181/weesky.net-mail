@@ -39,6 +39,9 @@
   --danger: #dc2626;
   --danger-hover: #b91c1c;
   --success: #16a34a;
+  --warning: #b45309;
+  --status-fg: #ffffff;
+  --scrim: rgba(0, 0, 0, 0.35);
 }
 
 [data-palette='azure'][data-theme='dark'] {
@@ -79,4 +82,7 @@
   --danger: #f87171;
   --danger-hover: #ef4444;
   --success: #4ade80;
+  --warning: #d97706;
+  --status-fg: #101316;
+  --scrim: rgba(0, 0, 0, 0.35);
 }

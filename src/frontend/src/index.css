@@ -49,55 +49,29 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.page-main {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px 32px;
+  background: color-mix(in oklab, var(--surface) 25%, transparent);
 }
 
 /* ── Card ────────────────────────────────────────────────── */
 
 .card {
-  background: rgba(255, 255, 255, 0.65);
+  background: color-mix(in oklab, var(--surface) 65%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 32px;
   width: 100%;
   max-width: 400px;
   position: relative;
-  z-index: 1;
+  z-index: var(--z-raised);
   backdrop-filter: blur(4px);
 }
 
-.card-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 24px;
-  color: var(--text);
-}
-
-.remember-row {
-  margin-bottom: 16px;
-}
-
-.remember-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-.remember-label input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
-  accent-color: var(--action-primary);
+@media (max-width: 639px) {
+  /* The login screen is the one surface a phone meets before anything else. .page-center's 24px
+     + .card's 32px spent 112px of a 360px screen on padding (measured, fields at 246px); 16+20
+     returns that to the fields, which are all width: 100%. Only LoginPage uses either class. */
+  .page-center { padding: 16px; }
+  .card { padding: 20px; }
 }
 
 /* ── Form ────────────────────────────────────────────────── */
@@ -161,10 +135,9 @@ body {
   cursor: not-allowed;
 }
 
-/* The 100% is the login form's shape and a dialog's, where the button IS the form's only control.
-   Anywhere else — a settings page, a toolbar, a band — it is wrong, and the mistake has now been
-   made six times. Reach for .btn-auto rather than inventing a seventh parent selector that undoes
-   it; see "Buttons & row actions" in website-design.md. */
+/* The 100% is the login form's shape and a dialog's, where the button IS the form's only control
+   — wrong anywhere else (a settings page, a toolbar, a band), a mistake made six times already.
+   Reach for .btn-auto rather than inventing a seventh parent selector that undoes it. */
 .btn-primary {
   background: var(--action-primary);
   color: var(--action-primary-fg);
@@ -190,7 +163,18 @@ body {
 
 .btn-danger:hover:not(:disabled) {
   background: var(--danger);
-  color: #fff;
+  color: var(--status-fg);
+}
+
+/* The filled variant, for a dialog whose one action is destructive. */
+.btn-danger-solid {
+  background: var(--danger);
+  color: var(--status-fg);
+  padding: 10px 16px;
+}
+
+.btn-danger-solid:hover:not(:disabled) {
+  background: var(--danger-hover);
 }
 
 .btn-ghost {
@@ -206,7 +190,7 @@ body {
 
 .btn-add {
   background: var(--action-primary);
-  color: #fff;
+  color: var(--action-primary-fg);
 }
 
 .btn-add:hover:not(:disabled) {
@@ -215,13 +199,9 @@ body {
 
 /* ── Column action row ───────────────────────────────────── */
 
-/* The row a module column opens with: one primary action taking the width, one square button
-   beside it. Mail (New message + Refresh) and contacts (Add contact + import/export) draw the
-   same row — transcribed rather than shared, the two had drifted 4px wide and 2px tall apart.
-   The square costs the label 47px (40 plus the gap): measured in probes/localisation-widths.html,
-   `+ Ajouter un contact` is 131.9px of ink against the 141 a 240px column leaves. It fits in both
-   shipped languages and in neither with much to spare, so a third language, a reworded label or a
-   wider square has to be re-measured there rather than reasoned about. */
+/* The row a module column opens with: one primary action, one square button beside it. Mail and
+   contacts draw the same row — see architecture-contacts.md for the drift history and the
+   131.9px/141px French measurement a relabel has to re-check in probes/localisation-widths.html. */
 .column-actions { flex: none; display: flex; gap: 7px; padding: 10px 10px 4px; }
 .column-actions-main { flex: 1; min-width: 0; padding: 11px 16px; }
 /* The rule lands on the wrapper, not on the button, and that is `.actionbar .dropdown-root`'s
@@ -239,38 +219,20 @@ body {
   margin-bottom: 16px;
 }
 
-.alert-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: var(--danger);
+.alert-error { --status-tone: var(--danger); }
+
+/* Status text mixes in --text: straight --success is 3.2:1 on a light surface. A toast's fill is
+   opaque since it floats over anything. */
+.alert-error, .toast-success, .toast-error, .svc-account-pill.is-ok, .svc-account-pill.is-fail,
+.svc-account-test-result.is-ok, .svc-account-test-result.is-fail, .contact-scopes-error,
+.calendar-sidebar-error, .message-row-draft, .contact-editor-photo-error, .compose-attachment-error,
+.invitation-card-badge.is-cancel, .invitation-card-error, .invitation-card .btn-danger,
+.message-row-priority.is-high, .recipient-token.is-invalid, .row-tag.is-warn {
+  color: color-mix(in oklab, var(--status-tone) 55%, var(--text));
 }
-
-/* ── Header ──────────────────────────────────────────────── */
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 28px;
-}
-
-.header-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.header-sub {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.header-greeting {
-  font-size: 13px;
-  color: var(--text);
-  margin-top: 6px;
-  font-weight: 500;
+.alert-error, .toast-success, .toast-error {
+  background: color-mix(in oklab, var(--status-tone) 12%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--status-tone) 30%, var(--surface));
 }
 
 /* ── Domain toolbar ─────────────────────────────────────── */
@@ -434,7 +396,7 @@ body {
 
 .alpha-nav-letter:hover {
   background: var(--action-primary);
-  color: #fff;
+  color: var(--action-primary-fg);
 }
 
 .alpha-nav-letter.is-active {
@@ -521,7 +483,7 @@ body {
 
 .alias-tile-delete:hover:not(:disabled) {
   color: var(--danger);
-  background: #fef2f2;
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 
 .alias-tile-delete:disabled {
@@ -562,7 +524,7 @@ body {
   text-transform: none;
   letter-spacing: normal;
   white-space: nowrap;
-  color: var(--danger);
+  --status-tone: var(--danger);
   border-color: var(--danger);
 }
 
@@ -610,69 +572,6 @@ body {
 
 
 /* ── Avatar & account panel ──────────────────────────────── */
-
-.avatar-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  font-family: var(--font);
-  letter-spacing: 0.05em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.15s;
-}
-
-.avatar-btn:hover {
-  background: rgba(255, 255, 255, 0.35);
-}
-
-.panel-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99;
-  background: rgba(0, 0, 0, 0.35);
-  animation: fade-in 0.22s ease-out;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.account-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  height: 100vh;
-  width: 280px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  padding: 28px 20px;
-  gap: 20px;
-  animation: panel-slide-in 0.22s ease-out;
-}
-
-@keyframes panel-slide-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
 
 .panel-fullname-row {
   display: flex;
@@ -736,20 +635,21 @@ body {
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
+/* Straight --success is under 3:1 on the light page ground; a fifth of --text brings it past. */
 .panel-fullname-confirm {
-  color: #16a34a;
-  border-color: #16a34a33;
+  color: color-mix(in oklab, var(--success) 80%, var(--text));
+  border-color: color-mix(in oklab, var(--success) 20%, transparent);
 }
 .panel-fullname-confirm:hover:not(:disabled) {
-  background: #16a34a18;
+  background: color-mix(in oklab, var(--success) 9%, transparent);
 }
 .panel-fullname-cancel {
   color: var(--text-muted);
 }
 .panel-fullname-cancel:hover:not(:disabled) {
-  color: #dc2626;
-  border-color: #dc262633;
-  background: #dc262610;
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 20%, transparent);
+  background: color-mix(in oklab, var(--danger) 6%, transparent);
 }
 .panel-fullname-btn:disabled {
   opacity: 0.5;
@@ -783,27 +683,6 @@ body {
   font-size: 12px;
   color: var(--text);
   word-break: break-all;
-}
-
-.panel-subdomains {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.panel-subdomains-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 2px;
-}
-
-.panel-subdomain-item {
-  font-size: 13px;
-  color: var(--text);
-  padding: 4px 0;
 }
 
 .panel-quota {
@@ -845,17 +724,11 @@ body {
 }
 
 .panel-quota-bar.is-warn .panel-quota-bar-fill {
-  background: #d97706;
+  background: var(--warning);
 }
 
 .panel-quota-bar.is-danger .panel-quota-bar-fill {
   background: var(--danger);
-}
-
-.panel-settings {
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  margin-bottom: -12px;
 }
 
 .toggle-row {
@@ -905,7 +778,7 @@ body {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--action-primary-fg);
   transition: transform 0.2s;
 }
 
@@ -927,38 +800,6 @@ body {
   cursor: not-allowed;
 }
 
-.panel-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border-top: 1px solid var(--border);
-  padding-top: 20px;
-  margin-top: 8px;
-}
-
-.panel-link {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-family: var(--font);
-  color: var(--text);
-  text-align: left;
-  padding: 8px 0;
-  transition: color 0.15s;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.panel-link:hover {
-  color: var(--action-primary);
-}
-
-.panel-link-danger:hover {
-  color: var(--danger);
-}
-
 /* The modal contract lives in styles/modal.css. */
 
 /* ── Toasts ──────────────────────────────────────────────── */
@@ -970,7 +811,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 300;
+  z-index: var(--z-toast);
 }
 
 .toast {
@@ -985,17 +826,8 @@ body {
   gap: 10px;
 }
 
-.toast-success {
-  background: #e8f5ec;
-  color: #1e5c30;
-  border: 1px solid #b6dfc2;
-}
-
-.toast-error {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fca5a5;
-}
+.toast-success { --status-tone: var(--success); }
+.toast-error { --status-tone: var(--danger); }
 
 .toast-close {
   background: transparent;
@@ -1038,7 +870,7 @@ body {
 .spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(0,0,0,0.1);
+  border: 2px solid color-mix(in oklab, var(--text) 10%, transparent);
   border-top-color: currentColor;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
@@ -1234,8 +1066,9 @@ body {
 /* The last-test pill: a tinted fill, not the identities page's plain-outline .row-tag.
    Muted by default (the "no call yet" pill) — .is-ok/.is-fail override it. */
 .svc-account-pill { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex: none; color: var(--text-muted); background: color-mix(in oklab, var(--text-muted) 12%, transparent); }
-.svc-account-pill.is-ok { color: var(--success); background: color-mix(in oklab, var(--success) 12%, transparent); }
-.svc-account-pill.is-fail { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
+.svc-account-pill.is-ok { --status-tone: var(--success); }
+.svc-account-pill.is-fail { --status-tone: var(--danger); }
+.svc-account-pill.is-ok, .svc-account-pill.is-fail { background: color-mix(in oklab, var(--status-tone) 12%, transparent); }
 
 /* The card's own width, not the window's: a tablet's settings column squeezed the login to 8 lines.
    The slot holds the card alone, so no dialog's fixed overlay sits inside this container. */
@@ -1257,8 +1090,8 @@ body {
    `.alert-error` still applies to a save refusal, which blocks the whole form. */
 .svc-account-test-result { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; max-width: 56ch; font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
 .svc-account-test-result svg { flex: none; }
-.svc-account-test-result.is-ok { color: var(--success); }
-.svc-account-test-result.is-fail { color: var(--danger); }
+.svc-account-test-result.is-ok { --status-tone: var(--success); }
+.svc-account-test-result.is-fail { --status-tone: var(--danger); }
 
 /* Pushes Tester to the leading edge of .folder-pick-submit's flex-end row (the dialog footer)
    instead of a second copy of that row's own layout and phone stacking (mail.css). */
@@ -1319,7 +1152,7 @@ body {
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: var(--z-combo);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1372,12 +1205,12 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* Every text box in a field row, named by what it is not: an allowlist of types rotted twice —
-   number, then tel — each falling through to the browser's own box beside the host above it.
-   The exclusions sit in :where() so this stays at .field-h input, under every deliberate
-   override below (.quota-field's narrow number box wins on specificity, as it did before). */
+/* Every text box in a field row, named by what it is not: an allowlist of types rotted twice
+   (number, then tel), each falling through to the browser's own box. The exclusions sit in
+   :where() so this stays at .field-h input, under every deliberate override below. */
 :is(.field-h, .field-v) input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
 :is(.field-h, .field-v) select,
+.field-h textarea,
 .field-v textarea {
   flex: 1;
   border: 1px solid var(--border);
@@ -1393,9 +1226,12 @@ body {
 
 :is(.field-h, .field-v) input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
 :is(.field-h, .field-v) select:focus,
+.field-h textarea:focus,
 .field-v textarea:focus {
   border-color: var(--action-primary);
 }
+
+:is(.field-h, .field-v) textarea { min-height: 80px; resize: vertical; }
 
 .field-h input:disabled,
 .field-h select:disabled {
@@ -1449,36 +1285,15 @@ body {
 }
 
 [data-theme="dark"] .page-center::before {
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--scrim);
 }
 
 [data-theme="dark"] .card {
-  background: rgba(39, 45, 56, 0.88);
-}
-
-[data-theme="dark"] .alert-error {
-  background: #2d1515;
-  border-color: #7f1d1d;
-}
-
-[data-theme="dark"] .alias-tile-delete:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--danger) 10%, transparent);
-}
-
-[data-theme="dark"] .toast-success {
-  background: #0d2b16;
-  color: #4ade80;
-  border-color: #166534;
-}
-
-[data-theme="dark"] .toast-error {
-  background: #2d1515;
-  color: #fca5a5;
-  border-color: #7f1d1d;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
 }
 
 [data-theme="dark"] .spinner {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: color-mix(in oklab, var(--text) 12%, transparent);
   border-top-color: currentColor;
 }
 
@@ -1535,27 +1350,6 @@ body {
   top: -2px;
 }
 
-.last-login-never {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-/* ── Theme selector ──────────────────────────────────────── */
-
-.theme-select {
-  font-family: var(--font);
-  font-size: 12px;
-  color: var(--text);
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 3px 6px;
-  cursor: pointer;
-  flex-shrink: 0;
-  appearance: auto;
-}
-
 /* ── Admin modal help tooltip ────────────────────────────── */
 
 .admin-modal-help {
@@ -1588,26 +1382,6 @@ body {
   color: var(--action-primary);
 }
 
-/* ── Back button ─────────────────────────────────────────────  */
-
-.back-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  opacity: 0.85;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
-}
-
-.back-btn:hover {
-  opacity: 1;
-}
-
 /* ── Provider badge ──────────────────────────────────────────  */
 
 .provider-badge {
@@ -1622,38 +1396,6 @@ body {
   color: var(--action-primary);
   letter-spacing: 0.03em;
   flex-shrink: 0;
-}
-
-/* ── Rules tabs ──────────────────────────────────────────────  */
-
-.rules-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid var(--border);
-  margin-bottom: 20px;
-}
-
-.rules-tab {
-  background: none;
-  border: none;
-  font-size: 14px;
-  font-family: var(--font);
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 8px 18px;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.rules-tab:hover {
-  color: var(--text);
-}
-
-.rules-tab.is-active {
-  color: var(--action-primary);
-  border-bottom-color: var(--action-primary);
 }
 
 /* ── Rules toolbar ───────────────────────────────────────────  */
@@ -1762,7 +1504,7 @@ body {
 
 .rule-help-dl code {
   font-size: 12px;
-  background: var(--surface-alt, rgba(0,0,0,0.05));
+  background: var(--surface-sunken);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -1847,6 +1589,8 @@ body {
   color: var(--text);
   line-height: 1.7;
 }
+
+.rules-notice-delete { padding: 9px 16px; font-size: 14px; }
 
 /* ── Rule card ───────────────────────────────────────────────  */
 
@@ -1958,8 +1702,8 @@ body {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #fff;
-  background: #6b7280;
+  color: var(--surface);
+  background: var(--text-muted);
   border-radius: 3px;
   padding: 1px 5px;
   flex-shrink: 0;
@@ -1967,28 +1711,6 @@ body {
 }
 
 /* ── Rule editor modal ───────────────────────────────────────  */
-
-.rule-editor-section {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px;
-  margin-bottom: 12px;
-}
-
-.rule-editor-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.rule-editor-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 
 .rule-editor-add-btn {
   background: none;
@@ -2061,37 +1783,6 @@ body {
   border-color: var(--action-primary);
 }
 
-/* ── Raw script editor ───────────────────────────────────────  */
-
-.raw-editor-wrap {
-  display: flex;
-  flex-direction: column;
-}
-
-.raw-textarea {
-  width: 100%;
-  min-height: 420px;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  outline: none;
-  resize: vertical;
-  transition: border-color 0.15s;
-}
-
-.raw-textarea:focus {
-  border-color: var(--action-primary);
-}
-
-[data-theme="dark"] .raw-textarea {
-  background: #1a1f2e;
-}
-
 /* ── Rules page body ─────────────────────────────────────────  */
 
 .rules-modal-body {
@@ -2131,7 +1822,7 @@ body {
   height: 28px;
   border-radius: 50%;
   background: var(--action-primary);
-  color: #fff;
+  color: var(--action-primary-fg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2291,841 +1982,16 @@ body {
 }
 .colour-grid-cell { display: flex; }
 
-/* ── Contacts module ───────────────────────────────────────────────────────────
-   Three band-stack columns inside the shell's single content area, the same
-   arrangement the mail module uses. min-height: 0 on the scrolling band is what
-   keeps the pinned heading pinned. */
-.contacts-layout { display: flex; height: 100%; min-height: 0; overflow: hidden; }
-
-.contacts-scopes-column {
-  width: 240px; flex: none; display: flex; flex-direction: column; min-height: 0;
-  overflow: hidden; background: var(--folders-bg); border-right: 1px solid var(--border);
-}
-/* The top row is `.column-actions`, shared with the mail folder column rather than transcribed
-   from it. Import and export used to be two filled buttons across the foot of this column — the
-   heaviest pair in it after Add contact, for the two rarest actions in the module, and a footer
-   shape nothing else in the app wears. There is no footer band any more; the column ends on the
-   scopes. */
-.contacts-scopes-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 8px; }
-
-.contact-scopes { display: flex; flex-direction: column; gap: 2px; }
-.contact-scope {
-  display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px;
-  border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer;
-  color: var(--text); font: inherit; font-size: 13px; text-align: left;
-}
-.contact-scope:hover { background: var(--folders-item-hover); }
-/* Fill and weight, no accent bar: the navigation language. */
-.contact-scope.is-active {
-  background: var(--pane-item-active-bg); color: var(--pane-item-active-fg); font-weight: 600;
-}
-/* `.folder-line.drop-ready .folder-row`, transcribed onto the scope row. Louder than `is-active`
-   on purpose: the scope you are already in must read as excluded, not as a target. The label is a
-   custom property because it is translated — a stylesheet's `content` cannot be. */
-.contact-scope.drop-ready {
-  background: color-mix(in oklab, var(--badge-count-bg) 16%, transparent);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: inset 0 0 0 2px var(--badge-count-bg);
-}
-.contact-scope.drop-ready::after {
-  content: var(--drop-label, '');
-  margin-left: auto; flex: none;
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--badge-count-bg);
-}
-.contact-scope-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.contact-scope-count { flex: none; color: var(--text-muted); font-size: 12px; }
-.contact-scope.is-active .contact-scope-count { color: inherit; }
-
-/* The Groups heading carries the « + », kept out of `.column-actions`, whose width is measured
-   to the pixel for a French label. */
-.contact-scopes-groups-header {
-  display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; padding: 0 10px;
-  color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-/* A heading rather than a bare label: the section is a structure a screen reader can reach,
-   and `font: inherit` keeps the band's own type against the h2's UA size. */
-.contact-scopes-groups-header > h2 { flex: 1; min-width: 0; margin: 0; font: inherit; }
-.contact-scopes-add {
-  flex: none; padding: 0 4px; border: 0; background: none; cursor: pointer;
-  color: var(--text-muted); font: inherit; font-size: 17px; font-weight: 400; line-height: 1;
-}
-.contact-scopes-add:hover { color: var(--icon-hover-accent); }
-/* A refused list says so: a Groups section that is merely empty claims the account has none. */
-.contact-scopes-error { margin: 0; padding: 2px 10px 6px; color: var(--danger); font-size: 12px; }
-/* A group row is the scope row plus its own menu: the row takes the width, the kebab sits at its
-   end. Drawn rather than hover-revealed — on a touch tablet a hover reveal is unreachable. */
-.contact-scope-row { display: flex; align-items: center; }
-.contact-scope-row .contact-scope { flex: 1; min-width: 0; }
-.contact-scope-row .dropdown-root { flex: none; }
-
-.contacts-row { flex: 1; display: flex; min-width: 0; min-height: 0; overflow: hidden; }
-.contacts-list, .contacts-card, .contacts-editor {
-  display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface);
-}
-.contacts-list { flex: none; }
-/* Hidden rather than unmounted where the card takes the screen — see ContactsLayout, and
-   .mail-list.is-hidden, which exists for the identical reason. */
-.contacts-list.is-hidden { display: none; }
-/* Both are `tabIndex={-1}` region targets, never tab stops — .mail-list's rule. */
-.contacts-list:focus, .contacts-scopes-column:focus { outline: none; }
-.contacts-card { flex: 1; min-width: 0; }
-.contacts-editor { flex: 1; min-width: 0; }
-.contacts-empty { margin: 0; padding: 20px; color: var(--text-muted); font-size: 13px; text-align: center; }
-
-/* The heading band is SelectionBand now (styles/selection.css); these two are what the list puts
-   in its centre slot. */
-.contacts-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
-.contacts-search .search-input { flex: 1; min-width: 0; }
-.contacts-search svg { flex: none; color: var(--text-muted); }
-.contacts-count { flex: none; color: var(--text-muted); font-size: 12px; }
-
-/* The list column speaks the message list's language rather than the page-tile one: rows run edge
-   to edge, separated by a hairline instead of standing apart as cards. A gap, a radius and a
-   surrounding border are what a tile on a *page* wears, where the list is one block among others;
-   in a column beside a detail pane they only spend width and vertical rhythm the rows want. */
-.contacts-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
-.contact-tiles { display: flex; flex-direction: column; }
-
-/* Positioned for the action cluster below, which is taken out of the flow like the message row's.
-   The left padding is a gutter reserved permanently for the checkbox, exactly as
-   `.message-row:not(.is-line)` reserves 34px: revealing the box on hover must never shove the
-   name sideways. */
-.contact-tile {
-  position: relative;
-  border: none; border-bottom: 1px solid var(--list-separator); background: var(--surface);
-  padding: 8px 12px 8px 34px; cursor: pointer;
-}
-/* Content-row language throughout, the message row's own: the hover fill on hover, the selected
-   fill plus an inset accent bar when picked. Never a bare fill — that is what a navigation pane
-   wears. The tile idiom's border-accent-plus-ring hover is for a list on a *page*, where no row is
-   ever picked; on a column that carries a selection it painted the two states nearly alike, the
-   picked tile and the one under the cursor both ringed in the accent. */
-.contact-tile:hover { background: var(--list-row-hover); }
-.contact-tile.is-selected {
-  background: var(--list-row-selected-bg); color: var(--list-row-selected-fg);
-  box-shadow: inset 3px 0 0 var(--accent-unread);
-}
-/* `.message-row-check`, to the declaration: hidden and inert at rest, centred over the gutter so
-   it stays centred whatever the tile's height, pinned once a selection stands. */
-.contact-tile-check {
-  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-  width: 16px; height: 16px; margin: 0;
-  accent-color: var(--action-primary); cursor: pointer;
-  opacity: 0; pointer-events: none;
-}
-.contact-tile:hover .contact-tile-check,
-.contact-tile:focus-within .contact-tile-check,
-.contact-tiles.has-selection .contact-tile-check,
-.contact-tile-check:checked { opacity: 1; pointer-events: auto; }
-
-/* Three of the four cells hold nothing in the flow — the box, the star and the cluster are all
-   positioned over the tile — so the skin is the content cell's alone and costs what it did. The
-   star's sits where the name's line already ended it: 26px of button against the content edge. */
-.contact-tile-flag { position: absolute; right: 12px; top: 8px; }
-
-/* Dimmed while it rides the cursor: the pill is the thing being moved, the tile is its origin. */
-.contact-tile.is-dragging { opacity: 0.45; }
-
-/* The star left this line's flex flow for a cell of its own, and the line was as tall as the 26px
-   button: measured, without the floor the line is 15px and every tile loses 11. The reserve
-   replaces the button plus the 7px gap it closed the line with — 334px of name, back to 301. */
-.contact-tile-line {
-  display: flex; align-items: center; min-width: 0;
-  min-height: 26px; padding-right: 33px;
-}
-.contact-tile-name {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-weight: 700; font-size: 13px;
-}
-
-/* One control size across the row, and it is `.row-btn`'s: a 26px box around an 18px glyph. The
-   row carried three — an 18px star on a 14px glyph, beside 28px action buttons on 16px ones — and
-   the star, the smallest, is the one control the tile draws at rest. The sizes are declared here
-   rather than by borrowing `.row-btn` itself: `.contact-star` also dresses the card and the
-   editor, where it is a form control at its own size, and `.admin-icon-btn`'s 16px svg rule
-   (0,1,1) beats a width attribute, so the glyph has to be overridden from a longer selector. */
-.contact-tile .contact-star,
-.contact-tile-actions .admin-icon-btn {
-  width: 26px; height: 26px; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.contact-tile .contact-star svg,
-.contact-tile-actions .admin-icon-btn svg { width: 18px; height: 18px; }
-/* The message row's cluster, to the pixel: out of the flow on the bottom-right corner, over the
-   last line present, and flush with the row's content edge. Out of the flow is what lets the name
-   keep the whole first line — reserving a slot beside it spent the width permanently for a control
-   that is only ever there under the cursor. */
-.contact-tile-actions {
-  position: absolute; right: 12px; bottom: 4px;
-  display: flex; gap: 2px; visibility: hidden;
-}
-.contact-tile:hover .contact-tile-actions,
-.contact-tile:focus-within .contact-tile-actions { visibility: visible; }
-
-/* The address is the line the cluster covers, so it ends in an ellipsis instead of running under
-   the buttons. Two 26px buttons and their 2px gap come to 54, plus 6px of air — the message row's
-   own arithmetic, and its own number for two buttons, now that the row draws one control size.
-   Unlike the message row's, the count is fixed: edit and delete, never a choice. */
-.contact-tile:hover .contact-tile-address,
-.contact-tile:focus-within .contact-tile-address { padding-right: 60px; }
-
-/* The grid's one tab stop may sit on a cluster button, and a hidden button is focusable by nothing
-   — the whole list would be unreachable by Tab. Specificity rather than order: the touch block and
-   the phone block below restate these selectors at (0,3,0) and (0,1,0) and both sit later. */
-.contact-tile:has(.contact-tile-actions .admin-icon-btn[tabindex="0"]) .contact-tile-actions {
-  visibility: visible; display: flex;
-}
-.contact-tile:has(.contact-tile-actions .admin-icon-btn[tabindex="0"]) .contact-tile-address {
-  padding-right: 60px;
-}
-
-.contact-star {
-  flex: none; display: inline-flex; padding: 2px; border: 0; background: transparent;
-  cursor: pointer; color: var(--text-muted);
-}
-.contact-star:hover { color: var(--icon-hover-accent); }
-.contact-star.is-on { color: var(--badge-count-bg); }
-
-.contact-tile-address {
-  /* min-height must reserve a full line even when empty, so tiles without an address don't shrink.
-     No left indent: the star left the head of the line for its right end, so the name starts at the
-     tile's own content edge and the address lines up under it — as the subject does under the
-     sender. */
-  line-height: 1.5; min-height: 1.5em; color: var(--text-muted); font-size: 12px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.contact-tile.is-selected .contact-tile-address { color: inherit; opacity: .8; }
-
-.contact-card { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-.contacts-card-invite { margin: auto; }
-
-/* The band the identity sits against, in the tone the editor's form area wears — the same step
-   below the sheet, so the fiche and the editor read as one screen in two states.
-
-   It took --topbar-bg first, the app's dark L. That failed for a reason no palette file could
-   show: this column sits directly under the topbar, so the two dark bands ran together into one
-   thick header and the card lost its own top edge. The rule is about what it is adjacent to, not
-   about the colour being wrong. */
-.contact-card-banner {
-  flex: none; height: 96px;
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 12px 14px;
-  background: var(--surface-sunken); border-bottom: 1px solid var(--border);
-}
-/* .reader-back's box, and it is only ever drawn where the card has replaced the list. It grows to
-   the touch floor as a painted box rather than a pseudo hit area, unlike the reader's: nothing
-   here sits inline with wrapping text, so there is no baseline to keep. */
-.contact-card-back {
-  flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; padding: 0;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: none; color: var(--text-muted); cursor: pointer;
-}
-.contact-card-back:hover { background: var(--list-row-hover); color: var(--text); }
-/* No foreground override for the cluster: the band is a sheet tone, so the star and the icon
-   buttons wear here exactly what they wear on the tile. The overrides this replaced existed only
-   to survive a coloured ground, and one of them was load-bearing — on --topbar-bg the favourite's
-   --badge-count-bg measured 1.00:1 in the classic palette, the same colour as the band. Worth
-   remembering before anyone tints this band again. */
-
-/* The avatar straddles the band's lower edge — half on the colour, half on the sheet — which is
-   what ties the two together. The ring is the sheet's own colour rather than a border token, so
-   the disc reads as cut out of the page instead of outlined on it.
-
-   The identity and the quick row are bands of the card, not content inside its scroller, and that
-   is what makes the overlap possible at all: `.contact-card-body` is `overflow-y: auto`, so the
-   disc's negative margin was clipped flat against the scroller's top edge — half a disc, measured
-   in the browser. It also puts this column back under the house rule every other one follows —
-   one scrolling band, the rest `flex: none` — so the name stays on screen while the data scrolls. */
-.contact-card-identity { flex: none; padding: 0 22px; }
-.contact-card-avatar {
-  display: block; width: 84px; height: 84px; border-radius: 50%;
-  margin-top: -42px; object-fit: cover;
-  border: 4px solid var(--surface); background: var(--surface-sunken);
-}
-.contact-card-avatar.is-initials,
-.contact-card-avatar.is-blank { display: grid; place-items: center; }
-.contact-card-avatar.is-initials {
-  background: var(--action-primary); color: var(--action-primary-fg);
-  font-size: 29px; font-weight: 600; letter-spacing: .02em;
-}
-.contact-card-avatar.is-blank { color: var(--text-muted); }
-/* A contact with no name falls back to its address (`displayNameOf`), which is one unbreakable
-   word, and `.contacts-card` is overflow:hidden — so the tail used to be cut off rather than
-   wrapped. `break-word` and not `anywhere`: only the second feeds its break points into
-   min-content sizing, and this box is sized from exactly that. */
-.contact-card-name {
-  margin: 12px 0 0; min-width: 0; overflow-wrap: break-word;
-  font-size: 23px; font-weight: 700; letter-spacing: -.015em; color: var(--text);
-}
-/* What situates somebody, in the block that names them rather than in a row among the phone
-   numbers. Both arrive with the detail, so both appear a beat after the name. */
-.contact-card-role { margin: 4px 0 0; font-size: 14px; font-weight: 500; color: var(--text); }
-.contact-card-org { margin: 1px 0 0; font-size: 13.5px; color: var(--text-muted); }
-
-/* The two links the rows already carry, promoted to where the eye lands after the name. */
-.contact-card-quick { flex: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 22px 0; }
-/* Write is a <button> — it opens a route, not a URL — while Call and Directions stay <a>. The
-   reset is what lets one rule dress both: a bare <button> otherwise brings the platform's own
-   border and font and sits a pixel off its neighbours. */
-.contact-quick-btn {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 14px; border: 0; border-radius: var(--radius-sm);
-  font: inherit; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer;
-  background: var(--action-primary); color: var(--action-primary-fg);
-}
-.contact-quick-btn:hover { background: var(--action-primary-hover); }
-.contact-quick-btn.is-ghost {
-  background: none; color: var(--text); border: 1px solid var(--border);
-}
-.contact-quick-btn.is-ghost:hover { background: var(--list-row-hover); }
-
-/* The groups holding this contact — chips rather than a row, since there is no rank between them
-   the way there is between addresses. Each × leaves that one group without a dialog: the
-   membership it drops is what a drag restores, never data lost the way deleting the contact is. */
-.contact-card-groups {
-  flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 22px 0;
-}
-.contact-group-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 4px 3px 10px; border-radius: 12px;
-  background: var(--surface-sunken); color: var(--text); font-size: 12px;
-}
-.contact-group-chip button {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
-  background: none; color: var(--text-muted); font-size: 11px; line-height: 1; cursor: pointer;
-}
-.contact-group-chip button:hover { background: var(--list-row-hover); color: var(--text); }
-
-.contact-card-body { flex: 1; min-height: 0; overflow-y: auto; }
-.contact-card-rows { display: grid; gap: 16px; padding: 22px; }
-.contact-card-row { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 16px; }
-/* The icon is the one the editor's own section heading wears for that family, so the two screens
-   name one family one way. `flex: none` on the glyph: the label column is fixed, and a shrinking
-   icon is what turns a set of aligned rows into a ragged one. */
-.contact-card-label {
-  display: flex; align-items: center; gap: 7px; padding-top: 2px;
-  color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-}
-.contact-card-label svg { flex: none; }
-.contact-card-values { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.contact-card-value { font-size: 13px; color: var(--text); min-width: 0; overflow-wrap: break-word; }
-/* The type the card stores and the editor lets you pick — Mobile, Domicile, Bureau — which this
-   screen used to drop, leaving three numbers as three indistinguishable lines. */
-/* nowrap on both badges: `.contact-card-value` carries `overflow-wrap: break-word` for the long
-   unbroken addresses this book is full of, and an inline child inherits it — so on a 360px screen
-   PRINCIPALE broke after PRI and finished on the next line. The value still breaks; its badges
-   move whole to the next line instead. */
-.contact-card-type {
-  margin-left: 8px; padding: 1px 7px; border-radius: 10px; white-space: nowrap;
-  background: var(--surface-sunken); color: var(--text-muted);
-  font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-}
-/* A postal address is several lines inside one value: an envelope, not a run of fields. Scoped to
-   `.is-postal` rather than every `.contact-card-value > span` — the e-mail row's `<a>` plus
-   `.contact-card-primary` badge are the same shape, and an unscoped rule out-specifies
-   `.contact-card-primary` and forces the badge onto its own line. */
-.contact-card-value.is-postal > span { display: block; }
-/* The type chip is the one child of a postal value that is not a line of the envelope. Without
-   this it inherits `display: block` above and stretches the full column — a grey bar, measured in
-   the browser. Three parts of specificity against that rule's two-plus-an-element, so it wins;
-   and its left margin goes, since it opens a line here instead of trailing a value. */
-.contact-card-value.is-postal > .contact-card-type {
-  display: inline-block; margin: 0 0 3px;
-}
-.contact-card-value a, .contact-card-link {
-  color: var(--action-primary); text-decoration: none;
-}
-.contact-card-value a:hover, .contact-card-link:hover { text-decoration: underline; }
-/* The address row's button reset: it wears the same link colour as the website row, with none of
-   a <button>'s own chrome, since an address is a link the card renders as a button on purpose
-   (Write opens the composer, never mailto:) rather than a control that happens to look like one. */
-.contact-card-link {
-  background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
-  max-width: 100%; text-align: start;
-}
-.contact-card-link:focus-visible {
-  outline: 2px solid var(--action-primary); outline-offset: 2px;
-}
-.contact-card-primary {
-  margin-left: 8px; color: var(--text-muted); font-size: 10px; text-transform: uppercase;
-  letter-spacing: .04em; white-space: nowrap;
-}
-
-/* In the head beside the name, not a band under the card. `margin-left: auto` rather than a
-   `flex: 1` on the name: a contact with no name falls back to its address, and growing that h2 to
-   fill the row is what would let it push the cluster off the edge instead of wrapping. */
-.contact-card-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; }
-
-.contact-editor-form { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-.contact-editor-head {
-  flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
-}
-.contact-editor-title {
-  margin: 0; flex: none; display: flex; align-items: center; gap: 8px; font-size: 16px;
-  font-weight: 700; color: var(--text);
-}
-/* Actions sit against the title rather than at the header's far edge, the same reasoning as the
-   composer's header (see mail.css .compose-header .modal-title::after); only ✕ keeps that edge. */
-.contact-editor-title::after {
-  content: '';
-  width: 1px;
-  height: 20px;
-  margin-left: 14px;
-  background: var(--border);
-}
-.contact-editor-head .modal-close { margin-left: auto; }
-/* .btn-primary's 100% width is right inside a dialog, where it is the form's only control; a
-   header button has to size to its label instead, like the composer's Send. */
-.contact-save-btn { width: auto; padding: 8px 14px; margin-left: 4px; }
-/* The form is bounded rather than full-bleed: four fields spread across a 900px column read as a
-   page that failed to load, not as a form. */
-/* The scroller is the whole pane, so its bar rides the window's edge. No padding and no width cap
-   of its own: the hero and the two columns carry their own insets, and a 524px cap in a 1167px
-   pane is what made this form read as cramped. */
-.contact-editor-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-}
-.contact-editor-body > .alert { margin: 18px 28px 0; }
-
-/* What identifies the contact, before the ways of reaching them: the split the reader draws
-   between a message's envelope and its body. The band is the crest here and the form below it the
-   trough — --surface is the lightest step in every palette, so the band keeps it and the tint goes
-   under. The reader marks that same boundary with a rule and no fill; the two modules draw one
-   boundary two ways for now, deliberately. */
-.contact-editor-hero {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  padding: 24px 28px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.contact-editor-avatar {
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex: none;
-}
-
-/* Same box in create mode, so the hero's height does not jump between the two modes and the name
-   fields stay where the eye left them. */
-/* Initials while the card carries no picture — the same disc, so the hero never changes height.
-   The icon is the last resort, for a create with nothing typed yet. */
-.contact-editor-avatar.is-initials,
-.contact-editor-avatar.is-blank {
-  display: grid;
-  place-items: center;
-}
-
-.contact-editor-avatar.is-initials {
-  background: var(--action-primary);
-  color: var(--action-primary-fg);
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.contact-editor-avatar.is-blank {
-  background: var(--surface-sunken);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-
-.contact-editor-face {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-}
-
-/* The avatar is the picker: a bare disc until it is hovered or focused, so nothing competes with
-   the face itself. */
-.contact-editor-avatar-button {
-  display: block;
-  padding: 0;
-  border: none;
-  background: none;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.contact-editor-avatar-button:hover .contact-editor-avatar,
-.contact-editor-avatar-button:focus-visible .contact-editor-avatar {
-  outline: 2px solid var(--action-primary);
-  outline-offset: 2px;
-}
-
-.contact-editor-photo-remove {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.contact-editor-photo-error {
-  margin: 0;
-  max-width: 140px;
-  color: var(--danger);
-  font-size: 12px;
-  text-align: center;
-}
-
-.contact-editor-identity {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 20px;
-}
-
-/* The two columns are one sheet split in two, so they run to the foot of the pane together rather
-   than each stopping at its own content height. */
-.contact-editor-cols {
-  display: grid;
-  grid-template-columns: 1.05fr 1fr;
-  flex: 1;
-  min-height: 0;
-}
-
-/* The step is horizontal, not vertical: both columns take the same tint, so the form is one
-   surface under the hero rather than two halves of unequal rank. Tinting one column alone put the
-   step on the vertical split — and its tint sat in the same family as the groups column next door,
-   which is what made the two read as the same surface. Watch the floor: --surface-sunken and --bg
-   are two points apart in the light palettes, and nothing here lets them meet only because the
-   columns cover .contact-editor-body whole. */
-.contact-editor-col {
-  padding: 26px 28px 34px;
-  background: var(--surface-sunken);
-  display: grid;
-  gap: 26px;
-  align-content: start;
-  min-width: 0;
-}
-
-/* The two halves are the same surface now, so the rule is what separates them. */
-.contact-editor-col.is-aside {
-  border-left: 1px solid var(--border);
-}
-
-/* The label above its control, not beside it. That is what frees the 110px .field-h reserves on
-   the left and lets two fields share a line — the whole reason this form has room now. */
-.field-v { display: grid; gap: 6px; min-width: 0; }
-
-/* A section title carries its icon; a plain field label does not, so the gap costs nothing where
-   there is no icon to sit beside. */
-.field-v > label,
-.field-v-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* A section title, not a field label: it names a whole group, so it takes the accent and a heavier
-   weight while the labels under it stay muted. */
-.field-v-label {
-  color: var(--action-primary);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.field-v-label > svg { flex: none; }
-
-/* Street takes what is left and the type sizes to its own widest option; the postcode is the one
-   box that must not grow, a code being shorter than the town beside it. Both selectors carry the
-   row's class on purpose: alone they are 0,1,0 and lose to `.field-v select` and to
-   `.contact-postal-row > input`, which is how all four boxes came out the same width. */
-.contact-postal-row .contact-postal-type { flex: none; }
-.contact-postal-row .contact-postal-short { flex: 0 0 110px; }
-.field-h textarea,
-.field-v textarea {
-  flex: 1; min-height: 80px; resize: vertical; border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 9px 12px; font-size: 14px; font-family: var(--font);
-  color: var(--text); background: var(--surface); outline: none; transition: border-color 0.15s;
-}
-.field-h textarea:focus,
-.field-v textarea:focus { border-color: var(--action-primary); }
-.contact-address-list { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.contact-address-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.contact-address-row input { flex: 1; min-width: 0; }
-.contact-address-primary {
-  flex: none; color: var(--action-primary); font-size: 10px; text-transform: uppercase;
-  letter-spacing: .04em;
-}
-.contact-address-add {
-  align-self: flex-start; border: 0; background: transparent; padding: 2px 0; cursor: pointer;
-  color: var(--action-primary); font: inherit; font-size: 12px;
-}
-.contact-address-add:hover { text-decoration: underline; }
-.contact-address-row select { flex: none; }
-/* The email rows share their columns, so the primary's label and another row's tick
-   leave every address box the same width. */
-.contact-address-list:has(> .is-email) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
-.contact-address-row.is-email { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
-.contact-address-row.is-email .contact-address-primary { justify-self: center; }
-.contact-address-list:has(> .is-email) > .contact-address-add { grid-column: 1 / -1; justify-self: start; }
-
-/* One postal address: the type row on the .contact-address-row pattern, then its RFC 6350
-   components on their own grid rows — gap, never per-element margins. */
-.contact-postal-item {
-  display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-.contact-postal-item:last-child { border-bottom: 0; padding-bottom: 0; }
-/* Flex, not a 1fr 1fr grid: the street shares its line with the type select and the bin, which a
-   two-track grid could only do by wrapping them onto a line of their own. */
-.contact-postal-row { display: flex; align-items: center; gap: 6px; }
-.contact-postal-row > input { flex: 1; min-width: 0; }
-.contact-postal-full { flex: 1; }
-
-/* The dropdown is anchored beneath the box, the shape website-design.md prescribes for a
-   combobox. The tokens stay inline in the box rather than becoming chips above it: that is what
-   this field already did, and what every mail client does. The list resets are this field's
-   alone: .ownership-dropdown's other users are <div>s, so it never had to undo the ul defaults. */
-.recipients-field .recipients-box { position: relative; }
-.recipients-field .ownership-dropdown {
-  max-height: 260px; overflow-y: auto; list-style: none; padding: 4px 0;
-}
-.ownership-dropdown-option .suggestion-names { font-weight: 600; }
-.ownership-dropdown-option .suggestion-address { color: var(--text-muted); font-size: 12px; }
-/* The gap belongs between the two, not to the address: a nameless contact's row carries the
-   address alone, and an unconditional margin indented it 8px past every other row. */
-.ownership-dropdown-option .suggestion-names + .suggestion-address { margin-left: 8px; }
-
-.import-counters { display: flex; gap: 8px; margin-bottom: 16px; }
-.import-counter {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 10px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-}
-.import-counter-value { font-size: 18px; font-weight: 600; }
-.import-counter-label { color: var(--text-muted); font-size: 12px; }
-
-.import-errors {
-  max-height: 220px; overflow-y: auto; margin: 0 0 20px; padding: 0 0 0 4px;
-  list-style: none; font-size: 13px;
-}
-.import-errors li { padding: 4px 0; border-bottom: 1px solid var(--border); }
-.import-errors li:last-child { border-bottom: 0; }
-.import-error-line { color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.import-errors-more { color: var(--text-muted); }
-
-@media (max-width: 1023px) {
-  /* The mail module's floating compose button owns this corner below 1024px, and it loses:
-     .toast-container is z-index 300 against its 60, and its 24px inset puts its whole box
-     inside the button's. The toast stack clears the button's top edge instead — the button is
-     56px tall on a 16px inset, so 72px, plus the 8px the stack already puts between toasts. */
-  .toast-container { bottom: 80px; }
-
-  /* A column's primary action becomes the floating button below 1024px: opening a drawer to write
-     a message, to check for new mail or to add a contact is one gesture too many. Refresh moves
-     into the list toolbar's kebab, which MessageList adds under this same condition (`inDrawer`)
-     and nowhere else, so a desktop keeps one Refresh rather than two. */
-  .context-drawer-panel .column-actions { display: none; }
-}
-
-/* There is no hover on a touch screen, and on several touch browsers :hover sticks after a tap,
-   so the tile's action cluster would appear and stay. It is the two REVEALING selectors that have
-   to be named, not the cluster: the base declaration is already `visibility: hidden`, a media
-   query adds no specificity, and a bare .contact-tile-actions (0,1,0) would lose to them (0,2,0).
-   Nothing is lost — a tap opens the card, whose Edit and Delete are at the touch floor.
-
-   `hover`, not a width: this block used to be `@container (max-width: 480px)` over a container
-   `.contacts-list` declared inside the 1023px block, which kept it off a desktop but also let a
-   tablet whose splitter sits past 480px have the cluster back with no way to reach it. Every rule
-   here is about the input device and none is about the column, so nothing is left needing a
-   container and the declaration went with the query. It carries no width, so the two-breakpoint
-   whitelist in styles/responsive.test.ts does not apply to it. */
-@media (hover: none) {
-  .contact-tile:hover .contact-tile-actions,
-  .contact-tile:focus-within .contact-tile-actions { display: none; }
-
-  /* The reserve goes with what it was reserving. The tab stop is a cell inside the tile now, not
-     the tile, but a tap still puts :focus-within on it whether or not the cluster is drawn —
-     leaving the address ending in an ellipsis 64px short of a row with nothing in that corner. */
-  .contact-tile:hover .contact-tile-address,
-  .contact-tile:focus-within .contact-tile-address { padding-right: 0; }
-
-  /* 31px, and the only navigation the contacts drawer holds. The 639px block below floors it
-     through var(--touch) for a narrow window; this reaches the 640-1023px touch tablet, where the
-     token is not declared at all — hence the number spelled out rather than a second declaration
-     of it. Neither condition contains the other, so both rules are live — but what keeps the
-     width-keyed copy alive in practice is probes/mobile-layout.html, which runs in a mouse-driven
-     Chrome where this query never matches: retiring it would drop contacts-drawer from
-     `smallest: 44` to 34 and read as a regression. */
-  .contact-scope { min-height: 44px; }
-
-  /* The two controls the groups section adds to that column, under the same rule and for the same
-     reason: the « + » is a 17px glyph and the row kebab a 14px one. */
-  .contact-scopes-add,
-  .contact-scope-row > .dropdown-root > button { min-width: 44px; min-height: 44px; }
-
-  /* The card's actions are icon buttons in the head from 640px up — 28px and 22px against a
-     finger, on the one tier where `--touch` is not declared at all (a phone draws the band
-     instead, whose cells are 56). Painted boxes rather than `.reader-back`'s inset pseudo: the
-     head has the room, and three adjacent pseudos would steal each other's taps. */
-  .contact-card-actions > button,
-  .contact-card-actions > .dropdown-root > button { min-width: 44px; min-height: 44px; }
-}
+/* ── Phone: forms and lists, shared by the settings pages, the admin tabs and the dialogs ── */
 
 @media (max-width: 639px) {
   /* iOS zooms the page in when a focused field's text is under 16px, and never zooms back out.
      16px on the controls, not on body: the interface keeps its 14px scale. */
   input, select, textarea { font-size: 16px; }
 
-  /* Same clearance against the button in its phone position, which is itself lifted over the
-     57px tab bar: 73px inset plus 56px of button is 129px, plus the same 8px gap. */
-  .toast-container { bottom: 137px; }
-
-  /* The login screen is the one surface a phone meets before anything else, and both boxes were
-     drawn for a desktop window: .page-center's 24px against .card's 32px spends 112px of a 360px
-     screen on padding and its own 1px border, and the fields measured 246px. 16 + 20 measures
-     286 — the two inputs and Sign in are all width: 100%, so every pixel returned here is field.
-     Only LoginPage uses either class, so neither rule can reach another screen. */
-  .page-center { padding: 16px; }
-  .card { padding: 20px; }
-
-  /* The list has the row to itself here, and the splitter's stored width left with the splitter:
-     measured at 320px, the base rule's flex: none then takes the column's 387px max-content and
-     runs 67px past the row. */
-  .contacts-list { flex: 1; }
-
-  /* The card is the whole screen, so its ← is a primary control rather than the reader's inline
-     26px arrow. */
-  .contact-card-back { width: var(--touch); height: var(--touch); }
-  /* The straddle is a desktop flourish and it cannot survive here, because the back arrow only
-     exists on this tier and the band's top-left is exactly where the disc's negative margin puts
-     it: measured on a 360px screen, the two shared x 22..58 and y 40..56, the arrow's whole hit
-     area under an opaque disc. Tuning the offset does not fix it — a 64px disc needs the margin
-     above -16 to clear a 44px arrow, and at -16 there is no straddle left to speak of. So on the
-     phone the band is the arrow's own row and the disc sits under it. The ring goes with the
-     overlap: it exists to cut the disc out of two grounds, and here there is only one. */
-  .contact-card-banner { height: auto; }
-  .contact-card-identity { padding: 0 18px; }
-  .contact-card-avatar {
-    width: 64px; height: 64px; margin-top: 14px; border-width: 0;
-  }
-  .contact-card-avatar.is-initials { font-size: 22px; }
-  .contact-card-name { margin-top: 10px; font-size: 20px; }
-  .contact-card-quick { padding: 14px 18px 0; }
-  .contact-card-rows { padding: 18px; }
-
-  /* 31px on its own 7px padding, and the only navigation the drawer holds. */
-  .contact-scope { min-height: var(--touch); }
-
-  /* The star grows a hit area rather than a painted box — .reader-back's idiom, and for the same
-     reason: at 44px square it would take 18px more of a line the name is already ellipsising, on a
-     tile that is at the floor. The 26x26 button needs 18px on each axis, biased into space no other
-     control claims. Sideways: 12px right is the tile's whole right padding and stops at the column
-     edge, leaving 6px left — under the line's 7px gap, so it never reaches the name. Vertically:
-     8px up is the tile's top padding and 10px down sits over the address line, which is not a
-     target of its own. */
-  .contact-star { position: relative; }
-  /* The skeleton and the editor's own numbers, which is what it was before the tile grew a star of
-     a different size: .contact-editor-body's override below bends the horizontal insets only and
-     reads top/bottom from here, so this rule may not be narrowed to the tile. */
-  .contact-star::before {
-    content: ''; position: absolute; top: -8px; right: -9px; bottom: -18px; left: -17px;
-  }
-  /* The tile's star is the 26px one, so it needs 18px per axis rather than 26. */
-  .contact-tile .contact-star::before { right: -12px; bottom: -10px; left: -6px; }
-
-  /* There is no hover on a touch screen, so the cluster is two 26px buttons no finger can reach —
-     and on several touch browsers :hover sticks after a tap, which would then reveal them
-     permanently. display, not visibility: the base rule and its two :hover/:focus-within reveals
-     all set visibility, so this wins on a different property whatever their specificity. Nothing is
-     lost — a tap opens the card, which carries Edit and Delete at the touch floor above. The
-     address keeps its reserve neutralised by the (hover: none) block, which a phone also matches. */
-  .contact-tile-actions { display: none; }
-
-  /* The label above its control instead of beside it. A 110px label column plus its 16px gap
-     leaves 151px of a 320px screen for an input whose own intrinsic width is ~177px, and
-     .field-h's inputs carry no min-width: 0 — so the box ran past the row rather than shrinking
-     into it: measured, every .field-h clipped by 20px at 320. :first-child rather than
-     label:first-child: the addresses row heads with a .field-h-label span, and the one row that
-     would keep its 110px column is the one holding the longest values. The trimmed padding fixes
-     nothing on its own — the stacking already clears the clip — it returns 8px of a 320px screen
-     to the measure the fields are read in. */
-  .contact-editor-body { padding: 14px; }
-  /* The rotation itself is the global `.field-h` rule further down this block now — the three
-     declarations that used to sit here were byte-identical to it. These two are not: the addresses
-     row heads with a `.field-h-label` span, so the global reset's `label:first-child` never
-     reaches it, and it is the row holding the longest values. */
-  .contact-editor-body .field-h > :first-child { width: auto; }
-  /* stretch is what widens the inputs; the favourite row's control is a 20px star and must not
-     become a full-width slab with a glyph in the corner. */
-  .contact-editor-body .field-h > .contact-star { align-self: flex-start; }
-  /* The tile's insets do not transfer here. This star is 20px rather than 18, and it sits at the
-     content edge of .contact-editor-body, which is overflow-y: auto — so its overflow-x computes
-     to auto too and clips at the padding box 14px away: the tile's 17px left overhang lost 3px
-     and the target measured 41. 14 + 20 + 10 is the same 44 with nothing outside the box. */
-  .contact-editor-body .contact-star::before { right: -10px; left: -14px; }
-
-  /* The header band's three items — title, Save contact, ✕ — measure 312px against the 284px a
-     320px screen leaves inside its 18px padding, and .contacts-editor is overflow: hidden, so the
-     ✕ was cut off rather than scrolled to. Wrapping rather than shrinking the title: at 360 the
-     English row still fits on one line (312 of 324), and where it does not — 320px, or French at
-     any width, which spends 189px on "Modifier le contact" and 163px on "Enregistrer le contact"
-     — the ✕ takes a second line instead of the surface's own name being ellipsised. */
-  .contact-editor-head { flex-wrap: wrap; }
-
-  /* The editor was rebuilt into a hero and two columns after this block was written, and nothing
-     here was told: a 360px screen was splitting into 1.05fr and 1fr, which left each field about
-     150px — the postal row's two boxes then read `Rég` and `Pay`, and the hero's second name
-     column ran off the right edge. One column at this tier, in both places, and the aside's rule
-     turns from vertical to horizontal since there is no longer anything beside it. */
-  .contact-editor-cols { grid-template-columns: 1fr; }
-  .contact-editor-col { padding: 18px 14px 22px; }
-  .contact-editor-col.is-aside { border-left: 0; border-top: 1px solid var(--border); }
-  .contact-editor-identity { grid-template-columns: 1fr; }
-  /* The hero stacks rather than staying a row: beside a 60px disc the name boxes measured 186px
-     of a 332px column, and they are the fields this tier exists to widen. A grid rather than
-     `flex-direction: column` because the disc and the favourite belong on one line — column would
-     have left the star alone on a row of its own. `1 / -1` on the identity is what takes the whole
-     width back. */
-  .contact-editor-hero {
-    display: grid; grid-template-columns: auto 1fr; align-items: center;
-    padding: 18px 14px; gap: 14px;
-  }
-  .contact-editor-hero > .contact-star { justify-self: end; }
-  .contact-editor-identity { grid-column: 1 / -1; }
-  .contact-editor-avatar { width: 60px; height: 60px; }
-  .contact-editor-avatar.is-initials { font-size: 21px; }
-  /* Make-primary and remove-address: 28px squares, and the only way to reorder or drop an address.
-     The input beside them carries min-width: 0, so the width they take comes out of it. */
-  .contact-address-row .admin-icon-btn { min-width: var(--touch); min-height: var(--touch); }
-  /* A 22px text link, and the only way to add a second address. */
-  .contact-address-add { min-height: var(--touch); }
-
-  /* ── Forms and lists, shared by the settings pages, the admin tabs and the dialogs ────────── */
-
-  /* The label above its control rather than beside it. .field-h's inputs carry no min-width: 0,
-     so an input's ~177px intrinsic width is its flex floor, and beside a 110px label column plus
-     a 16px gap that does not fit: measured at 360, every plain .field-h clipped by 38px inside a
-     274px section. gap: 4px is the composer's and the contact editor's own number for the same
-     rotation — the base 16px was the space between a label and the control BESIDE it, and turned
-     sideways it exceeds the 12px between one row and the next. */
+  /* Label above control: .field-h's inputs carry no min-width: 0, so their ~177px intrinsic
+     floor clipped beside a 110px label column (measured, 38px clip at 360). gap: 4px, not the
+     base 16 — that was the beside-label gap, and turned sideways it exceeds row spacing. */
   .field-h { flex-direction: column; align-items: stretch; gap: 4px; }
   /* The reset is not about clipping — 110px never overflows anything — it is about the caption
      wrapping inside a ribbon it no longer needs: measured at 320, "Confirm new password" is two
@@ -3136,10 +2002,9 @@ body {
      rest of this block in place. */
   .admin-list-header { flex-wrap: wrap; gap: 8px; }
 
-  /* Measured at 360: the tile ran 285px past the list. Wrapping alone does not close it — the
-     address is `width: 40ch; flex-shrink: 0`, over 300px before the tile's own padding, so it
-     overflows a line it has to itself. Two pages already carry exactly this pair for themselves
-     (.identity-list, .connected-account-text); here it is the skin's own answer. */
+  /* Measured at 360: the tile ran 285px past the list. Wrapping alone doesn't close it — the
+     address is `width: 40ch; flex-shrink: 0`, over 300px on its own line. Two pages already
+     carried this pair themselves (.identity-list, .connected-account-text); this is the skin's. */
   .admin-list-item { flex-wrap: wrap; }
   .admin-list-item-email { width: auto; max-width: 100%; }
   /* No metric moves for this pair and the row is the same height either way — measured, the
@@ -3150,46 +2015,28 @@ body {
   /* 28px squares, and the only route to editing or deleting a row. */
   .admin-icon-btn { min-height: var(--touch); min-width: var(--touch); }
 
-  /* Measured 39px, and global: login, settings, toolbars, dialogs. It is also the only control on
-     the composer's two dialogs, which carry no ✕ to fall back on. This is what floors
-     the contact card's three actions and .contact-save-btn — both are .btn, and their own rules
-     were dropped as duplicates of this one. */
+  /* Measured 39px, and global: login, settings, toolbars, dialogs — also the only control on
+     the composer's two dialogs, which carry no ✕. This floors the contact card's three actions
+     and .contact-save-btn too; their own duplicate rules were dropped. */
   .btn { min-height: var(--touch); }
 
-  /* Every typed control at the floor, the same breadth as the 16px rule at the head of this block
-     and for a related reason: measured, a .field-h text box is 39px and a select 41px on their
-     9px padding. Checkboxes and radios are out — both are hit through the label around them — and
-     so is the quota range, which is dragged rather than tapped.
-     `input:not([type])` because an attribute selector matches the ATTRIBUTE and not the IDL
-     default: .panel-fullname-input on the Account page ships no `type` at all and stayed at 28px
-     under the list above. The same distinction is why the compose fixtures in
-     probes/mobile-layout.html now carry a real type= — a bare <input /> there hid a regression
-     this rule caused in the recipients box. */
+  /* Every typed control at the floor (measured, 39-41px). Checkboxes/radios are out (hit through
+     their label), so is the quota range (dragged). `input:not([type])`: an attribute selector
+     matches the written attribute, not the IDL default — see CLAUDE.md's geometry paragraph. */
   input:not([type]), input[type="text"], input[type="password"], input[type="email"],
   input[type="number"], input[type="search"], input[type="date"], input[type="time"],
   select, textarea {
     min-height: var(--touch);
   }
 
-  /* How far the switch's hit area bleeds above and below its 20px painted box: 12 + 20 + 12 is
-     the 44. A token rather than a literal because .rule-card-header's row-gap further down is
-     DERIVED from this number — a line wrapping under a switch has to clear the bleed — and two
-     literals would go stale independently the day this one is retuned. Anything else that puts a
-     control on a wrapped line under a .toggle-switch answers to it too. */
+  /* How far the switch's hit area bleeds above/below its 20px box: 12 + 20 + 12 = 44. A token,
+     not a literal: .rule-card-header's row-gap below is DERIVED from it, so two literals would
+     go stale independently. Anything wrapping under a .toggle-switch answers to it too. */
   :root { --toggle-bleed: 12px; }
 
-  /* The painted switch stays 36x20: .toggle-track is `inset: 0`, so growing the box grows the
-     switch itself, and a 44px slab beside a 14px label is not the control this page draws. It
-     takes .reader-back's idiom instead — the bleed above and below, and 8px to the LEFT, make
-     44x44. The 8px is entirely leftward, not 4px each side, and that is measured rather than
-     tidy: a rightward overhang is counted by scrollWidth on every ancestor that does not own the
-     pseudo, and it read 4px of clip on .toggle-row and on .rule-card-header. Leftward overhang is
-     not counted at all in a left-to-right document, and there is somewhere for it to go at all
-     six call sites — .settings-content's 16px padding (GeneralPage, ApplicationTab),
-     .modal's 18px (AddEditUserModal), .admin-list-item's 12px (FolderManager),
-     .rule-card-header's 10px gap after the drag handle, and .toggle-row's 12px gap after its own
-     <label>, which toggles the same input anyway. Vertically the bleed reaches the row's own
-     label above, which is the same target again. */
+  /* The painted switch stays 36x20; `.reader-back`'s idiom grows the hit area instead — bleed
+     above/below plus 8px LEFT makes 44x44. All leftward, not split: `scrollWidth` counts a
+     rightward overhang (measured 4px clip) but not a leftward one, which every call site has room for. */
   .toggle-switch::before {
     content: '';
     position: absolute;
@@ -3199,11 +2046,9 @@ body {
     left: -8px;
   }
 
-  /* Measured at 320: the 140px column left .admin-tab-content 133px of the screen, and the five
-     tabs stacked 261px tall inside it. Horizontal and WRAPPING rather than scrolling sideways:
-     the labels come to 561px against 313px, so a scroller would carry the last two off-screen
-     with nothing to scroll the active one back into view. It costs a three-line, 149px strip —
-     still 112px shorter than the column it replaces, and it hands the content 273px. */
+  /* Measured at 320: the 140px column left .admin-tab-content 133px, tabs stacked 261px tall.
+     Horizontal and WRAPPING, not scrolling sideways: labels come to 561px against 313, so a
+     scroller would carry the last two off-screen with nothing to bring the active one back. */
   .admin-modal-body { display: block; overflow: visible; }
   .admin-tab-bar {
     width: auto;
@@ -3217,11 +2062,9 @@ body {
   .admin-tab { min-height: var(--touch); white-space: nowrap; }
   .admin-tab-content { padding: 14px 0 0; overflow: visible; }
 
-  /* The alias tile's delete is an 18px glyph absolutely positioned at right: 8px, and the only
-     way to drop an alias. The tile is given the floor so a symmetric hit area fits inside it
-     rather than bleeding into the 10px grid gutter, and the pseudo takes `left: -26px; right: 0`
-     — 26px straight over the 28px `margin-right` that .alias-tile-domain already reserves for
-     this button, which is space nothing else claims and puts nothing outside the tile. */
+  /* The alias tile's delete, an 18px glyph, is the only way to drop an alias. The tile gets the
+     floor so a symmetric hit area fits inside it rather than bleeding into the grid gutter; the
+     pseudo's `left: -26px` sits over `.alias-tile-domain`'s reserved 28px margin, claiming nothing else. */
   .alias-tile { min-height: var(--touch); }
   .alias-tile-delete::before {
     content: '';
@@ -3232,34 +2075,14 @@ body {
     left: -26px;
   }
 
-  /* Count, the extended-rules switch with its label and help, and New rule, all on one line
-     against 273px. The count keeps the first line and the rest wraps under it.
-     The row-gap is derived from --toggle-bleed for the same reason as .rule-card-header below,
-     but it earns its place at 320 ONLY — and the width is the whole point, so the numbers are
-     here rather than a "see above". .extended-rules-toggle is pushed right by margin-left: auto
-     while New rule wraps to the LEFT end of the next line, so how much of the button the switch
-     stands over depends on how far right the toolbar pushes the switch:
-       360 — switch painted x 175-211, hit x 167-211, button x 28-138: 29px apart, never meet.
-       320 — switch painted x 135-171, hit x 127-171, button x 28-138: the PAINTED box already
-             shares 3px of the button's x-range and the hit rect shares 11px, so the vertical
-             bleed lands on it — measured, an 11x4px overlap of the button's top-right corner
-             with the base 8px gap, and 2px of clearance with this one.
-     A pseudo on a positioned element paints above static siblings, so those 44 square pixels
-     would have been the switch answering a tap meant for New rule. The cost is 6px of band
-     height (73 -> 79) at a width that does not need it. */
+  /* Count, the switch, and New rule wrap to fit 273px; the row-gap is derived from --toggle-bleed
+     like .rule-card-header below, but only earns its place at 320px — the switch's hit-area
+     pseudo would otherwise overlap New rule's button and steal its tap (measured, 320 only). */
   .rules-toolbar { flex-wrap: wrap; row-gap: calc(var(--toggle-bleed) + 2px); }
 
-  /* Five 44px row actions plus their separator come to 237px on their own, so the header ran 46px
-     past a 283px card even with .rule-card-name shrunk to nothing by its own min-width: 0 — and
-     an ellipsised rule name is not what should pay for the buttons. The cluster takes a line of
-     its own and keeps the right edge every other row's actions sit on.
-     The row-gap is DERIVED from --toggle-bleed above, not chosen: the switch on line one sits
-     directly above the icon buttons on line two, and the base rule's 10px for both axes left the
-     switch's downward bleed 1px inside the first button — a pseudo on a positioned element paints
-     above static siblings, so it would have been the button losing the tap, not the switch. The
-     +2px is the switch's own sub-pixel centring on a line whose height is not an even multiple of
-     its 20px box: measured, 10px overlapped by 1.5px and this clears by 3. Retuning
-     --toggle-bleed retunes this with it. */
+  /* Five 44px actions plus separator (237px) overran a 283px card even with the name shrunk to
+     nothing, so the cluster wraps to its own line. row-gap is DERIVED from --toggle-bleed: the
+     base 10px left the switch's bleed overlapping the button below and stealing its tap (measured). */
   .rule-card-header { flex-wrap: wrap; row-gap: calc(var(--toggle-bleed) + 2px); }
   .rule-card-btns { margin-left: auto; }
 

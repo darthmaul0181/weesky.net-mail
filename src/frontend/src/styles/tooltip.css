@@ -17,7 +17,7 @@
   white-space: pre-line;
   overflow-wrap: break-word;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  z-index: 10;
+  z-index: var(--z-tooltip);
   pointer-events: none;
 }
 

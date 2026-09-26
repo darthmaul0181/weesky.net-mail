@@ -42,12 +42,14 @@
   --danger: #dc2626;
   --danger-hover: #b91c1c;
   --success: #16a34a;
+  --warning: #b45309;
+  --status-fg: #ffffff;
+  --scrim: rgba(0, 0, 0, 0.35);
 }
 
 [data-palette='classic'][data-theme='dark'] {
   /* --bg, --surface, --border, --text, --text-muted: copied verbatim from
-     index.css's former [data-theme="dark"] block. --danger and --success
-     are not overridden there, so they fall back to the light values above. */
+     index.css's former [data-theme="dark"] block. */
   --bg: #1e2229;
   --folders-bg: #1e2229;
   --folders-item-hover: #2f3849;
@@ -82,4 +84,11 @@
   --action-primary: #84aad8;
   --action-primary-hover: #99bbdf;
   --action-primary-fg: #ffffff;
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --success: #4ade80;
+  --warning: #d97706;
+  /* Darker than --bg, which is 4.2:1 on --danger-hover. */
+  --status-fg: #12161c;
+  --scrim: rgba(0, 0, 0, 0.35);
 }

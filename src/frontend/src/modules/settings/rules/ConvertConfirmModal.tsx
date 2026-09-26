@@ -27,8 +27,7 @@ export function ConvertConfirmModal({ incompatible, onConfirm, onClose, loading 
         ))}
       </ul>
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '20px' }}>
-        <button className="btn btn-primary"
-          style={{ width: 'auto', background: 'var(--danger)', borderColor: 'var(--danger)' }}
+        <button className="btn btn-danger-solid"
           onClick={onConfirm} disabled={loading}>
           {loading ? <span className="spinner" /> : t('rules.deleteAndSwitch')}
         </button>

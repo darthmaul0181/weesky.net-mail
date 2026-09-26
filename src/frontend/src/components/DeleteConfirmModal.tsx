@@ -37,7 +37,7 @@ export default function DeleteConfirmModal({
         )}
       </p>
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-        <button className="btn btn-primary" style={{ width: 'auto', background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
+        <button className="btn btn-danger-solid"
           onClick={() => { confirmed.current = true; onConfirm() }} disabled={loading}>
           {loading ? <span className="spinner" /> : confirmLabel ?? t('actions.delete')}
         </button>

@@ -90,7 +90,7 @@ describe('responsive contract', () => {
     expect(mediaBlocks(mail, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
     expect(mediaBlocks(band, '@container (max-width: 480px)')).not.toMatch(/:hover|:focus-within/)
     expect(mediaBlocks(mail, '@media (hover: none)')).toMatch(/\.message-row:hover \.message-row-cluster/)
-    expect(mediaBlocks(all['../index.css']!, '@media (hover: none)'))
+    expect(mediaBlocks(all['./contacts.css']!, '@media (hover: none)'))
       .toMatch(/\.contact-tile:hover \.contact-tile-actions/)
   })
 

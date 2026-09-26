@@ -94,8 +94,7 @@ export default function RulesPage() {
                 <p>{t('rules.advancedUnparsable')}</p>
                 <p>{t('rules.advancedDeleteHint')}</p>
                 <div style={{ marginTop: '16px' }}>
-                  <button className="btn"
-                    style={{ width: 'auto', color: 'var(--danger)', borderColor: 'var(--danger)', border: '1px solid' }}
+                  <button className="btn btn-danger rules-notice-delete"
                     onClick={() => setConfirmDeleteAll(true)}>
                     {t('rules.deleteScript')}
                   </button>

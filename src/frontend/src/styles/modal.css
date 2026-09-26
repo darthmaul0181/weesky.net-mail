@@ -8,8 +8,8 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 200;
+  background: var(--scrim);
+  z-index: var(--z-dialog);
   display: flex;
   overflow-y: auto;
   padding: 24px;
@@ -81,12 +81,6 @@
 .modal-close:disabled { opacity: 0.4; cursor: default; }
 .modal-close:disabled:hover { color: var(--text-muted); }
 
-.modal-success {
-  color: var(--success);
-  font-size: 14px;
-  padding: 12px 0;
-}
-
 /* This is what actually stops the box growing. balance equalises the lines instead of leaving a
    two-word orphan on the last one. */
 .modal p,
@@ -95,13 +89,9 @@
   text-wrap: balance;
 }
 
-/* A form control declares no intrinsic width — flex-basis:0 in .field-h, width:100% in the other
-   two idioms — so a content-sized dialog would collapse onto its floor. One amendment per idiom,
-   each adding .modal to the selector it amends: a single blanket selector cannot both beat
-   .field-h's 0-1-1 and lose to .folder-pick-filter's 0-1-0.
-
-   The measure is a width, never a flex-basis: measured in Chrome, a basis does not feed the flex
-   container's intrinsic contribution at all, so --field-w had literally no effect on the box. */
+/* One amendment per idiom rather than one blanket selector — a cascade constraint; a width, never
+   a flex-basis (measured in Chrome, a basis doesn't feed flex's intrinsic contribution). See
+   CLAUDE.md's "A dialog sizes to its content" section. */
 .modal .field-h > :is(input[type="text"], input[type="password"], input[type="email"],
                       input[type="number"], .quota-field, .identity-combo, .recipients-box,
                       .attendee-status) {
@@ -141,12 +131,26 @@
   max-width: 100%;
 }
 
-/* A 360px viewport leaves 312px inside the overlay's 24px padding, and min-width always beats
-   max-width — the 24rem floor put a 384px box in a 312px slot. The overlay's own overflow-y:
-   auto forces the other axis to auto too (CSS Overflow 3), so the real defect was never a
-   scrolling page: it was a dialog wider than the screen, inside an overlay now scrolling
-   sideways to show it. Below 640px a dialog simply takes the width it is given; the
-   content-sized contract above is untouched. The scroll stays the overlay's. */
+/* ImportReportShell's body, which the contacts and calendar import reports both draw. */
+.import-counters { display: flex; gap: 8px; margin-bottom: 16px; }
+.import-counter {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.import-counter-value { font-size: 18px; font-weight: 600; }
+.import-counter-label { color: var(--text-muted); font-size: 12px; }
+
+.import-errors {
+  max-height: 220px; overflow-y: auto; margin: 0 0 20px; padding: 0 0 0 4px;
+  list-style: none; font-size: 13px;
+}
+.import-errors li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.import-errors li:last-child { border-bottom: 0; }
+.import-errors-more { color: var(--text-muted); }
+
+/* min-width beats max-width, so the 24rem floor overflowed a narrow overlay; the overlay's own
+   overflow-y:auto then forced the other axis to auto too (CSS Overflow 3). Full story in
+   CLAUDE.md's "A dialog sizes to its content" section. */
 @media (max-width: 639px) {
   .modal-overlay { padding: 12px; }
 
@@ -160,10 +164,8 @@
   /* Stacked under its label, a 34ch box stopped short of the stretched <select> beside it. */
   .modal .field-h { --field-w: 100%; }
 
-  /* .modal-close is reused by every dialog and carries no Cancel sibling on most of them, so on
-     a phone — where the outside-click strip just shrank from 24px plus centring slack to 12px —
-     it is the practical way to dismiss. Same idiom as .rail-item/.drawer-toggle in shell.css and
-     .selection-btn in mail.css: min-*, not width/height, so the row's own layout still owns the
-     box's size. */
+  /* .modal-close has no Cancel sibling on most dialogs, so on a phone it is the practical way to
+     dismiss. Same min-*-not-width/height idiom as .rail-item/.drawer-toggle (shell.css) and
+     .selection-btn (mail.css). */
   .modal-close { min-width: var(--touch); min-height: var(--touch); }
 }

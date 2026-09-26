@@ -12,6 +12,7 @@
   --action-primary:#1e3a2b; --action-primary-hover:#2b4d3a; --action-primary-fg:#ffffff;
   --icon-hover-accent:#e0a63f; --icon-hover-danger:#f87171;
   --danger:#c02626; --danger-hover:#9c1c1c; --success:#15803d;
+  --warning:#b45309; --status-fg:#ffffff; --scrim:rgba(0, 0, 0, 0.35);
 }
 /* Deliberate: --action-primary shifts hue between modes (evergreen in light,
    amber in dark) — evergreen would dissolve into a dark background. The ROLE
@@ -28,4 +29,5 @@
   --reader-header-border:#2b352d; --quote-text:#869080;
   --action-primary:#e0a63f; --action-primary-hover:#ebb757; --action-primary-fg:#ffffff;
   --danger:#f87171; --danger-hover:#ef4444; --success:#4ade80;
+  --warning:#d97706; --status-fg:#141a16; --scrim:rgba(0, 0, 0, 0.35);
 }
