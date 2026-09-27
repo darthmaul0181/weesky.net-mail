@@ -2,6 +2,8 @@
 // Through the DOM, never a regex: attribute values are entity-escaped (`&amp;`), so a string match
 // would look up an id the map is not keyed by.
 
+import { parseBodyFragment } from './parseBodyFragment'
+
 const SCHEME = 'cid:'
 
 /** The bare id an <img src> references, or null when the src is not a cid: reference. */
@@ -10,7 +12,7 @@ function cidOf(src: string | null): string | null {
   return src.slice(SCHEME.length) || null
 }
 
-const parse = (html: string) => new DOMParser().parseFromString(html, 'text/html')
+const parse = parseBodyFragment
 
 /** `url(cid:X)` in a style attribute, quoted either way or bare. */
 const CSS_CID = /url\(\s*(?:"cid:([^"]*)"|'cid:([^']*)'|cid:([^)\s]*))\s*\)/gi

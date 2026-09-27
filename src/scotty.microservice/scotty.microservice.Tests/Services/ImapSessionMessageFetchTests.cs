@@ -60,6 +60,30 @@ public sealed class ImapSessionMessageFetchTests
             + string.Join("\n  ", server.FetchCommands));
     }
 
+    [Fact]
+    public async Task GetMessageAsync_CarriesTheSanitizersDeclaredDarkSchemeIntoTheDetail()
+    {
+        using var server = new MessageFetchImapServer();
+        server.Start();
+
+        using var client = new ImapClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        await client.ConnectAsync("127.0.0.1", server.Port, SecureSocketOptions.None, cts.Token);
+        await client.AuthenticateAsync("alice", "hunter2", cts.Token);
+
+        var sanitizer = new Mock<IMailHtmlSanitizer>();
+        sanitizer.Setup(s => s.Sanitize(It.IsAny<string>()))
+                 .Returns((string html) => new SanitizedHtml { Html = "<p>x</p>", DeclaresDarkScheme = true });
+
+        await using var session = new ImapSession(client, sanitizer.Object, Mock.Of<ILogger>());
+
+        var result = await session.GetMessageAsync("INBOX", 1, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.True(result.Value.DeclaresDarkScheme);
+    }
+
     private static async Task<Result<MailMessageDetail>> GetSinglePartMessageAsync(
         SinglePartImapServer server, CancellationToken token)
     {

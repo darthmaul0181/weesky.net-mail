@@ -116,6 +116,14 @@ describe('substituteInlineImages', () => {
     expect(substituteInlineImages('', { 'logo@mail': uri })).toBe('')
   })
 
+  // A leading <style> is hoisted into <head> and lost by a bare DOMParser round-trip; the
+  // shared parseBodyFragment helper keeps it inside the body this function reads back out.
+  it('keeps a leading stylesheet through the substitution', () => {
+    const html = '<style>.w{width:100%}</style><img src="cid:logo@mail">'
+
+    expect(substituteInlineImages(html, { 'logo@mail': uri })).toContain('<style>.w{width:100%}</style>')
+  })
+
   it('substitutes a cid background with the data uri', () => {
     const html = '<div style="background-size: contain; background-image: url(cid:logo@mail)"></div>'
 

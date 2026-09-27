@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
-import { FORBID_TAGS, FORBID_ATTR } from '../sanitizePolicy'
+import { READER_FORBID_TAGS, FORBID_ATTR } from '../sanitizePolicy'
+import { parseBodyFragment } from './parseBodyFragment'
 
 // Second pass over a body the backend already sanitised, in another engine: a sanitiser falls to a
 // parse divergence with the browser, and one engine's divergence does not reproduce in the other.
@@ -11,9 +12,11 @@ export function sanitizeBody(html: string): string {
     // data-blocked-src carries the withheld remote image URL; DOMPurify would strip an
     // unknown data attribute otherwise, and the "show images" action would have nothing left
     // to restore.
-    ADD_ATTR: ['data-blocked-src', 'data-blocked-bg', 'target'],
-    FORBID_TAGS,
-    FORBID_ATTR,
+    ADD_ATTR: ['data-blocked-src', 'data-blocked-bg', 'data-break-word', 'target'],
+    FORBID_TAGS: [...READER_FORBID_TAGS],
+    FORBID_ATTR: [...FORBID_ATTR],
+    // Without it a leading <style> is parsed into the head and dropped.
+    FORCE_BODY: true,
   })
 }
 
@@ -43,7 +46,7 @@ export function revealBlockedImages(html: string): string {
   const revealed = html.replace(/data-blocked-src=/g, 'src=')
   if (!revealed.includes(BLOCKED_BACKGROUND)) return revealed
 
-  const doc = new DOMParser().parseFromString(revealed, 'text/html')
+  const doc = parseBodyFragment(revealed)
   for (const element of doc.querySelectorAll<HTMLElement>(`[${BLOCKED_BACKGROUND}]`)) {
     const layers = (element.getAttribute(BLOCKED_BACKGROUND) ?? '')
       .split(/\s+/)
@@ -66,7 +69,8 @@ export function revealBlockedImages(html: string): string {
 // here grants the body a capability; the rules only set a floor and contain the two overflows a body
 // can inflict on the layout.
 export function renderBodyDocument(
-  fragment: string, options: { dark?: boolean; narrow?: boolean } = {},
+  fragment: string,
+  options: { dark?: boolean; senderDark?: boolean; remote?: boolean; narrow?: boolean } = {},
 ): string {
   // No filter here: darkenColours has already recoloured what the message declares. These are
   // the defaults for what it does not — the sheet behind a message that brings no background,
@@ -75,22 +79,28 @@ export function renderBodyDocument(
     ? { scheme: 'dark', background: '#212429', text: '#e0e0e0' }
     : { scheme: 'light', background: '#ffffff', text: '#1a1a1a' }
 
-  // An image is the one thing darkenColours cannot recolour, and the sandboxed cross-origin iframe
-  // lets no pixel be read, so the dimming is uniform. The colour toggle undoes it per message.
-  const images = options.dark ? 'filter: brightness(0.85) saturate(0.9);' : ''
+  // A sender's own dark design already chose its images.
+  const images = options.dark && !options.senderDark ? 'filter: brightness(0.85) saturate(0.9);' : ''
 
   // 44px of side margin out of a 360px screen is a lot to spend on nothing.
   const padding = options.narrow ? '12px 14px' : '18px 22px'
   // iOS reflows a document's font sizes on its own unless told the scale is deliberate.
   const scale = options.narrow ? '-webkit-text-size-adjust: 100%; text-size-adjust: 100%;' : ''
 
+  // Whatever the sanitisers let through, nothing remote loads before consent: the message's own
+  // stylesheet can name a font or an image, and this is the barrier that does not read it.
+  const remote = options.remote ? ' https: http:' : ''
+  const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data:${remote}; font-src${remote || " 'none'"}`
+
   return `<!doctype html>
 <html>
-<head><meta charset="utf-8"><style>
+<head><meta http-equiv="Content-Security-Policy" content="${csp}"><meta charset="utf-8"><style>
   :root { color-scheme: ${sheet.scheme}; }
   html { background: ${sheet.background}; }
+  /* A message commonly sets body { width: 100% }: without this our padding lands outside it. */
   body {
     margin: 0;
+    box-sizing: border-box;
     padding: ${padding};
     background: ${sheet.background};
     color: ${sheet.text};
@@ -104,6 +114,9 @@ export function renderBodyDocument(
   /* break-word, not anywhere: both break a long URL, but anywhere also feeds those break
      points into min-content sizing, so a table column can collapse to a single letter. */
   body { overflow-wrap: break-word; }
+  /* Only where the message asked for it (legacy word-break: break-word, which the backend cannot
+     keep as CSS): there it is what lets a long token wrap inside a table cell. */
+  [data-break-word] { overflow-wrap: anywhere; }
   /* Tables are the one thing that must keep its width, so it scrolls in its own box. */
   table { max-width: 100%; }
   pre { overflow-x: auto; }

@@ -1,4 +1,6 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Diagnostics;
+using System.Text.RegularExpressions;
+using weesky.Scotty.Microservice.Models.Mail;
 using weesky.Scotty.Microservice.Services;
 using Xunit;
 
@@ -7,6 +9,28 @@ namespace weesky.Scotty.Microservice.Tests.Services;
 public sealed class MailHtmlSanitizerTests
 {
     private readonly MailHtmlSanitizer _sut = new();
+
+    [Theory]
+    [InlineData("<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><p>hi</p></body></html>")]
+    [InlineData("<html><head><meta name=\"supported-color-schemes\" content=\"light dark\"></head><body><p>hi</p></body></html>")]
+    [InlineData("<html><head><META NAME=\"Color-Scheme\" CONTENT=\"dark\"></head><body><p>hi</p></body></html>")]
+    [InlineData("<html><head><style>:root { color-scheme: light dark; }</style></head><body><p>hi</p></body></html>")]
+    public void Sanitize_ReportsADeclaredDarkScheme(string html)
+    {
+        Assert.True(_sut.Sanitize(html).DeclaresDarkScheme);
+    }
+
+    // A dark block without the declaration is not a promise: prefers-color-scheme alone is how a
+    // sender reacts to a client, not how it says the design was made for both.
+    [Theory]
+    [InlineData("<html><head><style>@media (prefers-color-scheme: dark) { .x { color: #fff } }</style></head><body><p>hi</p></body></html>")]
+    [InlineData("<html><head><meta name=\"color-scheme\" content=\"light\"></head><body><p>hi</p></body></html>")]
+    [InlineData("<html><head><meta name=\"color-scheme\"></head><body><p>hi</p></body></html>")]
+    [InlineData("<p>hi</p>")]
+    public void Sanitize_ReportsNoDarkSchemeWithoutTheDeclaration(string html)
+    {
+        Assert.False(_sut.Sanitize(html).DeclaresDarkScheme);
+    }
 
     [Theory]
     [InlineData("<script>alert(1)</script><p>hi</p>", "script")]
@@ -50,7 +74,7 @@ public sealed class MailHtmlSanitizerTests
     // Unwrapping must not extend to containers whose text is not content.
     [Theory]
     [InlineData("<script>alert(1)</script><p>hi</p>", "alert(1)")]
-    [InlineData("<style>body{color:red}</style><p>hi</p>", "color:red")]
+    [InlineData("<template><p>tpl</p></template><p>hi</p>", "tpl")]
     [InlineData("<title>a subject</title><p>hi</p>", "a subject")]
     public void Sanitize_DropsTheContentOfNonRenderedContainers(string hostile, string forbidden)
     {
@@ -361,7 +385,6 @@ public sealed class MailHtmlSanitizerTests
     [Theory]
     [InlineData("<style>.x { background: url(http://evil.example/p.gif) }</style><p>hi</p>")]
     [InlineData("<style>@import url(http://evil.example/a.css); .x { color: red }</style><p>hi</p>")]
-    [InlineData("<style>@font-face { font-family: f; src: url(http://evil.example/f.woff) }</style><p>hi</p>")]
     public void Sanitize_NeverKeepsAUrlInASheet(string html)
     {
         var result = _sut.Sanitize(html).Html;
@@ -378,6 +401,360 @@ public sealed class MailHtmlSanitizerTests
             "<style>.x { font-family: \"</style><img src=x onerror=alert(1)>\" }</style><p>hi</p>").Html;
 
         Assert.DoesNotContain("onerror", result);
+        Assert.Contains("hi", result);
+    }
+
+    // A responsive newsletter adapts to a phone through its own @media rules, and they need
+    // !important to beat the inline widths they override.
+    [Fact]
+    public void Sanitize_KeepsAHeadStylesheetAtTheHeadOfTheBody()
+    {
+        var result = _sut.Sanitize(
+            "<html><head><style>@media only screen and (max-width: 499px) { .full-width { width: 100% !important } }</style></head>"
+            + "<body><table class=\"full-width\" id=\"main\"><tr><td>hi</td></tr></table></body></html>").Html;
+
+        Assert.StartsWith("<style>", result);
+        Assert.Contains("@media only screen and (max-width: 499px)", result);
+        Assert.Contains("width: 100% !important", result);
+        Assert.Contains("class=\"full-width\"", result);
+        Assert.Contains("id=\"main\"", result);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsHeadStylesheetsInDocumentOrder()
+    {
+        var result = _sut.Sanitize(
+            "<html><head><style>.a { color: red }</style><style>.b { color: blue }</style></head><body><p>hi</p></body></html>").Html;
+
+        Assert.True(result.IndexOf(".a", StringComparison.Ordinal) < result.IndexOf(".b", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Sanitize_KeepsChildCombinatorsInASheet()
+    {
+        var result = _sut.Sanitize("<style>td > p.a { color: red }</style><p class=\"a\">hi</p>").Html;
+
+        Assert.Contains("td>p.a", result.Replace(" ", string.Empty));
+    }
+
+    [Theory]
+    [InlineData("position")]
+    [InlineData("z-index")]
+    [InlineData("float")]
+    public void Sanitize_AppliesThePropertyAllowlistInsideASheet(string property)
+    {
+        var result = _sut.Sanitize(
+            $"<style>@media (max-width: 499px) {{ .x {{ {property}: 1; color: red }} }}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain(property, result);
+        Assert.Contains("color", result);
+    }
+
+    [Theory]
+    [InlineData("@import url(https://t.example/a.css);", "t.example")]
+    [InlineData("@keyframes k { from { color: red } }", "keyframes")]
+    [InlineData("@namespace svg url(http://www.w3.org/2000/svg);", "namespace")]
+    public void Sanitize_DropsEveryOtherAtRule(string rule, string forbidden)
+    {
+        var result = _sut.Sanitize($"<style>{rule} .x {{ color: red }}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain(forbidden, result);
+        Assert.Contains(".x", result);
+    }
+
+    // No consent surface exists for a url() in a rule: it would fetch on render.
+    [Theory]
+    [InlineData(".x { background-image: url(https://t.example/p.gif); color: red }")]
+    [InlineData("@media (max-width: 499px) { .x { background-image: url(https://t.example/p.gif); color: red } }")]
+    [InlineData(".x { background: url(https://t.example/p.gif) #fff; color: red }")]
+    [InlineData(".x { background-image: url(cid:logo@mail); color: red }")]
+    public void Sanitize_DropsAUrlDeclarationFromASheetRule(string css)
+    {
+        var result = _sut.Sanitize($"<style>{css}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("url(", result);
+        Assert.Contains("color", result);
+    }
+
+    // Ganss strips `media`, so the sheet's condition must travel into its text.
+    [Theory]
+    [InlineData("screen and (max-width: 600px)", "@media screen and (max-width: 600px)")]
+    [InlineData("only screen and (max-width: 600px)", "@media only screen and (max-width: 600px)")]
+    [InlineData("screen, print", "@media screen, print")]
+    [InlineData("print", "@media print")]
+    public void Sanitize_CarriesAStyleSheetsMediaIntoItsText(string media, string rule)
+    {
+        var result = _sut.Sanitize($"<style media=\"{media}\">.x{{display:none}}</style><p class=\"x\">hi</p>").Html;
+
+        Assert.Contains(rule, result);
+        Assert.DoesNotContain("media=", result);
+    }
+
+    [Theory]
+    [InlineData(" ALL ")]
+    [InlineData("")]
+    public void Sanitize_KeepsAStyleSheetForAllMediaUnconditional(string media)
+    {
+        var result = _sut.Sanitize($"<style media=\"{media}\">.x{{color:red}}</style><p class=\"x\">hi</p>").Html;
+
+        Assert.Contains("color", result);
+        Assert.DoesNotContain("@media", result);
+    }
+
+    // The value is spliced into CSS text: anything that could end the prelude or escape a
+    // character is refused rather than interpolated.
+    [Theory]
+    [InlineData("print { } .y")]
+    [InlineData("print; .y")]
+    [InlineData("\\70 rint")]
+    [InlineData("print /*")]
+    [InlineData("((( screen")]
+    public void Sanitize_DropsAStyleSheetWhoseMediaCannotBeCarried(string media)
+    {
+        var result = _sut.Sanitize($"<style media=\"{media}\">.x{{display:none}}</style><p class=\"x\">hi</p>").Html;
+
+        Assert.DoesNotContain("display", result);
+    }
+
+    // A text closing the wrapper early would put its later rules outside the condition.
+    [Fact]
+    public void Sanitize_DropsAMediaStyleSheetThatEscapesItsWrapper()
+    {
+        var result = _sut.Sanitize("<style media=\"print\">.a{color:red} } .x{display:none}</style><p class=\"x\">hi</p>").Html;
+
+        Assert.DoesNotContain("display", result);
+    }
+
+    // A font is gated by the reader's CSP until consent, like an image. Its descriptors are not
+    // filtered by the property allowlist.
+    [Fact]
+    public void Sanitize_KeepsAnHttpsFontFace()
+    {
+        var result = _sut.Sanitize(
+            "<style>@font-face { font-family: Brand; src: url(https://fonts.example/b.woff2) format(\"woff2\"), local(\"Arial\"); unicode-range: U+0000-00FF }</style><p>hi</p>").Html;
+
+        Assert.Contains("@font-face", result);
+        Assert.Contains("https://fonts.example/b.woff2", result);
+        Assert.Contains("unicode-range", result);
+    }
+
+    [Theory]
+    [InlineData("url(javascript:alert(1))")]
+    [InlineData("url(data:font/woff2;base64,AAAA)")]
+    [InlineData("url(https://fonts.example/b.woff2), url(file:///etc/passwd)")]
+    public void Sanitize_DropsAFontFaceWithANonHttpSource(string source)
+    {
+        var result = _sut.Sanitize($"<style>@font-face {{ font-family: Brand; src: {source} }} .x {{ color: red }}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("@font-face", result);
+        Assert.Contains(".x", result);
+    }
+
+    // The raw form is closed by the first HTML parse, which leaves an inert <img> behind.
+    [Fact]
+    public void Sanitize_NeverLetsASheetCloseItsOwnElement()
+    {
+        var result = _sut.Sanitize(
+            "<style>.x { font-family: \"a</style><img src=x onerror=alert(1)>\" } .y { color: red }</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("onerror", result);
+        Assert.Equal(result.Split("<style").Length - 1, result.Split("</style>").Length - 1);
+    }
+
+    // `\3c` is an unsafe escape, so HoldsUnsafeEscape removes this sheet before any parse; the
+    // `</` guard's own path is the safe `\/` escape below.
+    [Fact]
+    public void Sanitize_RemovesASheetWhoseEscapesWouldCloseIt()
+    {
+        var result = _sut.Sanitize(
+            "<style>a[title=\"\\3c/style>\\3cimg src=x onerror=alert(1)>\"] { color: red }</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("onerror", result);
+        Assert.DoesNotContain("<img", result);
+        Assert.Equal(result.Split("<style").Length - 1, result.Split("</style>").Length - 1);
+    }
+
+    // `\/` is safe punctuation, so these sheets reach the CSS parser, which resolves it: only the
+    // `</` guard in VetStyleSheets stands between the serialised text and a closed element.
+    [Theory]
+    [InlineData("a[title=\"<\\/style><img src=x onerror=alert(1)>\"] { color: red }")]
+    [InlineData("@font-face { font-family: \"<\\/style><img src=x onerror=alert(1)>\"; src: url(https://x.example/a.woff) }")]
+    public void Sanitize_RemovesASheetThatWouldCloseItsElementOnceParsed(string css)
+    {
+        var result = _sut.Sanitize($"<style>{css}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("<style", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("onerror", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Ganss strips `type`, so a block the sender marked as not CSS would otherwise go live.
+    [Theory]
+    [InlineData("text/template")]
+    [InlineData("text/x-handlebars")]
+    public void Sanitize_RemovesASheetTypedAsSomethingElse(string type)
+    {
+        var result = _sut.Sanitize($"<style type=\"{type}\">.x {{ display: none }}</style><p class=\"x\">hi</p>").Html;
+
+        Assert.DoesNotContain("<style", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("text/css")]
+    [InlineData(" TEXT/CSS ")]
+    [InlineData("")]
+    public void Sanitize_KeepsASheetTypedAsCss(string type)
+    {
+        var result = _sut.Sanitize($"<style type=\"{type}\">.x {{ display: none }}</style><p class=\"x\">hi</p>").Html;
+
+        Assert.Contains(".x { display: none }", result);
+    }
+
+    // Every bypass found across two review rounds of a hand-rolled CSS tokeniser, replayed against
+    // the rule that replaced it: a sheet holding any escape besides plain punctuation is removed
+    // whole, so none of these need parsing to be judged safe or not.
+    [Theory]
+    // The original three (round 1's first pass): an escaped url(), an escaped style breakout, an
+    // escaped @import.
+    [InlineData(".x { background-image: \\75 rl(https://t.example/e.gif); color: red }")]
+    [InlineData(".x { font-family: \"\\3c/style\\3e<img src=x onerror=alert(1)>\"; color: red }")]
+    [InlineData("@\\69 mport url(https://t.example/a.css); .x { color: red }")]
+    // The four probes that defeated round 1's tokeniser fix: an escaped brace, a quote inside an
+    // unquoted url(), a raw form feed inside a string, a bogus block right after the value.
+    [InlineData(".x { background-image: \\75 rl(https://t.example/e.gif) \\{ } }")]
+    [InlineData(".x { a: url(q\"b); background-image: \\75 rl(https://t.example/e.gif); c: \"z { } }")]
+    [InlineData(".x { font-family: \"a\f; background-image: \\75 rl(https://t.example/e.gif); b: \" { } }")]
+    [InlineData(".x { color: red; background-image: \\75 rl(https://t.example/e.gif) {} }")]
+    // The comment-gluing breakout: removing `/**/` with nothing in its place reassembled a real
+    // closing tag, rendering a phishing link as live page content.
+    [InlineData(".y { width: 1px\\31 } </**//style><img src=x onerror=alert(1)><a href=https://evil.example/login>Sign in</a> .z { color: red }")]
+    // The four that defeated round 2's tokeniser fix: an escaped `url(`, an escaped letter inside
+    // `url(`, an `@font-face` block wrongly treated as a grouping rule, and a url-shaped word
+    // fooling the token detector.
+    [InlineData("@media s { \\url(q\"b) } .y { color: \\72 ed } .z \" { color: blue } }")]
+    [InlineData(".x { background-image: u\\72 l(https://t.example/e.gif) }")]
+    [InlineData("@font-face { font-family: f; src: \\75 rl(https://t.example/f.woff) {} }")]
+    [InlineData("xurl(q\"b) \") } .y { color: \\72 ed } \" { } }")]
+    public void Sanitize_RemovesTheWholeSheetForAnyUnsafeEscape(string css)
+    {
+        var result = _sut.Sanitize($"<style>{css}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("<style", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("t.example", result);
+        Assert.DoesNotContain("Sign in", result);
+        Assert.DoesNotContain("onerror", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hi", result);
+    }
+
+    // Generated mail escapes punctuation in its own class names; none of it can spell a letter, a
+    // hex digit, a quote or a brace, so the sheet is kept untouched rather than parsed at all.
+    [Theory]
+    [InlineData(".sm\\:px-4", "padding-left: 16px !important")]
+    [InlineData(".w-1\\/2", "width: 50% !important")]
+    public void Sanitize_KeepsASheetEscapingOnlySafePunctuation(string selector, string declaration)
+    {
+        var result = _sut.Sanitize(
+            $"<style>@media (max-width: 600px) {{ {selector} {{ {declaration} }} }}</style><p>hi</p>").Html;
+
+        Assert.Contains(selector, result);
+        Assert.Contains(declaration, result);
+    }
+
+    // A brace is not in the safe set: `\}` cannot be told apart from an attempt to escape
+    // structure, so the whole sheet goes, unlike the punctuation escapes above.
+    [Fact]
+    public void Sanitize_RemovesASheetEscapingAClosingBrace()
+    {
+        var result = _sut.Sanitize("<style>.a\\}b { color: red }</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("<style", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hi", result);
+    }
+
+    // A backslash with nothing after it is unsafe by definition — there is no character to check.
+    [Fact]
+    public void Sanitize_RemovesASheetEndingInATrailingBackslash()
+    {
+        var result = _sut.Sanitize("<style>.x { color: red }\\</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("<style", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hi", result);
+    }
+
+    // Accepted cost: a legitimate CJK font name written as a CSS unicode escape is not
+    // distinguishable from an escaped fetch by punctuation alone, so its sheet is dropped too —
+    // exactly what every sheet did before this pass existed at all.
+    [Fact]
+    public void Sanitize_RemovesASheetWithALegitimateUnicodeEscape()
+    {
+        var result = _sut.Sanitize("<style>.x { font-family: \"\\5FAE\\8F6F\" }</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("<style", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("hi", result);
+    }
+
+    [Theory]
+    [InlineData(".sm\\:px-4 { color: red }")]
+    [InlineData(".w-1\\/2 { color: red }")]
+    [InlineData(".\\!mt-0 { color: red }")]
+    [InlineData(".x { color: red }")]
+    [InlineData("")]
+    public void HoldsUnsafeEscape_AcceptsPunctuationEscapesAndPlainSheets(string css)
+    {
+        Assert.False(MailHtmlSanitizer.HoldsUnsafeEscape(css));
+    }
+
+    [Theory]
+    [InlineData(".x { color: \\72 ed }")]
+    [InlineData(".x { color: red }\\")]
+    [InlineData(".a\\}b { color: red }")]
+    [InlineData(".x { font-family: \"\\5FAE\\8F6F\" }")]
+    [InlineData(".x { font-family: a\\* }")]
+    public void HoldsUnsafeEscape_RejectsAnythingElse(string css)
+    {
+        Assert.True(MailHtmlSanitizer.HoldsUnsafeEscape(css));
+    }
+
+    // `*` is not in the safe set: `\/\*` would escape past the safe-punctuation check into a real
+    // `/*` once Ganss serialises it back unescaped, opening a comment the second parser reads
+    // differently — so `\*` alone removes the whole sheet before Ganss ever sees it.
+    [Theory]
+    [InlineData(".x { font-family: a\\/\\* }")]
+    [InlineData("@media \\/\\* { .x { color: red } }")]
+    public void Sanitize_RemovesASheetEscapingASlashStarCommentOpener(string css)
+    {
+        var result = _sut.Sanitize($"<style>{css}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain("<style", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("/*", result);
+        Assert.Contains("hi", result);
+    }
+
+    // `(` and `[` are in the safe set, but Ganss serialises the escape away and hands
+    // VetStyleSheets a plain, unbalanced `a(`/`a[` — AngleSharp's own parser then treats the
+    // unterminated function/attribute selector as unparseable and drops the whole declaration
+    // (verified against the real pipeline, not assumed), so no unbalanced punctuation survives
+    // into the rendered rule either way.
+    [Theory]
+    [InlineData(".x { font-family: a\\( }", "a(")]
+    [InlineData(".x { font-family: a\\[ }", "a[")]
+    public void Sanitize_DropsADeclarationWhoseSafeEscapeUnbalancesAfterSerialisation(string css, string unbalanced)
+    {
+        var result = _sut.Sanitize($"<style>{css}</style><p>hi</p>").Html;
+
+        Assert.DoesNotContain(unbalanced, result);
+        Assert.Contains("hi", result);
+    }
+
+    // In an @font-face the bare `a(` is kept as an empty `font-family: ;`, which a re-parse drops:
+    // only the fixpoint check sees that the written sheet would not re-read to itself.
+    [Fact]
+    public void Sanitize_RemovesASheetThatDoesNotReReadToItself()
+    {
+        const string html = "<style>@font-face { font-family: a\\(; src: url(https://x.example/a.woff) } .y { color: red }</style><p>hi</p>";
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.DoesNotContain("<style", result);
         Assert.Contains("hi", result);
     }
 
@@ -777,7 +1154,7 @@ public sealed class MailHtmlSanitizerTests
     // The cap runs before the pipeline, never instead of it.
     [Theory]
     [InlineData("<script>alert(1)</script>", "alert(1)")]
-    [InlineData("<style>body{color:red}</style>", "color:red")]
+    [InlineData("<style>.x{position:fixed}</style>", "position")]
     [InlineData("<img src=x onerror=\"alert(1)\">", "onerror")]
     [InlineData("<a href=\"javascript:alert(1)\">x</a>", "javascript:")]
     [InlineData("<p style=\"border-image: url(https://evil.example/a.png)\">x</p>", "evil.example")]
@@ -810,4 +1187,169 @@ public sealed class MailHtmlSanitizerTests
     // still inside the CSS, which is the only place a leak can fetch from.
     private static string StyleOf(string html) =>
         Regex.Match(html, "style=\"(?<s>[^\"]*)\"").Groups["s"].Value;
+
+    // AngleSharp.Css parses recursively: past ~2 000 nested blocks it overflows the stack, which
+    // no catch survives — the whole API process dies. Run before the ceiling, this test crashes
+    // the test runner instead of failing.
+    [Theory]
+    [InlineData("<style>{0}</style><p>hi</p>", "@media a{", "}")]
+    [InlineData("<style>{0}</style><p>hi</p>", "@media a{", "")]
+    [InlineData("<style media=\"screen\">{0}</style><p>hi</p>", "@media a{", "}")]
+    [InlineData("<style>.x {{ width: {0} }}</style><p>hi</p>", "calc(", ")")]
+    [InlineData("<p style=\"width: {0}\">hi</p>", "calc(", ")")]
+    public void Sanitize_SurvivesCssNestedTooDeepForTheParser(string template, string open, string close)
+    {
+        var nested = string.Concat(Enumerable.Repeat(open, 5_000)) + "1px" + string.Concat(Enumerable.Repeat(close, 5_000));
+
+        var result = _sut.Sanitize(string.Format(template, nested)).Html;
+
+        Assert.Contains("hi", result);
+        Assert.DoesNotContain(open, result);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsASheetNestedToTheCeiling()
+    {
+        var result = _sut.Sanitize("<style>" + Nested(15, ".x { display: none }") + "</style><p>hi</p>").Html;
+
+        Assert.Contains("display: none", result);
+    }
+
+    // The media wrapper is one level more, so the same text crosses the ceiling once it has one.
+    [Theory]
+    [InlineData("<style>{0}</style><p>hi</p>")]
+    [InlineData("<style media=\"screen\">{0}</style><p>hi</p>")]
+    public void Sanitize_RemovesASheetNestedPastTheCeiling(string template)
+    {
+        var depth = template.Contains("media") ? 15 : 16;
+
+        var result = _sut.Sanitize(string.Format(template, Nested(depth, ".x { display: none }"))).Html;
+
+        Assert.DoesNotContain("<style", result);
+    }
+
+    [Theory]
+    [InlineData(".x { display: none }")]
+    [InlineData("@media (max-width: 600px) { .x { width: calc(100% - (2 * 8px)) !important } }")]
+    [InlineData(".x { font-family: \"{{{{{{{{{{{{{{{{{\" }")]
+    [InlineData(".x { display: none } /* {{{{{{{{{{{{{{{{{ */")]
+    [InlineData(".x { background: url(https://cdn.example/a(1).png) }")]
+    [InlineData(".x { background: url(  \"https://cdn.example/a.png\"  ) }")]
+    [InlineData(".a\\(b { display: none } .c\\[d { color: blue }")]
+    [InlineData("a) b] c} .x { display: none }")]
+    public void NestsTooDeep_ReadsBracketsAsTheTokeniserDoes(string css)
+    {
+        Assert.False(MailHtmlSanitizer.NestsTooDeep(css));
+    }
+
+    // Wherever the scan and the parser could read the text differently, the sheet goes.
+    [Theory]
+    [InlineData(".x { font-family: \"a\n\" }")]
+    [InlineData(".x { font-family: 'a }")]
+    [InlineData(".x { color: red } /* open")]
+    [InlineData(".x { background: url(a\"b) }")]
+    [InlineData(".x { background: url(a\\)\"{{{{{{{{{{{{{{{{{\") }")]
+    [InlineData(".x { background: url(a/*b) }")]
+    [InlineData(".x { width: calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} calc(} }")]
+    public void NestsTooDeep_FailsClosedWhereTheReadingsCouldPart(string css)
+    {
+        Assert.True(MailHtmlSanitizer.NestsTooDeep(css));
+    }
+
+    // Measured before the ceiling: 2 MB of CSS took 13-16 s, 19 000 `<style media>` 9.4 s, and
+    // 1.5 MB of `color-scheme:x ` 110 s in the dark-scheme scan alone.
+    [Fact]
+    public void Sanitize_DropsAStyleSheetPastTheSizeCeilingQuickly()
+    {
+        const string rule = ".x { display: none } ";
+        var html = "<style>" + string.Concat(Enumerable.Repeat(rule, 2_000_000 / rule.Length)) + "</style><p>hi</p>";
+
+        var result = AssertSanitisesWithinBudget(html);
+
+        Assert.DoesNotContain("<style", result.Html);
+        Assert.Contains("hi", result.Html);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsNoMoreSheetsThanTheCeilingQuickly()
+    {
+        var html = string.Concat(Enumerable.Repeat("<style media=\"screen\">.x { display: none }</style>", 19_000)) + "<p>hi</p>";
+
+        var result = AssertSanitisesWithinBudget(html);
+
+        Assert.Equal(64, Regex.Matches(result.Html, "<style>").Count);
+    }
+
+    [Fact]
+    public void Sanitize_ScansAHostileColorSchemeRunQuickly()
+    {
+        var html = "<style>" + string.Concat(Enumerable.Repeat("color-scheme:x ", 100_000)) + "</style><p>hi</p>";
+
+        Assert.False(AssertSanitisesWithinBudget(html).DeclaresDarkScheme);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsSheetsUnderTheCeilingUntouched()
+    {
+        var rules = string.Concat(Enumerable.Range(0, 5_000).Select(i => $".c{i} {{ display: none }}"));
+        var html = $"<html><head><style>{rules}</style><style media=\"screen and (max-width: 600px)\">.x {{ width: 100% }}</style></head>"
+                   + "<body><style>.y { display: block }</style><p>hi</p></body></html>";
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Equal(3, Regex.Matches(result, "<style>").Count);
+        Assert.Contains(".c4999 { display: none }", result);
+        Assert.Contains("@media screen and (max-width: 600px)", result);
+        Assert.Contains(".y { display: block }", result);
+    }
+
+    // Sheets are kept in document order until the budget is spent; everything after is dropped,
+    // even a sheet that alone would still have fit.
+    [Fact]
+    public void Sanitize_DropsEverySheetAfterTheSizeCeilingIsSpent()
+    {
+        var large = string.Concat(Enumerable.Repeat(".a { display: none } ", 150 * 1024 / 18));
+        var html = $"<style>{large}</style><style>{large.Replace(".a", ".b")}</style><style>.c {{ display: block }}</style><p>hi</p>";
+
+        var result = _sut.Sanitize(html).Html;
+
+        Assert.Contains(".a { display: none }", result);
+        Assert.DoesNotContain(".b {", result);
+        Assert.DoesNotContain(".c {", result);
+    }
+
+    private SanitizedHtml AssertSanitisesWithinBudget(string html)
+    {
+        var clock = Stopwatch.StartNew();
+        var result = _sut.Sanitize(html);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"sanitising took {clock.Elapsed}; the ceilings keep it well under a second.");
+        return result;
+    }
+
+    // AngleSharp knows neither `word-break: break-word` nor its modern spelling, so Ganss drops the
+    // one declaration that let an MJML mail's long tracking code wrap: an ING mail then overflowed.
+    [Theory]
+    [InlineData("padding: 10px; word-break: break-word")]
+    [InlineData("WORD-BREAK:Break-Word;")]
+    [InlineData("word-break: break-word !important")]
+    public void Sanitize_MarksAnElementThatAskedToBreakLongWords(string style)
+    {
+        var result = _sut.Sanitize($"<table><tr><td style=\"{style}\">BE_AMB_INV_HYPE_INVEST_UP</td></tr></table>").Html;
+
+        Assert.Contains("data-break-word", result);
+    }
+
+    [Theory]
+    [InlineData("word-break: break-all")]
+    [InlineData("word-break: normal")]
+    [InlineData("overflow-wrap: break-word")]
+    public void Sanitize_MarksNoElementThatDidNotAsk(string style)
+    {
+        var result = _sut.Sanitize($"<p style=\"{style}\">x</p>").Html;
+
+        Assert.DoesNotContain("data-break-word", result);
+    }
+
+    private static string Nested(int depth, string content) =>
+        string.Concat(Enumerable.Repeat("@media screen { ", depth)) + content + string.Concat(Enumerable.Repeat(" }", depth));
 }

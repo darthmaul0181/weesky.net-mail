@@ -507,6 +507,121 @@ describe('MessageReader', () => {
     theme.isDark = false
   })
 
+  // revealBlockedImages round-trips the body through the DOM; a bare DOMParser hoists a leading
+  // <style> into <head> and loses it on the way back out.
+  it('keeps a leading stylesheet through the background reveal', async () => {
+    mocks.getMailMessage.mockResolvedValue({
+      ...blockedBackground, htmlBody: '<style>.w{width:100%}</style>' + blockedBackground.htmlBody,
+    })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText(/1 remote image was blocked/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /show images/i }))
+
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('<style>.w{width:100%}</style>'))
+  })
+
+  const withSheet = {
+    ...detail,
+    htmlBody: '<style>.bg { background-color: #ffffff } @media (prefers-color-scheme: dark) { .bg { background-color: #262624 !important } }</style><p class="bg">Bonjour</p>',
+  }
+
+  // A sender's dark rules complete a client's recolouring, they do not replace it: ING's light
+  // text rule met a cell whose light background no rule of its own covered, and read white on white.
+  it('lays the sender\'s own dark design over our recolouring when the message declares one', async () => {
+    theme.isDark = true
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      declaresDarkScheme: true,
+      htmlBody: '<style>@media (prefers-color-scheme: dark) { .t { color: #F7F4F1 !important } }</style>'
+        + '<table><tr><td style="background-color: #f0f0f0"><span class="t">Bonjour</span></td></tr></table>',
+    })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+    expect(srcdoc).toContain('@media (min-width: 0)')
+    expect(srcdoc).toMatch(/\.t \{ color: (#f7f4f1|rgb\(247, 244, 241\)) !important/i)
+    expect(srcdoc).not.toContain('#f0f0f0')
+    expect(srcdoc).not.toContain('brightness')
+    theme.isDark = false
+  })
+
+  it('recolours a light-only message, stylesheet included, and drops its dark blocks', async () => {
+    theme.isDark = true
+    mocks.getMailMessage.mockResolvedValue(withSheet)
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+    expect(srcdoc).toContain('(max-width: 0) and (min-width: 1px)')
+    expect(srcdoc).toMatch(/\.bg \{ background-color: (#212121|rgb\(33, 33, 33\))/)
+    theme.isDark = false
+  })
+
+  // A boilerplate color-scheme meta promises a dark design the sheet does not carry.
+  it('recolours a message that declares a dark scheme but has no dark block', async () => {
+    theme.isDark = true
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail, declaresDarkScheme: true, htmlBody: '<style>.bg { background-color: #ffffff }</style><p class="bg">Bonjour</p>',
+    })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+    expect(srcdoc).toMatch(/\.bg \{ background-color: (#212121|rgb\(33, 33, 33\))/)
+    expect(srcdoc).toContain('brightness')
+    theme.isDark = false
+  })
+
+  it('recolours a message that only quotes the dark query in its text', async () => {
+    theme.isDark = true
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail, declaresDarkScheme: true,
+      htmlBody: '<style>.bg { background-color: #ffffff }</style><p class="bg">Try <code>@media (prefers-color-scheme: dark)</code></p>',
+    })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+    expect(srcdoc).toMatch(/\.bg \{ background-color: (#212121|rgb\(33, 33, 33\))/)
+    expect(srcdoc).toContain('brightness')
+    theme.isDark = false
+  })
+
+  it('brings the light original of a sender-dark message back on demand', async () => {
+    theme.isDark = true
+    mocks.getMailMessage.mockResolvedValue({ ...withSheet, declaresDarkScheme: true })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    fireEvent.click(screen.getByRole('button', { name: /original colours/i }))
+
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('(max-width: 0) and (min-width: 1px)'))
+    const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
+    expect(srcdoc).toContain('.bg { background-color: #ffffff }')
+    expect(srcdoc).not.toMatch(/#212121|rgb\(33, 33, 33\)|brightness/)
+    theme.isDark = false
+  })
+
+  it('keeps the light design in the light theme even when a dark one is declared', async () => {
+    mocks.getMailMessage.mockResolvedValue({ ...withSheet, declaresDarkScheme: true })
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText('Re: facture')
+
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('(max-width: 0) and (min-width: 1px)')
+  })
+
   // The whole point of the setting: no banner, no button, nothing to click per message.
   it('shows the images and no banner when the account always shows them', async () => {
     mocks.getMailMessage.mockResolvedValue(blocked)
@@ -523,6 +638,19 @@ describe('MessageReader', () => {
       .toContain('src="https://t.example/p.gif"')
     expect(screen.queryByText(/remote images were blocked/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /show images/i })).not.toBeInTheDocument()
+  })
+
+  it('widens the frame\'s policy to remote images only once they are shown', async () => {
+    mocks.getMailMessage.mockResolvedValue(blocked)
+
+    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+    await screen.findByText(/2 remote images were blocked/i)
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('img-src data:;')
+
+    fireEvent.click(screen.getByRole('button', { name: /show images/i }))
+
+    await waitFor(() => expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
+      .toContain('img-src data: https: http:'))
   })
 
   // A cached message can render before a cold preferences cache resolves; alwaysShowImagesOf

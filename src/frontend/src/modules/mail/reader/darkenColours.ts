@@ -2,11 +2,17 @@
 // never darkened, and a saturated background is damped, so every pair ends dark under light.
 // Runs before sanitising, so what it writes faces the same pass as the rest.
 
+import { forEachStyleRule } from './messageStyles'
+import { parseBodyFragment } from './parseBodyFragment'
+
 /** Attributes that carry a colour rather than a URL or a measurement. */
 const COLOUR_ATTRIBUTES = ['bgcolor', 'color', 'bordercolor']
 
 /** Declarations whose value is a colour. `background` is excluded: it is a shorthand. */
 const COLOUR_PROPERTIES = /(^|[\s;])(color|background-color|border(-[a-z]+)?-color|outline-color)\s*:\s*([^;]+)/gi
+
+/** The same colour properties, as whole names for a CSSOM declaration. */
+const STYLESHEET_COLOUR = /^(color|background-color|border(-[a-z]+)?-color|outline-color)$/i
 
 // A gradient is a colour in an image's clothes: mail tints a background image by laying a flat one
 // over it, so a message could paint itself white through a property no colour rule looks at.
@@ -53,11 +59,11 @@ export function toDarkColour(value: string, role: ColourRole = 'text'): string |
   return a === 1 ? `#${hex(nr)}${hex(ng)}${hex(nb)}` : `rgba(${nr}, ${ng}, ${nb}, ${a})`
 }
 
-/** Rewrites every colour a fragment declares, in style attributes and in colour attributes. */
+/** Rewrites every colour a fragment declares: style attributes, colour attributes and stylesheets. */
 export function darkenColours(html: string): string {
   if (!html) return ''
 
-  const document = new DOMParser().parseFromString(html, 'text/html')
+  const document = parseBodyFragment(html)
 
   for (const element of document.body.querySelectorAll<HTMLElement>('[style]')) {
     const style = element.getAttribute('style')!
@@ -65,8 +71,10 @@ export function darkenColours(html: string): string {
       .replace(COLOUR_PROPERTIES, (
         whole: string, lead: string, property: string, _side: string | undefined, value: string,
       ) => {
-        const dark = toDarkColour(value, roleOf(property))
-        return dark ? `${lead}${property}: ${dark}` : whole
+        // `!important` rides along after the colour: parsed with it, the colour reads as no colour.
+        const [, colour = value, important = ''] = /^(.*?)(\s*!\s*important)?\s*$/i.exec(value) ?? []
+        const dark = toDarkColour(colour, roleOf(property))
+        return dark ? `${lead}${property}: ${dark}${important ? ' !important' : ''}` : whole
       })
       .replace(IMAGE_PROPERTY, (_whole, lead: string, property: string, value: string) =>
         `${lead}${property}: ${darkenImageColours(value)}`))
@@ -77,6 +85,20 @@ export function darkenColours(html: string): string {
       const dark = toDarkColour(withHash(element.getAttribute(attribute)!), roleOf(attribute))
       if (dark) element.setAttribute(attribute, dark)
     }
+  }
+
+  for (const style of document.body.querySelectorAll('style')) {
+    style.textContent = forEachStyleRule(style.textContent ?? '', declarations => {
+      for (let i = 0; i < declarations.length; i++) {
+        const property = declarations.item(i)
+        const value = declarations.getPropertyValue(property)
+        const darkened = property === 'background-image'
+          ? darkenImageColours(value)
+          : STYLESHEET_COLOUR.test(property) ? toDarkColour(value, roleOf(property)) : null
+        if (darkened && darkened !== value)
+          declarations.setProperty(property, darkened, declarations.getPropertyPriority(property))
+      }
+    })
   }
 
   return document.body.innerHTML

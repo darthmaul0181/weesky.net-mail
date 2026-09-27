@@ -17,4 +17,11 @@ public sealed class SanitizedHtml
     /// was kept (then fully sanitised). Lets the client signal the cut to the reader.
     /// </summary>
     public bool Truncated { get; set; }
+
+    /// <summary>
+    /// True when the message declares a dark colour scheme (a color-scheme or supported-color-schemes
+    /// meta, or a color-scheme declaration naming dark). The reader then renders the sender's own
+    /// dark design instead of recolouring the light one.
+    /// </summary>
+    public bool DeclaresDarkScheme { get; set; }
 }
