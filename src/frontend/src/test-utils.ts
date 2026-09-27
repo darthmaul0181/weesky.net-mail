@@ -1,4 +1,5 @@
-import { act, fireEvent } from '@testing-library/react'
+import { act, fireEvent, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider, type DefaultOptions } from '@tanstack/react-query'
 import { createElement, type ReactNode } from 'react'
 import type { Mock } from 'vitest'
@@ -147,4 +148,20 @@ export function holdNextCall(mock: Mock) {
     resolve: (value: unknown) => settle.resolve(value),
     fail: () => settle.reject(new Error('Server error')),
   }
+}
+
+/** Chooses in a `MenuSelect` the way a user does: open the box, click the row. What
+    `userEvent.selectOptions` did for a native `<select>`. */
+export async function pickOption(box: HTMLElement, name: string | RegExp) {
+  await userEvent.click(box)
+  await userEvent.click(within(document.getElementById(box.getAttribute('aria-controls')!)!).getByRole('option', { name }))
+}
+
+/** The rows a `MenuSelect` offers, read by opening it and closed again. */
+export async function optionsOf(box: HTMLElement): Promise<string[]> {
+  await userEvent.click(box)
+  const rows = within(document.getElementById(box.getAttribute('aria-controls')!)!).getAllByRole('option')
+    .map(row => row.textContent ?? '')
+  await userEvent.click(box)
+  return rows
 }

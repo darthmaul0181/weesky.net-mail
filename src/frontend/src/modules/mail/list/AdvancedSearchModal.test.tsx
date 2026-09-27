@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import AdvancedSearchModal from './AdvancedSearchModal'
 import type { AdvancedForm } from './searchCriteria'
-import { fireEscape } from '../../../test-utils'
+import { fireEscape, pickOption } from '../../../test-utils'
 
 function setup(initialSubject = '') {
   const onSearch = vi.fn<(form: AdvancedForm) => void>(); const onClose = vi.fn()
@@ -17,13 +17,13 @@ describe('AdvancedSearchModal', () => {
     expect(screen.getByLabelText('Subject')).toHaveValue('facture')
   })
 
-  it('submits the assembled form', () => {
+  it('submits the assembled form', async () => {
     const { onSearch } = setup()
     fireEvent.change(screen.getByLabelText('From'), { target: { value: 'alice' } })
     fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'invoice' } })
-    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '14' } })
+    await pickOption(screen.getByLabelText('Date'), 'Last two weeks')
     fireEvent.click(screen.getByLabelText('Unread'))
-    fireEvent.change(screen.getByLabelText('Search in'), { target: { value: 'all' } })
+    await pickOption(screen.getByLabelText('Search in'), 'All folders')
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     expect(onSearch).toHaveBeenCalledWith({
       from: 'alice', to: '', subject: '', text: 'invoice',
@@ -31,10 +31,10 @@ describe('AdvancedSearchModal', () => {
     })
   })
 
-  it('maps This year to a day count', () => {
+  it('maps This year to a day count', async () => {
     const { onSearch } = setup()
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'x' } })
-    fireEvent.change(screen.getByLabelText('Date'), { target: { value: 'year' } })
+    await pickOption(screen.getByLabelText('Date'), 'This year')
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     const form = onSearch.mock.calls[0]![0]
     expect(form.sinceDays).toBeGreaterThanOrEqual(1)

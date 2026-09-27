@@ -188,6 +188,14 @@ When a rule is ambiguous, copy what those screens do.
 
 ## Search & pickers
 
+**A choice among fixed values is `MenuSelect`, never a native `<select>`** (`src/components/MenuSelect.tsx`,
+styles `.menu-select` / `.select-list` in `shell.css`). One control across the site: a box as wide as its
+widest option — invisible sizers hold that width, so the box never jumps when the value changes — opening a
+listbox with the chosen row ticked, typed letters jumping to a row, and a tree drawn by `depth`. It is the
+APG select-only combobox: focus stays on the box, so a dialog's Tab order never learns the list exists. A
+native `<select>` cannot paint a swatch or a bold name in its rows, and draws a different box on every
+system, which is why the calendar picker, the composer's From and Priority and every form select moved.
+
 Two shapes, both **live** — filtering happens on every keystroke, never behind a submit button:
 
 1. **List filter** — a `.search-input` (type `search`) placed in the list header filters the visible

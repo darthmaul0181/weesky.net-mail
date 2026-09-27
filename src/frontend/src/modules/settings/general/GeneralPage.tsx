@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
@@ -184,18 +185,18 @@ export default function GeneralPage() {
                 <span className="setting-hint">{t('general.pageSize.hint')}</span>
               </span>
               {/* Read through the same pair the list reads, never raw: a stored value outside the
-                  steps pages by one block there, and a `<select>` with no matching option would
+                  steps pages by one block there, and a select with no matching option would
                   say 10 here. */}
-              <select
+              <MenuSelect
                 id="page-size"
                 value={isStreaming(preferences) ? ALL : String(requestSizeOf(preferences))}
                 disabled={setPreference.isPending}
-                onChange={event =>
-                  void save(PREFERENCE_KEYS.pageSize, event.target.value, pageSizeToast(event.target.value, t))}
-              >
-                {PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
-                <option value={ALL}>{t('general.pageSize.all')}</option>
-              </select>
+                onChange={size => void save(PREFERENCE_KEYS.pageSize, size, pageSizeToast(size, t))}
+                options={[
+                  ...PAGE_SIZES.map(size => ({ value: String(size), label: String(size) })),
+                  { value: ALL, label: t('general.pageSize.all') },
+                ]}
+              />
             </div>
 
             <ToggleRow

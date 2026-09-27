@@ -1057,7 +1057,7 @@
                <div class="modal">
                  <div class="modal-header"><span class="modal-title">Move to…</span>
                    <button class="modal-close">✕</button></div>
-                 <div class="field-h"><label>Folder</label><select><option>INBOX.Archive</option></select></div>
+                 <div class="field-h"><label>Folder</label><div class="select-root"><button type="button" role="combobox" class="menu-select"><span class="menu-select-value"><span class="menu-select-name">INBOX.Archive</span><span class="menu-select-sizer" data-label="INBOX.Archive"></span></span><svg width="14" height="14"></svg></button></div></div>
                  <!-- AddEditUserModal's own row, the sixth and last .toggle-switch call site:
                       the switch's hit area bleeds 8px left, and this is the one place that
                       lands in a dialog's 18px padding rather than a page's. -->
@@ -1595,7 +1595,7 @@
             <div class="field-h is-setting">
               <span class="setting-label"><label for="ps">Messages per page</label>
                 <span class="setting-hint">How many rows a page of the list holds.</span></span>
-              <select id="ps"><option>30</option></select>
+              <div class="select-root"><button type="button" role="combobox" class="menu-select" id="ps"><span class="menu-select-value"><span class="menu-select-name">30</span><span class="menu-select-sizer" data-label="30"></span></span><svg width="14" height="14"></svg></button></div>
             </div>
             <div class="field-h is-setting">
               <span class="setting-label"><label for="sp">Message list preview</label>
@@ -1620,7 +1620,7 @@
             </form>
           </section>
         </div>`),
-      touch: '.drawer-toggle, .toggle-switch, .action-chip, .layout-card, select, input[type="text"], input[type="password"], .change-password-form .btn',
+      touch: '.drawer-toggle, .toggle-switch, .action-chip, .layout-card, .menu-select, input[type="text"], input[type="password"], .change-password-form .btn',
     })
 
     // 2. The list page. `.admin-list-item-email` is `width: 40ch; flex-shrink: 0` — over 300px of
@@ -1820,7 +1820,7 @@
               <h1 class="settings-page-title">Aliases</h1>
               <p class="alias-page-summary">56 receiving addresses · repeated prefixes are written once</p>
             </div>
-            <select class="alias-domain-select"><option>@weesky.be</option></select>
+            <div class="select-root alias-domain-select"><button type="button" role="combobox" class="menu-select"><span class="menu-select-value"><span class="menu-select-name">@weesky.be</span><span class="menu-select-sizer" data-label="@weesky.be"></span></span><svg width="14" height="14"></svg></button></div>
           </div>
           <div class="alias-composer has-picker">
             <svg width="20" height="20"></svg>
@@ -2156,7 +2156,7 @@
                 <div class="field-h">
                   <label for="event-calendar">Calendar</label>
                   <span class="calendar-swatch" style="--cal:#3b82c4"></span>
-                  <select id="event-calendar"><option>Personal</option></select>
+                  <div class="select-root"><button type="button" role="combobox" class="menu-select" id="event-calendar"><span class="menu-select-value"><span class="menu-select-name">Personal</span><span class="menu-select-sizer" data-label="Personal"></span></span><svg width="14" height="14"></svg></button></div>
                 </div>
                 <div class="field-h">
                   <label for="event-allday">All day</label>

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import MenuSelect from '../../../components/MenuSelect'
 import type { TFunction } from 'i18next'
 import TrashIcon from '../../../icons/TrashIcon'
 import type { RuleAction, RuleCondition } from './ruleDraft'
@@ -134,7 +135,7 @@ function actionArgPlaceholder(value: ActionTypeDef['value'], t: SettingsT): stri
   }
 }
 
-/** A `<select>`'s value read back as the option it names, so the list it drew is also its type. */
+/** A select's value read back as the option it names, so the list it drew is also its type. */
 function chosen<T extends { value: string }>(options: T[], value: string): T | undefined {
   return options.find(o => o.value === value)
 }
@@ -160,10 +161,12 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
 
   return (
     <div className="rule-row">
-      <select
+      <MenuSelect
+        ariaLabel={t('rules.fieldLabel')}
         value={condition.field}
-        onChange={e => {
-          const newDef = chosen(CONDITION_FIELDS, e.target.value)
+        options={availableFields.map(f => ({ value: f.value, label: fieldLabel(f.value, t) }))}
+        onChange={field => {
+          const newDef = chosen(CONDITION_FIELDS, field)
           if (!newDef) return
           const newBaseOps = extended ? CONDITION_OPERATORS : CONDITION_OPERATORS.filter(o => !o.extendedOnly)
           const newOps = newDef.operators
@@ -177,20 +180,17 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
             ...(newDef.inputType === 'weekday' && { value: '1,2,3,4,5' }),
           })
         }}
-      >
-        {availableFields.map(f => <option key={f.value} value={f.value}>{fieldLabel(f.value, t)}</option>)}
-      </select>
+      />
       {!isDuplicate && !isWeekday && (
-        <select
+        <MenuSelect
+          ariaLabel={t('rules.operatorLabel')}
           value={condition.operator}
-          onChange={e => {
-            const op = chosen(availableOperators, e.target.value)
+          options={availableOperators.map(o => ({ value: o.value, label: operatorLabel(o.value, t) }))}
+          onChange={operator => {
+            const op = chosen(availableOperators, operator)
             if (op) onChange({ ...condition, operator: op.value })
           }}
-        >
-          {availableOperators.map(o =>
-            <option key={o.value} value={o.value}>{operatorLabel(o.value, t)}</option>)}
-        </select>
+        />
       )}
       {condition.field === 'Header' && (
         <input
@@ -213,13 +213,13 @@ export function ConditionRow({ condition, onChange, onRemove, extended = false }
           style={{ flex: 1 }}
         />
       ) : isWeekday ? (
-        <select
-          value={WEEKDAY_VALUES.includes(condition.value) ? condition.value : WEEKDAY_VALUES[0]}
-          onChange={e => onChange({ ...condition, value: e.target.value })}
-          style={{ flex: 1 }}
-        >
-          {WEEKDAY_VALUES.map(v => <option key={v} value={v}>{weekdayLabel(v, t)}</option>)}
-        </select>
+        <MenuSelect
+          className="is-grow"
+          ariaLabel={t('rules.dayLabel')}
+          value={WEEKDAY_VALUES.includes(condition.value) ? condition.value : WEEKDAY_VALUES[0]!}
+          onChange={day => onChange({ ...condition, value: day })}
+          options={WEEKDAY_VALUES.map(v => ({ value: v, label: weekdayLabel(v, t) ?? v }))}
+        />
       ) : isDateField ? (
         <input
           type="date"
@@ -272,16 +272,15 @@ export function ActionRow({ action, onChange, onRemove, foldersDatalistId, exten
   const def = availableTypes.find(t => t.value === action.type) ?? availableTypes[0]!
   return (
     <div className="rule-row">
-      <select
+      <MenuSelect
+        ariaLabel={t('rules.actionLabel')}
         value={action.type}
-        onChange={e => {
-          const next = chosen(availableTypes, e.target.value)
+        options={availableTypes.map(type => ({ value: type.value, label: actionTypeLabel(type.value, t) }))}
+        onChange={type => {
+          const next = chosen(availableTypes, type)
           if (next) onChange({ type: next.value, argument: '' })
         }}
-      >
-        {availableTypes.map(type =>
-          <option key={type.value} value={type.value}>{actionTypeLabel(type.value, t)}</option>)}
-      </select>
+      />
       {def.hasArg && (
         <input
           type="text"

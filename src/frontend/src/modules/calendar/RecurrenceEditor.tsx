@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import MenuSelect from '../../components/MenuSelect'
 import { useCalendar } from './calendarContext'
 import { dateLocaleOf, WEEKDAY_TOKENS, weekdayNameOf, weekdayTokenAt } from './calendarLocale'
 import type { RecurrenceWrite } from './calendarTypes'
@@ -52,12 +53,8 @@ export default function RecurrenceEditor({ value, startDate, onChange }: Recurre
         <input id="repeat-interval" type="number" min={1} max={999} value={value.interval}
           className="recurrence-interval"
           onChange={event => emit({ interval: Math.max(1, Number(event.target.value) || 1) })} />
-        <select aria-label={t('repeat.unitLabel')} value={frequency}
-          onChange={event => pickUnit(event.target.value)}>
-          {['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].map(one => (
-            <option key={one} value={one}>{unit[one]}</option>
-          ))}
-        </select>
+        <MenuSelect ariaLabel={t('repeat.unitLabel')} value={frequency} onChange={pickUnit}
+          options={['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].map(one => ({ value: one, label: unit[one] ?? one }))} />
       </div>
 
       {/* Drawn for every unit, never withheld: under "every day" the seven boxes are all lit and

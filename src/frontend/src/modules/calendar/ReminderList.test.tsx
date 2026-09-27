@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import ReminderList from './ReminderList'
+import { pickOption } from '../../test-utils'
 
 function draw(reminders: number[], allDay = false, foreignAlarms: string[] = [],
   onChange = vi.fn()) {
@@ -11,28 +12,36 @@ function draw(reminders: number[], allDay = false, foreignAlarms: string[] = [],
 }
 
 describe('ReminderList', () => {
-  it('reads each reminder back as a sentence', () => {
+  it('reads each reminder back as a sentence', async () => {
     draw([15, 1440])
     const bells = screen.getAllByRole('combobox')
     expect(bells).toHaveLength(2)
-    expect(bells[0]).toHaveValue('15')
+    expect(bells[0]).toHaveTextContent('15 minutes before')
+    expect(bells[1]).toHaveTextContent('1 day before')
+
+    await userEvent.click(bells[0]!)
     expect(screen.getByRole('option', { name: '15 minutes before', selected: true }))
       .toBeInTheDocument()
+    await userEvent.click(bells[0]!)
+    await userEvent.click(bells[1]!)
     expect(screen.getByRole('option', { name: '1 day before', selected: true }))
       .toBeInTheDocument()
   })
 
   // A whole day has no hour, so the ladder is the moments the phones offer instead of distances.
-  it('offers the all-day ladder when the event has no hour', () => {
+  it('offers the all-day ladder when the event has no hour', async () => {
     draw([900], true)
+    await userEvent.click(screen.getByRole('combobox'))
     expect(screen.getByRole('option', { name: 'The day before at 09:00', selected: true }))
       .toBeInTheDocument()
   })
 
   // A value a phone wrote that neither ladder holds must still be readable and keepable.
-  it('keeps a value the ladder does not hold', () => {
+  it('keeps a value the ladder does not hold', async () => {
     draw([7])
-    expect(screen.getByRole('combobox')).toHaveValue('7')
+    const box = screen.getByRole('combobox')
+    expect(box).toHaveTextContent('7 minutes before')
+    await userEvent.click(box)
     expect(screen.getByRole('option', { name: '7 minutes before' })).toBeInTheDocument()
   })
 
@@ -55,7 +64,7 @@ describe('ReminderList', () => {
 
   it('changes one without touching its neighbours', async () => {
     const onChange = draw([15, 60])
-    await userEvent.selectOptions(screen.getAllByRole('combobox')[0]!, '30')
+    await pickOption(screen.getAllByRole('combobox')[0]!, '30 minutes before')
     expect(onChange).toHaveBeenCalledWith([30, 60])
   })
 

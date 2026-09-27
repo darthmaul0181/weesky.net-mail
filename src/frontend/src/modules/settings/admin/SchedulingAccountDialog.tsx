@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import PencilIcon from '../../../icons/PencilIcon'
 import ShieldAlertIcon from '../../../icons/ShieldAlertIcon'
@@ -145,10 +146,8 @@ export default function SchedulingAccountDialog({ account, addToast, onSave, onC
       </div>
       <div className="field-h">
         <label htmlFor="svc-account-security">{t('scheduling.security')}</label>
-        <select id="svc-account-security" value={security}
-          onChange={e => setSecurity(e.target.value as SchedulingSecurity)}>
-          {securityOptions.map(o => <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
-        </select>
+        <MenuSelect id="svc-account-security" value={security} onChange={setSecurity}
+          options={securityOptions.map(o => ({ value: o.value, label: securityLabel(o, t) }))} />
       </div>
       <div className="field-h">
         <label htmlFor="svc-account-login">{t('scheduling.login')}</label>

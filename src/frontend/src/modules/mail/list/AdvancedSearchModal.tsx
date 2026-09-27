@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import type { FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '../../../components/Modal'
@@ -63,22 +64,22 @@ export default function AdvancedSearchModal({ folderTitle, initialSubject, onSea
         </div>
         <div className="field-h">
           <label htmlFor="adv-date">{t('search.advanced.date')}</label>
-          <select id="adv-date" value={date} onChange={e => setDate(e.target.value)}>
-            <option value="">{t('search.advanced.allTime')}</option>
-            <option value="7">{t('search.advanced.last7')}</option>
-            <option value="14">{t('search.advanced.last14')}</option>
-            <option value="30">{t('search.advanced.last30')}</option>
-            <option value="90">{t('search.advanced.last90')}</option>
-            <option value="180">{t('search.advanced.last180')}</option>
-            <option value="year">{t('search.advanced.thisYear')}</option>
-          </select>
+          <MenuSelect id="adv-date" value={date} onChange={setDate} options={[
+            { value: '', label: t('search.advanced.allTime') },
+            { value: '7', label: t('search.advanced.last7') },
+            { value: '14', label: t('search.advanced.last14') },
+            { value: '30', label: t('search.advanced.last30') },
+            { value: '90', label: t('search.advanced.last90') },
+            { value: '180', label: t('search.advanced.last180') },
+            { value: 'year', label: t('search.advanced.thisYear') },
+          ]} />
         </div>
         <div className="field-h">
           <label htmlFor="adv-scope">{t('search.advanced.scope')}</label>
-          <select id="adv-scope" value={scope} onChange={e => setScope(e.target.value as 'this' | 'all')}>
-            <option value="this">{t('search.advanced.thisFolder', { folder: folderTitle })}</option>
-            <option value="all">{t('search.advanced.allFolders')}</option>
-          </select>
+          <MenuSelect id="adv-scope" value={scope} onChange={setScope} options={[
+            { value: 'this' as const, label: t('search.advanced.thisFolder', { folder: folderTitle }) },
+            { value: 'all' as const, label: t('search.advanced.allFolders') },
+          ]} />
         </div>
 
         <div className="advanced-search-checks">

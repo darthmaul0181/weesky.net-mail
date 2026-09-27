@@ -7,7 +7,7 @@ import { StrictMode, type ReactNode } from 'react'
 import SchedulingAccountSection from './SchedulingAccountSection'
 import type { SchedulingAccount } from './useSchedulingAccount'
 import { ApiError } from '../../../api.js'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
 import enAdmin from '../../../locales/en/admin.json'
 import frAdmin from '../../../locales/fr/admin.json'
 
@@ -262,7 +262,7 @@ describe('SchedulingAccountSection — dialog prefill', () => {
 
     expect(screen.getByLabelText('SMTP host')).toHaveValue('smtp.weesky.be')
     expect(screen.getByLabelText('SMTP port')).toHaveValue(587)
-    expect(screen.getByLabelText('SMTP security')).toHaveValue('StartTls')
+    expect(screen.getByLabelText('SMTP security')).toHaveTextContent('STARTTLS')
     expect(screen.getByLabelText('Login')).toHaveValue('agenda@weesky.net')
     const password = screen.getByLabelText('Password')
     expect(password).toHaveValue('')
@@ -293,26 +293,26 @@ describe('SchedulingAccountSection — dialog prefill', () => {
 })
 
 describe('SchedulingAccountSection — security choices', () => {
-  const choices = () => Array.from(screen.getByLabelText<HTMLSelectElement>('SMTP security').options, o => o.value)
+  const choices = (select: HTMLElement) => optionsOf(select)
 
   it('offers no « None » where the server refuses an unencrypted endpoint', async () => {
     await openEditDialog()
-    expect(choices()).toEqual(['StartTls', 'SslOnConnect'])
+    expect(await choices(screen.getByLabelText('SMTP security'))).toEqual(['STARTTLS', 'SSL/TLS'])
   })
 
   it('offers « None » where the server accepts one', async () => {
     await openEditDialog({ ...CONFIGURED, allowCleartext: true })
-    expect(choices()).toEqual(['None', 'StartTls', 'SslOnConnect'])
+    expect(await choices(screen.getByLabelText('SMTP security'))).toEqual(['None', 'STARTTLS', 'SSL/TLS'])
   })
 
   it('keeps a stored « None » shown and selectable, so the admin can move away from it', async () => {
     await openEditDialog({ ...CONFIGURED, security: 'None' })
     const select = screen.getByLabelText('SMTP security')
-    expect(select).toHaveValue('None')
+    expect(select).toHaveTextContent('None')
 
-    await userEvent.selectOptions(select, 'StartTls')
-    expect(select).toHaveValue('StartTls')
-    expect(choices()).toEqual(['None', 'StartTls', 'SslOnConnect'])
+    await pickOption(select, 'STARTTLS')
+    expect(select).toHaveTextContent('STARTTLS')
+    expect(await choices(select)).toEqual(['None', 'STARTTLS', 'SSL/TLS'])
   })
 })
 
@@ -358,7 +358,7 @@ describe('SchedulingAccountSection — password required on host/port change', (
   it('keeps the password optional when only the security changes', async () => {
     await openEditDialog()
 
-    await userEvent.selectOptions(screen.getByLabelText('SMTP security'), 'SslOnConnect')
+    await pickOption(screen.getByLabelText('SMTP security'), 'SSL/TLS')
 
     expect(screen.queryByText('A password is required to save or test this account.')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()

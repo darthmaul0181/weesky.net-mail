@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import Modal from '../../../components/Modal'
 import PencilIcon from '../../../icons/PencilIcon'
@@ -142,11 +143,8 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
       </div>
       <div className="field-h">
         <label htmlFor="ext-domain-imap-security">{t('external.imapSecurity')}</label>
-        <select id="ext-domain-imap-security" value={imapSecurity}
-          onChange={e => setImapSecurity(e.target.value)}>
-          {SECURITY_OPTIONS.map(o =>
-            <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
-        </select>
+        <MenuSelect id="ext-domain-imap-security" value={imapSecurity} onChange={setImapSecurity}
+          options={SECURITY_OPTIONS.map(o => ({ value: o.value, label: securityLabel(o, t) }))} />
       </div>
 
       <div className="field-h">
@@ -163,20 +161,16 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
       </div>
       <div className="field-h">
         <label htmlFor="ext-domain-smtp-security">{t('external.smtpSecurity')}</label>
-        <select id="ext-domain-smtp-security" value={smtpSecurity}
-          onChange={e => setSmtpSecurity(e.target.value)}>
-          {SECURITY_OPTIONS.map(o =>
-            <option key={o.value} value={o.value}>{securityLabel(o, t)}</option>)}
-        </select>
+        <MenuSelect id="ext-domain-smtp-security" value={smtpSecurity} onChange={setSmtpSecurity}
+          options={SECURITY_OPTIONS.map(o => ({ value: o.value, label: securityLabel(o, t) }))} />
       </div>
 
       <div className="field-h">
         <label htmlFor="ext-domain-auth-mode">{t('external.authentication')}</label>
-        <select id="ext-domain-auth-mode" value={authMode}
-          onChange={e => setAuthMode(e.target.value as 'Password' | 'OAuth2')}>
-          <option value="Password">{t('external.authPassword')}</option>
-          <option value="OAuth2">OAuth 2.0</option>
-        </select>
+        <MenuSelect id="ext-domain-auth-mode" value={authMode} onChange={setAuthMode} options={[
+          { value: 'Password' as const, label: t('external.authPassword') },
+          { value: 'OAuth2' as const, label: 'OAuth 2.0' },
+        ]} />
       </div>
 
       {isOAuth && (

@@ -6,6 +6,7 @@ import ContactEditView from './ContactEditView'
 import type {
   ContactDetail, ContactDetailEmail, ContactDraft, ContactDraftEmail,
 } from './contactTypes'
+import { optionsOf, pickOption } from '../../test-utils'
 
 // The reducer is tested on its own: this file wants the editor, not the canvas.
 vi.mock('./contactPhoto', () => ({
@@ -388,7 +389,7 @@ describe('ContactEditView', () => {
   it("une adresse postale sans aucune composante n'est pas envoyée, type ou pas", async () => {
     const { onSave } = setup({ contact: bruno })
     await userEvent.click(screen.getByRole('button', { name: /add a postal address/i }))
-    await userEvent.selectOptions(screen.getByLabelText(/postal address 1 type/i), 'WORK')
+    await pickOption(screen.getByLabelText(/postal address 1 type/i), 'Work')
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].postalAddresses).toEqual([])
@@ -431,12 +432,12 @@ describe('ContactEditView', () => {
 
   // Defect 4(a): a 3.0 round trip projects PREF into the type field itself
   // (`INTERNET,PREF,WORK`); the menu must never offer it as a choice.
-  it('strips PREF from a projected type before it ever reaches the phone dropdown', () => {
+  it('strips PREF from a projected type before it ever reaches the phone dropdown', async () => {
     setup({ contact: messyTypes })
 
-    const select = screen.getByLabelText<HTMLSelectElement>(/phone 1 type/i)
-    expect(select.value).toBe('INTERNET,WORK')
-    const optionTexts = Array.from(select.options).map(option => option.value)
+    const box = screen.getByLabelText(/phone 1 type/i)
+    expect(box).toHaveTextContent('INTERNET,WORK')
+    const optionTexts = await optionsOf(box)
     expect(optionTexts.some(value => value.toUpperCase().includes('PREF'))).toBe(false)
   })
 
@@ -446,7 +447,7 @@ describe('ContactEditView', () => {
   it('shows a quoted type raw in the dropdown but drops it from what is submitted', async () => {
     const { onSave } = setup({ contact: messyTypes })
 
-    expect(screen.getByLabelText(/postal address 1 type/i)).toHaveValue('Work Email')
+    expect(screen.getByLabelText(/postal address 1 type/i)).toHaveTextContent('Work Email')
 
     await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
 

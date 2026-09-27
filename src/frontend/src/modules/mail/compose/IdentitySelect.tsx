@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import DropdownMenu from '../../../components/DropdownMenu'
-import ChevronDownIcon from '../../../icons/ChevronDownIcon'
+import MenuSelect from '../../../components/MenuSelect'
 import { useAuth } from '../../../contexts/AuthContext'
 import type { SendingIdentity } from '../api/mailTypes'
 import { usableIdentities } from './usableIdentities'
@@ -38,14 +37,9 @@ export default function IdentitySelect({ identities, value, onChange }: Props) {
 
   return (
     <>
-      <DropdownMenu
-        ariaLabel={t('identity.menu')}
-        className="menu-select compose-from-select"
-        // The trigger sits at the left of the From row, with the whole composer to its right.
-        align="left"
-        trigger={<><span className="menu-select-name">{caption}</span><ChevronDownIcon size={14} /></>}
-        items={usable.map(i => ({ label: i.address, node: label(i), onSelect: () => onChange(i.address) }))}
-      />
+      <MenuSelect ariaLabel={t('identity.menu')} className="compose-from-select"
+        value={value} onChange={onChange} display={caption}
+        options={usable.map(i => ({ value: i.address, label: `${nameOf(i)} (${i.address})`, node: label(i) }))} />
       {tag}
     </>
   )

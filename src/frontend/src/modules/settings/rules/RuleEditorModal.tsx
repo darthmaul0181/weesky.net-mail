@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import type { FormEvent } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { api } from '../../../api.js'
@@ -151,14 +152,13 @@ export function RuleEditorModal({ rule: initialRule, onSave, onClose, extended =
             <div className="rule-wizard-step-header">
               <span className="rule-wizard-title">{t('rules.stepConditions')}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <select
+                <MenuSelect
                   className="rule-wizard-select"
+                  ariaLabel={t('rules.matchLabel')}
                   value={rule.matchAll ? 'all' : 'any'}
-                  onChange={e => setField('matchAll', e.target.value === 'all')}
-                >
-                  <option value="any">{t('rules.anyOf')}</option>
-                  <option value="all">{t('rules.allOf')}</option>
-                </select>
+                  onChange={match => setField('matchAll', match === 'all')}
+                  options={[{ value: 'any', label: t('rules.anyOf') }, { value: 'all', label: t('rules.allOf') }]}
+                />
                 <button type="button" className="rule-editor-add-btn" onClick={addCondition}>
                   <PlusIcon /> {t('actions.add', { ns: 'common' })}
                 </button>

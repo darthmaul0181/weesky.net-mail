@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import SystemFoldersModal from './SystemFoldersModal'
 import type { FolderRoleEntry, MailFolderNode } from '../../mail/api/mailTypes'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -77,7 +77,7 @@ describe('SystemFoldersModal', () => {
     renderModal()
 
     const trash = await screen.findByLabelText('Trash')
-    expect(trash).toHaveDisplayValue(/Automatic — Deleted Items/)
+    expect(trash).toHaveTextContent(/Automatic — Deleted Items/)
   })
 
   it('shows an override as the selected folder', async () => {
@@ -88,14 +88,14 @@ describe('SystemFoldersModal', () => {
     ])
     render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
-    expect(await screen.findByLabelText('Trash')).toHaveValue('Corbeille')
+    expect(await screen.findByLabelText('Trash')).toHaveTextContent('Corbeille')
   })
 
   it('assigns a role through the API', async () => {
     mocks.setFolderRole.mockResolvedValue(undefined)
     renderModal()
 
-    fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: 'Corbeille' } })
+    await pickOption(await screen.findByLabelText('Trash'), 'Corbeille')
 
     await waitFor(() => expect(mocks.setFolderRole).toHaveBeenCalledWith('trash', 'Corbeille', { accountId: 'primary' }))
   })
@@ -109,7 +109,7 @@ describe('SystemFoldersModal', () => {
     ])
     render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
-    fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: '' } })
+    await pickOption(await screen.findByLabelText('Trash'), 'Automatic')
 
     await waitFor(() => expect(mocks.clearFolderRole).toHaveBeenCalledWith('trash', { accountId: 'primary' }))
   })
@@ -119,7 +119,7 @@ describe('SystemFoldersModal', () => {
     mocks.setFolderRole.mockRejectedValue(new Error('This folder already holds another role'))
     renderModal()
 
-    fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: 'Corbeille' } })
+    await pickOption(await screen.findByLabelText('Trash'), 'Corbeille')
 
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not save the folder role', 'error'))
   })
@@ -133,7 +133,7 @@ describe('SystemFoldersModal', () => {
     ])
     render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
-    fireEvent.change(await screen.findByLabelText('Trash'), { target: { value: '' } })
+    await pickOption(await screen.findByLabelText('Trash'), 'Automatic')
 
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not save the folder role', 'error'))
   })
@@ -152,7 +152,7 @@ describe('SystemFoldersModal', () => {
     render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Trash')).toHaveDisplayValue(/Automatic — Deleted Items/)
+    expect(screen.getByLabelText('Trash')).toHaveTextContent(/Automatic — Deleted Items/)
   })
 
   // The stale notice and the resolved value key off independent fields on the entry, so a
@@ -170,7 +170,7 @@ describe('SystemFoldersModal', () => {
     render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Trash')).toHaveDisplayValue('Automatic — not set')
+    expect(screen.getByLabelText('Trash')).toHaveTextContent('Automatic — not set')
   })
 
   // Fix for the accessibility gap: DOM adjacency alone doesn't announce the notice to a
@@ -255,21 +255,20 @@ describe('SystemFoldersModal', () => {
     render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
     expect(await screen.findByLabelText('Trash'))
-      .toHaveDisplayValue('Automatic — Corbeille (detected from the name)')
+      .toHaveTextContent('Automatic — Corbeille (detected from the name)')
   })
 
   it('leaves a server-declared role unqualified', async () => {
     renderModal()
 
     // 'Deleted Items' arrives with provenance 'specialUse'.
-    expect(await screen.findByLabelText('Trash')).toHaveDisplayValue('Automatic — Deleted Items')
+    expect(await screen.findByLabelText('Trash')).toHaveTextContent('Automatic — Deleted Items')
   })
 
   it('never offers the inbox or a non-selectable folder', async () => {
     renderModal()
 
-    const options = Array.from((await screen.findByLabelText('Trash')).querySelectorAll('option'))
-      .map(option => option.getAttribute('value'))
+    const options = await optionsOf(await screen.findByLabelText('Trash'))
 
     expect(options).not.toContain('INBOX')
     expect(options).not.toContain('Container')
@@ -284,10 +283,8 @@ describe('SystemFoldersModal', () => {
     ])
     render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 
-    const trashOptions = Array.from((await screen.findByLabelText('Trash')).querySelectorAll('option'))
-      .map(option => option.getAttribute('value'))
-    const junkOptions = Array.from(screen.getByLabelText('Junk').querySelectorAll('option'))
-      .map(option => option.getAttribute('value'))
+    const trashOptions = await optionsOf(await screen.findByLabelText('Trash'))
+    const junkOptions = await optionsOf(screen.getByLabelText('Junk'))
 
     expect(trashOptions).not.toContain('Corbeille')   // taken by junk
     expect(junkOptions).toContain('Corbeille')        // its own override stays choosable

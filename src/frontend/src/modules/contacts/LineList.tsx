@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from 'react'
+import MenuSelect from '../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import TrashIcon from '../../icons/TrashIcon'
 import { typeLabel, typeOptions } from './contactLineTypes'
@@ -41,11 +42,8 @@ export function LineTypeSelect({ id, label, types, value, className, onChange }:
   return (
     <>
       <label className="visually-hidden" htmlFor={id}>{label}</label>
-      <select id={id} value={value} className={className} onChange={event => onChange(event.target.value)}>
-        {typeOptions(types, value).map(option => (
-          <option key={option} value={option}>{typeLabel(option, t)}</option>
-        ))}
-      </select>
+      <MenuSelect id={id} value={value} className={className} onChange={onChange}
+        options={typeOptions(types, value).map(option => ({ value: option, label: typeLabel(option, t) }))} />
     </>
   )
 }

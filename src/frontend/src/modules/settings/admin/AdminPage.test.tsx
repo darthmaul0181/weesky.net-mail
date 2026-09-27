@@ -5,7 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement, ReactNode } from 'react'
 import Toasts from '../../../components/Toasts'
 import { useToasts } from '../../../hooks/useToasts'
-import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, pickOption, settle } from '../../../test-utils'
 import AdminPage from './AdminPage'
 import { AddEditUserModal } from './AddEditUserModal'
 import { AddEditDomainModal } from './AddEditDomainModal'
@@ -728,7 +728,7 @@ describe('AddEditUserModal — field changes', () => {
     )
     await userEvent.type(screen.getAllByRole('textbox')[0]!, 'alice')
     await userEvent.type(screen.getByLabelText('Password'), 'pw')
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'EXM')
+    await pickOption(screen.getByRole('combobox'), 'example.com')
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
     await waitFor(() =>
       expect(mocks.adminCreateUser).toHaveBeenCalledWith(

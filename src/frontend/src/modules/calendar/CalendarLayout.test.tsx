@@ -10,8 +10,8 @@ import { utcOfLocalMidnight } from './plainDate'
 import type { Calendar, EventUpdated, OccurrenceListResponse } from './calendarTypes'
 import type { api as realApi } from '../../api'
 import {
-  createTestQueryClient, fireEscape, firePointer, installPointerEvents, mockViewport, pressBackdrop,
-  resetViewport, settle,
+  createTestQueryClient, fireEscape, firePointer, installPointerEvents, mockViewport, pickOption,
+  pressBackdrop, resetViewport, settle,
 } from '../../test-utils'
 
 afterEach(resetViewport)
@@ -348,8 +348,7 @@ describe('CalendarLayout', () => {
     api.getEvent.mockResolvedValue(detail({ repeat: REPEAT }))
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16&instance=2026-09-16T09:00:00')
 
-    await userEvent.click(await screen.findByLabelText('Calendar'))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Work' }))
+    await pickOption(await screen.findByLabelText('Calendar'), 'Work')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await screen.findByText('Save a recurring event')
@@ -366,7 +365,7 @@ describe('CalendarLayout', () => {
     renderAt('/calendar/e1/edit?view=week&date=2026-09-16')
 
     await userEvent.click(await screen.findByLabelText('Repeats'))
-    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'MONTHLY')
+    await pickOption(screen.getByLabelText('Unit'), 'month')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalledWith('e1',

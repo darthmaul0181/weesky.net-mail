@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type { AccountIdentity } from '../../../lib/accountIdentity'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
-import DropdownMenu from '../../../components/DropdownMenu'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import type { GroupOption } from '../../contacts/contactSearch'
 import type { Contact } from '../../contacts/contactTypes'
@@ -119,14 +119,9 @@ export default function ComposeFields({
       {(showPriority || priority !== 'normal') && (
         <div className="compose-priority">
           <span className="compose-priority-label">{t('fields.priority')}</span>
-          <DropdownMenu
-            ariaLabel={t('fields.priority')}
-            className="menu-select compose-priority-select"
-            align="left"
-            // priorityLabel falls back to Normal, so an out-of-union value cannot blank the app.
-            trigger={<><span className="menu-select-name">{priorityLabel(priority, t)}</span><ChevronDownIcon size={14} /></>}
-            items={PRIORITIES.map(p => ({ label: priorityLabel(p, t), onSelect: () => changePriority(p) }))}
-          />
+          <MenuSelect ariaLabel={t('fields.priority')} className="compose-priority-select"
+            value={priority} onChange={changePriority}
+            options={PRIORITIES.map(p => ({ value: p, label: priorityLabel(p, t) }))} />
         </div>
       )}
       <div className="field-h">

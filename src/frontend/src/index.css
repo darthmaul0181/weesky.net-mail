@@ -233,7 +233,6 @@ body {
 .alias-page-summary { margin: 0; font-size: 14px; color: var(--text-muted); }
 
 .alias-domain-select { min-width: 180px; }
-.alias-page-header .dropdown-menu { min-width: 100%; }
 
 /* One field that both filters the index and names the alias Create will add. */
 .alias-composer {
@@ -566,7 +565,7 @@ body {
   border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 16px;
 }
 .connect-account-panel .admin-list-header { margin-bottom: 12px; }
-.connect-account-panel .field-h select { flex: 0 0 auto; }
+.connect-account-panel .field-h > .select-root { flex: 0 0 auto; }
 
 
 /* ── Avatar & account panel ──────────────────────────────── */
@@ -1207,7 +1206,6 @@ body {
    (number, then tel), each falling through to the browser's own box. The exclusions sit in
    :where() so this stays at .field-h input, under every deliberate override below. */
 :is(.field-h, .field-v) input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
-:is(.field-h, .field-v) select,
 .field-h textarea,
 .field-v textarea {
   flex: 1;
@@ -1223,7 +1221,6 @@ body {
 }
 
 :is(.field-h, .field-v) input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
-:is(.field-h, .field-v) select:focus,
 .field-h textarea:focus,
 .field-v textarea:focus {
   border-color: var(--action-primary);
@@ -1231,8 +1228,10 @@ body {
 
 :is(.field-h, .field-v) textarea { min-height: 80px; resize: vertical; }
 
-.field-h input:disabled,
-.field-h select:disabled {
+/* `MenuSelect` is the flex item a `<select>` was, and grows the same way. */
+:is(.field-h, .field-v) > .select-root { flex: 1; }
+
+.field-h input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -1748,22 +1747,8 @@ body {
   margin-bottom: 0;
 }
 
-.rule-row select {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: var(--font);
-  color: var(--text);
-  background: var(--surface);
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.rule-row select:focus {
-  border-color: var(--action-primary);
-}
+.rule-row .menu-select { padding: 6px 8px; font-size: 13px; }
+.rule-row > .is-grow { flex: 1; }
 
 .rule-row-input {
   border: 1px solid var(--border);
@@ -1903,22 +1888,7 @@ body {
   border-color: var(--action-primary);
 }
 
-.rule-wizard-select {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 4px 8px;
-  font-size: 12px;
-  font-family: var(--font);
-  color: var(--text);
-  background: var(--surface);
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.rule-wizard-select:focus {
-  border-color: var(--action-primary);
-}
+.rule-wizard-select > .menu-select { padding: 4px 8px; font-size: 12px; }
 
 .rule-wizard-toggle-row {
   display: flex;
@@ -1985,7 +1955,7 @@ body {
 @media (max-width: 639px) {
   /* iOS zooms the page in when a focused field's text is under 16px, and never zooms back out.
      16px on the controls, not on body: the interface keeps its 14px scale. */
-  input, select, textarea { font-size: 16px; }
+  input, textarea, .menu-select { font-size: 16px; }
 
   /* Label above control: .field-h's inputs carry no min-width: 0, so their ~177px intrinsic
      floor clipped beside a 110px label column (measured, 38px clip at 360). gap: 4px, not the
@@ -2023,7 +1993,7 @@ body {
      matches the written attribute, not the IDL default — see CLAUDE.md's geometry paragraph. */
   input:not([type]), input[type="text"], input[type="password"], input[type="email"],
   input[type="number"], input[type="search"], input[type="date"], input[type="time"],
-  select, textarea {
+  textarea, .menu-select, .select-list .dropdown-item {
     min-height: var(--touch);
   }
 

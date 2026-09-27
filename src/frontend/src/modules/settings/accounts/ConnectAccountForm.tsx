@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type FormEvent } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import {
   errorText, leaveTo, providerRefused, useConnectableDomains, useConnectAccount,
@@ -79,13 +80,11 @@ export default function ConnectAccountForm({ onConnected, onCancel }: Props) {
         <div className="field-h">
           <label htmlFor="connect-server">{t('accounts.server')}</label>
           {/* The refusal named the fields that are about to disappear, so it cannot outlive them. */}
-          <select id="connect-server" value={domainId}
-            onChange={e => { setError(null); setDomainId(e.target.value) }}>
-            <option value="">{t('accounts.localServer')}</option>
-            {(domains ?? []).map(domain => (
-              <option key={domain.id} value={domain.id}>{domain.name}</option>
-            ))}
-          </select>
+          <MenuSelect id="connect-server" value={domainId}
+            onChange={next => { setError(null); setDomainId(next) }} options={[
+              { value: '', label: t('accounts.localServer') },
+              ...(domains ?? []).map(domain => ({ value: domain.id, label: domain.name })),
+            ]} />
         </div>
 
         {!isOAuth && (

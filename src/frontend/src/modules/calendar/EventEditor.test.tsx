@@ -5,6 +5,7 @@ import { calendarOf, renderInCalendar, TZ } from './calendarTestHarness'
 import type { EventDetail } from './calendarTypes'
 import EventEditor, { type EventEditorProps } from './EventEditor'
 import type { EventFormState } from './eventForm'
+import { pickOption } from '../../test-utils'
 
 vi.mock('../contacts/queries', () => ({ useContacts: () => ({ data: [] }) }))
 
@@ -77,6 +78,7 @@ describe('EventEditor', () => {
     expect(screen.getByLabelText('Start time')).toHaveValue('00:00')
     expect(screen.getByLabelText('End time')).toBeDisabled()
     expect(screen.getByLabelText('End time')).toHaveValue('00:00')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Reminder' }))
     expect(screen.getByRole('option', { name: 'The day before at 18:00', selected: true }))
       .toBeInTheDocument()
   })
@@ -194,8 +196,7 @@ describe('EventEditor', () => {
   it('opens More options on a description, and picks a calendar from the coloured list', async () => {
     draw()
     expect(screen.getByLabelText('Description')).toHaveValue('Bring the card')
-    await userEvent.click(screen.getByLabelText('Calendar'))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Work' }))
+    await pickOption(screen.getByLabelText('Calendar'), 'Work')
     expect(screen.getByLabelText('Calendar')).toHaveTextContent('Work')
   })
 

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderInCalendar } from './calendarTestHarness'
 import type { RecurrenceWrite } from './calendarTypes'
 import RecurrenceEditor from './RecurrenceEditor'
+import { pickOption } from '../../test-utils'
 
 const WEEKLY: RecurrenceWrite = { frequency: 'WEEKLY', interval: 1, byDay: ['MO'], end: 'Never' }
 
@@ -31,7 +32,7 @@ describe('RecurrenceEditor', () => {
   it('shows the interval and the unit', () => {
     draw({ ...WEEKLY, interval: 3 })
     expect(screen.getByLabelText('Repeat every')).toHaveValue(3)
-    expect(screen.getByLabelText('Unit')).toHaveValue('WEEKLY')
+    expect(screen.getByLabelText('Unit')).toHaveTextContent('weeks')
   })
 
   it('offers the seven days on a weekly rule, in the region\'s own order', () => {
@@ -62,10 +63,10 @@ describe('RecurrenceEditor', () => {
 
   it('keeps the days chosen when the unit moves off weekly, and drops them for daily', async () => {
     const onChange = draw({ ...WEEKLY, byDay: ['MO', 'WE'] })
-    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'MONTHLY')
+    await pickOption(screen.getByLabelText('Unit'), 'month')
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ frequency: 'MONTHLY', byDay: ['MO', 'WE'] }))
-    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'DAILY')
+    await pickOption(screen.getByLabelText('Unit'), 'day')
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ frequency: 'DAILY', byDay: [] }))
   })
@@ -73,7 +74,7 @@ describe('RecurrenceEditor', () => {
   // A rule that names no day repeats on nothing: leaving daily lands on the start's own weekday.
   it('falls back on the start weekday when a rule leaves daily with no day', async () => {
     const onChange = draw(MONTHLY)
-    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'WEEKLY')
+    await pickOption(screen.getByLabelText('Unit'), 'week')
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ frequency: 'WEEKLY', byDay: ['FR'] }))
   })

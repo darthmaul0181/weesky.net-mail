@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
-import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, pickOption, settle } from '../../../test-utils'
 import { mailKeys } from '../../mail/queries'
 import AliasesPage from './AliasesPage'
 
@@ -156,7 +156,7 @@ describe('AliasesPage', () => {
   it('hides the domain select with a single domain', async () => {
     renderPage()
     await screen.findByText('alias1')
-    expect(screen.queryByRole('button', { name: 'Domain' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Domain' })).not.toBeInTheDocument()
   })
 
   it('shows the domain select with multiple domains', async () => {
@@ -168,7 +168,7 @@ describe('AliasesPage', () => {
       ],
     })
     renderPage()
-    expect(await screen.findByRole('button', { name: 'Domain' })).toHaveTextContent('@weesky.be')
+    expect(await screen.findByRole('combobox', { name: 'Domain' })).toHaveTextContent('@weesky.be')
   })
 
   it('deletes an alias when the delete button is clicked', async () => {
@@ -383,9 +383,8 @@ describe('AliasesPage', () => {
       ],
     })
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Domain' }))
-    await userEvent.click(screen.getByRole('menuitem', { name: '@example.com' }))
-    expect(screen.getByRole('button', { name: 'Domain' })).toHaveTextContent('@example.com')
+    await pickOption(await screen.findByRole('combobox', { name: 'Domain' }), '@example.com')
+    expect(screen.getByRole('combobox', { name: 'Domain' })).toHaveTextContent('@example.com')
     expect(screen.getByText('@example.com', { selector: '.alias-composer-domain' })).toBeInTheDocument()
   })
 
