@@ -19,14 +19,14 @@ beforeEach(() => {
 })
 
 describe('AboutPage', () => {
-  it('names the product and its web version', () => {
+  it('names the product and its web version, with no product-wide number', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { level: 1, name: 'About' })).toBeInTheDocument()
     // The name is drawn in two weights, so it is two nodes: match the line rather than a word.
     expect(screen.getByText((_, element) =>
       element?.tagName === 'P' && element.textContent === 'Scotty webmail')).toBeInTheDocument()
-    expect(screen.getByText(`Version ${WEB_VERSION}`)).toBeInTheDocument()
+    expect(screen.queryByText(`Version ${WEB_VERSION}`)).not.toBeInTheDocument()
     expect(screen.getByText(`Web app ${WEB_VERSION} (${WEB_COMMIT})`)).toBeInTheDocument()
   })
 

@@ -3,7 +3,7 @@ using System.Reflection;
 namespace weesky.Scotty.Microservice.Models;
 
 /// <summary>
-/// The running build: the product version from the VERSION file (suffixed -dev outside a release)
+/// The running build: the API's version from src/scotty.microservice/VERSION (suffixed -dev outside a release)
 /// and the short commit the SDK appends to the informational version after a '+'.
 /// </summary>
 public sealed record ProductVersion(string Version, string? Commit)

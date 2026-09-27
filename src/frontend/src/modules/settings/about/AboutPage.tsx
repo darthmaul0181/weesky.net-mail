@@ -54,7 +54,6 @@ export default function AboutPage() {
       </div>
 
       <p className="about-product">{PRODUCT.name} <span className="about-product-kind">{PRODUCT.kind}</span></p>
-      <span className="about-badge">{t('about.version', { version: WEB_VERSION })}</span>
 
       <p className="about-builds">
         <span>{webLine}</span>
