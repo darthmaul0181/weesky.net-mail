@@ -95,7 +95,8 @@
 /* Unconditional, not gated to a width: `usePullToRefresh`'s listeners bind at every width, and
    a rule fired only below 1023px would leave a touch laptop above it uncontained. The only
    element in the module it can bind to — `.app-shell` has no `overflow`, so it isn't a container. */
-.mail-list-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
+/* overflow-x hidden, not the auto overflow-y computes it to: a row mid-swipe must not grow a sideways scrollbar. */
+.mail-list-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; }
 
 /* The scrollbar treatment these two columns wear lives in shell.css, shared with the contacts
    module's two scrollers rather than transcribed into them. */
@@ -418,6 +419,28 @@
    sender or subject does not fit would widen the track past the column — the trap the reader's
    details grid documents. A block child could never do that, which is what changes here. */
 .message-row-slot { display: grid; grid-template-rows: 1fr; grid-template-columns: minmax(0, 1fr); }
+
+/* The band shares the slot's one cell with the row and sits under it; it collapses with the slot. */
+.message-row-slot > .message-row { grid-area: 1 / 1; touch-action: pan-y pinch-zoom; }
+.message-row.is-swiping { box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18); }
+/* The accent bar stays: one box-shadow property carries both. */
+.message-row.is-unread.is-swiping,
+.message-row.is-selected.is-swiping {
+  box-shadow: inset 3px 0 0 var(--accent-unread), 0 1px 6px rgba(0, 0, 0, 0.18);
+}
+.message-row-swipe {
+  grid-area: 1 / 1; min-height: 0; overflow: hidden;
+  display: flex; align-items: center; gap: 8px; padding: 0 22px;
+  background: var(--surface-sunken); color: var(--text-muted);
+  font-size: 14px; font-weight: 600;
+}
+/* The finger went left, so the band shows on the right, label before the glyph. */
+.message-row-swipe.is-left { flex-direction: row-reverse; }
+.message-row-swipe.is-armed { color: var(--action-primary-fg); }
+.message-row-swipe.is-armed.is-seen { background: var(--swipe-seen); }
+.message-row-swipe.is-armed.is-flag { background: var(--swipe-flag); }
+.message-row-swipe.is-armed.is-archive { background: var(--swipe-archive); }
+.message-row-swipe.is-armed.is-delete { background: var(--swipe-delete); }
 
 .message-row-slot.is-leaving {
   overflow: hidden;

@@ -4,7 +4,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import {
   BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
   languageOf, notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf,
-  showFolderIconsOf, showPreviewOf, trustContactsOf, usePreferences, useSetPreference,
+  showFolderIconsOf, showPreviewOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
 import { createTestQueryClient, withQueryClient } from '../test-utils'
 
@@ -238,5 +238,20 @@ describe('languageOf', () => {
   // What every account gets before it has ever chosen — an absent row, not an absent language.
   it('falls back to auto for an account that has not chosen yet', () => {
     expect(languageOf({})).toBe('auto')
+  })
+})
+
+describe('swipeActionOf', () => {
+  it('reads each side', () => {
+    const prefs = { 'mail.swipeRight': 'archive', 'mail.swipeLeft': 'none' }
+    expect(swipeActionOf(prefs, 'right')).toBe('archive')
+    expect(swipeActionOf(prefs, 'left')).toBe('none')
+  })
+
+  // An older backend sends neither key; a newer build may write one this build ignores.
+  it('falls back to the defaults on an absent or unknown value', () => {
+    expect(swipeActionOf({}, 'right')).toBe('seen')
+    expect(swipeActionOf({}, 'left')).toBe('delete')
+    expect(swipeActionOf({ 'mail.swipeLeft': 'junk' }, 'left')).toBe('delete')
   })
 })

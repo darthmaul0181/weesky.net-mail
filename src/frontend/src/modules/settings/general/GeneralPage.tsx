@@ -8,11 +8,11 @@ import ToggleRow from '../../../components/ToggleRow'
 import Toasts from '../../../components/Toasts'
 import { useToasts } from '../../../hooks/useToasts'
 import {
-  ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, alwaysShowImagesOf, captureRecipientsOf,
-  composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf, notifySoundOf,
-  readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf, showPreviewOf, showSpamScoreOf,
-  trustContactsOf, usePreferences, useSetPreference,
-  type ComposeFormat, type ReadingPane, type RowAction,
+  ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, SWIPE_ACTIONS, alwaysShowImagesOf,
+  captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf,
+  notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
+  showSpamScoreOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
+  type ComposeFormat, type ReadingPane, type RowAction, type SwipeAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
@@ -22,6 +22,7 @@ import JunkIcon from '../../../icons/JunkIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import SlidersIcon from '../../../icons/SlidersIcon'
 import TrashIcon from '../../../icons/TrashIcon'
+import SwipeActionIcon from '../../mail/SwipeActionIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 
 function pageSizeToast(value: string, t: TFunction<'settings'>): string {
@@ -83,6 +84,17 @@ function EditorGlyph({ variant }: { variant: ComposeFormat }) {
   )
 }
 
+/** Literal keys, one per action: the missing-key guard cannot read a key held in a variable. */
+function swipeLabel(action: SwipeAction, t: TFunction<'settings'>): string {
+  switch (action) {
+    case 'none': return t('general.swipe.none')
+    case 'seen': return t('general.swipe.seen')
+    case 'flag': return t('general.swipe.flag')
+    case 'archive': return t('general.swipe.archive')
+    case 'delete': return t('general.swipe.delete')
+  }
+}
+
 /** Settings that shape the app, not the account; the backend fills the defaults in. */
 export default function GeneralPage() {
   const { t } = useTranslation('settings')
@@ -139,6 +151,12 @@ export default function GeneralPage() {
       addToast(apiErrorMessage(error, t('general.saveFailed')), 'error')
     }
   }
+
+  const swipeOptions = SWIPE_ACTIONS.map(action => ({
+    value: action,
+    label: swipeLabel(action, t),
+    icon: <span className={`swipe-option-icon is-${action}`}><SwipeActionIcon action={action} size={16} /></span>,
+  }))
 
   return (
     <div className="settings-page">
@@ -260,6 +278,36 @@ export default function GeneralPage() {
                   )
                 })}
               </div>
+            </div>
+          </section>
+
+          <section className="account-section">
+            <h2>{t('general.swipe.heading')}</h2>
+            <p className="svc-account-section-intro">{t('general.swipe.intro')}</p>
+            <div className="field-h is-setting">
+              <span className="setting-label"><label htmlFor="swipe-right">{t('general.swipe.right')}</label></span>
+              <MenuSelect
+                id="swipe-right"
+                value={swipeActionOf(preferences, 'right')}
+                options={swipeOptions}
+                disabled={setPreference.isPending}
+                onChange={action => void save(PREFERENCE_KEYS.swipeRight, action,
+                  t('general.swipe.rightToast', { action: swipeLabel(action, t) }))}
+              />
+            </div>
+            <div className="field-h is-setting">
+              <span className="setting-label">
+                <label htmlFor="swipe-left">{t('general.swipe.left')}</label>
+                <span className="setting-hint">{t('general.swipe.offHint')}</span>
+              </span>
+              <MenuSelect
+                id="swipe-left"
+                value={swipeActionOf(preferences, 'left')}
+                options={swipeOptions}
+                disabled={setPreference.isPending}
+                onChange={action => void save(PREFERENCE_KEYS.swipeLeft, action,
+                  t('general.swipe.leftToast', { action: swipeLabel(action, t) }))}
+              />
             </div>
           </section>
 

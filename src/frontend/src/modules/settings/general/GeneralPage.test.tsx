@@ -295,7 +295,7 @@ describe('GeneralPage', () => {
     await screen.findByLabelText('Messages per page')
 
     expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent))
-      .toEqual(['Layout', 'Privacy & security', 'Composing', 'Notifications'])
+      .toEqual(['Layout', 'Swipe gestures', 'Privacy & security', 'Composing', 'Notifications'])
   })
 
   // A pressed button, not a ticked box: the multi-select must not be drawn like the reading-pane
@@ -565,5 +565,21 @@ describe('the default composing editor', () => {
 
     await waitFor(() =>
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.composeFormat', 'text'))
+  })
+})
+
+describe('GeneralPage swipe gestures', () => {
+  it('shows the defaults when nothing is stored', async () => {
+    renderPage()
+    expect(await screen.findByLabelText('Swipe right')).toHaveTextContent('Read / unread')
+    expect(screen.getByLabelText('Swipe left')).toHaveTextContent('Delete')
+  })
+
+  it('saves each side', async () => {
+    renderPage()
+    await pickOption(await screen.findByLabelText('Swipe right'), 'Archive')
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('mail.swipeRight', 'archive'))
+    await pickOption(screen.getByLabelText('Swipe left'), 'None')
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('mail.swipeLeft', 'none'))
   })
 })

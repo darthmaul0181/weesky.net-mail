@@ -8,7 +8,8 @@ import type { MailFolderNode } from '../api/mailTypes'
 import { createTestQueryClient, fireTouch as dispatchTouch, settle } from '../../../test-utils'
 import { focusablesIn, tabbablesIn } from '../../../lib/layerStack'
 import { DRAG_MIME, serializeDrag } from './dragMessages'
-import type { RowExit } from './useRowExit'
+import { useRowExit, type RowExit } from './useRowExit'
+import type { AddToast } from '../../../hooks/useToasts'
 
 const mocks = vi.hoisted(() => ({
   getMailMessages: vi.fn(), getPreferences: vi.fn(), useMessageList: vi.fn(), mutate: vi.fn(),
@@ -99,6 +100,15 @@ type ListProps = Parameters<typeof MessageList>[0]
 
 // The only press useLongPress answers to. A mouse hold is deliberately inert — see its own suite.
 const FINGER = { pointerType: 'touch', isPrimary: true, button: 0 }
+
+/** A drag across the row by `dx`, the row given a 300px width jsdom does not lay out. */
+function swipe(row: HTMLElement, dx: number) {
+  Object.defineProperty(row, 'clientWidth', { configurable: true, value: 300 })
+  fireEvent.pointerDown(row, { ...FINGER, clientX: 150, clientY: 10, pointerId: 1 })
+  fireEvent.pointerMove(row, { ...FINGER, clientX: 150 + dx / 2, clientY: 10, pointerId: 1 })
+  fireEvent.pointerMove(row, { ...FINGER, clientX: 150 + dx, clientY: 10, pointerId: 1 })
+  fireEvent.pointerUp(row, { ...FINGER, pointerId: 1 })
+}
 
 /* The exit's own timing is useRowExit's business and is tested there; here it is stubbed through,
    so every assertion about what a row action fires stays on the click that fires it. */
@@ -627,15 +637,6 @@ describe('the row controls', () => {
     expect(within(row).getByRole('button', { name: 'Delete' }))
       .toHaveAttribute('title', 'Delete')
   })
-
-  it('mutation errors reach onNotify', () => {
-    const onNotify = vi.fn()
-    renderList({ onNotify })
-
-    mocks.onError?.('Could not update the message')
-
-    expect(onNotify).toHaveBeenCalledWith('Could not update the message')
-  })
 })
 
 describe('archive and trash from the row', () => {
@@ -782,15 +783,17 @@ describe('archive and trash from the row', () => {
     expect(onRows).toHaveBeenLastCalledWith([3, 4])
   })
 
-  it('move and delete failures reach onNotify', () => {
+  it('flag, move and delete failures reach onNotify as errors', () => {
     const onNotify = vi.fn()
     renderList({ onNotify })
 
+    mocks.onError?.('Could not update the message')
     mocks.moveError?.('Could not move the message')
     mocks.deleteError?.('Could not delete the message')
 
-    expect(onNotify).toHaveBeenCalledWith('Could not move the message')
-    expect(onNotify).toHaveBeenCalledWith('Could not delete the message')
+    expect(onNotify).toHaveBeenCalledWith('Could not update the message', 'error')
+    expect(onNotify).toHaveBeenCalledWith('Could not move the message', 'error')
+    expect(onNotify).toHaveBeenCalledWith('Could not delete the message', 'error')
   })
 })
 
@@ -2529,5 +2532,127 @@ describe('the list as a grid', () => {
     fireEvent.keyDown(star, { key: 'End' })
 
     expect(star).toHaveFocus()
+  })
+})
+
+async function renderSwipe(preferences: Record<string, string>, props: Partial<ListProps> = {}) {
+  const view = renderList(props, { 'mail.rowActions': 'seen', ...preferences })
+  await waitFor(() => expect(
+    within(rowOf(/alice martin/i)).queryByRole('button', { name: 'Archive' })).toBeNull())
+  return view
+}
+
+describe('MessageList swipe', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useMessageList.mockReturnValue(pagedState())
+    mocks.folders = [
+      folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+      folderNode({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+      folderNode({ path: 'Archive', name: 'Archive', specialUse: 'archive' }),
+    ]
+  })
+
+  it('swiping right past the threshold marks an unread message read', async () => {
+    await renderSwipe({ 'mail.swipeRight': 'seen' })
+    swipe(rowOf(/alice martin/i), 200)
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ folderPath: 'INBOX', uids: [2], flag: 'seen', value: true }))
+  })
+
+  it('swiping left deletes behind a five-second Undo', async () => {
+    const onNotify = vi.fn(() => 1)
+    await renderSwipe({ 'mail.swipeLeft': 'delete' }, { onNotify })
+    swipe(rowOf(/alice martin/i), -200)
+    const aHold: unknown = expect.any(Promise)
+    expect(mocks.move).toHaveBeenCalledWith(expect.objectContaining({
+      folderPath: 'INBOX', uids: [2], targetFolderPath: 'Trash', copy: false, hold: aHold,
+    }))
+    expect(onNotify).toHaveBeenCalledWith('Moved to Trash', 'success',
+      expect.objectContaining({ label: 'Undo' }),
+      expect.objectContaining({ durationMs: 5000, countdown: true }))
+  })
+
+  // The hold starts with the move, once the row has left: an Undo can never beat the removal.
+  it('raises the Undo toast only once the row has left', async () => {
+    const onNotify = vi.fn<AddToast>(() => 1)
+    function Listed() {
+      return <MessageList {...defaultListProps()} onNotify={onNotify} rowExit={useRowExit()} />
+    }
+    mocks.getPreferences.mockResolvedValue({
+      'mail.pageSize': '50', 'mail.showPreview': 'true', 'mail.rowActions': 'seen', 'mail.swipeLeft': 'delete',
+    })
+    render(<Listed />, { wrapper })
+    await waitFor(() => expect(
+      within(rowOf(/alice martin/i)).queryByRole('button', { name: 'Archive' })).toBeNull())
+    swipe(rowOf(/alice martin/i), -200)
+    expect(onNotify).not.toHaveBeenCalled()
+    expect(mocks.move).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(mocks.move).toHaveBeenCalledWith(
+      expect.objectContaining({ uids: [2], targetFolderPath: 'Trash', hold: expect.any(Promise) as unknown })))
+    expect(onNotify).toHaveBeenCalledWith('Moved to Trash', 'success',
+      expect.objectContaining({ label: 'Undo' }), expect.objectContaining({ durationMs: 5000 }))
+  })
+
+  it('inside the trash, swiping left asks before deleting for good', async () => {
+    await renderSwipe({ 'mail.swipeLeft': 'delete' }, { folderPath: 'Trash', folderRole: 'trash' })
+    swipe(rowOf(/alice martin/i), -200)
+    // DeleteConfirmModal is an alertdialog: it interrupts to ask one question.
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    expect(mocks.move).not.toHaveBeenCalled()
+  })
+
+  it('an action no folder can take does nothing', async () => {
+    mocks.folders = [folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
+    await renderSwipe({ 'mail.swipeLeft': 'archive' })
+    swipe(rowOf(/alice martin/i), -200)
+    expect(mocks.move).not.toHaveBeenCalled()
+    expect(rowOf(/alice martin/i).style.transform).toBe('')
+  })
+
+  it('a short swipe does nothing, and the click it ends in opens nothing', async () => {
+    const onSelect = vi.fn()
+    await renderSwipe({ 'mail.swipeRight': 'seen' }, { onSelect })
+    const row = rowOf(/alice martin/i)
+    swipe(row, 60)
+    fireEvent.click(row)
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('does not swipe while selecting', async () => {
+    await renderSwipe({ 'mail.swipeRight': 'seen' })
+    vi.useFakeTimers()
+    try {
+      const row = rowOf(/alice martin/i)
+      fireEvent.pointerDown(row, FINGER)
+      act(() => { vi.advanceTimersByTime(500) })
+      fireEvent.pointerUp(row)
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+      swipe(rowOf(/bob@x.be/i), 200)
+      expect(mocks.mutate).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('a side set to None does not move', async () => {
+    await renderSwipe({ 'mail.swipeRight': 'none', 'mail.swipeLeft': 'none' })
+    const row = rowOf(/alice martin/i)
+    swipe(row, 200)
+    swipe(row, -200)
+    expect(row.style.transform).toBe('')
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect(mocks.move).not.toHaveBeenCalled()
+  })
+
+  it('a mouse drag never swipes', async () => {
+    await renderSwipe({ 'mail.swipeRight': 'seen' })
+    const row = rowOf(/alice martin/i)
+    Object.defineProperty(row, 'clientWidth', { configurable: true, value: 300 })
+    const mouse = { pointerType: 'mouse', isPrimary: true, button: 0, pointerId: 1 }
+    fireEvent.pointerDown(row, { ...mouse, clientX: 150, clientY: 10 })
+    fireEvent.pointerMove(row, { ...mouse, clientX: 350, clientY: 10 })
+    fireEvent.pointerUp(row, mouse)
+    expect(mocks.mutate).not.toHaveBeenCalled()
   })
 })

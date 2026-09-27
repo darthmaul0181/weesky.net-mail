@@ -15,6 +15,8 @@ export const PREFERENCE_KEYS = {
   composeFormat: 'mail.composeFormat',
   showFolderIcons: 'mail.showFolderIcons',
   groupConversations: 'mail.groupConversations',
+  swipeRight: 'mail.swipeRight',
+  swipeLeft: 'mail.swipeLeft',
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
   language: 'ui.language',
@@ -22,7 +24,8 @@ export const PREFERENCE_KEYS = {
 
 export type Preferences = Record<string, string>
 
-const queryKey = ['preferences'] as const
+export const preferencesKey = ['preferences'] as const
+const queryKey = preferencesKey
 
 /** `enabled` so a caller with no session — the locale provider on the login page — can leave the
     query off rather than firing a request that can only 401. Same shape as `useFolders`. */
@@ -141,6 +144,18 @@ export function showFolderIconsOf(preferences: Preferences): boolean {
     the key yet must keep it that way. */
 export function groupConversationsOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.groupConversations] === 'true'
+}
+
+export type SwipeAction = 'none' | 'seen' | 'flag' | 'archive' | 'delete'
+
+/** The order the settings list offers them in. */
+export const SWIPE_ACTIONS: readonly SwipeAction[] = ['none', 'seen', 'flag', 'archive', 'delete']
+
+/** The backend's own defaults, repeated for a backend that predates the keys. */
+export function swipeActionOf(preferences: Preferences, side: 'left' | 'right'): SwipeAction {
+  const stored = preferences[side === 'right' ? PREFERENCE_KEYS.swipeRight : PREFERENCE_KEYS.swipeLeft]
+  const known = SWIPE_ACTIONS.find(action => action === stored)
+  return known ?? (side === 'right' ? 'seen' : 'delete')
 }
 
 /** Off unless explicitly on: a key the backend has not sent yet must keep images blocked. */

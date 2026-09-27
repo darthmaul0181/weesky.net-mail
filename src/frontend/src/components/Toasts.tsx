@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent } from 'react'
+import { useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Toast as ToastData } from '../hooks/useToasts'
 
@@ -11,22 +11,23 @@ interface ToastProps {
   onResume?: (id: number) => void
 }
 
-/** One row. A ref, not state: the reason set is interaction bookkeeping, never painted itself. */
+/** One row. The reason set is a ref, bookkeeping only; `paused`, which the countdown paints, is state. */
 function Toast({ toast, onRemove, onPause, onResume }: ToastProps) {
   const { t } = useTranslation('common')
   // Hover and focus are counted separately, not as one flag: a pause the keyboard armed must
   // survive the mouse merely passing over and leaving (WCAG 2.2.1), so resume only fires once
   // neither reason is still held.
   const reasons = useRef(new Set<PauseReason>())
+  const [paused, setPaused] = useState(false)
 
   function pauseFor(reason: PauseReason) {
-    if (reasons.current.size === 0) onPause?.(toast.id)
+    if (reasons.current.size === 0) { onPause?.(toast.id); setPaused(true) }
     reasons.current.add(reason)
   }
 
   function resumeFor(reason: PauseReason) {
     reasons.current.delete(reason)
-    if (reasons.current.size === 0) onResume?.(toast.id)
+    if (reasons.current.size === 0) { onResume?.(toast.id); setPaused(false) }
   }
 
   // A tap emulates pointerenter with no matching pointerleave until the next interaction
@@ -42,9 +43,10 @@ function Toast({ toast, onRemove, onPause, onResume }: ToastProps) {
   }
 
   const { action } = toast
+  const className = `toast toast-${toast.type}${toast.countdown ? ' has-countdown' : ''}${paused ? ' is-paused' : ''}`
 
   return (
-    <div className={`toast toast-${toast.type}`} role={toast.type === 'error' ? 'alert' : undefined}
+    <div className={className} role={toast.type === 'error' ? 'alert' : undefined}
       onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave}
       onFocus={() => pauseFor('focus')} onBlur={() => resumeFor('focus')}>
       <span>{toast.message}</span>
@@ -58,6 +60,10 @@ function Toast({ toast, onRemove, onPause, onResume }: ToastProps) {
       {toast.type === 'error' && (
         <button type="button" className="toast-close" aria-label={t('actions.close')}
           onClick={() => onRemove(toast.id)}>✕</button>
+      )}
+      {toast.countdown && (
+        <span className="toast-countdown" aria-hidden="true"
+          style={{ '--toast-ms': `${toast.durationMs ?? 0}ms` } as CSSProperties} />
       )}
     </div>
   )

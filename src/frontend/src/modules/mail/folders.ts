@@ -10,6 +10,7 @@ import {
   type Snapshot,
 } from './cachePatches'
 import { folderByPath } from './folders/folderNodes'
+import { holdsPendingMove } from './hold'
 import { patchFolderSubscription, type FolderCountDeltas } from './list/listPatch'
 import { mailKeys } from './mailKeys'
 
@@ -23,6 +24,7 @@ export const POLL_INTERVAL = 60_000
     `sound || desktop`, /mail passes nothing, and one enabled observer runs the query. */
 export function useFolders(enabled = true) {
   const accountId = useAccountId()
+  const client = useQueryClient()
   const { data: preferences } = usePreferences()
   // Background polling is the cost of a notification, so only those who asked for one pay it:
   // an untouched tab keeps costing nothing.
@@ -30,7 +32,12 @@ export function useFolders(enabled = true) {
 
   return useQuery<MailFolderNode[]>({
     queryKey: mailKeys.folders(accountId),
-    queryFn: ({ signal }) => api.getMailFolders({ signal, accountId }),
+    queryFn: ({ signal }) => {
+      const cached = client.getQueryData<MailFolderNode[]>(mailKeys.folders(accountId))
+      return cached && holdsPendingMove(client, accountId)
+        ? Promise.resolve(cached)
+        : api.getMailFolders({ signal, accountId })
+    },
     enabled,
     refetchInterval: POLL_INTERVAL,
     refetchIntervalInBackground: notifies,

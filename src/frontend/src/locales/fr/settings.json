@@ -101,6 +101,20 @@
       "on": "{{action}} est désormais une action rapide",
       "off": "{{action}} n’est plus une action rapide"
     },
+    "swipe": {
+      "heading": "Gestes de glissement",
+      "intro": "Glissez un message dans la liste pour agir sans l’ouvrir. Écrans tactiles uniquement.",
+      "right": "Glisser vers la droite",
+      "left": "Glisser vers la gauche",
+      "offHint": "Choisissez Aucune des deux côtés pour désactiver le glissement.",
+      "none": "Aucune",
+      "seen": "Lu / non lu",
+      "flag": "Suivre / ne plus suivre",
+      "archive": "Archiver",
+      "delete": "Supprimer",
+      "rightToast": "Glisser vers la droite : {{action}}",
+      "leftToast": "Glisser vers la gauche : {{action}}"
+    },
     "privacy": "Confidentialité et sécurité",
     "remoteImages": {
       "label": "Toujours afficher les images distantes",

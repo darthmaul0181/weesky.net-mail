@@ -46,6 +46,12 @@
   --warning: #b45309;
   --status-fg: #ffffff;
   --scrim: rgba(0, 0, 0, 0.35);
+
+  /* Swipe bands: semantic like --danger, darkened so white text clears 4.5:1; dark inherits. */
+  --swipe-seen: #2563eb;
+  --swipe-flag: #b45309;
+  --swipe-archive: #15803d;
+  --swipe-delete: #dc2626;
 }
 
 /* Deliberate: --action-primary shifts hue between modes (navy in light,

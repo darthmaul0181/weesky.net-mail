@@ -285,6 +285,16 @@
 .menu-select-sizer { visibility: hidden; }
 .menu-select-sizer::before { content: attr(data-label); }
 
+/* The settings list shows each swipe action in the colour its band takes. The --swipe-* tokens
+   are tuned for white text on the band itself; mixed with --text they clear a glyph's 3:1 on
+   --surface in dark mode too (worst 3.93:1), where the straight token measures 2.5-3.6:1. */
+.swipe-option-icon { display: inline-flex; }
+.swipe-option-icon.is-none { color: var(--text-muted); }
+.swipe-option-icon.is-seen { color: color-mix(in oklab, var(--swipe-seen) 70%, var(--text)); }
+.swipe-option-icon.is-flag { color: color-mix(in oklab, var(--swipe-flag) 70%, var(--text)); }
+.swipe-option-icon.is-archive { color: color-mix(in oklab, var(--swipe-archive) 70%, var(--text)); }
+.swipe-option-icon.is-delete { color: color-mix(in oklab, var(--swipe-delete) 70%, var(--text)); }
+
 .select-list {
   left: 0; right: auto; min-width: 100%; margin: 0;
   max-height: min(320px, 60vh); overflow-y: auto; list-style: none;

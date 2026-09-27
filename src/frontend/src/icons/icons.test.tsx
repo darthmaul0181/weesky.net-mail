@@ -63,6 +63,7 @@ import InfoIcon from './InfoIcon'
 import PlusIcon from './PlusIcon'
 import CloseIcon from './CloseIcon'
 import GlobeIcon from './GlobeIcon'
+import BanIcon from './BanIcon'
 
 const icons = [
   { name: 'MailIcon', Icon: MailIcon, defaultSize: '20' },
@@ -127,6 +128,7 @@ const icons = [
   { name: 'PlusIcon', Icon: PlusIcon, defaultSize: '16' },
   { name: 'CloseIcon', Icon: CloseIcon, defaultSize: '16' },
   { name: 'GlobeIcon', Icon: GlobeIcon, defaultSize: '15' },
+  { name: 'BanIcon', Icon: BanIcon, defaultSize: '15' },
 ]
 
 describe('icons', () => {

@@ -20,6 +20,7 @@ function callbacks(): RowCallbacks {
   return {
     open: vi.fn(), check: vi.fn(), setFlag: vi.fn(), archive: vi.fn(), junk: vi.fn(),
     remove: vi.fn(), toggleThread: vi.fn(), dragStart: vi.fn(), dragEnd: vi.fn(),
+    swipe: vi.fn(), selecting: vi.fn(() => false),
   }
 }
 
@@ -40,7 +41,8 @@ function props(over: Partial<Parameters<typeof MessageRow>[0]> = {}) {
     rowActions: ['seen', 'archive', 'delete'] as const, checked: false, open: false,
     leaving: false, dragging: false, archiveOff: false, archiveReason: 'no archive',
     junkOff: false, junkReason: 'no junk', trashOff: false, trashReason: 'no trash',
-    deleteLabel: 'Delete', on: callbacks(), ...over,
+    deleteLabel: 'Delete', swipeRight: 'seen' as const, swipeLeft: 'delete' as const,
+    on: callbacks(), ...over,
   }
 }
 

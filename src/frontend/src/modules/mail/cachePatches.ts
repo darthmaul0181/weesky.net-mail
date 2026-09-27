@@ -5,14 +5,19 @@ import {
 import i18next from 'i18next'
 import { api } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
+import {
+  BLOCK_SIZE, groupConversationsOf, isStreaming, type Preferences,
+} from '../../hooks/usePreferences'
 import type {
-  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage,
+  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult, MailThread,
 } from './api/mailTypes'
 import {
   blankPage, pageSummaries, patchFolderCounts, patchFolderUnread, patchPage, patchSearchResults,
   patchSummaries, removeFromPage, removeSearchResults,
   type FolderCountDeltas, type MailFlagName,
 } from './list/listPatch'
+import { dedupeByUid } from './list/messageStream'
+import { dedupeThreads } from './list/threading'
 import { mailKeys } from './mailKeys'
 
 export interface SetFlagsArgs {
@@ -212,6 +217,124 @@ export function removeFromFolderCaches(
   }
 
   return { snapshots, removed: tally.removed, removedUnread: tally.removedUnread }
+}
+
+// Each row goes back after the nearest row that stood before it and is still there, else first.
+function reinsert<T>(
+  before: T[], now: T[], restored: (row: T) => T | null, same: (a: T, b: T) => boolean,
+): T[] {
+  const rows = [...now]
+  before.forEach((row, index) => {
+    const back = restored(row)
+    if (!back || rows.some(kept => same(kept, back))) return
+    let at = 0
+    for (let earlier = index - 1; earlier >= 0 && at === 0; earlier--) {
+      at = rows.findIndex(kept => same(kept, before[earlier]!)) + 1
+    }
+    rows.splice(at, 0, back)
+  })
+  return rows
+}
+
+const sameUid = (a: MailMessageSummary, b: MailMessageSummary) => a.uid === b.uid
+const sameThread = (a: MailThread, b: MailThread) =>
+  a.messages.some(member => b.messages.some(other => other.uid === member.uid))
+
+function reinsertIntoPage(before: MailFolderPage, now: MailFolderPage, uids: Set<number>): MailFolderPage {
+  const pick = (row: MailMessageSummary) => (uids.has(row.uid) ? row : null)
+  const messages = reinsert(before.messages, now.messages, pick, sameUid)
+  if (!before.threads || !now.threads) return { ...now, messages }
+
+  // Members back into the threads still listed, then the threads the removal emptied.
+  const origins = before.threads
+  const grown = now.threads.map(thread => {
+    const origin = origins.find(old => sameThread(old, thread))
+    return origin ? { messages: reinsert(origin.messages, thread.messages, pick, sameUid) } : thread
+  })
+  const threads = reinsert(origins, grown, old => {
+    const back = old.messages.filter(member => uids.has(member.uid))
+    return back.length > 0 ? { messages: back } : null
+  }, sameThread)
+  return { ...now, messages, threads }
+}
+
+/** Undoes removeFromFolderCaches on the caches as they now stand: a write made since (a star,
+    another removal) keeps its effect, which restoring the snapshots would revert. */
+export function reinsertIntoFolderCaches(
+  queryClient: QueryClient, folderPath: string, uids: number[], snapshots: Snapshot[],
+) {
+  const targets = new Set(uids)
+  const pickResult = (row: MailSearchResult) =>
+    (row.folderPath === folderPath && targets.has(row.uid) ? row : null)
+  const sameResult = (a: MailSearchResult, b: MailSearchResult) =>
+    a.uid === b.uid && a.folderPath === b.folderPath
+
+  for (const [key, before] of snapshots) {
+    if (key[2] === 'messages') {
+      queryClient.setQueryData<MailFolderPage>(key, now =>
+        now && reinsertIntoPage(before as MailFolderPage, now, targets))
+    } else if (key[2] === 'messageStream') {
+      const blocks = (before as InfiniteData<MailFolderPage>).pages
+      queryClient.setQueryData<InfiniteData<MailFolderPage>>(key, now => now && {
+        ...now,
+        pages: now.pages.map((page, index) =>
+          blocks[index] ? reinsertIntoPage(blocks[index], page, targets) : page),
+      })
+    } else if (key[2] === 'search') {
+      queryClient.setQueryData<MailSearchPage>(key, now => {
+        if (!now) return now
+        const results = reinsert((before as MailSearchPage).results, now.results, pickResult, sameResult)
+        return { ...now, results, total: now.total + results.length - now.results.length }
+      })
+    }
+  }
+}
+
+/** Fetches block 0 alone and merges it in. Never invalidates: that would refetch EVERY loaded
+    block — forty blocks would be forty IMAP connections and forty full folder sorts. */
+async function refreshFirstBlock(
+  client: QueryClient, accountId: string, folder: string, grouped: boolean,
+) {
+  const key = mailKeys.messageStream(accountId, folder, BLOCK_SIZE, grouped)
+  try {
+    const fresh: MailFolderPage =
+      await api.getMailMessages(folder, 0, BLOCK_SIZE, { accountId, grouped })
+    client.setQueryData<InfiniteData<MailFolderPage>>(key, old => {
+      if (!old) return old
+      // A cached InfiniteData always holds the block it was seeded with; fresh stands in for a
+      // head that somehow isn't there rather than asserting one.
+      const [head, ...rest] = old.pages
+      const previousHead = head ?? fresh
+      return {
+        ...old,
+        // Merged, not replaced: arrivals push old block-0 rows out of the fresh window,
+        // and the frozen later blocks do not hold them — a replace would drop them.
+        // Grouped, the unit is the thread: a reply joins its own rather than opening a row.
+        pages: [
+          grouped
+            ? {
+                ...fresh,
+                threads: dedupeThreads([fresh, previousHead])
+                  .map(group => ({ messages: group.messages })),
+              }
+            : { ...fresh, messages: dedupeByUid([fresh, previousHead]) },
+          ...rest,
+        ],
+      }
+    })
+  } catch {
+    // A poll-driven refresh fails in silence; the next tick tries again.
+  }
+}
+
+/** Reloads the folder's list as the poll does when it moved: block 0 streaming, the pages otherwise. */
+export function refreshFolderList(
+  client: QueryClient, accountId: string, folder: string, preferences: Preferences,
+) {
+  if (isStreaming(preferences)) {
+    return refreshFirstBlock(client, accountId, folder, groupConversationsOf(preferences))
+  }
+  return client.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, folder) })
 }
 
 // Empties pages and blocks in place, snapshotting each. Unlike dropFolderCaches it keeps the queries:

@@ -50,6 +50,8 @@ export interface RequestOptions {
   signal?: AbortSignal
   /** A read's wait for the response headers; writes have no deadline, as one cut may have landed. */
   timeoutMs?: number
+  /** Lets a write outlive the page: a move sent while the tab closes. */
+  keepalive?: boolean
 }
 
 /** A frozen backend otherwise spins forever. The body is not timed: a big download may be slow. */
@@ -135,8 +137,8 @@ function carriesAccount(accountId: string | null | undefined): accountId is stri
   return Boolean(accountId) && accountId !== 'primary'
 }
 
-function send(path: string, init: RequestInit, { signal, timeoutMs }: RequestOptions): Promise<Response> {
-  if (init.method !== 'GET') return fetch(`${BASE}${path}`, { ...init, signal })
+function send(path: string, init: RequestInit, { signal, timeoutMs, keepalive }: RequestOptions): Promise<Response> {
+  if (init.method !== 'GET') return fetch(`${BASE}${path}`, { ...init, signal, keepalive })
   return withTimeout(deadline => fetch(`${BASE}${path}`, {
     ...init, signal: signal ? anySignal([signal, deadline]) : deadline,
   }), timeoutMs ?? READ_TIMEOUT_MS)

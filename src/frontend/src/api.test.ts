@@ -951,6 +951,15 @@ describe('mail endpoints', () => {
     )
   })
 
+  it('passes keepalive through to a write', async () => {
+    mockFetch(204)
+    const { api } = await import('./api.js')
+
+    await api.moveMessages('INBOX', [1], 'Trash', { keepalive: true })
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ keepalive: true }))
+  })
+
   it('POSTs the copy body', async () => {
     mockFetch(204)
     const { api } = await import('./api.js')

@@ -1,52 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query'
-import { api } from '../../../api.js'
-import {
-  BLOCK_SIZE, groupConversationsOf, isStreaming, usePreferences,
-} from '../../../hooks/usePreferences'
-import type { MailFolderPage } from '../api/mailTypes'
+import { useQueryClient } from '@tanstack/react-query'
+import { usePreferences } from '../../../hooks/usePreferences'
+import { refreshFolderList } from '../cachePatches'
 import { folderByPath } from '../folders/folderNodes'
 import { mailKeys, useAccountId, useFolders } from '../queries'
 import { folderChanged, snapshotOf, uidValidityBroke, type FolderSnapshot } from './folderDelta'
-import { dedupeByUid } from './messageStream'
-import { dedupeThreads } from './threading'
-
-/** Fetches block 0 alone and merges it in. Never invalidates: that would refetch EVERY loaded
-    block — forty blocks would be forty IMAP connections and forty full folder sorts. */
-async function refreshFirstBlock(
-  client: QueryClient, accountId: string, folder: string, grouped: boolean,
-) {
-  const key = mailKeys.messageStream(accountId, folder, BLOCK_SIZE, grouped)
-  try {
-    const fresh: MailFolderPage =
-      await api.getMailMessages(folder, 0, BLOCK_SIZE, { accountId, grouped })
-    client.setQueryData<InfiniteData<MailFolderPage>>(key, old => {
-      if (!old) return old
-      // A cached InfiniteData always holds the block it was seeded with; fresh stands in for a
-      // head that somehow isn't there rather than asserting one.
-      const [head, ...rest] = old.pages
-      const previousHead = head ?? fresh
-      return {
-        ...old,
-        // Merged, not replaced: arrivals push old block-0 rows out of the fresh window,
-        // and the frozen later blocks do not hold them — a replace would drop them.
-        // Grouped, the unit is the thread: a reply joins its own rather than opening a row.
-        pages: [
-          grouped
-            ? {
-                ...fresh,
-                threads: dedupeThreads([fresh, previousHead])
-                  .map(group => ({ messages: group.messages })),
-              }
-            : { ...fresh, messages: dedupeByUid([fresh, previousHead]) },
-          ...rest,
-        ],
-      }
-    })
-  } catch {
-    // A poll-driven refresh fails in silence; the next tick tries again.
-  }
-}
 
 // Refreshes the list when the polled listing says its folder moved; the first observation is the
 // baseline and never triggers.
@@ -86,10 +44,6 @@ export function useListRefresh(folderPath: string | null, enabled = true): void 
 
     if (!folderChanged(last.snapshot, snapshot)) return
 
-    if (isStreaming(preferences)) {
-      void refreshFirstBlock(client, accountId, folderPath, groupConversationsOf(preferences))
-    } else {
-      void client.invalidateQueries({ queryKey: mailKeys.messagesIn(accountId, folderPath) })
-    }
+    void refreshFolderList(client, accountId, folderPath, preferences)
   }, [folders, folderPath, preferences, accountId, client])
 }

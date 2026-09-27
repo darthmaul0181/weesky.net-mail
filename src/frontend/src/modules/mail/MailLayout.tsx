@@ -69,7 +69,8 @@ export default function MailLayout() {
   const { data: folders, isLoading, isError, error } = useFolders(!settling)
   const { refresh, fetching: refreshFetching } = useMailRefresh()
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
-  const moveMessages = useMoveMessages(addToast)
+  const notifyError = useCallback((message: string) => addToast(message, 'error'), [addToast])
+  const moveMessages = useMoveMessages(notifyError)
   // Owned here rather than in the list: the drop on a folder and the reader's own actions remove
   // rows too, and three sets would let one surface animate a row another has already dropped.
   const rowExit = useRowExit()
@@ -277,6 +278,7 @@ export default function MailLayout() {
         onRefresh={refresh}
         inDrawer={drawer.inDrawer}
         onNotify={addToast}
+        onDismissNotice={removeToast}
         onRows={keepRows}
         onDeparted={departed}
         rowExit={rowExit}
@@ -293,7 +295,7 @@ export default function MailLayout() {
   const readerNode = folderByPath(folders, readerFolder)
   const readerProps = {
     folderPath: readerFolder, uid, folderRole: readerNode?.specialUse ?? null,
-    onDeparted: departed, depart: rowExit.depart, onNotify: addToast,
+    onDeparted: departed, depart: rowExit.depart, onNotify: notifyError,
   }
 
   if (settling) return <div className="mail-full-pane"><LoadingBlock /></div>

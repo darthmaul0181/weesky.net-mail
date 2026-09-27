@@ -229,4 +229,28 @@ public sealed class UserPreferencesTests
         Assert.True(UserPreferences.IsValid("mail.groupConversations", "false"));
         Assert.False(UserPreferences.IsValid("mail.groupConversations", "yes"));
     }
+
+    [Theory]
+    [InlineData(UserPreferences.MailSwipeRight, "seen")]
+    [InlineData(UserPreferences.MailSwipeLeft, "delete")]
+    public void Swipe_defaults_are_the_mail_app_convention(string key, string expected)
+    {
+        Assert.Equal(expected, UserPreferences.All.Single(p => p.Key == key).Default);
+    }
+
+    [Theory]
+    [InlineData("none", true)]
+    [InlineData("seen", true)]
+    [InlineData("flag", true)]
+    [InlineData("archive", true)]
+    [InlineData("delete", true)]
+    [InlineData("junk", false)]            // left out on purpose: too rare for a gesture
+    [InlineData("Delete", false)]
+    [InlineData("", false)]
+    [InlineData("seen,delete", false)]     // one action per side, never a set
+    public void Swipe_accepts_one_known_action(string value, bool valid)
+    {
+        Assert.Equal(valid, UserPreferences.IsValid(UserPreferences.MailSwipeRight, value));
+        Assert.Equal(valid, UserPreferences.IsValid(UserPreferences.MailSwipeLeft, value));
+    }
 }

@@ -617,6 +617,63 @@
       CASES.push({ name, html: row(selecting), touch: '.message-row' })
     }
 
+    // A row mid-swipe, the finger gone left past the threshold on a Delete: MessageRow's own
+    // markup, the band first in the slot and outside the `role="row"`, the row slid by inline
+    // transform. `escape` says the band stays in the slot it shares with the row, whatever the
+    // row's translation; `contrast` reads the armed label on `--swipe-delete`, in both themes.
+    // Drive it under touch emulation at 360x640 and 390x844.
+    CASES.push({
+      name: 'swipe band',
+      html: `
+      <div class="mail-list" style="width:360px">
+        <div class="mail-list-scroll">
+          <div class="message-list" role="grid" aria-label="Messages" aria-rowcount="1">
+            <div class="message-row-slot" role="presentation">
+              <div aria-hidden="true" class="message-row-swipe is-left is-delete is-armed">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4h6v2" />
+                </svg>
+                <span>Delete</span>
+              </div>
+              <div role="row" aria-rowindex="1" class="message-row is-unread is-swiping"
+                   style="--row-actions:3; transform: translateX(-160px)">
+                <div class="message-row-select" role="gridcell">
+                  <input type="checkbox" class="message-row-check" />
+                </div>
+                <div class="message-row-content" role="gridcell" tabindex="-1"
+                     aria-label="Unread. Alice Martin: Re: facture du mois de juillet, 18 Jul">
+                  <div class="message-row-top">
+                    <span class="message-row-unread-dot"></span>
+                    <span class="message-row-from">Alice Martin</span>
+                    <span class="message-row-date">18 Jul</span>
+                  </div>
+                  <div class="message-row-subject">Re: facture du mois de juillet</div>
+                  <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>
+                </div>
+                <div class="message-row-flag" role="gridcell">
+                  <button class="row-btn row-star">★</button>
+                </div>
+                <div class="message-row-actions" role="gridcell">
+                  <div class="message-row-cluster">
+                    <button class="row-btn">S</button>
+                    <button class="row-btn">A</button>
+                    <button class="row-btn is-danger">D</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`,
+      escape: ['.message-row-swipe', '.message-row-slot'],
+      contrast: '.message-row-swipe span',
+    })
+
     // A conversation unfolded: the collapsed head, then one `.is-thread-member` sub-row per
     // message — the head's own message included, which is what MessageList renders (the parent
     // stands for the thread, the members are every message in it), so a two-message thread is

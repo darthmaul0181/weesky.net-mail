@@ -101,6 +101,20 @@
       "on": "{{action}} is now a quick action",
       "off": "{{action}} is no longer a quick action"
     },
+    "swipe": {
+      "heading": "Swipe gestures",
+      "intro": "Swipe a message in the list to act on it without opening it. Touch screens only.",
+      "right": "Swipe right",
+      "left": "Swipe left",
+      "offHint": "Choose None on both sides to turn swiping off.",
+      "none": "None",
+      "seen": "Read / unread",
+      "flag": "Star / unstar",
+      "archive": "Archive",
+      "delete": "Delete",
+      "rightToast": "Swipe right: {{action}}",
+      "leftToast": "Swipe left: {{action}}"
+    },
     "privacy": "Privacy & security",
     "remoteImages": {
       "label": "Always show remote images",
