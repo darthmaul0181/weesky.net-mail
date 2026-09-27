@@ -8,7 +8,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query'
 import { api } from '../../../api.js'
-import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, optionsOf, settle } from '../../../test-utils'
 import RulesPage from './RulesPage'
 import { RequestTimeoutError } from '../../../lib/withTimeout'
 import { RuleEditorModal } from './RuleEditorModal'
@@ -296,7 +296,7 @@ describe('RuleEditorModal action gating', () => {
 // ── Extended action types (Keep) ──────────────────────────────
 
 describe('ActionRow extended types', () => {
-  it('shows Keep in inbox option in extended mode', () => {
+  it('shows Keep in inbox option in extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -305,13 +305,11 @@ describe('ActionRow extended types', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const actionSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'FileInto')), 'select')
-    expect(Array.from(actionSelect.options).some(o => o.value === 'Keep')).toBe(true)
+    const actionSelect = screen.getByRole('combobox', { name: 'Action' })
+    expect(await optionsOf(actionSelect)).toContain('Keep in inbox')
   })
 
-  it('hides Keep in inbox option in non-extended mode', () => {
+  it('hides Keep in inbox option in non-extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -320,10 +318,8 @@ describe('ActionRow extended types', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const actionSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'FileInto')), 'select')
-    expect(Array.from(actionSelect.options).some(o => o.value === 'Keep')).toBe(false)
+    const actionSelect = screen.getByRole('combobox', { name: 'Action' })
+    expect(await optionsOf(actionSelect)).not.toContain('Keep in inbox')
   })
 })
 
@@ -399,7 +395,7 @@ describe('Mark as flagged', () => {
 // ── Body condition (extended only) ────────────────────────────
 
 describe('ConditionRow body field', () => {
-  it('shows Body option in extended mode', () => {
+  it('shows Body option in extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -408,13 +404,11 @@ describe('ConditionRow body field', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const condFieldSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    expect(Array.from(condFieldSelect.options).some(o => o.value === 'Body')).toBe(true)
+    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    expect(await optionsOf(condFieldSelect)).toContain('Body')
   })
 
-  it('hides Body option in non-extended mode', () => {
+  it('hides Body option in non-extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -423,13 +417,11 @@ describe('ConditionRow body field', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const condFieldSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    expect(Array.from(condFieldSelect.options).some(o => o.value === 'Body')).toBe(false)
+    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    expect(await optionsOf(condFieldSelect)).not.toContain('Body')
   })
 
-  it('limits operators to Contains, NotContains and Regex when Body is selected', () => {
+  it('limits operators to Contains, NotContains and Regex when Body is selected', async () => {
     const rule: SieveRuleWrite = {
       ...fileIntoRule('a', 'r1'),
       conditions: [{ field: 'Body', operator: 'Contains', value: 'casino' }],
@@ -437,18 +429,15 @@ describe('ConditionRow body field', () => {
     render(
       <RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
 
-    const selects = document.querySelectorAll('select')
-    const opSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Contains') &&
-      !Array.from(s.options).some(o => o.value === 'FileInto')), 'select')
-    expect(Array.from(opSelect.options).map(o => o.value)).toEqual(['Contains', 'NotContains', 'Regex'])
+    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
+    expect(await optionsOf(opSelect)).toEqual(['contains', 'not contains', 'matches (regex)'])
   })
 })
 
 // ── Envelope / subaddress fields (extended only) ──────────────
 
 describe('ConditionRow envelope and subaddress fields', () => {
-  it('shows EnvelopeFrom, EnvelopeTo, RecipientDetail in extended mode', () => {
+  it('shows EnvelopeFrom, EnvelopeTo, RecipientDetail in extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -457,16 +446,14 @@ describe('ConditionRow envelope and subaddress fields', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const condFieldSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    const values = Array.from(condFieldSelect.options).map(o => o.value)
-    expect(values).toContain('EnvelopeFrom')
-    expect(values).toContain('EnvelopeTo')
-    expect(values).toContain('RecipientDetail')
+    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    const values = await optionsOf(condFieldSelect)
+    expect(values).toContain('Envelope from')
+    expect(values).toContain('Envelope to')
+    expect(values).toContain('Recipient +detail')
   })
 
-  it('hides envelope/subaddress fields in non-extended mode', () => {
+  it('hides envelope/subaddress fields in non-extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -475,20 +462,18 @@ describe('ConditionRow envelope and subaddress fields', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const condFieldSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    const values = Array.from(condFieldSelect.options).map(o => o.value)
-    expect(values).not.toContain('EnvelopeFrom')
-    expect(values).not.toContain('EnvelopeTo')
-    expect(values).not.toContain('RecipientDetail')
+    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    const values = await optionsOf(condFieldSelect)
+    expect(values).not.toContain('Envelope from')
+    expect(values).not.toContain('Envelope to')
+    expect(values).not.toContain('Recipient +detail')
   })
 })
 
 // ── Regex operator (extended only) ────────────────────────────
 
 describe('Regex operator', () => {
-  it('shows regex option in extended mode', () => {
+  it('shows regex option in extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -497,14 +482,11 @@ describe('Regex operator', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const opSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Contains') &&
-      !Array.from(s.options).some(o => o.value === 'FileInto')), 'select')
-    expect(Array.from(opSelect.options).some(o => o.value === 'Regex')).toBe(true)
+    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
+    expect(await optionsOf(opSelect)).toContain('matches (regex)')
   })
 
-  it('shows regex option in non-extended mode', () => {
+  it('shows regex option in non-extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -513,18 +495,15 @@ describe('Regex operator', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const opSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Contains') &&
-      !Array.from(s.options).some(o => o.value === 'FileInto')), 'select')
-    expect(Array.from(opSelect.options).some(o => o.value === 'Regex')).toBe(true)
+    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
+    expect(await optionsOf(opSelect)).toContain('matches (regex)')
   })
 })
 
 // ── Duplicate condition (extended only) ───────────────────────
 
 describe('Duplicate condition', () => {
-  it('shows Duplicate field in extended mode', () => {
+  it('shows Duplicate field in extended mode', async () => {
     render(
       <RuleEditorModal
         rule={fileIntoRule('a', 'r1')}
@@ -533,10 +512,8 @@ describe('Duplicate condition', () => {
         onClose={() => {}}
       />)
 
-    const selects = document.querySelectorAll('select')
-    const condFieldSelect = found(Array.from(selects).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    expect(Array.from(condFieldSelect.options).some(o => o.value === 'Duplicate')).toBe(true)
+    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    expect(await optionsOf(condFieldSelect)).toContain('Duplicate message')
   })
 
   it('hides operator select when Duplicate field is active', () => {
@@ -547,12 +524,7 @@ describe('Duplicate condition', () => {
     render(
       <RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
 
-    const selects = document.querySelectorAll('select')
-    const hasOpSelect = Array.from(selects).some(s =>
-      Array.from(s.options).some(o => o.value === 'Contains') &&
-      !Array.from(s.options).some(o => o.value === 'FileInto') &&
-      !Array.from(s.options).some(o => o.value === 'Subject'))
-    expect(hasOpSelect).toBe(false)
+    expect(screen.queryByRole('combobox', { name: 'Operator' })).not.toBeInTheDocument()
   })
 })
 
@@ -609,39 +581,37 @@ describe('FileInto :create checkbox', () => {
 // ── Date conditions ───────────────────────────────────────────
 
 describe('Date condition fields', () => {
-  function getCondFieldSelect() {
-    return found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
+  function condFieldSelect() {
+    return screen.getByRole('combobox', { name: 'Field' })
   }
-  it('CurrentDate and MessageDate appear in extended mode', () => {
+  it('CurrentDate and MessageDate appear in extended mode', async () => {
     render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const opts = Array.from(getCondFieldSelect().options).map(o => o.value)
-    expect(opts).toContain('CurrentDate')
-    expect(opts).toContain('MessageDate')
+    const opts = await optionsOf(condFieldSelect())
+    expect(opts).toContain('Current date')
+    expect(opts).toContain('Message date')
   })
 
-  it('CurrentDate and MessageDate are hidden in non-extended mode', () => {
+  it('CurrentDate and MessageDate are hidden in non-extended mode', async () => {
     render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
-    const opts = Array.from(getCondFieldSelect().options).map(o => o.value)
-    expect(opts).not.toContain('CurrentDate')
-    expect(opts).not.toContain('MessageDate')
+    const opts = await optionsOf(condFieldSelect())
+    expect(opts).not.toContain('Current date')
+    expect(opts).not.toContain('Message date')
   })
 
-  it('shows Before and OnOrAfter operators when CurrentDate is selected', () => {
+  it('shows Before and OnOrAfter operators when CurrentDate is selected', async () => {
     const rule: SieveRuleWrite = {
       ...fileIntoRule('a', 'r1'),
       conditions: [{ field: 'CurrentDate', operator: 'Before', value: '2026-12-31' }],
     }
     render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    // When CurrentDate is selected the op select shows date operators (no 'Contains')
-    const dateOpSelect = found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === 'Before')), 'select')
-    const ops = Array.from(dateOpSelect.options).map(o => o.value)
-    expect(ops).toContain('Before')
-    expect(ops).toContain('OnOrAfter')
-    expect(ops).toContain('Equals')
-    expect(ops).not.toContain('Contains')
-    expect(ops).not.toContain('Matches')
+    // When CurrentDate is selected the op select shows date operators (no 'contains')
+    const dateOpSelect = screen.getByRole('combobox', { name: 'Operator' })
+    const ops = await optionsOf(dateOpSelect)
+    expect(ops).toContain('is before')
+    expect(ops).toContain('is on or after')
+    expect(ops).toContain('equals')
+    expect(ops).not.toContain('contains')
+    expect(ops).not.toContain('matches (wildcard)')
   })
 
   it('shows a date input instead of text when CurrentDate is selected', () => {
@@ -653,47 +623,41 @@ describe('Date condition fields', () => {
     expect(document.querySelector('input[type="date"]')).toBeInTheDocument()
   })
 
-  it('Before and OnOrAfter operators are absent in non-extended mode', () => {
+  it('Before and OnOrAfter operators are absent in non-extended mode', async () => {
     render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
-    const opSelect = found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === 'Contains') &&
-      !Array.from(s.options).some(o => o.value === 'FileInto')), 'select')
-    const ops = Array.from(opSelect.options).map(o => o.value)
-    expect(ops).not.toContain('Before')
-    expect(ops).not.toContain('OnOrAfter')
+    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
+    const ops = await optionsOf(opSelect)
+    expect(ops).not.toContain('is before')
+    expect(ops).not.toContain('is on or after')
   })
 })
 
 // ── Weekday / hour conditions ─────────────────────────────────
 
 describe('CurrentWeekday condition', () => {
-  it('appears in extended mode', () => {
+  it('appears in extended mode', async () => {
     render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const fieldSelect = found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    expect(Array.from(fieldSelect.options).some(o => o.value === 'CurrentWeekday')).toBe(true)
+    const fieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    expect(await optionsOf(fieldSelect)).toContain('Current weekday')
   })
 
-  it('is absent in non-extended mode', () => {
+  it('is absent in non-extended mode', async () => {
     render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
-    const fieldSelect = found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    expect(Array.from(fieldSelect.options).some(o => o.value === 'CurrentWeekday')).toBe(false)
+    const fieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    expect(await optionsOf(fieldSelect)).not.toContain('Current weekday')
   })
 
-  it('shows weekday dropdown with preset options when selected', () => {
+  it('shows weekday dropdown with preset options when selected', async () => {
     const rule: SieveRuleWrite = {
       ...fileIntoRule('a', 'r1'),
       conditions: [{ field: 'CurrentWeekday', operator: 'Contains', value: '1,2,3,4,5' }],
     }
     render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const weekdaySelect = found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === '1,2,3,4,5')), 'select')
-    expect(weekdaySelect).toBeTruthy()
-    const opts = Array.from(weekdaySelect.options).map(o => o.value)
-    expect(opts).toContain('0,6')
-    expect(opts).toContain('1')
-    expect(opts).toContain('0')
+    const daySelect = screen.getByRole('combobox', { name: 'Day' })
+    const opts = await optionsOf(daySelect)
+    expect(opts).toContain('Weekend (Sat–Sun)')
+    expect(opts).toContain('Monday')
+    expect(opts).toContain('Sunday')
   })
 
   it('hides the operator select when CurrentWeekday is active', () => {
@@ -702,23 +666,18 @@ describe('CurrentWeekday condition', () => {
       conditions: [{ field: 'CurrentWeekday', operator: 'Contains', value: '1,2,3,4,5' }],
     }
     render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const hasOpSelect = Array.from(document.querySelectorAll('select')).some(s =>
-      Array.from(s.options).some(o => o.value === 'Contains') &&
-      !Array.from(s.options).some(o => o.value === 'FileInto') &&
-      !Array.from(s.options).some(o => o.value === '1,2,3,4,5'))
-    expect(hasOpSelect).toBe(false)
+    expect(screen.queryByRole('combobox', { name: 'Operator' })).not.toBeInTheDocument()
   })
 })
 
 describe('CurrentHour condition', () => {
-  it('appears in extended mode', () => {
+  it('appears in extended mode', async () => {
     render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const fieldSelect = found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === 'Subject')), 'select')
-    expect(Array.from(fieldSelect.options).some(o => o.value === 'CurrentHour')).toBe(true)
+    const fieldSelect = screen.getByRole('combobox', { name: 'Field' })
+    expect(await optionsOf(fieldSelect)).toContain('Current hour')
   })
 
-  it('shows number input 0-23 and Before/OnOrAfter operators when selected', () => {
+  it('shows number input 0-23 and Before/OnOrAfter operators when selected', async () => {
     const rule: SieveRuleWrite = {
       ...fileIntoRule('a', 'r1'),
       conditions: [{ field: 'CurrentHour', operator: 'Before', value: '9' }],
@@ -726,12 +685,11 @@ describe('CurrentHour condition', () => {
     render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
     const hourInput = document.querySelector('input[type="number"][min="0"][max="23"]')
     expect(hourInput).toBeInTheDocument()
-    const opSelect = found(Array.from(document.querySelectorAll('select')).find(s =>
-      Array.from(s.options).some(o => o.value === 'Before')), 'select')
-    const ops = Array.from(opSelect.options).map(o => o.value)
-    expect(ops).toContain('Before')
-    expect(ops).toContain('OnOrAfter')
-    expect(ops).not.toContain('Contains')
+    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
+    const ops = await optionsOf(opSelect)
+    expect(ops).toContain('is before')
+    expect(ops).toContain('is on or after')
+    expect(ops).not.toContain('contains')
   })
 })
 

@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
+import MenuSelect from '../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import { CALENDAR_COLORS } from './calendarColors'
 import type { Calendar } from './calendarTypes'
@@ -92,12 +93,8 @@ export default function ImportDialog({
         {mode === 'existing' ? (
           <div className="field-h">
             <label htmlFor="calendar-import-into">{t('import.existing')}</label>
-            <select id="calendar-import-into" value={id}
-              onChange={event => setId(event.target.value)}>
-              {calendars.map(one => (
-                <option key={one.id} value={one.id}>{one.displayName}</option>
-              ))}
-            </select>
+            <MenuSelect id="calendar-import-into" value={id} onChange={setId}
+              options={calendars.map(one => ({ value: one.id, label: one.displayName }))} />
           </div>
         ) : (
           <CalendarNameColourFields nameId="calendar-import-name" hexId="calendar-import-hex"

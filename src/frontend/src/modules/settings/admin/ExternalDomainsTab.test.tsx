@@ -3,7 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { createTestQueryClient, holdNextCall, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, optionsOf, pickOption, settle } from '../../../test-utils'
 import ExternalDomainsTab from './ExternalDomainsTab'
 import type { ExternalDomain } from './useExternalDomains'
 
@@ -133,11 +133,11 @@ describe('ExternalDomainsTab — create', () => {
     await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
     await userEvent.clear(screen.getByLabelText('IMAP port'))
     await userEvent.type(screen.getByLabelText('IMAP port'), '993')
-    await userEvent.selectOptions(screen.getByLabelText('IMAP security'), 'SslOnConnect')
+    await pickOption(screen.getByLabelText('IMAP security'), 'SSL/TLS')
     await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
     await userEvent.clear(screen.getByLabelText('SMTP port'))
     await userEvent.type(screen.getByLabelText('SMTP port'), '465')
-    await userEvent.selectOptions(screen.getByLabelText('SMTP security'), 'SslOnConnect')
+    await pickOption(screen.getByLabelText('SMTP security'), 'SSL/TLS')
 
     await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
 
@@ -233,10 +233,10 @@ describe('ExternalDomainsTab — edit', () => {
     expect(screen.getByLabelText('Display name')).toHaveValue('Outlook')
     expect(screen.getByLabelText('IMAP host')).toHaveValue('outlook.office365.com')
     expect(screen.getByLabelText('IMAP port')).toHaveValue(993)
-    expect(screen.getByLabelText('IMAP security')).toHaveValue('SslOnConnect')
+    expect(screen.getByLabelText('IMAP security')).toHaveTextContent('SSL/TLS')
     expect(screen.getByLabelText('SMTP host')).toHaveValue('smtp.office365.com')
     expect(screen.getByLabelText('SMTP port')).toHaveValue(587)
-    expect(screen.getByLabelText('SMTP security')).toHaveValue('StartTls')
+    expect(screen.getByLabelText('SMTP security')).toHaveTextContent('STARTTLS')
     expect(screen.getByLabelText('Sieve host')).toHaveValue('sieve.office365.com')
     expect(screen.getByLabelText('Sieve port')).toHaveValue(4190)
   })
@@ -247,12 +247,7 @@ describe('ExternalDomainsTab — edit', () => {
     await userEvent.click(screen.getAllByTitle('Edit')[0]!)
 
     const select = screen.getByLabelText('IMAP security')
-    const options = Array.from(select.querySelectorAll('option'))
-    expect(options.map(o => [o.value, o.textContent])).toEqual([
-      ['None', 'None'],
-      ['StartTls', 'STARTTLS'],
-      ['SslOnConnect', 'SSL/TLS'],
-    ])
+    expect(await optionsOf(select)).toEqual(['None', 'STARTTLS', 'SSL/TLS'])
   })
 
   it('sends the update with the edited domain id', async () => {
@@ -342,7 +337,7 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     await fillBaseFields()
 
     expect(screen.queryByLabelText('Client secret')).not.toBeInTheDocument()
-    await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'OAuth2')
+    await pickOption(screen.getByLabelText('Authentication'), 'OAuth 2.0')
     expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
 
     await userEvent.type(screen.getByLabelText('Authorization URL'), 'https://login.test/authorize')
@@ -371,7 +366,7 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     renderTab()
     await screen.findByText('Gmail')
     await fillBaseFields()
-    await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'OAuth2')
+    await pickOption(screen.getByLabelText('Authentication'), 'OAuth 2.0')
 
     await userEvent.type(screen.getByLabelText('Authorization URL'), 'http://login.test/authorize')
     await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
@@ -389,7 +384,7 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     await screen.findByText('Outlook (OAuth)')
     await userEvent.click(screen.getByTitle('Edit'))
 
-    expect(screen.getByLabelText('Authentication')).toHaveValue('OAuth2')
+    expect(screen.getByLabelText('Authentication')).toHaveTextContent('OAuth 2.0')
     expect(screen.getByLabelText('Authorization URL'))
       .toHaveValue('https://login.microsoftonline.com/common/oauth2/v2.0/authorize')
     const secret = screen.getByLabelText('Client secret')
@@ -421,7 +416,7 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     await userEvent.type(screen.getByLabelText('Display name'), 'Provider')
     await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.provider.test')
     await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.provider.test')
-    await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'OAuth2')
+    await pickOption(screen.getByLabelText('Authentication'), 'OAuth 2.0')
     await userEvent.type(screen.getByLabelText('Authorization URL'), 'https://login.test/authorize')
     await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
     await userEvent.type(screen.getByLabelText('Scopes'), 'openid')

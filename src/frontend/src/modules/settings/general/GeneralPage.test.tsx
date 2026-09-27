@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import GeneralPage from './GeneralPage'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
@@ -37,21 +37,20 @@ describe('GeneralPage', () => {
   it('shows the stored page size, not a value of its own', async () => {
     renderPage({ 'mail.pageSize': '100', 'mail.showPreview': 'true' })
 
-    expect(await screen.findByLabelText('Messages per page')).toHaveValue('100')
+    expect(await screen.findByLabelText('Messages per page')).toHaveTextContent('100')
   })
 
   it('offers the five steps and All', async () => {
     renderPage()
 
-    const options = Array.from((await screen.findByLabelText('Messages per page')).querySelectorAll('option'))
-    expect(options.map(o => o.value)).toEqual(['10', '20', '30', '50', '100', 'all'])
-    expect(options.map(o => o.textContent)).toEqual(['10', '20', '30', '50', '100', 'All'])
+    const options = await optionsOf(await screen.findByLabelText('Messages per page'))
+    expect(options).toEqual(['10', '20', '30', '50', '100', 'All'])
   })
 
   it('shows All as the selection when it is stored', async () => {
     renderPage({ 'mail.pageSize': 'all', 'mail.showPreview': 'true' })
 
-    expect(await screen.findByLabelText('Messages per page')).toHaveValue('all')
+    expect(await screen.findByLabelText('Messages per page')).toHaveTextContent('All')
   })
 
   /* A stored value outside the offered steps — a hand-edited row, a newer build, the unbounded
@@ -59,13 +58,13 @@ describe('GeneralPage', () => {
   it('shows the bounded size when the stored value is not one of the steps', async () => {
     renderPage({ 'mail.pageSize': '2000', 'mail.showPreview': 'true' })
 
-    expect(await screen.findByLabelText('Messages per page')).toHaveValue('100')
+    expect(await screen.findByLabelText('Messages per page')).toHaveTextContent('100')
   })
 
   it('saves All as the string the backend accepts', async () => {
     renderPage()
 
-    fireEvent.change(await screen.findByLabelText('Messages per page'), { target: { value: 'all' } })
+    await pickOption(await screen.findByLabelText('Messages per page'), 'All')
 
     await waitFor(() =>
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.pageSize', 'all'))
@@ -74,7 +73,7 @@ describe('GeneralPage', () => {
   it('saves a new page size', async () => {
     renderPage()
 
-    fireEvent.change(await screen.findByLabelText('Messages per page'), { target: { value: '50' } })
+    await pickOption(await screen.findByLabelText('Messages per page'), '50')
 
     await waitFor(() =>
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.pageSize', '50'))
@@ -266,7 +265,7 @@ describe('GeneralPage', () => {
     renderPage()
     mocks.setPreference.mockRejectedValue(new Error('Refused by the server'))
 
-    fireEvent.change(await screen.findByLabelText('Messages per page'), { target: { value: '10' } })
+    await pickOption(await screen.findByLabelText('Messages per page'), '10')
 
     expect(await screen.findByText('Could not save the setting')).toBeInTheDocument()
   })

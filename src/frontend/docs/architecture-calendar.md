@@ -159,11 +159,10 @@ A `UNE seule largeur` of NON in that probe is the regression to look for — and
 `shell.css`, because the end row's segmented control lives there and without it the three choices
 measure as bare radios, 42px narrower than what ships.
 
-**The calendar picker is a dropdown drawn as the select it replaces** (`CalendarSelect`, on
-`DropdownMenu`). A native `<select>` cannot paint an option, so the colour swatch used to sit
+**The calendar picker is the site's select, carrying its colour** (`CalendarSelect`, on
+`MenuSelect`). A native `<select>` cannot paint an option, so the colour swatch used to sit
 *beside* the box, and the box then started 8px to the right of every other control in the column.
-The trigger wears the `.field-h` control's own box with the swatch inside it, and every row of the
-menu carries its calendar's swatch. **Description lives under *More options*, availability does not**: on a plain event
+The swatch now sits inside the box, and every row of the list carries its calendar's swatch. **Description lives under *More options*, availability does not**: on a plain event
 the form is title, calendar, when, whether it repeats, reminders, location and availability; a
 description that holds text opens the chevron on its own, the rule every other field under it
 already follows (2026-09-10: availability moved up under the location, so it is no longer one).

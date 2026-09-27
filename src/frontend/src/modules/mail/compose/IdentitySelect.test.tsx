@@ -33,8 +33,8 @@ describe('IdentitySelect', () => {
   it('offers a menu with several identities, each name bold, and reports the pick', () => {
     const onChange = vi.fn()
     render(<IdentitySelect identities={[primary, alias]} value="mick@weesky.be" onChange={onChange} />)
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    const item = screen.getByRole('menuitem', { name: 'Michel (michel@weesky.be)' })
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    const item = screen.getByRole('option', { name: 'Michel (michel@weesky.be)' })
     expect(item.querySelector('strong')?.textContent).toBe('Michel')
     fireEvent.click(item)
     expect(onChange).toHaveBeenCalledWith('michel@weesky.be')
@@ -42,7 +42,7 @@ describe('IdentitySelect', () => {
 
   it('shows the selected identity, name bold, on the trigger', () => {
     render(<IdentitySelect identities={[primary, alias]} value="michel@weesky.be" onChange={vi.fn()} />)
-    const trigger = screen.getByRole('button', { name: 'From identity' })
+    const trigger = screen.getByRole('combobox', { name: 'From identity' })
     expect(trigger).toHaveTextContent('Michel (michel@weesky.be)')
     expect(trigger.querySelector('strong')?.textContent).toBe('Michel')
   })
@@ -52,8 +52,8 @@ describe('IdentitySelect', () => {
       identity: { email: 'mick@weesky.be', displayName: 'Mick Dubois', subDomains: [] },
     } as never)
     render(<IdentitySelect identities={[primary, alias]} value="mick@weesky.be" onChange={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    expect(screen.getByRole('menuitem', { name: 'Mick Dubois (mick@weesky.be)' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    expect(screen.getByRole('option', { name: 'Mick Dubois (mick@weesky.be)' })).toBeInTheDocument()
   })
 
   // The alias behind the pick is deleted from another client and the refetch marks it stale. The
@@ -62,16 +62,16 @@ describe('IdentitySelect', () => {
   it('keeps naming a chosen identity that goes stale, flagged unavailable', () => {
     const { rerender } = render(
       <IdentitySelect identities={[primary, alias]} value="michel@weesky.be" onChange={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Michel (michel@weesky.be)')
+    expect(screen.getByRole('combobox', { name: 'From identity' })).toHaveTextContent('Michel (michel@weesky.be)')
 
     rerender(
       <IdentitySelect identities={[primary, { ...alias, stale: true }]} value="michel@weesky.be" onChange={vi.fn()} />)
 
-    const trigger = screen.getByRole('button', { name: 'From identity' })
+    const trigger = screen.getByRole('combobox', { name: 'From identity' })
     expect(trigger).toHaveTextContent('Michel (michel@weesky.be)')
     expect(screen.getByText('unavailable')).toBeInTheDocument()
     fireEvent.click(trigger)
-    expect(screen.getByRole('menuitem', { name: 'Mick (mick@weesky.be)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Mick (mick@weesky.be)' })).toBeInTheDocument()
   })
 
   it('names a stale identity as plain text when no other one is usable', () => {
@@ -86,7 +86,7 @@ describe('IdentitySelect', () => {
   it('never proposes a stale identity', () => {
     const stale = identity({ address: 'gone@weesky.be', displayName: 'Ancien', isDefault: false, isPrimary: false, stale: true })
     render(<IdentitySelect identities={[primary, alias, stale]} value="mick@weesky.be" onChange={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    expect(screen.queryByRole('menuitem', { name: /gone@weesky.be/ })).toBeNull()
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    expect(screen.queryByRole('option', { name: /gone@weesky.be/ })).toBeNull()
   })
 })

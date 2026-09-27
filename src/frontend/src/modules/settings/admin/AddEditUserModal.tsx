@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import Modal from '../../../components/Modal'
@@ -100,9 +101,8 @@ export function AddEditUserModal({ user, domains, onSave, onClose }: Props) {
       </div>
       <div className="field-h">
         <label htmlFor={fieldId('domain')}>{t('accounts.domain')}</label>
-        <select id={fieldId('domain')} value={domainId} onChange={e => setDomainId(e.target.value)} disabled={isEdit}>
-          {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
+        <MenuSelect id={fieldId('domain')} value={domainId} onChange={setDomainId} disabled={isEdit}
+          options={domains.map(d => ({ value: d.id, label: d.name }))} />
       </div>
       <div className="field-h">
         <label htmlFor={fieldId('password')}>{t('accounts.password')}</label>

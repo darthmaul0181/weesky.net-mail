@@ -37,7 +37,7 @@ describe('ImportDialog', () => {
     open()
     expect(screen.getByRole('radio', { name: 'An existing calendar' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'A new calendar' })).not.toBeChecked()
-    expect(screen.getByRole('combobox')).toHaveValue('b')
+    expect(screen.getByRole('combobox')).toHaveTextContent('Work')
   })
 
   // The file says what it is; asking the user to retype it is asking them to get it wrong.

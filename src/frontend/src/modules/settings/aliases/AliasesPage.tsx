@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
@@ -12,8 +13,6 @@ import Toasts from '../../../components/Toasts'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import AtSignIcon from '../../../icons/AtSignIcon'
 import SearchIcon from '../../../icons/SearchIcon'
-import ChevronDownIcon from '../../../icons/ChevronDownIcon'
-import DropdownMenu from '../../../components/DropdownMenu'
 import type { AccountDomain } from '../../../lib/accountIdentity'
 import type { AliasInfo } from '../../mail/api/mailTypes'
 import AliasIndex from './AliasIndex'
@@ -133,9 +132,9 @@ export default function AliasesPage() {
             : t('aliases.summary', { count: inDomain.length })}</p>
         </div>
         {domains.length > 1 && (
-          <DropdownMenu ariaLabel={t('aliases.domain')} className="menu-select alias-domain-select"
-            trigger={<><span className="menu-select-name">@{selectedDomain}</span><ChevronDownIcon size={14} /></>}
-            items={domains.map(d => ({ label: `@${d.name}`, onSelect: () => setSelectedDomain(d.name) }))} />
+          <MenuSelect ariaLabel={t('aliases.domain')} className="alias-domain-select" align="right"
+            value={selectedDomain} onChange={setSelectedDomain}
+            options={domains.map(d => ({ value: d.name, label: `@${d.name}` }))} />
         )}
       </div>
 

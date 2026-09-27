@@ -527,7 +527,7 @@
 .field-v-label > svg { flex: none; }
 
 /* Street takes what's left, type sizes to its widest option, postcode must not grow. Both
-   selectors carry the row's class on purpose: alone they're 0,1,0 and lose to `.field-v select`
+   selectors carry the row's class on purpose: alone they're 0,1,0 and lose to `.field-v > .select-root`
    / `.contact-postal-row > input`, which is how all four boxes matched. */
 .contact-postal-row .contact-postal-type { flex: none; }
 .contact-postal-row .contact-postal-short { flex: 0 0 110px; }
@@ -543,7 +543,7 @@
   color: var(--action-primary); font: inherit; font-size: 12px;
 }
 .contact-address-add:hover { text-decoration: underline; }
-.contact-address-row select { flex: none; }
+.contact-address-row > .select-root { flex: none; }
 /* The email rows share their columns, so the primary's label and another row's tick
    leave every address box the same width. */
 .contact-address-list:has(> .is-email) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }

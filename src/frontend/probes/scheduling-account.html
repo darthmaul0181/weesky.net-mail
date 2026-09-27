@@ -213,7 +213,7 @@
             <div class="field-h"><label for="d-host">Hôte SMTP</label><input id="d-host" type="text" value="mail.weesky.be" /></div>
             <div class="field-h"><label for="d-port">Port SMTP</label><input id="d-port" type="number" value="587" /></div>
             <div class="field-h"><label for="d-security">Sécurité SMTP</label>
-              <select id="d-security"><option>Aucune</option><option selected>STARTTLS</option><option>SSL/TLS</option></select>
+              <div class="select-root"><button type="button" role="combobox" class="menu-select" id="d-security"><span class="menu-select-value"><span class="menu-select-name">STARTTLS</span><span class="menu-select-sizer" data-label="Aucune"></span><span class="menu-select-sizer" data-label="STARTTLS"></span><span class="menu-select-sizer" data-label="SSL/TLS"></span></span><svg width="14" height="14"></svg></button></div>
             </div>
             <div class="field-h"><label for="d-login">Identifiant</label><input id="d-login" type="text" value="noreply-agenda@weesky.net" /></div>
             <div class="field-h"><label for="d-password">Mot de passe</label><input id="d-password" type="password" placeholder="Inchangé" /></div>
@@ -287,7 +287,7 @@
     const indented = [...dialogModal.querySelectorAll('.svc-account-field-indent')].map(x)
     report['indent (note warn result)'] = `input x=${inputX}  ${indented.join(' ')}`
       + `  ${indented.every(v => v === inputX) ? 'ON INPUT COLUMN' : 'OFF INPUT COLUMN'}`
-    report['inputs / select width'] = [...dialogModal.querySelectorAll('.field-h > :is(input, select)')]
+    report['inputs / select width'] = [...dialogModal.querySelectorAll('.field-h > :is(input, .select-root)')]
       .map(el => `${x(el)}-${Math.round(box(el).right)}`).join(' ')
 
     const pill = document.querySelector('.svc-account-pill')

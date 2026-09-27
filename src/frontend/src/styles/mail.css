@@ -1115,7 +1115,8 @@
 /* The calendar picker is the event editor's own (CalendarSelect); here it is one control among
    the buttons, as wide as its name and as tall as they are, its menu opening under its left edge. */
 .invitation-card .dropdown-root { flex: none; }
-.invitation-card .menu-select { width: auto; padding: 6px 10px; font-size: 13px; }
+.invitation-card .select-root { width: max-content; max-width: 100%; }
+.invitation-card .menu-select { padding: 6px 10px; font-size: 13px; }
 .invitation-card .dropdown-menu { left: 0; right: auto; }
 .invitation-card .btn[aria-pressed="true"] { outline: 2px solid var(--action-primary); outline-offset: 1px; }
 .invitation-card-error { margin: 0 0 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; --status-tone: var(--danger); }
@@ -1762,9 +1763,9 @@ textarea.compose-editor {
 .compose-from-value { font-size: 14px; color: var(--text); }
 /* The site's select (`.menu-select`), at the height of the subject box below them. From sizes to
    the identity it names, and ellipsises one too long for the row rather than pushing it wide. */
-.compose-from-select, .compose-priority-select { padding: 6px 12px; }
+:is(.compose-from-select, .compose-priority-select) > .menu-select { padding: 6px 12px; }
 .compose-priority-select { width: 160px; }
-.compose-from .dropdown-root { min-width: 0; }
+.compose-from .select-root { min-width: 0; }
 .compose-from-select { width: auto; min-width: 160px; max-width: 100%; }
 
 /* ── Compose: attachments ────────────────────────────────────────────────── */

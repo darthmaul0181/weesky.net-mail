@@ -101,9 +101,9 @@
   max-width: 100%;
 }
 
-/* A <select> is exempt: its widest option already is the right measure. Forcing --field-w on it
-   made SystemFoldersModal narrower than the folder names it lists. */
-.modal .field-h > select {
+/* A select (`MenuSelect`) is exempt: its widest option already is the right measure. Forcing
+   --field-w on it made SystemFoldersModal narrower than the folder names it lists. */
+.modal .field-h > .select-root {
   flex-basis: auto;
   min-width: 0;
   max-width: 100%;
@@ -121,7 +121,7 @@
   flex: none;
 }
 
-.modal .field > :is(input, select, textarea) {
+.modal .field > :is(input, .select-root, textarea) {
   width: var(--field-w, 34ch);
   max-width: 100%;
 }

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation } from 'react-router'
 import ConnectedAccountsPage from './ConnectedAccountsPage'
 import { leaveTo } from './useConnectedAccounts'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getConnectedAccounts: vi.fn(),
@@ -126,9 +126,9 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await openForm()
 
-    const options = within(await screen.findByLabelText('Server')).getAllByRole('option')
+    const options = await optionsOf(await screen.findByLabelText('Server'))
 
-    expect(options.map(option => option.textContent)).toEqual(['Weesky (local)', 'Acme'])
+    expect(options).toEqual(['Weesky (local)', 'Acme'])
   })
 
   it('connects a local mailbox with no domain and closes the form', async () => {
@@ -148,7 +148,7 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await openForm()
 
-    await userEvent.selectOptions(await screen.findByLabelText('Server'), 'd1')
+    await pickOption(await screen.findByLabelText('Server'), 'Acme')
     await userEvent.type(screen.getByLabelText('Email'), 'me@acme.com')
     await userEvent.type(screen.getByLabelText('Password'), 'secret')
     await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
@@ -350,7 +350,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     renderPage([WORK], [ACME, OUTLOOK])
     await openForm()
 
-    await userEvent.selectOptions(await screen.findByLabelText('Server'), 'd2')
+    await pickOption(await screen.findByLabelText('Server'), 'Outlook')
 
     expect(screen.getByRole('button', { name: 'Sign in with Outlook' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Email')).not.toBeInTheDocument()
@@ -362,7 +362,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     renderPage([WORK], [ACME, OUTLOOK])
     await openForm()
 
-    await userEvent.selectOptions(await screen.findByLabelText('Server'), 'd2')
+    await pickOption(await screen.findByLabelText('Server'), 'Outlook')
     const button = screen.getByRole('button', { name: 'Sign in with Outlook' })
     await userEvent.click(button)
 
@@ -380,7 +380,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     mocks.startOAuthConnect.mockRejectedValue(apiError('', 502))
     await openForm()
 
-    await userEvent.selectOptions(await screen.findByLabelText('Server'), 'd2')
+    await pickOption(await screen.findByLabelText('Server'), 'Outlook')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in with Outlook' }))
 
     expect(await screen.findByRole('alert'))
@@ -398,7 +398,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
     expect(await screen.findByRole('alert')).toBeInTheDocument()
 
-    await userEvent.selectOptions(screen.getByLabelText('Server'), 'd2')
+    await pickOption(screen.getByLabelText('Server'), 'Outlook')
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -418,8 +418,8 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     await openForm()
 
     const server = await screen.findByLabelText('Server')
-    await userEvent.selectOptions(server, 'd2')
-    await userEvent.selectOptions(server, 'd1')
+    await pickOption(server, 'Outlook')
+    await pickOption(server, 'Acme')
 
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
     expect(server).toHaveFocus()
@@ -430,7 +430,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     mocks.startOAuthConnect.mockRejectedValue(apiError('Too Many Requests', 429))
     await openForm()
 
-    await userEvent.selectOptions(await screen.findByLabelText('Server'), 'd2')
+    await pickOption(await screen.findByLabelText('Server'), 'Outlook')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in with Outlook' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts')

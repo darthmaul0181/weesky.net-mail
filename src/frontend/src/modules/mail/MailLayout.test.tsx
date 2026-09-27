@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import { ApiError } from '../../api.js'
 import type { MailFolderNode } from './api/mailTypes'
-import { createTestQueryClient, mockViewport, resetViewport, settle } from '../../test-utils'
+import { createTestQueryClient, mockViewport, pickOption, resetViewport, settle } from '../../test-utils'
 import { DRAG_MIME, serializeDrag } from './list/dragMessages'
 
 const mocks = vi.hoisted(() => ({
@@ -976,7 +976,7 @@ describe('searching from the layout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Advanced search' }))
     const modal = document.querySelector('.modal') as HTMLElement
     fireEvent.change(within(modal).getByLabelText('Subject'), { target: { value: 'e' } })
-    fireEvent.change(within(modal).getByLabelText('Search in'), { target: { value: 'all' } })
+    await pickOption(within(modal).getByLabelText('Search in'), 'All folders')
     fireEvent.click(within(modal).getByRole('button', { name: 'Search' }))
   }
 

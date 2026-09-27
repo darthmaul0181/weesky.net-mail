@@ -265,16 +265,36 @@
 
 .dropdown-root { position: relative; }
 
-/* A dropdown drawn as the select it replaces: the calendar picker and the aliases' domain. */
+/* The site's one select (`MenuSelect`): a box as wide as its widest option — the sizers are that
+   option list, stacked invisibly in the value's grid cell, their text drawn by `content` so it
+   reaches neither the accessibility tree nor a text query — and a listbox under it. */
+.select-root { position: relative; min-width: 0; }
 .menu-select {
   display: flex; align-items: center; gap: 8px; width: 100%;
   border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px;
   font-size: 14px; font-family: var(--font); color: var(--text); background: var(--surface);
   cursor: pointer; text-align: left;
 }
-.menu-select:focus-visible { outline: none; border-color: var(--action-primary); }
-.menu-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-select:focus-visible, .menu-select[aria-expanded="true"] { outline: none; border-color: var(--action-primary); }
+.menu-select:disabled { opacity: 0.6; cursor: not-allowed; }
 .menu-select > svg { flex: none; color: var(--text-muted); }
+.menu-select-value { flex: 1; min-width: 0; display: grid; }
+.menu-select-value > * {
+  grid-area: 1 / 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.menu-select-sizer { visibility: hidden; }
+.menu-select-sizer::before { content: attr(data-label); }
+
+.select-list {
+  left: 0; right: auto; min-width: 100%; margin: 0;
+  max-height: min(320px, 60vh); overflow-y: auto; list-style: none;
+}
+.select-root.is-right .select-list { left: auto; right: 0; }
+.select-list.is-up { top: auto; bottom: calc(100% + 4px); }
+.select-list .dropdown-item.is-active { background: color-mix(in oklab, var(--text) 10%, var(--surface)); }
+.select-list .dropdown-item[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+.select-option-label { flex: 1; min-width: 0; padding-inline-start: calc(var(--depth, 0) * 1.2em); }
+.select-list .dropdown-item > svg:last-child { flex: none; color: var(--action-primary); }
 
 /* `width: max-content` is load-bearing: absolutely positioned with `right: 0`/no `left`, an auto
    width would shrink-fit to min-content and wrap every label past ~124px. Content-sizing is also
@@ -532,7 +552,7 @@ a.dropdown-item { text-decoration: none; }
 
 /* The control takes the width its own content needs, not the width of the page: a page-size
    picker stretched across the column reads as a text field and hides how few values it offers. */
-.field-h.is-setting select,
+.field-h.is-setting > .select-root,
 .field-h.is-setting input[type="number"] {
   flex: 0 0 auto;
 }

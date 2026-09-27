@@ -137,9 +137,9 @@ describe('InvitationCard', () => {
     })
     renderCard()
 
-    // The editor's own picker: a menu, not a native select.
+    // The editor's own picker: the site's select, not a native one.
     fireEvent.click(await screen.findByLabelText('Calendar'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Travail' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Travail' }))
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
 
     await waitFor(() => expect(mocks.respondInvitation).toHaveBeenCalledWith(

@@ -337,8 +337,10 @@
       })
     }
 
-    // 4.7 AdvancedSearchModal's date <select> — exempt from --field-w, so its widest option sets
+    // 4.7 AdvancedSearchModal's date select — exempt from --field-w, so its widest option sets
     // the dialog's width. `Deux dernières semaines` is the widest French option.
+    // MenuSelect's markup: the sizers are what make the box as wide as its widest option.
+    const menuSelect = labels => `<div class="select-root"><button type="button" class="menu-select"><span class="menu-select-value"><span class="menu-select-name">${labels[0]}</span>${labels.map(l => `<span class="menu-select-sizer" data-label="${l}"></span>`).join('')}</span><svg width="14" height="14"></svg></button></div>`
     const DATES = ['allTime', 'last7', 'last14', 'last30', 'last90', 'last180', 'thisYear']
     for (const lang of ['en', 'fr']) {
       const html = `<div class="modal-overlay"><div class="modal">
@@ -346,18 +348,17 @@
         <form>${['from', 'to', 'subject', 'body'].map(f =>
           `<div class="field-h"><label>${s(lang, 'mail:search.advanced.' + f)}</label><input type="text" /></div>`).join('')}
         <div class="field-h"><label>${s(lang, 'mail:search.advanced.date')}</label>
-        <select>${DATES.map(d => `<option>${s(lang, 'mail:search.advanced.' + d)}</option>`).join('')}</select></div>
+        ${menuSelect(DATES.map(d => s(lang, 'mail:search.advanced.' + d)))}</div>
         <div class="field-h"><label>${s(lang, 'mail:search.advanced.scope')}</label>
-        <select><option>${s(lang, 'mail:search.advanced.thisFolder', { folder: 'Courrier indésirable' })}</option>
-        <option>${s(lang, 'mail:search.advanced.allFolders')}</option></select></div>
+        ${menuSelect([s(lang, 'mail:search.advanced.thisFolder', { folder: 'Courrier indésirable' }), s(lang, 'mail:search.advanced.allFolders')])}</div>
         <div class="folder-pick-submit"><button class="btn btn-primary">${icon(15)} ${s(lang, 'mail:search.advanced.submit')}</button></div>
         </form></div></div>`
       const host = mount(html, 1280)
       host.style.height = '700px'
       const modal = host.querySelector('.modal')
-      const sel = host.querySelector('select')
+      const sel = host.querySelector('.select-root')
       add({
-        target: 'AdvancedSearchModal <select>', lang, label: s(lang, 'mail:search.advanced.last14'),
+        target: 'AdvancedSearchModal select', lang, label: s(lang, 'mail:search.advanced.last14'),
         text: px(sel.getBoundingClientRect().width), lines: 1,
         avail: px(modal.clientWidth), modalWidth: px(modal.getBoundingClientRect().width),
         fits: modal.scrollWidth <= modal.clientWidth + 1,

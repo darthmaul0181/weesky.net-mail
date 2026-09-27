@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import MenuSelect from '../../components/MenuSelect'
 import PlusIcon from '../../icons/PlusIcon'
 import {
   ALL_DAY_PRESETS, DATED_DEFAULT, DATED_PRESETS, MAX_REMINDERS, reminderLabel,
@@ -30,13 +31,9 @@ export default function ReminderList({
     <div className="reminder-list">
       {reminders.map((minutes, index) => (
         <div className="reminder-row" key={index}>
-          <select value={minutes} aria-label={t('editor.reminder')}
-            onChange={event => onChange(reminders.map(
-              (one, at) => (at === index ? Number(event.target.value) : one)))}>
-            {options(minutes, allDay).map(value => (
-              <option key={value} value={value}>{reminderLabel(value, allDay, t)}</option>
-            ))}
-          </select>
+          <MenuSelect ariaLabel={t('editor.reminder')} value={String(minutes)}
+            onChange={picked => onChange(reminders.map((one, at) => (at === index ? Number(picked) : one)))}
+            options={options(minutes, allDay).map(value => ({ value: String(value), label: reminderLabel(value, allDay, t) }))} />
           <button type="button" className="reminder-remove"
             aria-label={t('editor.removeReminder')}
             onClick={() => onChange(reminders.filter((_, at) => at !== index))}>✕</button>

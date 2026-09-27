@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import LoadingBlock from '../../../components/LoadingBlock'
 import Modal from '../../../components/Modal'
 import SlidersIcon from '../../../icons/SlidersIcon'
-import { flatten, indent, sortFolders } from '../../mail/folders/folderNodes'
+import { flatten, sortFolders } from '../../mail/folders/folderNodes'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { roleLabel } from '../../mail/roleLabel'
 import { useClearFolderRole, useFolderRoles, useFolders, useSetFolderRole } from '../../mail/queries'
@@ -79,18 +80,17 @@ export default function SystemFoldersModal({ onClose, onNotify }: Props) {
               <div key={role}>
                 <div className="field-h">
                   <label htmlFor={`role-${role}`}>{roleLabel(role, tMail)}</label>
-                  <select
+                  <MenuSelect
                     id={`role-${role}`}
                     value={selected}
                     disabled={pendingRole === role}
-                    onChange={event => void onChange(role, event.target.value)}
-                    aria-describedby={entry?.staleOverride ? `role-${role}-stale` : undefined}
-                  >
-                    <option value="">{automaticLabel(entry, nameOf, t)}</option>
-                    {options.map(({ node, depth }) => (
-                      <option key={node.path} value={node.path}>{indent(depth)}{node.name}</option>
-                    ))}
-                  </select>
+                    onChange={path => void onChange(role, path)}
+                    describedBy={entry?.staleOverride ? `role-${role}-stale` : undefined}
+                    options={[
+                      { value: '', label: automaticLabel(entry, nameOf, t) },
+                      ...options.map(({ node, depth }) => ({ value: node.path, label: node.name, depth })),
+                    ]}
+                  />
                 </div>
                 {entry?.staleOverride && (
                   // Kept and signalled, never dropped (§ 5.3). aria-describedby so it is

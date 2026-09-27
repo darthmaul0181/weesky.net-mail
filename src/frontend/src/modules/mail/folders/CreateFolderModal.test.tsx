@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import CreateFolderModal from './CreateFolderModal'
-import { fireEscape } from '../../../test-utils'
+import { fireEscape, optionsOf } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
 
 const mocks = vi.hoisted(() => ({ create: vi.fn() }))
@@ -160,13 +160,13 @@ describe('CreateFolderModal', () => {
   it('preselects the parent it was given', () => {
     renderModal({ defaultParent: 'Projects' })
 
-    expect(screen.getByLabelText('Parent')).toHaveValue('Projects')
+    expect(screen.getByLabelText('Parent')).toHaveTextContent('Projects')
   })
 
-  it('offers every folder as a parent, children included', () => {
+  it('offers every folder as a parent, children included', async () => {
     renderModal()
 
-    const options = Array.from(screen.getByLabelText('Parent').querySelectorAll('option'))
-    expect(options.map(o => o.value)).toEqual(['', 'INBOX', 'Projects', 'Projects/Alpha'])
+    const names = await optionsOf(screen.getByLabelText('Parent'))
+    expect(names).toEqual(['(top level)', 'INBOX', 'Projects', 'Alpha'])
   })
 })

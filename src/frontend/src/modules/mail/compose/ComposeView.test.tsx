@@ -394,7 +394,7 @@ describe('ComposeView', () => {
     renderCompose()
 
     expect(screen.getByText('Mick Weesky (mick@weesky.be)')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'From identity' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'From identity' })).toBeNull()
   })
 
   it('preselects the default identity and sends its address', async () => {
@@ -402,7 +402,7 @@ describe('ComposeView', () => {
     vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
     renderCompose()
 
-    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Michel (michel@weesky.be)')
+    expect(screen.getByRole('combobox', { name: 'From identity' })).toHaveTextContent('Michel (michel@weesky.be)')
     addRecipient('To', 'a@b.c')
     fireEvent.click(sendButton())
 
@@ -417,9 +417,9 @@ describe('ComposeView', () => {
     vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
     renderCompose()
 
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
-    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick Weesky (mick@weesky.be)')
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Mick Weesky (mick@weesky.be)' }))
+    expect(screen.getByRole('combobox', { name: 'From identity' })).toHaveTextContent('Mick Weesky (mick@weesky.be)')
 
     addRecipient('To', 'a@b.c')
     fireEvent.click(sendButton())
@@ -434,15 +434,15 @@ describe('ComposeView', () => {
     vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
     renderCompose()
 
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Mick Weesky (mick@weesky.be)' }))
 
     vi.mocked(useIdentities).mockReturnValue(
       { data: [{ ...identityList[0], stale: true }, identityList[1]] } as never)
     // Any state change; the refetched list lands on the next render.
     fireEvent.click(screen.getByRole('button', { name: 'Cc' }))
 
-    expect(screen.getByRole('button', { name: 'From identity' })).toHaveTextContent('Mick Weesky (mick@weesky.be)')
+    expect(screen.getByRole('combobox', { name: 'From identity' })).toHaveTextContent('Mick Weesky (mick@weesky.be)')
     expect(screen.getByText('unavailable')).toBeInTheDocument()
   })
 
@@ -453,8 +453,8 @@ describe('ComposeView', () => {
     renderCompose()
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'draft' } })
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Mick Weesky (mick@weesky.be)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(await discardModal()).toBeInTheDocument()
@@ -464,8 +464,8 @@ describe('ComposeView', () => {
     vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
     const { router } = renderCompose()
 
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Mick Weesky (mick@weesky.be)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
@@ -497,10 +497,10 @@ describe('ComposeView', () => {
 })
 
 describe('the priority row', () => {
-  const trigger = () => screen.getByRole('button', { name: 'Priority' })
+  const trigger = () => screen.getByRole('combobox', { name: 'Priority' })
   const pick = (label: string) => {
     fireEvent.click(trigger())
-    fireEvent.click(screen.getByRole('menuitem', { name: label }))
+    fireEvent.click(screen.getByRole('option', { name: label }))
   }
   const draftSeed: ComposeSeed = {
     action: 'draft', to: ['alice@ext.example'], cc: [], bcc: [],
@@ -574,7 +574,7 @@ describe('the priority row', () => {
 
     fireEvent.click(trigger())
     rows.length = 0
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Normal' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Normal' }))
 
     expect(rows).not.toContain(true)
   })
@@ -948,8 +948,8 @@ describe('drafts in the composer', () => {
     cleanup()
 
     const { router } = renderCompose('INBOX', draftSeed)
-    fireEvent.click(screen.getByRole('button', { name: 'From identity' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Mick Weesky (mick@weesky.be)' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Mick Weesky (mick@weesky.be)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(await discardModal()).toBeInTheDocument()

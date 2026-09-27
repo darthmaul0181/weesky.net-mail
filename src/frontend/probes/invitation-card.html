@@ -47,9 +47,8 @@
     erreur 1 at 900 (FR and EN) and at 400 EN; WRAP at 400 FR only, Réessayer under its sentence.
     glyphes 0 in all 88 readings, against controle 2. actions unchanged: no WRAP at 900.
 
-  The loop skips any node with no box: the calendar `<select>`'s `<option>` elements are laid
-  out by the widget and answer a zero-sized rect at the origin, which once read as an overhang
-  of 24 at 400 and 448 at 900 on state 1.
+  The loop skips any node with no box: a node the layout leaves without one answers a zero-sized
+  rect at the origin, which once read as an overhang of 24 at 400 and 448 at 900 on state 1.
 
   Drive it in Chrome/Edge with device-metric emulation (the platform clamps --window-size), at a
   400px and a 900px reader column — the two `.mail-reader` widths this file lays out itself, so

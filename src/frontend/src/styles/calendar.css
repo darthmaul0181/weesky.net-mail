@@ -517,7 +517,7 @@
 /* The calendar picker is a `.menu-select` (shell.css) — see architecture-calendar.md. `flex: 1`
    on the root plus `width: 100%` on the button are both needed: the root is the flex item, the
    button is what is seen. */
-.calendar-editor-form .field-h > .dropdown-root { flex: 1; min-width: 0; }
+.calendar-editor-form .field-h > .select-root { flex: 1; }
 .menu-select > .calendar-swatch { background: var(--cal); }
 .calendar-editor-form .dropdown-menu { left: 0; right: auto; min-width: 100%; }
 .calendar-editor-form .dropdown-item > .calendar-swatch { background: var(--cal); }
@@ -576,7 +576,7 @@
 /* ── The bell ──────────────────────────────────────────────────────────────── */
 .reminder-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .reminder-row { display: flex; align-items: center; gap: 6px; }
-.reminder-row > select { flex: 1; min-width: 0; }
+.reminder-row > .select-root { flex: 1; }
 .reminder-remove {
   flex: none; border: none; background: none; color: var(--text-muted); cursor: pointer;
   padding: 2px 6px; border-radius: var(--radius-sm); font-size: 13px;
