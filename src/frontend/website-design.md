@@ -47,7 +47,7 @@ When a rule is ambiguous, copy what those screens do.
   (`--action-primary`) and a soft ring of the same hue appears around it. Because the highlight is
   driven by the `--action-primary` token — not a fixed colour — it automatically follows whatever
   theme (light/dark) and palette the user has chosen; never hard-code the hover colour. This is the
-  standard affordance for every interactive tile (admin rows, identities, aliases).
+  standard affordance for every interactive tile (admin rows, identities).
 - **Unless the tile can be *picked* — then it is a list row, and it takes the message row whole.**
   A tile lives on a page, where a row is acted on and never selected; a list column sits beside a
   detail pane, and the two surfaces want different things. The border-and-ring hover collides there
@@ -265,6 +265,12 @@ occupy **permanently reserved** space (a padding gutter or a fixed flex slot), s
 shoves the row's text sideways. The line a cluster would cover reserves that width and ends in an
 ellipsis, instead of running under the buttons. The rule for any hover-revealed control: reserve
 first, reveal into the reserve.
+
+**The one exception is the Aliases index**, where names flow as words on a line rather than as rows:
+reserving room for two buttons beside every name doubled the height of a letter, and widening the
+hovered name pushed every name after it. Its copy and delete live in a bubble floating over the
+neighbours (`.alias-bubble`), placed above the name — below it, or pinned to one side, where the
+scroll box would cut it — so nothing moves at all.
 
 ## The mail module
 

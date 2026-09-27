@@ -20,10 +20,10 @@ const swatch = (color: string | undefined) => (
 export default function CalendarSelect({ label, calendars, value, onChange }: CalendarSelectProps) {
   const chosen = calendars.find(one => one.id === value)
   return (
-    <DropdownMenu ariaLabel={label} className="calendar-select" align="left"
+    <DropdownMenu ariaLabel={label} className="menu-select" align="left"
       trigger={<>
         {swatch(chosen?.color)}
-        <span className="calendar-select-name">{chosen?.displayName ?? ''}</span>
+        <span className="menu-select-name">{chosen?.displayName ?? ''}</span>
         <ChevronDownIcon size={14} />
       </>}
       items={calendars.map(one => ({
