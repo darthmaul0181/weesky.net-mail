@@ -68,6 +68,20 @@ only removes the image longhand from a sheet that already carried the others.
 
 ## Known and accepted
 
+- **About 5 % of HTML mail still scrolls sideways on a phone, and the reader does not zoom it to
+  fit.** Measured 2026-09-27 at 412px (a Galaxy S26) over two real mailboxes, 323 HTML messages:
+  24 overflowed (7.4 %). Two causes remain after the stylesheet work. A template with no mobile
+  rules at all (a Stripe receipt fixed at 480px, a railway ticket at ~940px) is wider than the
+  screen by design; Outlook and Gmail shrink such a message to fit, but the zoom it needs was
+  under 0.7 for all but 3 of the 24, where text is small enough that the reader pinches anyway —
+  so zoom-to-fit (a same-origin, scriptless measuring frame beside the reader, plus an "original
+  size" toggle) was judged not worth its cost and its relaxation of the frame barrier. And a long
+  URL or address written as text inside a table cell (gov.uk, Hetzner, OVH, Moody's) cannot wrap:
+  `overflow-wrap: break-word` on the body does not lower a cell's minimum width, and `anywhere`
+  everywhere collapses real columns (see the GitHub case in `architecture-mail.md`). Only a
+  message that asks for it with `word-break: break-word` gets `anywhere`, through the backend's
+  `data-break-word` marker — that fixed ING and one OVH mail. Pinch-zoom on the page is the
+  fallback; revisit if the proportion grows.
 - **The dark-mode image dimming is uniform and covers `<img>` only.** `brightness(0.85)
   saturate(0.9)`, applied in `renderBodyDocument`. It cannot be content-aware: the reader's iframe
   is sandboxed without same-origin and the images are cross-origin, so no pixel can be read to
