@@ -1807,33 +1807,51 @@
       touch: '.toggle-switch, .admin-icon-btn, .rules-toolbar .btn',
     })
 
-    // 7. The Aliases page. Its own tile skin — `.alias-grid` is a wrapping flex of `.alias-tile`s
-    //    whose delete is an 18px glyph absolutely positioned inside a tile roughly 41px tall, so
-    //    neither a painted 44px box nor a symmetric pseudo fits without the tile itself being
-    //    floored first. The alpha rail beside it is a column of 20px letters.
+    // 7. The Aliases page. An index: a letter per line and one line per family of three, names
+    //    in a wrapping flex that keep their width when their bubble opens. On a finger the name
+    //    and the bubble's two buttons take the 44px floor, under `hover: none` — run with touch
+    //    emulation for those, as the note at the top says.
     CASES.push({
       name: 'settings-aliases',
       html: settingsPage(`
         <div class="settings-page">
-          <div class="domain-toolbar">
-            <select class="domain-select"><option>weesky.be</option></select>
-            <input type="text" class="search-input" placeholder="New alias" />
-            <button class="btn btn-add">Create</button>
-            <label class="toggle-row alias-alpha-toggle" style="margin-left:auto">
-              <span class="toggle-label">A-Z</span>
-              <span class="toggle-switch"><input type="checkbox" /><span class="toggle-track"></span></span>
-            </label>
+          <div class="settings-page-header alias-page-header">
+            <div class="alias-page-heading">
+              <h1 class="settings-page-title">Aliases</h1>
+              <p class="alias-page-summary">56 receiving addresses · repeated prefixes are written once</p>
+            </div>
+            <select class="alias-domain-select"><option>@weesky.be</option></select>
           </div>
-          <div class="alias-grid">
-            <div class="alias-tile"><span class="alias-tile-name">facturation</span><span class="alias-tile-domain">@weesky.be</span>
-              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
-            <div class="alias-tile"><span class="alias-tile-name">contact</span><span class="alias-tile-domain">@weesky.be</span>
-              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
-            <div class="alias-tile"><span class="alias-tile-name">marie-christine.vandenbroucke</span><span class="alias-tile-domain">@weesky.be</span>
-              <button class="alias-tile-delete"><svg width="14" height="14"></svg></button></div>
+          <div class="alias-composer has-picker">
+            <svg width="20" height="20"></svg>
+            <input type="search" placeholder="Type to filter the index, or to create an address" />
+            <span class="alias-composer-domain">@weesky.be</span>
+            <button class="btn btn-primary btn-auto">Create</button>
+          </div>
+          <div class="alias-view-wrapper">
+            <div class="alias-scroll-area">
+              <div role="grid" class="alias-index">
+                <div role="rowgroup" class="alias-letter">
+                  <div role="row" class="alias-line">
+                    <div role="rowheader" class="alias-line-head"><span class="alias-letter-mark">M</span></div>
+                    <div role="gridcell" class="alias-cell"><span class="alias-cell-name">marie-christine.vandenbroucke</span>
+                      <span class="alias-bubble"><span class="alias-bubble-address">marie-christine.vandenbroucke@weesky.be</span>
+                        <button class="admin-icon-btn"><svg width="16" height="16"></svg></button>
+                        <button class="admin-icon-btn is-danger"><svg width="16" height="16"></svg></button></span></div>
+                  </div>
+                  <div role="row" class="alias-line">
+                    <div role="rowheader" class="alias-line-head"><span class="alias-family">michael.… ×3</span></div>
+                    <div role="gridcell" class="alias-cell"><span class="alias-cell-name">dalpont</span></div>
+                    <div role="gridcell" class="alias-cell"><span class="alias-cell-name">dalpont-okta</span></div>
+                    <div role="gridcell" class="alias-cell"><span class="alias-cell-name">test</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <nav class="alpha-nav"><button class="alpha-nav-letter">M</button></nav>
           </div>
         </div>`),
-      touch: '.alias-tile-delete, .toggle-switch, .domain-toolbar .btn, .domain-select',
+      touch: '.alias-cell, .alias-bubble .admin-icon-btn, .alias-composer .btn, .alias-domain-select',
     })
 
     // 8. The Folders page. `FolderManager` puts a `.toggle-switch` as the FIRST child of an

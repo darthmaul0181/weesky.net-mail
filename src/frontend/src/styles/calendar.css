@@ -514,20 +514,11 @@
 .calendar-editor-screen > .calendar-editor-form {
   flex: 1; min-height: 0; overflow-y: auto; padding: 16px 14px;
 }
-/* The calendar picker is a dropdown drawn as the select it replaces — see architecture-
-   calendar.md. `flex: 1` on the root plus `width: 100%` on the button are both needed: the
-   root is the flex item, the button is what is seen. */
+/* The calendar picker is a `.menu-select` (shell.css) — see architecture-calendar.md. `flex: 1`
+   on the root plus `width: 100%` on the button are both needed: the root is the flex item, the
+   button is what is seen. */
 .calendar-editor-form .field-h > .dropdown-root { flex: 1; min-width: 0; }
-.calendar-select {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px;
-  font-size: 14px; font-family: var(--font); color: var(--text); background: var(--surface);
-  cursor: pointer; text-align: left;
-}
-.calendar-select:focus-visible { outline: none; border-color: var(--action-primary); }
-.calendar-select > .calendar-swatch { background: var(--cal); }
-.calendar-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.calendar-select > svg { flex: none; color: var(--text-muted); }
+.menu-select > .calendar-swatch { background: var(--cal); }
 .calendar-editor-form .dropdown-menu { left: 0; right: auto; min-width: 100%; }
 .calendar-editor-form .dropdown-item > .calendar-swatch { background: var(--cal); }
 /* A date box is as wide as a date and a time box four characters, whatever the row holds: the

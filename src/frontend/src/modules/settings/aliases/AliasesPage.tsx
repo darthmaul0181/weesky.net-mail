@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../api.js'
@@ -7,13 +7,17 @@ import { useAccountId } from '../../../hooks/useAccountId'
 import { useListLoadState } from '../../../hooks/useListLoadState'
 import { useToasts } from '../../../hooks/useToasts'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
-import { readStored, writeStored } from '../../../lib/safeStorage'
+import { collator } from '../../../lib/intl'
 import Toasts from '../../../components/Toasts'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
-import TrashIcon from '../../../icons/TrashIcon'
 import AtSignIcon from '../../../icons/AtSignIcon'
+import SearchIcon from '../../../icons/SearchIcon'
+import ChevronDownIcon from '../../../icons/ChevronDownIcon'
+import DropdownMenu from '../../../components/DropdownMenu'
 import type { AccountDomain } from '../../../lib/accountIdentity'
 import type { AliasInfo } from '../../mail/api/mailTypes'
+import AliasIndex from './AliasIndex'
+import { buildIndex } from './aliasFamilies'
 
 interface PendingDelete { name: string; domain: string }
 
@@ -35,7 +39,6 @@ export default function AliasesPage() {
 
   // The app's thirty-second default, as the admin lists: the readers' five minutes is theirs.
   const aliasesQuery = useAliases(true, { staleTime: 30_000 })
-  const aliases = aliasesQuery.data ?? []
   // useListLoadState is the admin tabs' own predicate (useAdminLists.ts's useListLoad wraps it
   // with a toast). Aliases already announces a failure through its own role="alert" banner below,
   // so it uses the state directly rather than the toasting wrapper — one announcement, not two.
@@ -47,18 +50,9 @@ export default function AliasesPage() {
   const [deletingKey, setDeletingKey] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
-  const [alphaMode, setAlphaMode] = useState(() => readStored('alias_alpha_mode') === 'true')
 
-  function handleAlphaModeChange(value: boolean) {
-    setAlphaMode(value)
-    writeStored('alias_alpha_mode', String(value))
-  }
-
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const groupRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  // A confirmed delete takes the tile's own button with it, so focus goes back to the page's name.
+  // A confirmed delete takes the name's own button with it, so focus goes back to the page's name.
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const [activeLetter, setActiveLetter] = useState('')
 
   useEffect(() => {
     api.getAccount().then(data => {
@@ -73,25 +67,13 @@ export default function AliasesPage() {
     }).catch(() => {})
   }, [])
 
-  const visibleAliases = aliases
-    .filter(a => !selectedDomain || a.domain === selectedDomain)
-    .filter(a => !search || `${a.name}@${a.domain}`.includes(search.toLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name))
-
-  const grouped: Array<[string, AliasInfo[]]> = []
-  const groupMap: Record<string, AliasInfo[]> = {}
-  for (const a of visibleAliases) {
-    const letter = a.name[0]?.toUpperCase() ?? '#'
-    if (!groupMap[letter]) {
-      groupMap[letter] = []
-      grouped.push([letter, groupMap[letter]])
-    }
-    groupMap[letter].push(a)
-  }
-  const availableLetters = grouped.map(([l]) => l)
-  const effectiveActiveLetter = availableLetters.includes(activeLetter)
-    ? activeLetter
-    : (availableLetters[0] ?? '')
+  const query = search.toLowerCase()
+  const inDomain = useMemo(() => (aliasesQuery.data ?? [])
+    .filter(a => !selectedDomain || a.domain === selectedDomain), [aliasesQuery.data, selectedDomain])
+  const matching = useMemo(() => inDomain
+    .filter(a => !query || `${a.name}@${a.domain}`.toLowerCase().includes(query)), [inDomain, query])
+  const letters = useMemo(() => buildIndex(matching,
+    (x, y) => collator({ sensitivity: 'base' }).compare(x, y)), [matching])
 
   async function handleDelete(name: string, domain: string) {
     const key = `${name}@${domain}`
@@ -117,7 +99,7 @@ export default function AliasesPage() {
     setAdding(true)
     try {
       await api.createAlias(search, selectedDomain)
-      const key = `${search}@${selectedDomain}`
+      const key = `${search}@${selectedDomain}`.toLowerCase()
       const refreshed = invalidateAliasCaches()
       addToast(t('aliases.added', { alias: key }))
       setSearch('')
@@ -130,52 +112,38 @@ export default function AliasesPage() {
     }
   }
 
-  function handleScroll() {
-    const container = scrollRef.current
-    if (!container) return
-    const containerTop = container.getBoundingClientRect().top
-    let current = availableLetters[0] ?? ''
-    for (const letter of availableLetters) {
-      const el = groupRefs.current[letter]
-      if (el && el.getBoundingClientRect().top - containerTop <= 8) current = letter
+  async function handleCopy(address: string) {
+    try {
+      await navigator.clipboard.writeText(address)
+      addToast(t('aliases.copied', { alias: address }))
+    } catch {
+      addToast(t('aliases.copyFailed'), 'error')
     }
-    if (current !== activeLetter) setActiveLetter(current)
-  }
-
-  function scrollToLetter(letter: string) {
-    const el = groupRefs.current[letter]
-    const container = scrollRef.current
-    if (!el || !container) return
-    container.scrollTop += el.getBoundingClientRect().top - container.getBoundingClientRect().top
   }
 
   return (
     <div className="settings-page">
-      <div className="settings-page-header">
-        <h1 className="settings-page-title" ref={headingRef} tabIndex={-1}>
-          <AtSignIcon size={17} />{t('nav.aliases')}
-        </h1>
+      <div className="settings-page-header alias-page-header">
+        <div className="alias-page-heading">
+          <h1 className="settings-page-title" ref={headingRef} tabIndex={-1}>
+            <AtSignIcon size={17} />{t('nav.aliases')}
+          </h1>
+          <p className="alias-page-summary">{query
+            ? t('aliases.summaryFiltered', { total: inDomain.length, shown: matching.length })
+            : t('aliases.summary', { count: inDomain.length })}</p>
+        </div>
+        {domains.length > 1 && (
+          <DropdownMenu ariaLabel={t('aliases.domain')} className="menu-select alias-domain-select"
+            trigger={<><span className="menu-select-name">@{selectedDomain}</span><ChevronDownIcon size={14} /></>}
+            items={domains.map(d => ({ label: `@${d.name}`, onSelect: () => setSelectedDomain(d.name) }))} />
+        )}
       </div>
 
-      <div className="domain-toolbar">
-        {domains.length > 1 && (
-          <>
-            <label htmlFor="domain-select" className="domain-label">{t('aliases.domain')}</label>
-            <select
-              id="domain-select"
-              className="domain-select"
-              value={selectedDomain}
-              onChange={e => setSelectedDomain(e.target.value)}
-            >
-              {domains.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
-              ))}
-            </select>
-          </>
-        )}
+      <div className={`alias-composer${domains.length > 1 ? ' has-picker' : ''}${search.length > 30 ? ' is-error' : ''}`}>
+        <SearchIcon size={20} />
         <input
-          className={`search-input${search.length > 30 ? ' is-error' : ''}`}
           type="search"
+          aria-label={t('aliases.searchLabel')}
           placeholder={t('aliases.searchPlaceholder')}
           value={search}
           onChange={e => {
@@ -191,24 +159,14 @@ export default function AliasesPage() {
             }
           }}
         />
+        {selectedDomain && <span className="alias-composer-domain">@{selectedDomain}</span>}
         <button
-          className="btn btn-add"
+          className="btn btn-primary btn-auto"
           onClick={() => void handleAdd()}
           disabled={adding || !selectedDomain || !search.trim() || search.length > 30}
         >
           {adding ? <span className="spinner" /> : t('aliases.create')}
         </button>
-        <label className="toggle-row alias-alpha-toggle" style={{ marginLeft: 'auto' }}>
-          <span className="toggle-label">{t('aliases.alphabetical')}</span>
-          <span className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={alphaMode}
-              onChange={e => handleAlphaModeChange(e.target.checked)}
-            />
-            <span className="toggle-track" />
-          </span>
-        </label>
       </div>
 
       {loadFailed && <div className="alert alert-error" role="alert">{t('aliases.loadFailed')}</div>}
@@ -217,82 +175,13 @@ export default function AliasesPage() {
         <div className="loading-center">
           <span className="spinner" />
         </div>
-      ) : visibleAliases.length === 0 ? (
+      ) : letters.length === 0 ? (
         <div className="alias-empty-grid">{t('aliases.empty')}</div>
-      ) : alphaMode ? (
-        <div className="alias-view-wrapper">
-          <div className="alias-scroll-area" ref={scrollRef} onScroll={handleScroll}>
-            {grouped.map(([letter, groupAliases]) => (
-              <div key={letter} className="alias-group">
-                <div
-                  className="alias-group-header"
-                  ref={el => { groupRefs.current[letter] = el }}
-                >
-                  <span className="alias-group-letter">{letter}</span>
-                  <div className="alias-group-divider" />
-                </div>
-                <div className="alias-grid">
-                  {groupAliases.map(a => {
-                    const key = `${a.name}@${a.domain}`
-                    const isNew = highlightedKey === key
-                    return (
-                      <div
-                        className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
-                        key={key}
-                        onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
-                      >
-                        <span className="alias-tile-name">{a.name}</span>
-                        <span className="alias-tile-domain">@{a.domain}</span>
-                        <button
-                          className="alias-tile-delete"
-                          onClick={() => setPendingDelete({ name: a.name, domain: a.domain })}
-                          title={t('actions.delete', { ns: 'common' })}
-                        >
-                          <TrashIcon />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="alpha-nav">
-            {availableLetters.map(letter => (
-              <button
-                key={letter}
-                className={`alpha-nav-letter${effectiveActiveLetter === letter ? ' is-active' : ''}`}
-                onClick={() => scrollToLetter(letter)}
-              >
-                {letter}
-              </button>
-            ))}
-          </div>
-        </div>
       ) : (
-        <div className="alias-grid">
-          {visibleAliases.map(a => {
-            const key = `${a.name}@${a.domain}`
-            const isNew = highlightedKey === key
-            return (
-              <div
-                className={isNew ? 'alias-tile alias-tile-new' : 'alias-tile'}
-                key={key}
-                onAnimationEnd={isNew ? () => setHighlightedKey(null) : undefined}
-              >
-                <span className="alias-tile-name">{a.name}</span>
-                <span className="alias-tile-domain">@{a.domain}</span>
-                <button
-                  className="alias-tile-delete"
-                  onClick={() => setPendingDelete({ name: a.name, domain: a.domain })}
-                  title={t('actions.delete', { ns: 'common' })}
-                >
-                  <TrashIcon />
-                </button>
-              </div>
-            )
-          })}
-        </div>
+        <AliasIndex letters={letters} highlightedKey={highlightedKey}
+          onHighlightEnd={() => setHighlightedKey(null)}
+          onCopy={address => void handleCopy(address)}
+          onDelete={alias => setPendingDelete({ name: alias.name, domain: alias.domain })} />
       )}
 
       {pendingDelete && (

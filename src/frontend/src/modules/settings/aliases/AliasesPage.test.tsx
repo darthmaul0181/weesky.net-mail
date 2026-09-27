@@ -61,6 +61,11 @@ describe('AliasesPage', () => {
     expect(screen.getByText('alias2')).toBeInTheDocument()
   })
 
+  it("counts the domain's addresses under the title", async () => {
+    renderPage()
+    expect(await screen.findByText('2 receiving addresses · repeated prefixes are written once')).toBeInTheDocument()
+  })
+
   it('shows the empty state when there are no aliases', async () => {
     mocks.getAliases.mockResolvedValue([])
     renderPage()
@@ -135,22 +140,23 @@ describe('AliasesPage', () => {
   it('filters visible aliases by search term', async () => {
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'alias1')
+    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'alias1')
     expect(screen.getByText('alias1')).toBeInTheDocument()
     expect(screen.queryByText('alias2')).not.toBeInTheDocument()
+    expect(screen.getByText('1 of 2 addresses match')).toBeInTheDocument()
   })
 
   it('shows an error toast when search term exceeds 30 characters', async () => {
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'a'.repeat(31))
+    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'a'.repeat(31))
     expect(await screen.findByText('An alias cannot exceed 30 characters')).toBeInTheDocument()
   })
 
   it('hides the domain select with a single domain', async () => {
     renderPage()
     await screen.findByText('alias1')
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Domain' })).not.toBeInTheDocument()
   })
 
   it('shows the domain select with multiple domains', async () => {
@@ -162,7 +168,7 @@ describe('AliasesPage', () => {
       ],
     })
     renderPage()
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Domain' })).toHaveTextContent('@weesky.be')
   })
 
   it('deletes an alias when the delete button is clicked', async () => {
@@ -216,8 +222,8 @@ describe('AliasesPage', () => {
       .mockResolvedValue([...ALIASES, { name: 'new', domain: 'weesky.be' }])
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'new')
-    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'new')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(mocks.createAlias).toHaveBeenCalledWith('new', 'weesky.be'))
     expect(await screen.findByText('new@weesky.be added')).toBeInTheDocument()
   })
@@ -227,8 +233,8 @@ describe('AliasesPage', () => {
     mocks.createAlias.mockRejectedValue(new Error('Alias exists'))
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
-    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'bad')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     expect(await screen.findByText('Failed to create alias.')).toBeInTheDocument()
   })
 
@@ -239,8 +245,8 @@ describe('AliasesPage', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'new')
-    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'new')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.aliases('primary') }))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('primary') })
@@ -258,25 +264,52 @@ describe('AliasesPage', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('primary') })
   })
 
-  it('persists the alphabetical toggle locally when toggled', async () => {
+  it('files names under their letter, one family of three per line, in lower case', async () => {
+    mocks.getAliases.mockResolvedValue([
+      { name: 'darth_ebay', domain: 'weesky.be' }, { name: 'Dorian', domain: 'weesky.be' },
+      { name: 'darth_amazon', domain: 'weesky.be' }, { name: 'darth_ups', domain: 'weesky.be' },
+      { name: 'abuse', domain: 'weesky.be' },
+    ])
     renderPage()
-    const toggle = await screen.findByRole('checkbox', { name: /alphabetical/i })
-    fireEvent.click(toggle)
-    expect(localStorage.getItem('alias_alpha_mode')).toBe('true')
+    await screen.findByText('abuse')
+    const rows = screen.getAllByRole('row').map(row =>
+      [...row.querySelectorAll('.alias-cell-name')].map(name => name.textContent).join(','))
+    expect(rows).toEqual(['abuse', 'dorian', 'amazon,ebay,ups'])
+    expect(screen.getByRole('rowheader', { name: 'D, darth_… (3 aliases)' })).toBeInTheDocument()
+    expect(screen.getByRole('gridcell', { name: 'darth_ups@weesky.be' })).toBeInTheDocument()
   })
 
-  it('reads alpha mode from localStorage on initial render', async () => {
-    localStorage.setItem('alias_alpha_mode', 'true')
-    mocks.getAliases.mockResolvedValue([
-      { name: 'beta', domain: 'weesky.be' },
-      { name: 'alpha', domain: 'weesky.be' },
-    ])
-    const { container } = renderPage()
-    // alpha mode renders group letters as .alias-group-letter elements
-    await waitFor(() => expect(container.querySelector('.alias-group-letter')).toBeTruthy())
-    const letters = [...container.querySelectorAll('.alias-group-letter')].map(el => el.textContent)
-    expect(letters).toContain('A')
-    expect(letters).toContain('B')
+  it('copies the full address from the bubble', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getAllByTitle('Copy the address')[1]!)
+    expect(writeText).toHaveBeenCalledWith('alias2@weesky.be')
+    expect(await screen.findByText('alias2@weesky.be copied')).toBeInTheDocument()
+  })
+
+  it('says so when the clipboard refuses the address', async () => {
+    Object.defineProperty(navigator, 'clipboard',
+      { value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) }, configurable: true })
+    renderPage()
+    await screen.findByText('alias1')
+    await userEvent.click(screen.getAllByTitle('Copy the address')[0]!)
+    expect(await screen.findByText('Could not copy the address.')).toBeInTheDocument()
+  })
+
+  // One stop for the whole index: Tab lands on the first name, the arrows walk the names, and F2
+  // is the way into one — where its copy and delete are.
+  it('walks the names with the arrows and enters one with F2', async () => {
+    renderPage()
+    await screen.findByText('alias1')
+    screen.getByPlaceholderText('Type to filter the index, or to create an address').focus()
+    await userEvent.tab()
+    expect(screen.getByRole('gridcell', { name: 'alias1@weesky.be' })).toHaveFocus()
+    await userEvent.keyboard('{ArrowRight}{F2}')
+    expect(screen.getAllByTitle('Copy the address')[1]).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('gridcell', { name: 'alias2@weesky.be' })).toHaveFocus()
   })
 
   it('shows a success toast after deleting an alias', async () => {
@@ -305,60 +338,40 @@ describe('AliasesPage', () => {
     await waitFor(() => expect(mocks.getAliases).toHaveBeenCalledTimes(2))
   })
 
-  it('fires alpha nav letter click (scrollToLetter)', async () => {
-    localStorage.setItem('alias_alpha_mode', 'true')
+  it('scrolls to a letter from the letter rail', async () => {
     mocks.getAliases.mockResolvedValue([
       { name: 'alpha', domain: 'weesky.be' },
       { name: 'beta', domain: 'weesky.be' },
     ])
     const { container } = renderPage()
-    await waitFor(() => expect(container.querySelector('.alpha-nav-letter')).toBeTruthy())
-    const navButtons = container.querySelectorAll('.alpha-nav-letter')
-    await userEvent.click(navButtons[1]!) // click 'B'
-    expect(navButtons[1]!).toBeInTheDocument()
+    await screen.findByText('beta')
+    const area = container.querySelector<HTMLElement>('.alias-scroll-area')!
+    expect(screen.getByRole('button', { name: 'A' })).toHaveClass('is-active')
+    // jsdom lays nothing out, so every letter reads as reached and the last one lights.
+    await userEvent.click(screen.getByRole('button', { name: 'B' }))
+    fireEvent.scroll(area)
+    expect(screen.getByRole('button', { name: 'B' })).toHaveClass('is-active')
   })
 
-  it('fires scroll event in alpha mode (handleScroll)', async () => {
-    localStorage.setItem('alias_alpha_mode', 'true')
-    mocks.getAliases.mockResolvedValue([
-      { name: 'alpha', domain: 'weesky.be' },
-      { name: 'beta', domain: 'weesky.be' },
-    ])
-    const { container } = renderPage()
-    await waitFor(() => expect(container.querySelector('.alias-scroll-area')).toBeTruthy())
-    const scrollArea = container.querySelector('.alias-scroll-area')
-    if (!scrollArea) throw new Error('scroll area not yet rendered')
-    fireEvent.scroll(scrollArea)
-    expect(container.querySelector('.alias-group-letter')).toBeTruthy()
-  })
-
-  it('clears alias highlight after animation ends (non-alpha mode)', async () => {
+  it('clears the new alias highlight after its animation ends', async () => {
     mocks.createAlias.mockResolvedValue(null)
     mocks.getAliases
       .mockResolvedValueOnce(ALIASES)
       .mockResolvedValue([...ALIASES, { name: 'newone', domain: 'weesky.be' }])
     const { container } = renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'newone')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Create alias' })).not.toBeDisabled())
-    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
-    const newTile = await waitFor(
-      () => {
-        const el = container.querySelector('.alias-tile-new')
-        if (!el) throw new Error('tile not yet highlighted')
-        return el
-      },
-      { timeout: 3000 }
-    )
-    // Invoke the onAnimationEnd handler directly via React internal props. The cast is to the
-    // untyped internal shape jsdom never fires animation events for; there is no public type for it.
-    const propsKey = Object.keys(newTile).find(k => k.startsWith('__reactProps'))
-    if (propsKey) {
-      await act(async () => {
-        (newTile as unknown as Record<string, { onAnimationEnd: () => void }>)[propsKey]!.onAnimationEnd()
-      })
-    }
-    await waitFor(() => expect(container.querySelector('.alias-tile-new')).toBeNull())
+    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'NewOne')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    const cell = await waitFor(() => {
+      const el = container.querySelector('.alias-cell.is-new')
+      if (!el) throw new Error('name not yet highlighted')
+      return el
+    })
+    // jsdom never fires animation events React listens for, so the handler is called through
+    // React's own props; there is no public type for that internal shape.
+    const propsKey = Object.keys(cell).find(k => k.startsWith('__reactProps'))!
+    act(() => { (cell as unknown as Record<string, { onAnimationEnd: () => void }>)[propsKey]!.onAnimationEnd() })
+    await waitFor(() => expect(container.querySelector('.alias-cell.is-new')).toBeNull())
   })
 
   it('changes the selected domain in the domain toolbar', async () => {
@@ -370,28 +383,18 @@ describe('AliasesPage', () => {
       ],
     })
     renderPage()
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'example.com')
-    expect(screen.getByRole('combobox')).toHaveValue('example.com')
-  })
-
-  it('deletes an alias in alpha mode', async () => {
-    localStorage.setItem('alias_alpha_mode', 'true')
-    mocks.deleteAlias.mockResolvedValue(null)
-    mocks.getAliases.mockResolvedValue([{ name: 'alpha', domain: 'weesky.be' }])
-    renderPage()
-    await screen.findByText('alpha')
-    await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
-    await waitFor(() => expect(mocks.deleteAlias).toHaveBeenCalledWith('alpha', 'weesky.be'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Domain' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: '@example.com' }))
+    expect(screen.getByRole('button', { name: 'Domain' })).toHaveTextContent('@example.com')
+    expect(screen.getByText('@example.com', { selector: '.alias-composer-domain' })).toBeInTheDocument()
   })
 
   it('removes an error toast when its close button is clicked', async () => {
     mocks.createAlias.mockRejectedValue(new Error('Alias exists'))
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'bad')
-    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
+    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'bad')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await screen.findByText('Failed to create alias.')
     const closeBtn = await screen.findByRole('button', { name: 'Close' })
     await userEvent.click(closeBtn)
@@ -414,40 +417,5 @@ describe('AliasesPage', () => {
     renderPage()
     // page renders without crashing; aliases still show via the default mock
     expect(await screen.findByText('alias1')).toBeInTheDocument()
-  })
-
-  it('renders alpha mode with no aliases (empty state)', async () => {
-    localStorage.setItem('alias_alpha_mode', 'true')
-    mocks.getAliases.mockResolvedValue([])
-    renderPage()
-    expect(await screen.findByText('No aliases for this domain.')).toBeInTheDocument()
-  })
-
-  it('clears alias highlight after animation ends (alpha mode)', async () => {
-    localStorage.setItem('alias_alpha_mode', 'true')
-    mocks.createAlias.mockResolvedValue(null)
-    mocks.getAliases
-      .mockResolvedValueOnce([{ name: 'alpha', domain: 'weesky.be' }])
-      .mockResolvedValue([{ name: 'alpha', domain: 'weesky.be' }, { name: 'newone', domain: 'weesky.be' }])
-    const { container } = renderPage()
-    await waitFor(() => expect(container.querySelector('.alias-group-letter')).toBeTruthy())
-    await userEvent.type(screen.getByPlaceholderText('Search or create…'), 'newone')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Create alias' })).not.toBeDisabled())
-    await userEvent.click(screen.getByRole('button', { name: 'Create alias' }))
-    const newTile = await waitFor(
-      () => {
-        const el = container.querySelector('.alias-tile-new')
-        if (!el) throw new Error('tile not yet highlighted')
-        return el
-      },
-      { timeout: 3000 }
-    )
-    const propsKey = Object.keys(newTile).find(k => k.startsWith('__reactProps'))
-    if (propsKey) {
-      await act(async () => {
-        (newTile as unknown as Record<string, { onAnimationEnd: () => void }>)[propsKey]!.onAnimationEnd()
-      })
-    }
-    await waitFor(() => expect(container.querySelector('.alias-tile-new')).toBeNull())
   })
 })

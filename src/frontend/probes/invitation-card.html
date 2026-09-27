@@ -152,7 +152,7 @@
     // the footer under them.
     function states(s) {
       const three = btn(s.accept, false, 'primary') + btn(s.tentative) + btn(s.decline)
-      const picker = `<div class="dropdown-root is-left"><button type="button" class="calendar-select" aria-label="${s.calendar}" aria-expanded="false"><span class="calendar-swatch" aria-hidden="true" style="--cal: #2e7d5b"></span><span class="calendar-select-name">Personnel</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>`
+      const picker = `<div class="dropdown-root is-left"><button type="button" class="menu-select" aria-label="${s.calendar}" aria-expanded="false"><span class="calendar-swatch" aria-hidden="true" style="--cal: #2e7d5b"></span><span class="menu-select-name">Personnel</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>`
       const check = '<span class="invitation-card-check" aria-hidden="true">✓</span>'
       const said = (text, muted = false) =>
         `<div class="invitation-card-actions is-answered"><span class="invitation-card-answer${muted ? ' is-muted' : ''}">${text}</span></div>`

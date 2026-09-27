@@ -188,15 +188,6 @@ body {
   color: var(--text);
 }
 
-.btn-add {
-  background: var(--action-primary);
-  color: var(--action-primary-fg);
-}
-
-.btn-add:hover:not(:disabled) {
-  background: var(--action-primary-hover);
-}
-
 /* ── Column action row ───────────────────────────────────── */
 
 /* The row a module column opens with: one primary action, one square button beside it. Mail and
@@ -235,46 +226,54 @@ body {
   border: 1px solid color-mix(in oklab, var(--status-tone) 30%, var(--surface));
 }
 
-/* ── Domain toolbar ─────────────────────────────────────── */
+/* ── Aliases page header ─────────────────────────────────── */
 
-.domain-toolbar {
+.alias-page-header { align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
+.alias-page-heading { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.alias-page-summary { margin: 0; font-size: 14px; color: var(--text-muted); }
+
+.alias-domain-select { min-width: 180px; }
+.alias-page-header .dropdown-menu { min-width: 100%; }
+
+/* One field that both filters the index and names the alias Create will add. */
+.alias-composer {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  background: var(--surface);
+  gap: 12px;
+  min-height: 60px;
+  margin-bottom: 20px;
+  padding: 0 10px 0 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 12px 16px;
-}
-
-.domain-label {
-  font-size: 13px;
-  font-weight: 500;
+  background: var(--surface);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
 }
 
-.domain-select {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  font-size: 14px;
-  font-family: var(--font);
+.alias-composer:focus-within { border-color: var(--action-primary); }
+.alias-composer.is-error { border-color: var(--danger); }
+.alias-composer > svg { flex: none; }
+
+.alias-composer input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
   color: var(--text);
-  background: var(--surface);
+  font-family: var(--font);
+  font-size: 17px;
+  text-overflow: ellipsis;
   outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s;
-  min-width: 180px;
 }
 
-.domain-select:focus {
-  border-color: var(--action-primary);
+.alias-composer-domain { font-size: 17px; white-space: nowrap; }
+
+/* On a phone a domain select above already names the domain; the field keeps the width it frees. */
+@media (max-width: 639px) {
+  .alias-composer { gap: 8px; padding-left: 14px; }
+  .alias-composer input { font-size: 15px; }
+  .alias-composer.has-picker .alias-composer-domain { display: none; }
 }
+.alias-composer .btn { flex: none; }
 
 .search-input {
   border: 1px solid var(--border);
@@ -302,7 +301,7 @@ body {
 
 .alias-view-wrapper {
   display: flex;
-  max-height: calc(100vh - 260px);
+  max-height: calc(100vh - 300px);
   min-height: 200px;
   background: transparent;
   overflow: hidden;
@@ -311,53 +310,12 @@ body {
 
 .alias-scroll-area {
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 16px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--action-primary) transparent;
-}
-
-.alias-scroll-area::-webkit-scrollbar {
-  width: 8px;
-}
-
-.alias-scroll-area::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.alias-scroll-area::-webkit-scrollbar-thumb {
-  background: var(--action-primary);
-  border-radius: 4px;
-}
-
-.alias-group {
-  margin-bottom: 16px;
-}
-
-.alias-group:last-child {
-  margin-bottom: 4px;
-}
-
-.alias-group-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.alias-group-letter {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
-  flex-shrink: 0;
-  line-height: 1;
-}
-
-.alias-group-divider {
-  flex: 1;
-  height: 1px;
-  background: var(--border);
+  padding: 4px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .alpha-nav {
@@ -404,17 +362,6 @@ body {
   font-weight: 700;
 }
 
-.alias-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.alias-group .alias-grid {
-  margin-bottom: 0;
-}
-
 .alias-empty-grid {
   padding: 40px;
   text-align: center;
@@ -422,75 +369,126 @@ body {
   margin-bottom: 24px;
 }
 
-.alias-tile {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+/* The index: one line per letter, then one per family of three or more. A name keeps its width
+   when its bubble opens — the bubble floats over its neighbours instead of pushing them. */
+.alias-letter {
   display: flex;
-  align-items: baseline;
-  gap: 2px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--list-separator);
+}
+
+.alias-letter:last-child { border-bottom: none; }
+
+.alias-line {
   position: relative;
-  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 2px;
+  padding-left: 52px;
+}
+
+.alias-letter-mark {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+  color: var(--accent-unread);
+}
+
+.alias-family {
+  margin-right: 8px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.alias-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
   cursor: default;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
 }
 
-.alias-tile:hover {
-  border-color: var(--action-primary);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--action-primary) 15%, transparent);
+.alias-cell:hover,
+.alias-cell:focus-within {
+  background: var(--pane-item-active-bg);
+  color: var(--pane-item-active-fg);
 }
 
-@keyframes alias-tile-blink {
-  0%, 33%, 66%, 100% { background: var(--surface); }
+.alias-cell:focus-visible { box-shadow: 0 0 0 2px var(--action-primary); }
+
+@keyframes alias-cell-blink {
+  0%, 33%, 66%, 100% { background: transparent; }
   16%, 50%, 83%      { background: color-mix(in oklab, var(--action-primary) 18%, transparent); }
 }
 
-.alias-tile-new {
-  animation: alias-tile-blink 1.2s ease-in-out;
-}
+.alias-cell.is-new { animation: alias-cell-blink 1.2s ease-in-out; }
 
-.alias-tile-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.alias-tile-domain {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  margin-right: 28px;
-}
-
-.alias-tile-delete {
+.alias-bubble {
   position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  padding: 2px;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 3;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 2px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  transition: color 0.15s, background 0.15s;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--text) 18%, transparent);
+  color: var(--text);
+  transform: translateX(-50%);
+  visibility: hidden;
 }
 
-.alias-tile-delete:hover:not(:disabled) {
-  color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 10%, transparent);
+/* The gap between a name and its bubble must not count as leaving the name. */
+.alias-bubble::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 10px;
 }
 
-.alias-tile-delete:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.alias-cell:hover > .alias-bubble,
+.alias-cell:focus-within > .alias-bubble { visibility: visible; }
+
+.alias-cell[data-below="true"] > .alias-bubble { bottom: auto; top: calc(100% + 8px); }
+.alias-cell[data-below="true"] > .alias-bubble::after { top: auto; bottom: 100%; }
+.alias-cell[data-align="start"] > .alias-bubble { left: 0; transform: none; }
+.alias-cell[data-align="end"] > .alias-bubble { left: auto; right: 0; transform: none; }
+
+.alias-bubble-address {
+  margin-right: 6px;
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
 }
 
+/* A finger has no hover: a tap focuses the name, and both it and the bubble's buttons get the floor. */
+@media (hover: none) {
+  .alias-cell { min-height: 44px; }
+  .alias-bubble .admin-icon-btn { min-width: 44px; min-height: 44px; }
+}
 
 /* ── Identities page ─────────────────────────────────────── */
 
@@ -2061,19 +2059,6 @@ body {
   }
   .admin-tab { min-height: var(--touch); white-space: nowrap; }
   .admin-tab-content { padding: 14px 0 0; overflow: visible; }
-
-  /* The alias tile's delete, an 18px glyph, is the only way to drop an alias. The tile gets the
-     floor so a symmetric hit area fits inside it rather than bleeding into the grid gutter; the
-     pseudo's `left: -26px` sits over `.alias-tile-domain`'s reserved 28px margin, claiming nothing else. */
-  .alias-tile { min-height: var(--touch); }
-  .alias-tile-delete::before {
-    content: '';
-    position: absolute;
-    top: -13px;
-    right: 0;
-    bottom: -13px;
-    left: -26px;
-  }
 
   /* Count, the switch, and New rule wrap to fit 273px; the row-gap is derived from --toggle-bleed
      like .rule-card-header below, but only earns its place at 320px — the switch's hit-area

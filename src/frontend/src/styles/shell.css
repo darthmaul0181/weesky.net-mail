@@ -265,6 +265,17 @@
 
 .dropdown-root { position: relative; }
 
+/* A dropdown drawn as the select it replaces: the calendar picker and the aliases' domain. */
+.menu-select {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px;
+  font-size: 14px; font-family: var(--font); color: var(--text); background: var(--surface);
+  cursor: pointer; text-align: left;
+}
+.menu-select:focus-visible { outline: none; border-color: var(--action-primary); }
+.menu-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-select > svg { flex: none; color: var(--text-muted); }
+
 /* `width: max-content` is load-bearing: absolutely positioned with `right: 0`/no `left`, an auto
    width would shrink-fit to min-content and wrap every label past ~124px. Content-sizing is also
    what keeps it translatable (French reaches 338px); max-width is the safety net past that. */
@@ -836,7 +847,8 @@ a.dropdown-item { text-decoration: none; }
 .mail-list-scroll,
 .contacts-list-scroll,
 .contacts-scopes-scroll,
-.calendar-sidebar-scroll {
+.calendar-sidebar-scroll,
+.alias-scroll-area {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
@@ -845,31 +857,36 @@ a.dropdown-item { text-decoration: none; }
 .mail-list-scroll:hover,
 .contacts-list-scroll:hover,
 .contacts-scopes-scroll:hover,
-.calendar-sidebar-scroll:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
+.calendar-sidebar-scroll:hover,
+.alias-scroll-area:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
 
 .mail-folders-scroll::-webkit-scrollbar,
 .mail-list-scroll::-webkit-scrollbar,
 .contacts-list-scroll::-webkit-scrollbar,
 .contacts-scopes-scroll::-webkit-scrollbar,
-.calendar-sidebar-scroll::-webkit-scrollbar { width: 8px; }
+.calendar-sidebar-scroll::-webkit-scrollbar,
+.alias-scroll-area::-webkit-scrollbar { width: 8px; }
 
 .mail-folders-scroll::-webkit-scrollbar-track,
 .mail-list-scroll::-webkit-scrollbar-track,
 .contacts-list-scroll::-webkit-scrollbar-track,
 .contacts-scopes-scroll::-webkit-scrollbar-track,
-.calendar-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.calendar-sidebar-scroll::-webkit-scrollbar-track,
+.alias-scroll-area::-webkit-scrollbar-track { background: transparent; }
 
 .mail-folders-scroll::-webkit-scrollbar-thumb,
 .mail-list-scroll::-webkit-scrollbar-thumb,
 .contacts-list-scroll::-webkit-scrollbar-thumb,
 .contacts-scopes-scroll::-webkit-scrollbar-thumb,
-.calendar-sidebar-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.calendar-sidebar-scroll::-webkit-scrollbar-thumb,
+.alias-scroll-area::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 
 .mail-folders-scroll:hover::-webkit-scrollbar-thumb,
 .mail-list-scroll:hover::-webkit-scrollbar-thumb,
 .contacts-list-scroll:hover::-webkit-scrollbar-thumb,
 .contacts-scopes-scroll:hover::-webkit-scrollbar-thumb,
-.calendar-sidebar-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
+.calendar-sidebar-scroll:hover::-webkit-scrollbar-thumb,
+.alias-scroll-area:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
 
 /* ── About ────────────────────────────────────────────────────────────────────
    The one settings page taking the whole content box, not its padding: a product card, not

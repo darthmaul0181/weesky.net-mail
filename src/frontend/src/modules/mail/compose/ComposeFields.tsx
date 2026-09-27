@@ -121,10 +121,10 @@ export default function ComposeFields({
           <span className="compose-priority-label">{t('fields.priority')}</span>
           <DropdownMenu
             ariaLabel={t('fields.priority')}
-            className="compose-priority-select"
+            className="menu-select compose-priority-select"
             align="left"
             // priorityLabel falls back to Normal, so an out-of-union value cannot blank the app.
-            trigger={<>{priorityLabel(priority, t)} <ChevronDownIcon size={13} /></>}
+            trigger={<><span className="menu-select-name">{priorityLabel(priority, t)}</span><ChevronDownIcon size={14} /></>}
             items={PRIORITIES.map(p => ({ label: priorityLabel(p, t), onSelect: () => changePriority(p) }))}
           />
         </div>
