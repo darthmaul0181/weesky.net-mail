@@ -109,7 +109,7 @@ body { width: 100%; }
       const senderDark = dark && declares && hasDarkDesign(html)
       const revealed = remote ? revealBlockedImages(html) : html
       const schemed = resolveColourScheme(revealed, senderDark ? 'dark' : 'light')
-      return { senderDark, body: sanitizeBody(dark && !senderDark ? darkenColours(schemed) : schemed) }
+      return { senderDark, body: sanitizeBody(dark ? darkenColours(schemed) : schemed) }
     }
 
     function loaded(frame) {

@@ -528,16 +528,24 @@ describe('MessageReader', () => {
     htmlBody: '<style>.bg { background-color: #ffffff } @media (prefers-color-scheme: dark) { .bg { background-color: #262624 !important } }</style><p class="bg">Bonjour</p>',
   }
 
-  it('renders the sender\'s own dark design when the message declares one', async () => {
+  // A sender's dark rules complete a client's recolouring, they do not replace it: ING's light
+  // text rule met a cell whose light background no rule of its own covered, and read white on white.
+  it('lays the sender\'s own dark design over our recolouring when the message declares one', async () => {
     theme.isDark = true
-    mocks.getMailMessage.mockResolvedValue({ ...withSheet, declaresDarkScheme: true })
+    mocks.getMailMessage.mockResolvedValue({
+      ...detail,
+      declaresDarkScheme: true,
+      htmlBody: '<style>@media (prefers-color-scheme: dark) { .t { color: #F7F4F1 !important } }</style>'
+        + '<table><tr><td style="background-color: #f0f0f0"><span class="t">Bonjour</span></td></tr></table>',
+    })
 
     const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
     await screen.findByText('Re: facture')
 
     const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
     expect(srcdoc).toContain('@media (min-width: 0)')
-    expect(srcdoc).toMatch(/\.bg \{ background-color: (#ffffff|rgb\(255, 255, 255\))/)
+    expect(srcdoc).toMatch(/\.t \{ color: (#f7f4f1|rgb\(247, 244, 241\)) !important/i)
+    expect(srcdoc).not.toContain('#f0f0f0')
     expect(srcdoc).not.toContain('brightness')
     theme.isDark = false
   })

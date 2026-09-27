@@ -147,8 +147,10 @@ export default function MessageReader(
   const showImages = imagesShown || alwaysShow || senderApproved || contactTrusted
   // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
   // rest — the same reason revealBlockedImages runs on this side of it.
-  // The sender's own dark design wins over our recolouring, but only when the message declares one,
-  // its sheet holds one and the reader asked for dark; the colour toggle brings the light one back.
+  // A sender's dark rules complete a client's recolouring rather than replace it — cells they never
+  // mention keep their light backgrounds — so ours always runs, and theirs, when the message declares
+  // them and its sheet holds them, go on top: a background is never lightened nor a text darkened,
+  // so a colour they already chose for the dark survives. The colour toggle brings the light one back.
   // A full parse of the body: once per message, not once per render.
   const darkDesign = useMemo(() => hasDarkDesign(data?.htmlBody ?? ''), [data?.htmlBody])
   const senderDark = inverted && data?.declaresDarkScheme === true && darkDesign
@@ -156,7 +158,7 @@ export default function MessageReader(
     const html = data?.htmlBody ?? ''
     const revealed = showImages ? revealBlockedImages(html) : html
     const schemed = resolveColourScheme(revealed, senderDark ? 'dark' : 'light')
-    return sanitizeBody(inverted && !senderDark ? darkenColours(schemed) : schemed)
+    return sanitizeBody(inverted ? darkenColours(schemed) : schemed)
   }, [data?.htmlBody, showImages, inverted, senderDark])
   // Inlined after sanitising, unlike the reveal: these data URIs are built from our own API's
   // bytes rather than from message markup, so they are not what the pass exists to police.
