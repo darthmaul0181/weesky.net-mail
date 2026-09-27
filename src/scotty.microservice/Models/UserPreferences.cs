@@ -47,7 +47,11 @@ public static class UserPreferences
     // never chose at all.
     public const string UiLanguage = "ui.language";
 
+    public const string MailSwipeRight = "mail.swipeRight";
+    public const string MailSwipeLeft = "mail.swipeLeft";
+
     private static readonly string[] Booleans = ["true", "false"];
+    private static readonly string[] SwipeActions = ["none", "seen", "flag", "archive", "delete"];
 
     public static IReadOnlyList<PreferenceDefinition> All { get; } =
     [
@@ -73,6 +77,9 @@ public static class UserPreferences
         new(MailGroupConversations, "false", Booleans),
         new(ContactsCaptureRecipients, "true", Booleans),
         new(MailTrustContacts, "false", Booleans),
+        // Right is the reversible action, left the one an Undo covers: what mail apps already do.
+        new(MailSwipeRight, "seen", SwipeActions),
+        new(MailSwipeLeft, "delete", SwipeActions),
         new(UiLanguage, "auto", ["auto", "en", "fr"]),
     ];
 

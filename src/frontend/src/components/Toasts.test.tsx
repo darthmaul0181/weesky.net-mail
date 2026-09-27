@@ -153,7 +153,7 @@ describe('useToasts', () => {
   it('dismisses a plain toast after 3 seconds', () => {
     const { result } = renderHook(() => useToasts())
 
-    act(() => result.current.addToast('Saved'))
+    act(() => { result.current.addToast('Saved') })
     act(() => { vi.advanceTimersByTime(3000) })
 
     expect(result.current.toasts).toHaveLength(0)
@@ -163,11 +163,33 @@ describe('useToasts', () => {
   it('keeps a toast carrying an action for 8 seconds', () => {
     const { result } = renderHook(() => useToasts())
 
-    act(() => result.current.addToast('2 contacts added', 'success', { label: 'Undo', onClick: () => {} }))
+    act(() => { result.current.addToast('2 contacts added', 'success', { label: 'Undo', onClick: () => {} }) })
     act(() => { vi.advanceTimersByTime(3000) })
     expect(result.current.toasts).toHaveLength(1)
 
     act(() => { vi.advanceTimersByTime(5000) })
     expect(result.current.toasts).toHaveLength(0)
+  })
+})
+
+describe('Toasts countdown', () => {
+  it('draws a bar over the toast’s own duration and pauses it with the toast', () => {
+    render(<Toasts onRemove={vi.fn()} onPause={vi.fn()} onResume={vi.fn()} toasts={[
+      { id: 1, message: 'Moved to Trash', type: 'success', durationMs: 5000, countdown: true,
+        action: { label: 'Undo', onClick: vi.fn() } },
+    ]} />)
+    const toast = screen.getByText('Moved to Trash').closest('.toast') as HTMLElement
+    const bar = toast.querySelector('.toast-countdown') as HTMLElement
+    expect(bar.style.getPropertyValue('--toast-ms')).toBe('5000ms')
+
+    fireEvent.focus(screen.getByRole('button', { name: 'Undo' }))
+    expect(toast).toHaveClass('is-paused')
+    fireEvent.blur(screen.getByRole('button', { name: 'Undo' }))
+    expect(toast).not.toHaveClass('is-paused')
+  })
+
+  it('draws no bar on an ordinary toast', () => {
+    render(<Toasts onRemove={vi.fn()} toasts={[{ id: 1, message: 'Saved', type: 'success' }]} />)
+    expect(document.querySelector('.toast-countdown')).toBeNull()
   })
 })

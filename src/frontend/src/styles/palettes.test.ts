@@ -32,7 +32,7 @@ describe('the palette stylesheets', () => {
   // Vitest mocks CSS imports to '' unless vite.config's test.css.include matches; that empties
   // every token list and makes each parity check pass vacuously.
   it('reads the stylesheets, not empty mocks', () => {
-    expect(reference.light).toHaveLength(39)
+    expect(reference.light).toHaveLength(43)
   })
   // Derived, not a second hand-maintained list: what matters is that the stylesheets on disk and
   // the ids the module offers are the same set, which is also what the two checks below assert

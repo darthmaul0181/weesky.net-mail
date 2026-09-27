@@ -2,18 +2,20 @@ import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } fr
 import i18next from 'i18next'
 import { ApiError, api } from '../../api.js'
 import { useAccountId, useComposeAccountId } from '../../hooks/useAccountId'
+import { preferencesKey, type Preferences } from '../../hooks/usePreferences'
 import { calendarKeys } from '../calendar/queries'
 import type {
   ApplyReplyArgs, ApplyReplyResponse, InvitationResponse, MailFolderPage,
   MailMessageDetail, MailMessageSource, MailSearchPage, RespondInvitationArgs,
 } from './api/mailTypes'
 import {
-  cancelLoaded, cancelListQueries, dropFolderCaches, patchTreeCounts, removeFromFolderCaches,
-  restoreSnapshots, type Snapshot,
+  cancelLoaded, cancelListQueries, dropFolderCaches, patchTreeCounts, refreshFolderList,
+  reinsertIntoFolderCaches, removeFromFolderCaches, restoreSnapshots, type Snapshot,
 } from './cachePatches'
 import type { FolderCountDeltas } from './list/listPatch'
 import type { SearchCriteria } from './list/searchCriteria'
 import { nextBlockIndex } from './list/messageStream'
+import { HoldCancelled, markHoldSettled } from './hold'
 import { mailKeys } from './mailKeys'
 
 export function useMessages(
@@ -155,6 +157,8 @@ export interface MoveMessagesArgs {
   uids: number[]
   targetFolderPath: string
   copy: boolean
+  /** The request waits for it; cancelled, it is an Undo and the caches go back in silence. */
+  hold?: Promise<void>
 }
 
 // The source loses its rows, the target's caches are dropped rather than invalidated, both counters
@@ -165,10 +169,13 @@ export function useMoveMessages(onError?: (message: string) => void) {
 
   return useMutation({
     mutationKey: mailKeys.writes(accountId),
-    mutationFn: ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) =>
-      copy
-        ? api.copyMessages(folderPath, uids, targetFolderPath, { accountId })
-        : api.moveMessages(folderPath, uids, targetFolderPath, { accountId }),
+    mutationFn: async ({ folderPath, uids, targetFolderPath, copy, hold }: MoveMessagesArgs) => {
+      if (hold) await hold
+      const options = hold ? { accountId, keepalive: true } : { accountId }
+      return copy
+        ? api.copyMessages(folderPath, uids, targetFolderPath, options)
+        : api.moveMessages(folderPath, uids, targetFolderPath, options)
+    },
 
     onMutate: async ({ folderPath, uids, targetFolderPath, copy }: MoveMessagesArgs) => {
       await cancelListQueries(queryClient, accountId, folderPath)
@@ -178,6 +185,7 @@ export function useMoveMessages(onError?: (message: string) => void) {
       await cancelLoaded(queryClient, mailKeys.searchIn(accountId))
 
       const snapshots: Snapshot[] = []
+      let removal: Snapshot[] = []
       const patches: [string, FolderCountDeltas][] = []
       // A copy removes nothing, so how many of the batch were unread is unknowable here without
       // scanning for it alone; the target badge waits for the poll instead.
@@ -185,7 +193,8 @@ export function useMoveMessages(onError?: (message: string) => void) {
 
       if (!copy) {
         const source = removeFromFolderCaches(queryClient, accountId, folderPath, uids)
-        snapshots.push(...source.snapshots)
+        removal = source.snapshots
+        snapshots.push(...removal)
         patches.push([folderPath, { total: -source.removed, unread: -source.removedUnread }])
         // Target mirrors what actually left the source, not uids.length, so a cold source
         // cache can't inflate it past the source's own drop. Consequence: an uncached source
@@ -201,19 +210,35 @@ export function useMoveMessages(onError?: (message: string) => void) {
       patches.push([targetFolderPath, added])
       snapshots.push(...patchTreeCounts(queryClient, accountId, patches))
 
-      return { snapshots, copy }
+      return { snapshots, copy, removal, patches }
     },
 
-    onError: (_error, _args, context) => {
+    // An Undo puts back only what this move took: writes made during the hold must stay. A held
+    // move refused later restores the snapshots, then reloads the list to get those writes back.
+    onError: (error, { folderPath, uids, hold }, context) => {
+      if (error instanceof HoldCancelled) {
+        if (!context) return
+        reinsertIntoFolderCaches(queryClient, folderPath, uids, context.removal)
+        patchTreeCounts(queryClient, accountId, context.patches.map(
+          ([path, deltas]) => [path, { total: -deltas.total, unread: -deltas.unread }]))
+        return
+      }
       restoreSnapshots(queryClient, context)
+      const preferences = queryClient.getQueryData<Preferences>(preferencesKey)
+      if (hold && preferences) void refreshFolderList(queryClient, accountId, folderPath, preferences)
       onError?.(i18next.t(context?.copy ? 'mail:mutations.copyFailed' : 'mail:mutations.moveFailed'))
     },
 
     // A removal shrank the active search page and left sibling pages a stale total, and no poll
     // touches search — so reconcile the mounted search against the server, which re-windows it.
     // A copy leaves the source intact: nothing to reconcile.
-    onSettled: (_data, _error, { copy }) => {
+    onSettled: (_data, _error, { copy, hold }) => {
       if (!copy) void queryClient.invalidateQueries({ queryKey: mailKeys.searchIn(accountId) })
+      // useFolders answered from the cache while the hold stood: land any refresh it swallowed.
+      if (hold) {
+        markHoldSettled(hold)
+        void queryClient.invalidateQueries({ queryKey: mailKeys.folders(accountId) })
+      }
     },
   })
 }

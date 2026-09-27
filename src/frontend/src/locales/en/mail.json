@@ -104,6 +104,11 @@
     "alreadyJunk": "Already in the junk folder"
   },
   "list": {
+    "swipe": {
+      "archived": "Moved to Archive",
+      "trashed": "Moved to Trash",
+      "undo": "Undo"
+    },
     "gridLabel": "Messages",
     "selectFolder": "Select a folder",
     "loading": "Loading messages…",

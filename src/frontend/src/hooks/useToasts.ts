@@ -13,19 +13,31 @@ export interface ToastAction {
   onClick: () => void
 }
 
+export interface ToastOptions {
+  /** Replaces the 3 s / 8 s default. */
+  durationMs?: number
+  /** A bar that empties over the duration, paused with the toast. */
+  countdown?: boolean
+  /** Runs when the toast times out — never when it is dismissed or its action is used. */
+  onExpire?: () => void
+}
+
 export interface Toast {
   id: number
   message: string
   type: 'success' | 'error'
   action?: ToastAction
+  durationMs?: number
+  countdown?: boolean
 }
 
-export type AddToast = (message: string, type?: Toast['type'], action?: ToastAction) => void
+export type AddToast = (message: string, type?: Toast['type'], action?: ToastAction, options?: ToastOptions) => number
 
 interface TimerEntry {
   timeoutId: ReturnType<typeof setTimeout> | null
   remaining: number
   startedAt: number | null
+  onExpire?: () => void
 }
 
 export function useToasts() {
@@ -53,19 +65,24 @@ export function useToasts() {
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [clearTimer])
 
-  const arm = useCallback((id: number, delay: number) => {
+  const arm = useCallback((id: number, delay: number, onExpire?: () => void) => {
     const timeoutId = setTimeout(() => {
       timers.current.delete(id)
       setToasts(prev => prev.filter(t => t.id !== id))
+      onExpire?.()
     }, delay)
-    timers.current.set(id, { timeoutId, remaining: delay, startedAt: Date.now() })
+    timers.current.set(id, { timeoutId, remaining: delay, startedAt: Date.now(), onExpire })
   }, [])
 
-  const addToast: AddToast = useCallback((message, type = 'success', action) => {
+  const addToast: AddToast = useCallback((message, type = 'success', action, options) => {
     const id = ++nextToastId
-    setToasts(prev => [...prev, { id, message, type, action }])
-    if (type === 'error') return
-    arm(id, action ? DISMISS_WITH_ACTION_MS : DISMISS_MS)
+    setToasts(prev => [...prev, {
+      id, message, type, action, durationMs: options?.durationMs, countdown: options?.countdown,
+    }])
+    if (type !== 'error') {
+      arm(id, options?.durationMs ?? (action ? DISMISS_WITH_ACTION_MS : DISMISS_MS), options?.onExpire)
+    }
+    return id
   }, [arm])
 
   // WCAG 2.2.1's "no timing" escape hatch. An id with no entry here — an error toast, which
@@ -75,13 +92,15 @@ export function useToasts() {
     if (entry === undefined || entry.timeoutId === null || entry.startedAt === null) return
     clearTimeout(entry.timeoutId)
     const elapsed = Date.now() - entry.startedAt
-    timers.current.set(id, { timeoutId: null, remaining: Math.max(0, entry.remaining - elapsed), startedAt: null })
+    timers.current.set(id, {
+      timeoutId: null, remaining: Math.max(0, entry.remaining - elapsed), startedAt: null, onExpire: entry.onExpire,
+    })
   }, [])
 
   const resumeToast = useCallback((id: number) => {
     const entry = timers.current.get(id)
     if (entry === undefined || entry.timeoutId !== null) return
-    arm(id, entry.remaining)
+    arm(id, entry.remaining, entry.onExpire)
   }, [arm])
 
   return { toasts, addToast, removeToast, pauseToast, resumeToast }

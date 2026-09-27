@@ -104,6 +104,11 @@
     "alreadyJunk": "Déjà dans le dossier des indésirables"
   },
   "list": {
+    "swipe": {
+      "archived": "Déplacé dans l’archive",
+      "trashed": "Déplacé dans la corbeille",
+      "undo": "Annuler"
+    },
     "gridLabel": "Messages",
     "selectFolder": "Sélectionnez un dossier",
     "loading": "Chargement des messages…",

@@ -854,6 +854,17 @@ body {
   cursor: pointer;
 }
 
+/* Empties over the toast's own life and stops with its timer, so it shows what is really left. */
+.toast.has-countdown { position: relative; overflow: hidden; }
+.toast-countdown {
+  position: absolute; left: 0; bottom: 0; width: 100%; height: 3px;
+  background: var(--status-tone); transform-origin: left;
+  animation: toast-countdown var(--toast-ms) linear forwards;
+}
+.toast.is-paused .toast-countdown { animation-play-state: paused; }
+@keyframes toast-countdown { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .toast-countdown { animation: none; } }
+
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

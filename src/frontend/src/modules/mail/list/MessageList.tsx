@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode, RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, usePreferences,
+  DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, swipeActionOf, usePreferences,
 } from '../../../hooks/usePreferences'
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
@@ -35,6 +35,9 @@ import { useMessageList } from './useMessageList'
 import { useForwarders } from '../../../hooks/useForwarders'
 import { useToday } from '../../../hooks/useToday'
 import { usePullToRefresh } from '../../../hooks/usePullToRefresh'
+import { useAccountId } from '../../../hooks/useAccountId'
+import type { AddToast } from '../../../hooks/useToasts'
+import { useDeferredMove } from './useDeferredMove'
 
 interface Props {
   folderPath: string | null
@@ -51,7 +54,9 @@ interface Props {
   /** The folder column is behind a drawer, so its RefreshButton is out of reach and the kebab
       takes the action. On desktop that button is on screen and a second entry is a duplicate. */
   inDrawer?: boolean
-  onNotify?: (message: string) => void
+  onNotify?: AddToast
+  /** Takes down the Undo toast of a swipe whose move was sent early. */
+  onDismissNotice?: (id: number) => void
   onRows?: (uids: number[]) => void
   /** `batch` is the whole set a bulk action removed; the single-row callers omit it (defaults to `[uid]`). */
   onDeparted?: (uid: number, batch?: number[]) => void
@@ -69,7 +74,7 @@ interface Props {
 // Three bands (heading, rows, footer); only the rows scroll, so the pager never sits past the last row.
 export default function MessageList(
   { folderPath, folderName, folderRole, selectedUid, onSelect, wide = false, leading, onRefresh,
-    inDrawer = false, onNotify, onRows, onDeparted, rowExit, search = null, onSearchChange,
+    inDrawer = false, onNotify, onDismissNotice, onRows, onDeparted, rowExit, search = null, onSearchChange,
     onOpenResult, regionRef }: Props) {
   const { t } = useTranslation('mail')
   const today = useToday()
@@ -79,6 +84,8 @@ export default function MessageList(
   // A fresh array on every render would re-render every memoised row on every render.
   const rowActions = useMemo<readonly RowAction[]>(
     () => (preferences ? rowActionsOf(preferences) : DEFAULT_ROW_ACTIONS), [preferences])
+  const swipeRight = preferences ? swipeActionOf(preferences, 'right') : 'none'
+  const swipeLeft = preferences ? swipeActionOf(preferences, 'left') : 'none'
 
   const pageSize = preferences ? requestSizeOf(preferences) : 0
   const listSearch = useListSearch(folderPath, search, onSearchChange, pageSize)
@@ -94,9 +101,10 @@ export default function MessageList(
   const rowOffset = (paging?.page ?? 0) * pageSize
   const scrollRef = useRef<HTMLDivElement>(null)
   const { pull, armed } = usePullToRefresh(scrollRef, () => onRefresh?.())
-  const setFlags = useSetFlags(onNotify)
-  const moveMessages = useMoveMessages(onNotify)
-  const deleteMessages = useDeleteMessages(onNotify)
+  const notifyError = useCallback((message: string) => onNotify?.(message, 'error'), [onNotify])
+  const setFlags = useSetFlags(notifyError)
+  const moveMessages = useMoveMessages(notifyError)
+  const deleteMessages = useDeleteMessages(notifyError)
   const { departing } = rowExit
   const { data: folders } = useFolders()
   const {
@@ -116,6 +124,10 @@ export default function MessageList(
   // criteria too: two searches both sit on `search:0`), never while streaming into one folder.
   const resetKey = `${folderPath}::${searching ? `search:${searchPage}` : (paging ? paging.page : 'stream')}`
     + `::${JSON.stringify(search ?? null)}`
+  const accountId = useAccountId()
+  const deferred = useDeferredMove({
+    notify: onNotify, dismiss: onDismissNotice, flushKey: `${accountId}::${resetKey}`,
+  })
   const selection = useSelection(resetKey)
   const { selected } = selection
   const loadedUids = useMemo(() => memberUids(groups), [groups])
@@ -142,7 +154,7 @@ export default function MessageList(
 
   const bulk = useBulkActions({
     folderPath, inTrash, purges, trashPath: roles.trash, selectedUids, selectedUid, selection,
-    rowExit, onDeparted, onNotify, moveMessages, deleteMessages, setFlags,
+    rowExit, onDeparted, onNotify: notifyError, moveMessages, deleteMessages, setFlags,
   })
 
   // The dialogs render inside this root, so their Escape bubbles here: it belongs to whatever
@@ -172,11 +184,13 @@ export default function MessageList(
 
   // The reader is told at the click and the list takes its time: only the rows are animating, and
   // an open message that waits 300ms to be replaced reads as the action having missed.
-  function moveTo(target: string | null, uids: number[]) {
-    if (!folderPath || !target) return
+  // `hold` is asked for when the move fires, so its Undo toast cannot show before the row has left.
+  function moveTo(target: string | null, uids: number[], hold?: () => Promise<void>): boolean {
+    if (!folderPath || !target) return false
     rowExit.depart(uids, () =>
-      moveMessages.mutate({ folderPath, uids, targetFolderPath: target, copy: false }))
+      moveMessages.mutate({ folderPath, uids, targetFolderPath: target, copy: false, hold: hold?.() }))
     reportDeparted(uids)
+    return true
   }
 
   function onRowDragStart(event: DragEvent<HTMLDivElement>, rowUids: number[]) {
@@ -213,6 +227,15 @@ export default function MessageList(
     else moveTo(roles.trash, uids)
   }
 
+  // True when the row leaves; inside the trash the confirm decides, so the row stays.
+  function swipeRow(uids: number[], action: 'archive' | 'delete', label: string): boolean {
+    if (action === 'delete' && inTrash) { setExpunging({ label, uids }); return false }
+    const target = action === 'archive' ? roles.archive : roles.trash
+    if (!folderPath || !target) return false
+    return moveTo(target, uids, () => deferred.start(
+      t(action === 'archive' ? 'list.swipe.archived' : 'list.swipe.trashed'), t('list.swipe.undo')))
+  }
+
   // What a row calls, as one object built once and never rebuilt: a row handed a callback this
   // render created would re-render whenever anything did.
   const rowOn: RowCallbacks = useForwarders({
@@ -222,6 +245,8 @@ export default function MessageList(
     archive: (uids: number[]) => moveTo(roles.archive, uids),
     junk: (uids: number[]) => moveTo(roles.junk, uids),
     remove: removeRow,
+    swipe: swipeRow,
+    selecting: () => count > 0,
     toggleThread: toggleExpanded,
     dragStart: onRowDragStart,
     dragEnd: () => setDraggingUids(null),
@@ -293,6 +318,8 @@ export default function MessageList(
           trashOff={trashOff}
           trashReason={trashReason}
           deleteLabel={deleteLabel}
+          swipeRight={swipeRight}
+          swipeLeft={swipeLeft}
           on={rowOn}
         />
       )

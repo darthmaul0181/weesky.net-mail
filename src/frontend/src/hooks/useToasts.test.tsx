@@ -71,7 +71,7 @@ describe('useToasts', () => {
   it('pauses the dismiss timer and resumes it with the remaining time (WCAG 2.2.1)', () => {
     const { result } = renderHook(() => useToasts())
 
-    act(() => result.current.addToast('saved'))
+    act(() => { result.current.addToast('saved') })
     act(() => { vi.advanceTimersByTime(2000) })
     act(() => result.current.pauseToast(result.current.toasts[0]!.id))
     act(() => { vi.advanceTimersByTime(5000) }) // well past the original 3s budget
@@ -87,7 +87,7 @@ describe('useToasts', () => {
   it('pausing an id with no timer (an error toast, or an unknown id) is a no-op', () => {
     const { result } = renderHook(() => useToasts())
 
-    act(() => result.current.addToast('failed', 'error'))
+    act(() => { result.current.addToast('failed', 'error') })
     const id = result.current.toasts[0]!.id
 
     expect(() => act(() => result.current.pauseToast(id))).not.toThrow()
@@ -98,9 +98,50 @@ describe('useToasts', () => {
   it('resuming a toast that was never paused is a no-op, not a second timer', () => {
     const { result } = renderHook(() => useToasts())
 
-    act(() => result.current.addToast('saved'))
+    act(() => { result.current.addToast('saved') })
     act(() => result.current.resumeToast(result.current.toasts[0]!.id))
 
     expect(vi.getTimerCount()).toBe(1)
+  })
+})
+
+describe('useToasts options', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('returns the id and honours a custom duration', () => {
+    const { result } = renderHook(() => useToasts())
+    let id = 0
+    act(() => { id = result.current.addToast('moved', 'success', undefined, { durationMs: 5000 }) })
+    expect(id).toBeGreaterThan(0)
+    act(() => { vi.advanceTimersByTime(4999) })
+    expect(result.current.toasts).toHaveLength(1)
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(result.current.toasts).toHaveLength(0)
+  })
+
+  it('calls onExpire on timeout only', () => {
+    const expired = vi.fn()
+    const { result } = renderHook(() => useToasts())
+    let first = 0
+    act(() => {
+      first = result.current.addToast('a', 'success', undefined, { durationMs: 5000, onExpire: expired })
+      result.current.addToast('b', 'success', undefined, { durationMs: 5000, onExpire: expired })
+    })
+    act(() => { result.current.removeToast(first) })
+    act(() => { vi.advanceTimersByTime(5000) })
+    expect(expired).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not expire while paused', () => {
+    const expired = vi.fn()
+    const { result } = renderHook(() => useToasts())
+    let id = 0
+    act(() => { id = result.current.addToast('a', 'success', undefined, { durationMs: 5000, onExpire: expired }) })
+    act(() => { vi.advanceTimersByTime(2000); result.current.pauseToast(id) })
+    act(() => { vi.advanceTimersByTime(10_000) })
+    expect(expired).not.toHaveBeenCalled()
+    act(() => { result.current.resumeToast(id); vi.advanceTimersByTime(3000) })
+    expect(expired).toHaveBeenCalledTimes(1)
   })
 })

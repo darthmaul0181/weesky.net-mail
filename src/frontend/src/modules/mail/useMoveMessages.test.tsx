@@ -4,11 +4,13 @@ import { type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type {
   MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
 } from './api/mailTypes'
-import { mailKeys, useDeleteMessages, useMoveMessages, useSearchMessages } from './queries'
+import { mailKeys, useDeleteMessages, useFolders, useMoveMessages, useSearchMessages } from './queries'
+import { createHold } from './hold'
 import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   moveMessages: vi.fn(), copyMessages: vi.fn(), deleteMessages: vi.fn(), searchMessages: vi.fn(),
+  getMailFolders: vi.fn(), getMailMessages: vi.fn(), getPreferences: vi.fn(() => Promise.resolve({})),
 }))
 vi.mock('../../api.js', () => ({ api: mocks }))
 vi.mock('../../contexts/AuthContext', () => ({
@@ -99,6 +101,179 @@ describe('useMoveMessages', () => {
     vi.clearAllMocks()
     client = createTestQueryClient({ mutations: { retry: false } })
     wrapper = withQueryClient(client)
+  })
+
+  it('patches at once, sends only when the hold releases, with keepalive', async () => {
+    seed()
+    mocks.moveMessages.mockResolvedValue(undefined)
+    const hold = createHold()
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false, hold: hold.promise })
+    })
+    expect(uidsOf(sourcePage()!.messages)).toEqual([2, 3])
+    expect(mocks.moveMessages).not.toHaveBeenCalled()
+
+    await act(async () => { hold.release(); await settle() })
+
+    expect(mocks.moveMessages).toHaveBeenCalledWith('INBOX', [1], 'Archive', { accountId: 'primary', keepalive: true })
+  })
+
+  it('an Undo restores the caches in silence and sends nothing', async () => {
+    seed()
+    const onError = vi.fn()
+    const hold = createHold()
+    const { result } = renderHook(() => useMoveMessages(onError), { wrapper })
+    await act(async () => {
+      result.current.mutate({ folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false, hold: hold.promise })
+    })
+
+    await act(async () => { hold.cancel(); await settle() })
+
+    expect(uidsOf(sourcePage()!.messages)).toEqual([1, 2, 3])
+    expect(folder('INBOX').total).toBe(20)
+    expect(mocks.moveMessages).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  const heldMove = (result: { current: ReturnType<typeof useMoveMessages> }, uids: number[]) => {
+    const hold = createHold()
+    result.current.mutate({ folderPath: 'INBOX', uids, targetFolderPath: 'Archive', copy: false, hold: hold.promise })
+    return hold
+  }
+
+  it('an Undo puts the rows back where they stood, keeping a write made meanwhile', async () => {
+    seed()
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    let hold!: ReturnType<typeof createHold>
+    await act(async () => { hold = heldMove(result, [1]) })
+    client.setQueryData<MailFolderPage>(sourcePagesKey, page => page && {
+      ...page, messages: page.messages.map(row => row.uid === 2 ? { ...row, flagged: true } : row),
+    })
+
+    await act(async () => { hold.cancel(); await settle() })
+
+    expect(uidsOf(sourcePage()!.messages)).toEqual([1, 2, 3])
+    expect(sourcePage()!.messages[1]!.flagged).toBe(true)
+    expect(sourceStream()!.pages.map(block => uidsOf(block.messages))).toEqual([[1, 4], [5]])
+    expect([folder('INBOX').total, folder('INBOX').unread]).toEqual([20, 5])
+    expect([folder('Archive').total, folder('Archive').unread]).toEqual([3, 1])
+  })
+
+  it('an Undo of the second of two held moves leaves the first one out', async () => {
+    seed()
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    let first!: ReturnType<typeof createHold>
+    let second!: ReturnType<typeof createHold>
+    await act(async () => { first = heldMove(result, [1]) })
+    await act(async () => { second = heldMove(result, [3]) })
+
+    await act(async () => { second.cancel(); await settle() })
+
+    expect(uidsOf(sourcePage()!.messages)).toEqual([2, 3])
+    expect(sourceStream()!.pages.map(block => uidsOf(block.messages))).toEqual([[4], [5]])
+    expect([folder('INBOX').total, folder('INBOX').unread]).toEqual([19, 4])
+    await act(async () => { first.cancel(); await settle() })
+    expect(uidsOf(sourcePage()!.messages)).toEqual([1, 2, 3])
+  })
+
+  it('an Undo of the first of two held moves leaves the second one out', async () => {
+    seed()
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    let first!: ReturnType<typeof createHold>
+    let second!: ReturnType<typeof createHold>
+    await act(async () => { first = heldMove(result, [1]) })
+    await act(async () => { second = heldMove(result, [3]) })
+
+    await act(async () => { first.cancel(); await settle() })
+
+    expect(uidsOf(sourcePage()!.messages)).toEqual([1, 2])
+    expect([folder('INBOX').total, folder('INBOX').unread]).toEqual([19, 4])
+    await act(async () => { second.cancel(); await settle() })
+  })
+
+  it('an Undo brings back a conversation the move had emptied, in its place', async () => {
+    const groupedKey = mailKeys.messages('primary', 'INBOX', 0, 50, true)
+    client.setQueryData(groupedKey, groupedPageOf('INBOX',
+      [[summary(1), summary(2)], [summary(3)], [summary(4)]]))
+    client.setQueryData(foldersKey, [node('INBOX', 20, 5), node('Archive', 3, 1)])
+    const { result } = renderHook(() => useMoveMessages(), { wrapper })
+    let hold!: ReturnType<typeof createHold>
+    await act(async () => { hold = heldMove(result, [2, 3]) })
+
+    await act(async () => { hold.cancel(); await settle() })
+
+    expect(client.getQueryData<MailFolderPage>(groupedKey)!.threads!
+      .map(thread => uidsOf(thread.messages))).toEqual([[1, 2], [3], [4]])
+  })
+
+  it.each([
+    ['streaming', { 'mail.pageSize': 'all' }],
+    ['paged', { 'mail.pageSize': '50' }],
+  ])('a held move the server refuses restores the caches and refreshes the %s list', async (mode, preferences) => {
+    const seeded = seed()
+    client.setQueryData(['preferences'], preferences)
+    mocks.moveMessages.mockRejectedValue(new Error('boom'))
+    mocks.getMailMessages.mockResolvedValue(pageOf('INBOX', [summary(1)]))
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const onError = vi.fn()
+    const { result } = renderHook(() => useMoveMessages(onError), { wrapper })
+    let hold!: ReturnType<typeof createHold>
+    await act(async () => { hold = heldMove(result, [1]) })
+
+    await act(async () => { hold.release(); await settle() })
+
+    expect(sourcePage()).toStrictEqual(seeded.page)
+    expect(onError).toHaveBeenCalledWith('Could not move the message')
+    if (mode === 'streaming') {
+      expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 100, { accountId: 'primary', grouped: false })
+    } else {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.messagesIn('primary', 'INBOX') })
+    }
+  })
+
+  it('keeps the cached tree while a held move waits', async () => {
+    const { tree: seeded } = seed()
+    mocks.getMailFolders.mockResolvedValue(seeded)
+    const tree = renderHook(() => useFolders(), { wrapper })
+    await settle()
+    const hold = createHold()
+    const moved = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      moved.result.current.mutate({ folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false, hold: hold.promise })
+    })
+    const patched = folder('INBOX').total
+    expect(patched).toBe(19)
+    mocks.getMailFolders.mockClear()
+
+    await act(async () => { await tree.result.current.refetch() })
+
+    expect(mocks.getMailFolders).not.toHaveBeenCalled()
+    expect(folder('INBOX').total).toBe(patched)
+    await act(async () => { hold.cancel(); await settle() })
+  })
+
+  it.each([
+    ['sent', (hold: ReturnType<typeof createHold>) => hold.release()],
+    ['undone', (hold: ReturnType<typeof createHold>) => hold.cancel()],
+  ])('refreshes the tree a held move kept back once it is %s', async (_state, end) => {
+    const { tree: seeded } = seed()
+    mocks.getMailFolders.mockResolvedValue(seeded)
+    mocks.moveMessages.mockResolvedValue(undefined)
+    renderHook(() => useFolders(), { wrapper })
+    await settle()
+    const hold = createHold()
+    const moved = renderHook(() => useMoveMessages(), { wrapper })
+    await act(async () => {
+      moved.result.current.mutate({ folderPath: 'INBOX', uids: [1], targetFolderPath: 'Archive', copy: false, hold: hold.promise })
+    })
+    mocks.getMailFolders.mockClear()
+
+    await act(async () => { await client.invalidateQueries({ queryKey: foldersKey }) })
+    expect(mocks.getMailFolders).not.toHaveBeenCalled()
+
+    await act(async () => { end(hold); await settle() })
+    expect(mocks.getMailFolders).toHaveBeenCalledTimes(1)
   })
 
   it('takes the rows out of every source cache and drops the target caches', async () => {

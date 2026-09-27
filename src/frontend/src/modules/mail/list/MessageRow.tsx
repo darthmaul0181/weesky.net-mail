@@ -1,11 +1,12 @@
-import { memo, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import type {
   CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { RowAction } from '../../../hooks/usePreferences'
+import type { RowAction, SwipeAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary } from '../api/mailTypes'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
+import BanIcon from '../../../icons/BanIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import MailIcon from '../../../icons/MailIcon'
@@ -13,26 +14,35 @@ import MailOpenIcon from '../../../icons/MailOpenIcon'
 import PaperclipIcon from '../../../icons/PaperclipIcon'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
+import SwipeActionIcon from '../SwipeActionIcon'
 import { formatListDate } from './formatDate'
 import { useLongPress } from '../../../hooks/useLongPress'
+import { useSwipe, type SwipeSide } from '../../../hooks/useSwipe'
 
 // A component only so the long-press hook can live outside the rows' `.map()`. A held press still
-// ends in a click on touch browsers, which `onClickCapture` eats.
-function Row({ onLongPress, children, ...rest }:
-  { onLongPress?: () => void; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+// ends in a click on touch browsers, and so does a swipe; `onClickCapture` eats both.
+type SwipeBinding = ReturnType<typeof useSwipe<HTMLDivElement>>
+
+function Row({ onLongPress, swipe, children, ...rest }:
+  { onLongPress?: () => void; swipe: SwipeBinding; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
   const fired = useRef(false)
-  const { onPointerDown, ...press } = useLongPress(() => {
+  const { onPointerDown, onPointerMove, onPointerUp, onPointerCancel } = useLongPress(() => {
     if (!onLongPress) return  // A cross-folder result: no selection to enter, so no click to eat.
     fired.current = true
     onLongPress()
   })
+  const { ref, handlers } = swipe
   return (
     <div
       {...rest}
-      {...press}
-      onPointerDown={event => { fired.current = false; onPointerDown(event) }}
+      ref={ref}
+      onPointerDown={event => { fired.current = false; onPointerDown(event); handlers.onPointerDown(event) }}
+      onPointerMove={event => { onPointerMove(event); handlers.onPointerMove(event) }}
+      onPointerUp={() => { onPointerUp(); handlers.onPointerUp() }}
+      onPointerCancel={() => { onPointerCancel(); handlers.onPointerCancel() }}
       onClickCapture={event => {
-        if (!fired.current) return
+        const swiped = swipe.swallowClick()
+        if (!fired.current && !swiped) return
         fired.current = false
         // Both are load-bearing and neither replaces the other: stopPropagation keeps the click
         // from the checkbox's own listener, preventDefault is what cancels the input's native
@@ -69,6 +79,10 @@ export interface RowCallbacks {
   junk: (uids: number[]) => void
   /** `label` names the row in the trash's confirm dialog. */
   remove: (uids: number[], label: string) => void
+  /** True when the row leaves; `label` names it in the trash's confirm dialog. */
+  swipe: (uids: number[], action: 'archive' | 'delete', label: string) => boolean
+  /** Whether a selection stands, asked at the touch: a prop would redraw every row on the first tick. */
+  selecting: () => boolean
   toggleThread: (groupKey: number) => void
   dragStart: (event: DragEvent<HTMLDivElement>, uids: number[]) => void
   dragEnd: () => void
@@ -107,6 +121,8 @@ export interface MessageRowProps {
   trashOff: boolean
   trashReason: string
   deleteLabel: string
+  swipeRight: SwipeAction
+  swipeLeft: SwipeAction
   on: RowCallbacks
 }
 
@@ -117,7 +133,7 @@ const NO_ACTIONS: readonly RowAction[] = []
 function MessageRow({
   message, members, groupKey, expanded, member, rowIndex, ariaRow, wide, drafts, crossFolder,
   today, showsPreview, rowActions, checked, open, leaving, dragging, archiveOff, archiveReason,
-  junkOff, junkReason, trashOff, trashReason, deleteLabel, on,
+  junkOff, junkReason, trashOff, trashReason, deleteLabel, swipeRight, swipeLeft, on,
 }: MessageRowProps) {
   const { t } = useTranslation('mail')
   const thread = members !== undefined
@@ -141,6 +157,29 @@ function MessageRow({
   const subject = message.subject || t('list.noSubject')
   const when = formatListDate(message.date, today)
   const seenLabel = t(unread ? 'toolbar.markRead' : 'toolbar.markUnread')
+
+  const actionOf = (side: SwipeSide) => (side === 'right' ? swipeRight : swipeLeft)
+  const unavailable = (action: SwipeAction) =>
+    (action === 'archive' && archiveOff) || (action === 'delete' && trashOff)
+  const swipe = useSwipe<HTMLDivElement>(
+    side => !crossFolder && !leaving && actionOf(side) !== 'none' && !on.selecting(),
+    side => {
+      const action = actionOf(side)
+      if (unavailable(action)) return 'return'
+      if (action === 'seen') { on.setFlag(rowUids, 'seen', unread); return 'return' }
+      if (action === 'flag') { on.setFlag(rowUids, 'flagged', !flagged); return 'return' }
+      if (action === 'none') return 'return'
+      return on.swipe(rowUids, action, subject) ? 'leave' : 'return'
+    })
+  const band = swipe.state.side && actionOf(swipe.state.side)
+  const bandOff = band ? unavailable(band) : false
+  const bandLabel = band === 'seen' ? seenLabel
+    : band === 'flag' ? t(flagged ? 'list.unstar' : 'list.star')
+      : band === 'archive' ? t('toolbar.archive') : deleteLabel
+  // The confirmation at the threshold; Android only, iOS has no vibration API.
+  const buzz = swipe.state.armed && !bandOff
+  useEffect(() => { if (buzz && 'vibrate' in navigator) navigator.vibrate(10) }, [buzz])
+  if (swipe.state.side) classes.push('is-swiping')
   const priorityLabel = message.priority === 'high' ? t('list.highPriority')
     : message.priority === 'low' ? t('list.lowPriority') : null
   // A word in the Draft badge's slot, not a glyph in the subject line: a glyph there sat
@@ -297,12 +336,21 @@ function MessageRow({
       className={`message-row-slot${leaving ? ' is-leaving' : ''}`}
       role="presentation"
     >
+      {/* Under the row, outside it: the grid keeps its four cells and a reader hears none of this. */}
+      {band && swipe.state.side && (
+        <div aria-hidden="true" className={`message-row-swipe is-${swipe.state.side} is-${band}`
+          + `${swipe.state.armed && !bandOff ? ' is-armed' : ''}`}>
+          {bandOff ? <BanIcon size={22} /> : <SwipeActionIcon action={band} size={22} unread={unread} />}
+          {swipe.state.armed && !bandOff && <span>{bandLabel}</span>}
+        </div>
+      )}
     <Row
       role="row"
       aria-rowindex={ariaRow}
       className={classes.join(' ')}
       style={{ '--row-actions': shownActions.length } as CSSProperties}
       draggable={!crossFolder}
+      swipe={swipe}
       onClick={() => on.open(message)}
       onDragStart={event => on.dragStart(event, rowUids)}
       onDragEnd={() => on.dragEnd()}
