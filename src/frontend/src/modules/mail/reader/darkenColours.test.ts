@@ -281,6 +281,16 @@ function hueOf(r: number, g: number, b: number): number {
   return (h * 60 + 360) % 360
 }
 
+describe('darkenColours — important', () => {
+  // The Loterie's star numbers declare `color: … !important` inline: the colour was left navy while
+  // the chip under it turned dark, and the numbers vanished into their own background.
+  it('recolours an inline colour marked important and keeps the priority', () => {
+    const out = darkenColours('<table><tr><td style="background-color: rgba(134, 178, 234, 1); color: rgba(0, 19, 103, 1) !important">4</td></tr></table>')
+    expect(out).not.toContain('rgba(0, 19, 103, 1)')
+    expect(out).toMatch(/color: #[\da-f]{6} !important/)
+  })
+})
+
 describe('darkenColours — stylesheets', () => {
   // A light-authored newsletter paints its slabs from the stylesheet as often as inline.
   it('darkens colours declared in a stylesheet, media blocks included', () => {

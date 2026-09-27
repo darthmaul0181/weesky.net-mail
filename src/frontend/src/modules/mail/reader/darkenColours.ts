@@ -71,8 +71,10 @@ export function darkenColours(html: string): string {
       .replace(COLOUR_PROPERTIES, (
         whole: string, lead: string, property: string, _side: string | undefined, value: string,
       ) => {
-        const dark = toDarkColour(value, roleOf(property))
-        return dark ? `${lead}${property}: ${dark}` : whole
+        // `!important` rides along after the colour: parsed with it, the colour reads as no colour.
+        const [, colour = value, important = ''] = /^(.*?)(\s*!\s*important)?\s*$/i.exec(value) ?? []
+        const dark = toDarkColour(colour, roleOf(property))
+        return dark ? `${lead}${property}: ${dark}${important ? ' !important' : ''}` : whole
       })
       .replace(IMAGE_PROPERTY, (_whole, lead: string, property: string, value: string) =>
         `${lead}${property}: ${darkenImageColours(value)}`))
