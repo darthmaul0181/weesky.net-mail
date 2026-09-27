@@ -63,6 +63,12 @@ describe('sanitizeBody', () => {
   })
 
   // A newsletter's @media rules are what fit it to a phone; the iframe is the barrier here.
+  // The server marks what a message asked to break with a declaration AngleSharp cannot keep.
+  it('keeps the marker for a long word the message lets break', () => {
+    expect(sanitizeBody('<table><tr><td data-break-word="">BE_AMB_INV_HYPE</td></tr></table>'))
+      .toContain('data-break-word')
+  })
+
   it('keeps a leading stylesheet and the classes and ids it targets', () => {
     const out = sanitizeBody('<style>@media (max-width: 499px) { .w { width: 100% !important } }</style><table class="w" id="m"><tr><td>x</td></tr></table>')
     expect(out).toContain('<style>@media (max-width: 499px)')
@@ -235,8 +241,10 @@ describe('renderBodyDocument', () => {
   // `anywhere` breaks the same words, but unlike `break-word` it also feeds those break points
   // into min-content sizing — so a table column could shrink to one letter, and a GitHub mail
   // rendered its "Status" heading vertically with the icons squashed to slivers.
-  it('never uses the value that collapses table columns', () => {
-    expect(renderBodyDocument('<p>x</p>')).not.toContain('overflow-wrap: anywhere')
+  // The one exception is an element the message itself marked, where it is what the sender asked.
+  it('uses the value that collapses table columns only where the message asked for it', () => {
+    const rules = [...renderBodyDocument('<p>x</p>').matchAll(/([^{}/]+)\{[^}]*overflow-wrap:\s*anywhere/g)]
+    expect(rules.map(rule => rule[1]!.trim())).toEqual(['[data-break-word]'])
   })
 
   it('constrains an oversized image to the reader width', () => {

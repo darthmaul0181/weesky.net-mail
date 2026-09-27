@@ -1326,6 +1326,30 @@ public sealed class MailHtmlSanitizerTests
         return result;
     }
 
+    // AngleSharp knows neither `word-break: break-word` nor its modern spelling, so Ganss drops the
+    // one declaration that let an MJML mail's long tracking code wrap: an ING mail then overflowed.
+    [Theory]
+    [InlineData("padding: 10px; word-break: break-word")]
+    [InlineData("WORD-BREAK:Break-Word;")]
+    [InlineData("word-break: break-word !important")]
+    public void Sanitize_MarksAnElementThatAskedToBreakLongWords(string style)
+    {
+        var result = _sut.Sanitize($"<table><tr><td style=\"{style}\">BE_AMB_INV_HYPE_INVEST_UP</td></tr></table>").Html;
+
+        Assert.Contains("data-break-word", result);
+    }
+
+    [Theory]
+    [InlineData("word-break: break-all")]
+    [InlineData("word-break: normal")]
+    [InlineData("overflow-wrap: break-word")]
+    public void Sanitize_MarksNoElementThatDidNotAsk(string style)
+    {
+        var result = _sut.Sanitize($"<p style=\"{style}\">x</p>").Html;
+
+        Assert.DoesNotContain("data-break-word", result);
+    }
+
     private static string Nested(int depth, string content) =>
         string.Concat(Enumerable.Repeat("@media screen { ", depth)) + content + string.Concat(Enumerable.Repeat(" }", depth));
 }

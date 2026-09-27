@@ -15,6 +15,7 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 {
     private const string BlockedSrcAttribute = "data-blocked-src";
     private const string BlockedBackgroundAttribute = "data-blocked-bg";
+    private const string BreakWordAttribute = "data-break-word";
 
     // Four ceilings, one per dimension the pipeline's cost rides on. It builds three DOM trees
     // plus two serialisations over bodies ImapSession takes straight off the wire, and each
@@ -99,6 +100,10 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         @"(?<![\w-])(?:supported-color-schemes|color-scheme)\s*:[^;}]{0,64}\bdark\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex BreakWordDeclaration = new(
+        @"(?:^|;)\s*word-break\s*:\s*break-word\s*(?:!\s*important\s*)?(?:;|$)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly HtmlSanitizer _sanitizer;
     private readonly HtmlParser _parser = new();
     private readonly CssParser _cssParser = new();
@@ -123,7 +128,9 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         {
             "href", "src", "alt", "title", "style", "class", "id",
             "colspan", "rowspan", "align", "valign", "width", "height",
-            "cellpadding", "cellspacing", "border", "bgcolor", "dir", "face", "size", "color"
+            "cellpadding", "cellspacing", "border", "bgcolor", "dir", "face", "size", "color",
+            // Written by MarkBreakWord; a message bringing its own only lets its text wrap.
+            BreakWordAttribute
         }) _sanitizer.AllowedAttributes.Add(attribute);
         // data-blocked-src / -bg are deliberately absent: both are written by our own post-Ganss
         // pass, and allowing them would let a message forge withheld images the banner then counts.
@@ -207,6 +214,7 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
             CarryMediaIntoText(style);
         UnwrapDisallowedTags(pre.Body);
         CullEscapedDeclarations(pre.Body);
+        MarkBreakWord(pre.Body);
 
         var cleaned = _sanitizer.Sanitize(pre.Body?.InnerHtml ?? string.Empty);
 
@@ -492,6 +500,16 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
             // Ganss parses an inline style with the same recursive parser as a sheet.
             styled.SetAttribute("style", NestsTooDeep(style) ? string.Empty : style);
         }
+    }
+
+    // Browsers read the legacy `word-break: break-word` as `overflow-wrap: anywhere`, which lets a
+    // long token wrap inside a table cell; AngleSharp knows neither spelling and Ganss drops it, so
+    // the element carries a marker the reader's own stylesheet turns back into the declaration.
+    private static void MarkBreakWord(AngleSharp.Dom.IElement root)
+    {
+        foreach (var styled in root.QuerySelectorAll("[style]"))
+            if (BreakWordDeclaration.IsMatch(styled.GetAttribute("style")!))
+                styled.SetAttribute(BreakWordAttribute, string.Empty);
     }
 
     // Three rounds of a hand-rolled CSS tokeniser each closed one bypass and opened another —

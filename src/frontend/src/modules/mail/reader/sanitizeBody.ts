@@ -12,7 +12,7 @@ export function sanitizeBody(html: string): string {
     // data-blocked-src carries the withheld remote image URL; DOMPurify would strip an
     // unknown data attribute otherwise, and the "show images" action would have nothing left
     // to restore.
-    ADD_ATTR: ['data-blocked-src', 'data-blocked-bg', 'target'],
+    ADD_ATTR: ['data-blocked-src', 'data-blocked-bg', 'data-break-word', 'target'],
     FORBID_TAGS: [...READER_FORBID_TAGS],
     FORBID_ATTR: [...FORBID_ATTR],
     // Without it a leading <style> is parsed into the head and dropped.
@@ -114,6 +114,9 @@ export function renderBodyDocument(
   /* break-word, not anywhere: both break a long URL, but anywhere also feeds those break
      points into min-content sizing, so a table column can collapse to a single letter. */
   body { overflow-wrap: break-word; }
+  /* Only where the message asked for it (legacy word-break: break-word, which the backend cannot
+     keep as CSS): there it is what lets a long token wrap inside a table cell. */
+  [data-break-word] { overflow-wrap: anywhere; }
   /* Tables are the one thing that must keep its width, so it scrolls in its own box. */
   table { max-width: 100%; }
   pre { overflow-x: auto; }
