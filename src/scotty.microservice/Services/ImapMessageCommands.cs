@@ -490,6 +490,7 @@ internal sealed class ImapMessageCommands(
                 TextBody = textBody ?? string.Empty,
                 BlockedImageCount = sanitized.BlockedImageCount,
                 Truncated = sanitized.Truncated,
+                DeclaresDarkScheme = sanitized.DeclaresDarkScheme,
                 Authentication = MailAuthenticationReader.Parse(message.Headers),
                 SpamScore = MailSpamScoreReader.Parse(message.Headers),
                 MailingList = headerDetails.MailingList,

@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
+import { COMPOSER_FORBID_TAGS, READER_FORBID_TAGS } from '../sanitizePolicy'
+
+describe('sanitize policies', () => {
+  // The editor is a div in the SPA document: a stylesheet there would restyle the whole app.
+  it('forbids style in the composer and allows it in the reader', () => {
+    expect(COMPOSER_FORBID_TAGS).toContain('style')
+    expect(READER_FORBID_TAGS).not.toContain('style')
+  })
+})
 
 describe('sanitizeBody', () => {
   // These prove the client barrier on its own. The backend already sanitised the body, but
@@ -52,6 +61,14 @@ describe('sanitizeBody', () => {
   it('returns empty for an empty body', () => {
     expect(sanitizeBody('')).toBe('')
   })
+
+  // A newsletter's @media rules are what fit it to a phone; the iframe is the barrier here.
+  it('keeps a leading stylesheet and the classes and ids it targets', () => {
+    const out = sanitizeBody('<style>@media (max-width: 499px) { .w { width: 100% !important } }</style><table class="w" id="m"><tr><td>x</td></tr></table>')
+    expect(out).toContain('<style>@media (max-width: 499px)')
+    expect(out).toContain('class="w"')
+    expect(out).toContain('id="m"')
+  })
 })
 
 describe('revealBlockedImages', () => {
@@ -62,6 +79,14 @@ describe('revealBlockedImages', () => {
 
   it('leaves a body with no blocked images untouched', () => {
     expect(revealBlockedImages('<p>hi</p>')).toBe('<p>hi</p>')
+  })
+
+  // A leading <style> is hoisted into <head> and lost by a bare DOMParser round-trip; the
+  // shared parseBodyFragment helper keeps it inside the body this function reads back out.
+  it('keeps a leading stylesheet through the reveal', () => {
+    const html = '<style>.w{width:100%}</style><div data-blocked-bg="https://cdn.example/l.png"></div>'
+
+    expect(revealBlockedImages(html)).toContain('<style>.w{width:100%}</style>')
   })
 
   it('output is still sanitised afterwards', () => {
@@ -199,6 +224,10 @@ describe('renderBodyDocument', () => {
     expect(renderBodyDocument('<p>x</p>')).toMatch(/padding:\s*18px 22px/)
   })
 
+  it('counts its padding inside a width the message gives the body', () => {
+    expect(renderBodyDocument('<p>x</p>')).toMatch(/body\s*\{[^}]*box-sizing:\s*border-box/)
+  })
+
   it('keeps a long unbroken URL from scrolling the body sideways', () => {
     expect(renderBodyDocument('<p>x</p>')).toMatch(/overflow-wrap:\s*break-word/)
   })
@@ -264,6 +293,30 @@ describe('renderBodyDocument', () => {
 
     expect(document).not.toContain('<script')
     expect(document).toContain('hi')
+  })
+
+  describe('content security policy', () => {
+    const cspOf = (document: string) => /http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(document)?.[1] ?? ''
+
+    it('loads nothing remote without consent', () => {
+      expect(cspOf(renderBodyDocument('<p>x</p>')))
+        .toBe("default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'")
+    })
+
+    it('admits remote images and fonts once the images are shown', () => {
+      expect(cspOf(renderBodyDocument('<p>x</p>', { remote: true })))
+        .toBe("default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; font-src https: http:")
+    })
+
+    // Before the body's own <style>, or the body's rules could load under no policy at all.
+    it('is the first thing in the head', () => {
+      expect(renderBodyDocument('<p>x</p>')).toMatch(/<head><meta http-equiv="Content-Security-Policy"/)
+    })
+  })
+
+  it('does not dim images when the sender designed the dark version', () => {
+    expect(renderBodyDocument('<p>x</p>', { dark: true, senderDark: true })).not.toContain('brightness')
+    expect(renderBodyDocument('<p>x</p>', { dark: true, senderDark: true })).toContain('color-scheme: dark')
   })
 })
 

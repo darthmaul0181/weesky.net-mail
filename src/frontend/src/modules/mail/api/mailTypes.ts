@@ -245,6 +245,8 @@ export interface MailMessageDetail {
   htmlBody: string
   textBody: string
   blockedImageCount: number
+  /** The sender designed the body for a dark scheme too. Absent from an API that predates it. */
+  declaresDarkScheme?: boolean
   /** The backend cut the body at one of its ceilings: what is shown is not the whole message. */
   truncated: boolean
   attachments: MailAttachmentInfo[]

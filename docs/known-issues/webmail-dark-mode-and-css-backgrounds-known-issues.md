@@ -7,6 +7,10 @@ a review transcript is a finding nobody will ever act on.
 
 Design intent for the slice: `docs/history/specs/2026-07-26-webmail-css-background-images-design.md`.
 
+The message-stylesheets slice (2026-09-27, `docs/history/specs/2026-09-27-webmail-mail-stylesheets-design.md`)
+added the entries on quoted classes, escaped font names, stylesheet backgrounds, remote fonts and
+media, and the CSSOM round trip.
+
 ## Worth fixing
 
 ### Forwarding a message whose background is a `cid:` image sends a dead background
@@ -40,6 +44,27 @@ serialisation collapses and the background colour stops being darkened.
 Today the collapse cannot happen because those three are absent. Anyone widening the allowlist —
 a change that looks routine, and which rule 6 of `src/scotty.microservice/CLAUDE.md` calls
 routine — must re-measure dark mode.
+
+### A quoted message's classes reach the composer
+
+`PrepareQuote` keeps `class` (the outgoing sanitiser's Ganss defaults) and `SquireEditor`'s
+DOMPurify keeps it too, so a quoted `class="header"` can pick up a style of the webmail's own
+inside the editor, which is a plain div in the SPA document. Pre-existing and independent of the
+stylesheet work; not fixed there because Squire relies on its own classes to format.
+
+### An escaped slash beside a parenthesis in a string loses a font declaration
+
+`.x { font-family: "a(", b\/c }` passes the backslash cull (`\/` is a safe escape), but Ganss
+writes `b\/c` back as `b/c` and the whole declaration is lost in the round trip. The sheet is
+kept, only that font list falls back. Rare in real mail; no safety impact.
+
+### A stylesheet `background:` shorthand comes back as `initial` longhands
+
+AngleSharp serialises every `background:` shorthand as its longhands, `url()` or not:
+`.x { background: red }` comes back as `background-image: initial; background-position: initial;
+…; background-color: …`, declarations the sender never wrote. They reset exactly what the
+shorthand resets, so the render is unchanged — harmless. The `url()` cull is not the cause: it
+only removes the image longhand from a sheet that already carried the others.
 
 ## Known and accepted
 
@@ -75,3 +100,19 @@ routine — must re-measure dark mode.
 - **Two branches of `NO_SURVIVING_LAYER` are untested**: `revert-layer` was verified by hand in
   both engines but is absent from the parametrised list, and jsdom cannot reach the `none` branch
   through the DOM.
+- **A remote font does not raise the blocked-images banner.** A sheet has no consent surface of
+  its own: a `@font-face` is not counted in `blockedImageCount`, only held back by the frame's
+  CSP. A message with no remote image keeps its fallback font unless images are always shown or
+  the sender is trusted.
+- **Remote `<video>` and `<audio>` stay blocked even after consent.** The frame's CSP opens on
+  `default-src 'none'` and consent widens `img-src` and `font-src` only, so `media-src` stays
+  closed. Mail clients rarely play either; widening it would make consent cover more than the
+  banner says.
+- **A stylesheet holding an unsafe escape is removed whole.** A backslash not followed by one of
+  the safe punctuation characters (CJK font names written as hex escapes are the realistic case)
+  drops the entire `<style>`, and the message renders as it did before stylesheets were kept —
+  desktop layout, no dark design. Three hand-written tokenisers each closed one bypass and opened
+  another; failing closed is the price of not having a fourth.
+- **Recolouring a light message's stylesheet round-trips it through the browser's CSSOM.** Rules
+  and declarations the engine does not understand are dropped on the way back to text. They were
+  inert in that engine anyway; the loss is only in what another engine might have made of them.

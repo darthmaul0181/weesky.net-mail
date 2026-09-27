@@ -280,3 +280,17 @@ function hueOf(r: number, g: number, b: number): number {
   const h = max === rd ? ((gd - bd) / d) % 6 : max === gd ? (bd - rd) / d + 2 : (rd - gd) / d + 4
   return (h * 60 + 360) % 360
 }
+
+describe('darkenColours — stylesheets', () => {
+  // A light-authored newsletter paints its slabs from the stylesheet as often as inline.
+  it('darkens colours declared in a stylesheet, media blocks included', () => {
+    const out = darkenColours('<style>.bg { background-color: #ffffff } @media (max-width: 499px) { .t { color: #000000 !important } }</style><p class="t">x</p>')
+    expect(out).toMatch(/\.bg \{ background-color: (#212121|rgb\(33, 33, 33\)); \}/)
+    expect(out).toMatch(/\.t \{ color: (#e0e0e0|rgb\(224, 224, 224\)) !important; \}/)
+  })
+
+  it('darkens the stops of a gradient in a stylesheet', () => {
+    const out = darkenColours('<style>.g { background-image: linear-gradient(#ffffff, #ffffff) }</style><p>x</p>')
+    expect(out).not.toMatch(/#ffffff|rgb\(255, 255, 255\)/)
+  })
+})

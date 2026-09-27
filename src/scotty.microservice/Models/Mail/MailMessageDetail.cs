@@ -64,6 +64,9 @@ public sealed class MailMessageDetail
     /// </summary>
     public bool Truncated { get; set; }
 
+    /// <summary>Whether the sender designed this body for a dark scheme too; see SanitizedHtml.</summary>
+    public bool DeclaresDarkScheme { get; set; }
+
     public List<MailAttachmentInfo> Attachments { get; set; } = new();
 
     /// <summary>Filled when the message carries a REQUEST or CANCEL calendar part (spec 5e, décision 1).</summary>

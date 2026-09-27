@@ -37,6 +37,7 @@ import ReaderHeader from './ReaderHeader'
 import ReaderAttachments from './ReaderAttachments'
 import { isWebUnsubscribe } from './unsubscribeLink'
 import { darkenColours } from './darkenColours'
+import { hasDarkDesign, resolveColourScheme } from './messageStyles'
 import { renderBodyDocument, revealBlockedImages, sanitizeBody } from './sanitizeBody'
 import { substituteInlineImages } from './inlineImages'
 import { isCalendarType, isImageType } from './mediaType'
@@ -146,11 +147,17 @@ export default function MessageReader(
   const showImages = imagesShown || alwaysShow || senderApproved || contactTrusted
   // Recolour before sanitising, so everything darkenColours writes faces the same pass as the
   // rest — the same reason revealBlockedImages runs on this side of it.
+  // The sender's own dark design wins over our recolouring, but only when the message declares one,
+  // its sheet holds one and the reader asked for dark; the colour toggle brings the light one back.
+  // A full parse of the body: once per message, not once per render.
+  const darkDesign = useMemo(() => hasDarkDesign(data?.htmlBody ?? ''), [data?.htmlBody])
+  const senderDark = inverted && data?.declaresDarkScheme === true && darkDesign
   const sanitized = useMemo(() => {
     const html = data?.htmlBody ?? ''
     const revealed = showImages ? revealBlockedImages(html) : html
-    return sanitizeBody(inverted ? darkenColours(revealed) : revealed)
-  }, [data?.htmlBody, showImages, inverted])
+    const schemed = resolveColourScheme(revealed, senderDark ? 'dark' : 'light')
+    return sanitizeBody(inverted && !senderDark ? darkenColours(schemed) : schemed)
+  }, [data?.htmlBody, showImages, inverted, senderDark])
   // Inlined after sanitising, unlike the reveal: these data URIs are built from our own API's
   // bytes rather than from message markup, so they are not what the pass exists to police.
   const inlineImages = useInlineImages(folderPath, uid, data?.attachments, sanitized)
@@ -362,7 +369,7 @@ export default function MessageReader(
           className="reader-body"
           sandbox="allow-popups allow-popups-to-escape-sandbox"
           title={t('reader.bodyTitle')}
-          srcDoc={renderBodyDocument(body, { dark: inverted, narrow })}
+          srcDoc={renderBodyDocument(body, { dark: inverted, senderDark, remote: showImages, narrow })}
         />
       ) : (
         <div className="reader-text">{data.textBody}</div>

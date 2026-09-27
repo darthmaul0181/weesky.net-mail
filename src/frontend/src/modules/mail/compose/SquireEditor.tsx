@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import DOMPurify from 'dompurify'
 import Squire from 'squire-rte'
-import { FORBID_TAGS, FORBID_ATTR } from '../sanitizePolicy'
+import { COMPOSER_FORBID_TAGS, FORBID_ATTR } from '../sanitizePolicy'
 
 export type EditorCommand =
   | 'undo' | 'redo'
@@ -56,11 +56,13 @@ const toggles: Partial<Record<EditorCommand, [keyof Squire, keyof Squire, string
 const invoke = (squire: Squire, method: keyof Squire) => (squire[method] as () => void)()
 
 // Squire would otherwise reach for a global DOMPurify the app never defines. Stricter than its default
-// (protocols checked) and sharing the reader's FORBID lists: this div is in the SPA document, where a
-// surviving <style> would apply document-wide. importNode resets element state as Squire's default does.
+// (protocols checked) and sharing the common FORBID_ATTR plus the reader's FORBID_ANYWHERE list, with
+// <style> added: this div is in the SPA document, where a surviving one would apply document-wide.
+// importNode resets element state as Squire's default does.
 const sanitizeToDOMFragment = (html: string): DocumentFragment => {
   const fragment = DOMPurify.sanitize(html, {
-    RETURN_DOM_FRAGMENT: true, WHOLE_DOCUMENT: false, FORCE_BODY: false, FORBID_TAGS, FORBID_ATTR,
+    RETURN_DOM_FRAGMENT: true, WHOLE_DOCUMENT: false, FORCE_BODY: false,
+    FORBID_TAGS: [...COMPOSER_FORBID_TAGS], FORBID_ATTR: [...FORBID_ATTR],
   })
   return document.importNode(fragment, true)
 }
