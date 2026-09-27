@@ -451,7 +451,6 @@
     "copied": "Copié"
   },
   "about": {
-    "version": "Version {{version}}",
     "webApp": "Application web",
     "server": "Serveur",
     "serverUnavailable": "Serveur indisponible",

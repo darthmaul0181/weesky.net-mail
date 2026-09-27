@@ -15,7 +15,7 @@ public sealed class ProductVersionTests
         => Assert.Equal(new ProductVersion("1.0.0", null), ProductVersion.Parse("1.0.0"));
 
     [Fact]
-    public void Current_IsReadFromTheVersionFileAtTheRepositoryRoot()
+    public void Current_IsReadFromTheMicroserviceVersionFile()
     {
         var expected = File.ReadAllText(FindVersionFile()).Trim();
 
@@ -31,10 +31,10 @@ public sealed class ProductVersionTests
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            var candidate = Path.Combine(dir.FullName, "VERSION");
+            var candidate = Path.Combine(dir.FullName, "src", "scotty.microservice", "VERSION");
             if (File.Exists(candidate)) return candidate;
         }
 
-        throw new FileNotFoundException("No VERSION file above the test binaries");
+        throw new FileNotFoundException("No src/scotty.microservice/VERSION above the test binaries");
     }
 }

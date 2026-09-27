@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { BUILT_AT, WEB_COMMIT, WEB_VERSION, versionLabel } from './appVersion'
 import { versionStamp } from './versionStamp'
+import versionFile from '../../VERSION?raw'
 
 describe('appVersion', () => {
   // The suite is not a release build, so it sees what a dev deployment ships.
-  it('stamps the product version, suffixed -dev outside a release build', () => {
+  it('stamps the web app version, suffixed -dev outside a release build', () => {
     expect(WEB_VERSION).toMatch(/^\d+\.\d+\.\d+-dev$/)
+  })
+
+  it("reads the web app's own VERSION file, not the API's", () => {
+    expect(WEB_VERSION).toBe(`${versionFile.trim()}-dev`)
   })
 
   // Host-dependent: a checkout has a commit, an extracted tarball has none. Both are legitimate,
@@ -19,9 +24,7 @@ describe('appVersion', () => {
   })
 })
 
-// The VERSION file itself sits above this project and Vitest overrides `server.fs.allow`, so it
-// cannot be read here; the API suite pins the file-to-version wiring (ProductVersionTests). What
-// is pinned here is the switch the config applies to it — RELEASE_BUILD, the same one the API
+// The switch the config applies to that file — RELEASE_BUILD, the same one the API
 // build reads as -p:ReleaseBuild, so the two halves cannot disagree about what a release is.
 describe('versionStamp', () => {
   it('leaves a release build bare', () => {

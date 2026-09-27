@@ -980,15 +980,6 @@ a.dropdown-item { text-decoration: none; }
 }
 .about-product-kind { font-weight: 300; color: var(--rail-fg); }
 
-.about-badge {
-  margin-top: 14px;
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--topbar-fg) 14%, transparent);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 /* One line on a desktop, one line per fact on a phone: the separator is drawn by the rule below
    rather than written into the text, so the phone block only has to change the direction. */
 .about-builds {

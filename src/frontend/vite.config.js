@@ -6,8 +6,8 @@ import react from '@vitejs/plugin-react'
 import license from 'rollup-plugin-license'
 import { versionStamp } from './src/lib/versionStamp.ts'
 
-// One product version for the web app and the API, read from the repository's VERSION file.
-const PRODUCT_VERSION = readFileSync(new URL('../../VERSION', import.meta.url), 'utf8').trim()
+// The web app's own version; the API keeps its own in src/scotty.microservice/VERSION.
+const WEB_VERSION = readFileSync(new URL('./VERSION', import.meta.url), 'utf8').trim()
 /** Our own borrowed assets, one row each. The full notices stay in THIRD-PARTY.md, which is
     the record; this is the list the page shows. */
 const OWN_ASSETS = [{
@@ -167,7 +167,7 @@ export default defineConfig(({ command, mode }) => {
     // Build-only plugins, so they belong to the output rather than to Vite's own list.
     build: { rolldownOptions: { plugins: [collectNotices, emitNotices] } },
     define: {
-      __APP_VERSION__: JSON.stringify(versionStamp(PRODUCT_VERSION, RELEASE)),
+      __APP_VERSION__: JSON.stringify(versionStamp(WEB_VERSION, RELEASE)),
       __APP_COMMIT__: JSON.stringify(shortCommit()),
       __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
     },
