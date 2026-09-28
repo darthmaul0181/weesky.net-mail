@@ -1,6 +1,9 @@
 {
   "nav": {
     "label": "Settings",
+    "mail": "Mail",
+    "calendar": "Calendar",
+    "application": "Application",
     "account": "Account",
     "general": "General",
     "accounts": "Connected accounts",
@@ -55,7 +58,7 @@
   "general": {
     "loadFailed": "Could not load the settings.",
     "saveFailed": "Could not save the setting",
-    "layout": "Layout",
+    "layout": "Message list",
     "readingPane": {
       "label": "Reading pane",
       "hint": "Where a message opens — beside the list, under it, or full width.",
@@ -100,13 +103,6 @@
       "delete": "Delete",
       "on": "{{action}} is now a quick action",
       "off": "{{action}} is no longer a quick action"
-    },
-    "calendar": "Calendar",
-    "birthdays": {
-      "label": "Birthdays calendar",
-      "hint": "Your contacts’ birthdays, in the webmail and on your synced devices.",
-      "on": "Birthdays calendar turned on",
-      "off": "Birthdays calendar turned off"
     },
     "swipe": {
       "heading": "Swipe gestures",
@@ -174,6 +170,24 @@
       "hint": "Your browser will ask for permission the first time.",
       "on": "New mail will raise a notification",
       "off": "Desktop notifications are off"
+    }
+  },
+  "calendarGeneral": {
+    "calendars": "Calendars",
+    "birthdays": {
+      "label": "Birthdays calendar",
+      "hint": "Your contacts’ birthdays, in the webmail and on your synced devices.",
+      "on": "Birthdays calendar turned on",
+      "off": "Birthdays calendar turned off"
+    },
+    "week": "Week",
+    "firstDayOfWeek": {
+      "label": "First day of the week",
+      "hint": "The column the week and month views start with.",
+      "monday": "Monday",
+      "sunday": "Sunday",
+      "mondayToast": "Weeks now start on Monday",
+      "sundayToast": "Weeks now start on Sunday"
     }
   },
   "accounts": {

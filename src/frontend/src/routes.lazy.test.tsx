@@ -33,7 +33,7 @@ vi.mock('./modules/settings/SettingsLayout', () => ({
 }))
 vi.mock('./modules/settings/account/AccountPage', () => ({ default: () => <p>account page</p> }))
 // Held until the test releases it: a settings sub-page chunk not yet fetched.
-vi.mock('./modules/settings/general/GeneralPage', async () => {
+vi.mock('./modules/settings/general/MailGeneralPage', async () => {
   await heldGeneral.gate
   return { default: () => <p>general page</p> }
 })
@@ -64,7 +64,7 @@ describe('lazy module routes', () => {
     await screen.findByText('account page')
     expect(screen.getByText('settings nav')).toBeInTheDocument()
 
-    await act(() => router.navigate('/settings/general'))
+    await act(() => router.navigate('/settings/mail'))
 
     expect(screen.getByText('settings nav')).toBeInTheDocument()
     expect(screen.queryByText('general page')).toBeNull()

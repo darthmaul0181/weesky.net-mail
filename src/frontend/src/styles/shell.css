@@ -398,6 +398,19 @@ a.dropdown-item { text-decoration: none; }
   font-weight: 600;
 }
 
+/* A module's pages under its name. Full ink, not --text-muted: measured, muted on --folders-bg
+   stays under 4.5:1 in six light palettes. Size and caps are what keep it under the rows. */
+.pane-group { display: flex; flex-direction: column; gap: 2px; }
+
+.pane-group-label {
+  padding: 14px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
 /* The account block again at the foot of its column, so a user deep in settings can change
    mailbox without going back to the mail view. */
 .settings-nav-foot {
@@ -413,6 +426,16 @@ a.dropdown-item { text-decoration: none; }
   min-width: 0;
   overflow: auto;
   padding: 24px 28px;
+}
+
+/* The module a shared title belongs to — "General" is a page of both Mail and Calendar. */
+.settings-page-eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
 }
 
 .settings-page-header {

@@ -4,7 +4,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import {
   BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
   languageOf, notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf,
-  showFolderIconsOf, showPreviewOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
+  firstDayOfWeekOf, showFolderIconsOf, showPreviewOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
 import { createTestQueryClient, withQueryClient } from '../test-utils'
 
@@ -253,5 +253,16 @@ describe('swipeActionOf', () => {
     expect(swipeActionOf({}, 'right')).toBe('seen')
     expect(swipeActionOf({}, 'left')).toBe('delete')
     expect(swipeActionOf({ 'mail.swipeLeft': 'junk' }, 'left')).toBe('delete')
+  })
+})
+
+describe('firstDayOfWeekOf', () => {
+  it('reads Sunday', () => {
+    expect(firstDayOfWeekOf({ 'calendar.firstDayOfWeek': 'sunday' })).toBe('sunday')
+  })
+
+  it('falls back to Monday on an absent or unknown value', () => {
+    expect(firstDayOfWeekOf({})).toBe('monday')
+    expect(firstDayOfWeekOf({ 'calendar.firstDayOfWeek': 'saturday' })).toBe('monday')
   })
 })

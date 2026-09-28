@@ -98,6 +98,19 @@ describe('settings section', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'))
   })
 
+  // General was split by module; a bookmark to it lands on the mail half, where it always began.
+  it('redirects the old General URL to Mail › General', async () => {
+    const router = renderAt('/settings/general')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/mail'))
+  })
+
+  it('names the group of a page two groups share a label with', async () => {
+    mockViewport('phone')
+    renderAt('/settings/calendar')
+    await settle()
+    expect(document.querySelector('.settings-mobile-title')?.textContent).toBe('Calendar · General')
+  })
+
   // The old URL was linked from the mail column and may sit in a bookmark.
   it('redirects the old system-folders URL to the folders page', async () => {
     const router = renderAt('/settings/system-folders')
@@ -108,16 +121,15 @@ describe('settings section', () => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     renderAt('/settings/account')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+    const links = (scope: HTMLElement) =>
+      within(scope).getAllByRole('link').map(link => link.textContent)
+    expect(links(nav.getByRole('group', { name: 'Mail' }))).toEqual(
+      ['General', 'Connected accounts', 'Folders', 'Identities', 'Aliases', 'Rules'])
+    expect(links(nav.getByRole('group', { name: 'Calendar' }))).toEqual(['General'])
+    expect(links(nav.getByRole('group', { name: 'Application' }))).toEqual(['About'])
     expect(nav.getByText('Account')).toBeInTheDocument()
-    expect(nav.getByText('General')).toBeInTheDocument()
-    expect(nav.getByText('Connected accounts')).toBeInTheDocument()
     expect(nav.getByText('Appearance')).toBeInTheDocument()
-    expect(nav.getByText('Folders')).toBeInTheDocument()
-    expect(nav.getByText('Aliases')).toBeInTheDocument()
-    expect(nav.getByText('Identities')).toBeInTheDocument()
     expect(nav.getByText('Sync')).toBeInTheDocument()
-    expect(nav.getByText('Rules')).toBeInTheDocument()
-    expect(nav.getByText('About')).toBeInTheDocument()
     // The address is drawn once the account has landed: only then is the gate final.
     expect(await screen.findAllByText('mick@weesky.be')).not.toHaveLength(0)
     expect(nav.queryByText('Administration')).not.toBeInTheDocument()
@@ -128,7 +140,8 @@ describe('settings section', () => {
   // each looked perfectly fine on their own — only the set showed the rule was not being kept.
   it.each([
     ['/settings/account', 'Account'],
-    ['/settings/general', 'General'],
+    ['/settings/mail', 'General'],
+    ['/settings/calendar', 'General'],
     ['/settings/accounts', 'Connected accounts'],
     ['/settings/appearance', 'Appearance'],
     ['/settings/folders', 'Folders'],
@@ -174,7 +187,7 @@ describe('settings section', () => {
     localStorage.setItem('mail.activeAccount', 'g1')
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
     mocks.getConnectedAccounts.mockResolvedValue([connectedRow()])
-    renderAt('/settings/general')
+    renderAt('/settings/mail')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
     await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
     expect(nav.queryByText('Aliases')).not.toBeInTheDocument()
@@ -187,7 +200,7 @@ describe('settings section', () => {
     localStorage.setItem('mail.activeAccount', 'g1')
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     mocks.getConnectedAccounts.mockResolvedValue([connectedRow({ sieveSupported: false })])
-    renderAt('/settings/general')
+    renderAt('/settings/mail')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
     await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
     expect(nav.queryByText('Rules')).not.toBeInTheDocument()
@@ -197,7 +210,7 @@ describe('settings section', () => {
     localStorage.setItem('mail.activeAccount', 'g1')
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     mocks.getConnectedAccounts.mockResolvedValue([connectedRow()])
-    renderAt('/settings/general')
+    renderAt('/settings/mail')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
     await waitFor(() => expect(nav.queryByText('Sync')).not.toBeInTheDocument())
   })
@@ -207,7 +220,7 @@ describe('settings section', () => {
   it('shows the full primary nav while the account list is still loading', async () => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
     mocks.getConnectedAccounts.mockReturnValue(new Promise(() => {}))
-    renderAt('/settings/general')
+    renderAt('/settings/mail')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
     expect(await nav.findByText('Administration')).toBeInTheDocument()
     expect(nav.getByText('Account')).toBeInTheDocument()
@@ -215,20 +228,20 @@ describe('settings section', () => {
     expect(nav.getByText('Rules')).toBeInTheDocument()
   })
 
-  it('deep-links to /settings/account under a connected account and redirects to General', async () => {
+  it('deep-links to /settings/account under a connected account and redirects to Mail › General', async () => {
     localStorage.setItem('mail.activeAccount', 'g1')
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     mocks.getConnectedAccounts.mockResolvedValue([connectedRow()])
     const router = renderAt('/settings/account')
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/mail'))
   })
 
-  it('deep-links to /settings/rules under a non-Sieve connected account and redirects to General', async () => {
+  it('deep-links to /settings/rules under a non-Sieve connected account and redirects to Mail › General', async () => {
     localStorage.setItem('mail.activeAccount', 'g1')
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     mocks.getConnectedAccounts.mockResolvedValue([connectedRow({ sieveSupported: false })])
     const router = renderAt('/settings/rules')
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/mail'))
   })
 
   describe('capability gating', () => {
@@ -287,7 +300,7 @@ describe('settings section', () => {
       mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
       mocks.getConnectedAccounts.mockResolvedValue([connectedRow({ sieveSupported: true })])
       mocks.getCapabilities.mockResolvedValue({ rules: false })
-      renderAt('/settings/general')
+      renderAt('/settings/mail')
       const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
       await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
       expect(nav.getByText('Rules')).toBeInTheDocument()
@@ -312,11 +325,11 @@ describe('settings section', () => {
         expect(router.state.location.pathname).toBe('/settings/admin')
       })
 
-      it('deep-links to /settings/rules on the primary account with capabilities.rules=false and redirects to General', async () => {
+      it('deep-links to /settings/rules on the primary account with capabilities.rules=false and redirects to Mail › General', async () => {
         mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
         mocks.getCapabilities.mockResolvedValue({ rules: false })
         const router = renderAt('/settings/rules')
-        await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+        await waitFor(() => expect(router.state.location.pathname).toBe('/settings/mail'))
       })
 
       it('deep-links to /settings/rules on the primary account with no capabilities fixture and stays', async () => {
@@ -327,11 +340,11 @@ describe('settings section', () => {
         expect(router.state.location.pathname).toBe('/settings/rules')
       })
 
-      it('deep-links to /settings/aliases with capabilities.aliases=false and redirects to General', async () => {
+      it('deep-links to /settings/aliases with capabilities.aliases=false and redirects to Mail › General', async () => {
         mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
         mocks.getCapabilities.mockResolvedValue({ aliases: false })
         const router = renderAt('/settings/aliases')
-        await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'))
+        await waitFor(() => expect(router.state.location.pathname).toBe('/settings/mail'))
       })
 
       it('deep-links to /settings/aliases with no capabilities fixture and stays', async () => {
@@ -419,7 +432,7 @@ describe('SettingsLayout below 1024px', () => {
 
   it('opens the drawer from the hamburger', async () => {
     mockViewport('tablet')
-    renderAt('/settings/general')
+    renderAt('/settings/mail')
     await settle()
     expect(document.querySelector('.context-drawer.is-open')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
@@ -432,7 +445,7 @@ describe('SettingsLayout below 1024px', () => {
   // by-reference contract, which is a convention rather than a guarantee.
   it('closes the drawer on a pick and follows the section name', async () => {
     mockViewport('tablet')
-    renderAt('/settings/general')
+    renderAt('/settings/mail')
     await settle()
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
     await userEvent.click(screen.getByRole('link', { name: 'Appearance' }))

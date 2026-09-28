@@ -7,6 +7,7 @@ import LoadingBlock from '../../components/LoadingBlock'
 import Modal from '../../components/Modal'
 import Toasts from '../../components/Toasts'
 import { useLayer } from '../../hooks/useLayer'
+import { firstDayOfWeekOf, usePreferences } from '../../hooks/usePreferences'
 import { useToasts } from '../../hooks/useToasts'
 import { useViewport } from '../../hooks/useViewport'
 import PlusIcon from '../../icons/PlusIcon'
@@ -18,7 +19,9 @@ import { CalendarContext, type CalendarContextValue } from './calendarContext'
 import CalendarDialogs, { type PendingEvent, type ScopeAsk } from './CalendarDialogs'
 import CalendarSidebar from './CalendarSidebar'
 import CalendarToolbar, { CalendarSearch } from './CalendarToolbar'
-import { dateLocaleOf, formatRangeTitle, hourCycleOf, weekNumberOf, weekRulesOf } from './calendarLocale'
+import {
+  dateLocaleOf, formatRangeTitle, hourCycleOf, weekNumberOf, weekRulesFor, type WeekRules,
+} from './calendarLocale'
 import type { EditScope, Occurrence } from './calendarTypes'
 import EventEditor, { EDITOR_TITLE_ID } from './EventEditor'
 import EventPreview from './EventPreview'
@@ -64,21 +67,28 @@ function windowErrorOf(error: unknown, t: TFunction<'calendar'>): string {
 
 interface Preview { occurrence: Occurrence; anchor: HTMLElement; rect: DOMRect }
 
+/** Waits for the account's first weekday: drawn on Monday first, a Sunday account would watch its
+ * week jump a column. A refused read falls back to Monday rather than holding the module. */
+export default function CalendarLayout() {
+  const preferences = usePreferences()
+  if (preferences.data === undefined && !preferences.isError) return <LoadingBlock />
+  return <CalendarScreen rules={weekRulesFor(firstDayOfWeekOf(preferences.data ?? {}))} />
+}
+
 /** The module's two columns. It owns the grid's and the editor's queries and hands the answers
  * down, so the sidebar, toolbar and dialogs mount in a test with no provider; only the bubble
  * fetches its own detail. */
-export default function CalendarLayout() {
+function CalendarScreen({ rules }: { rules: WeekRules }) {
   const { t, i18n } = useTranslation('calendar')
   const navigate = useNavigate()
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
   const drawer = useContextDrawer()
   const phone = useViewport() === 'phone'
 
-  // Read once: the zone and the region rules are the machine's, and re-deriving them per render
+  // Read once: the zone and the region are the machine's, and re-deriving them per render
   // would rebuild an Intl formatter on every keystroke in the search box.
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, [])
   const region = navigator.language
-  const rules = useMemo(() => weekRulesOf(region), [region])
   const cycle = useMemo(() => hourCycleOf(region), [region])
   const lang = i18n.language
   const locale = useMemo(() => dateLocaleOf(lang, region), [lang, region])

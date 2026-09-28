@@ -20,7 +20,8 @@ const AccountPage = lazy(() => import('./modules/settings/account/AccountPage'))
 const ConnectedAccountsPage = lazy(() => import('./modules/settings/accounts/ConnectedAccountsPage'))
 const AppearancePage = lazy(() => import('./modules/settings/appearance/AppearancePage'))
 const FoldersPage = lazy(() => import('./modules/settings/mail/FoldersPage'))
-const GeneralPage = lazy(() => import('./modules/settings/general/GeneralPage'))
+const MailGeneralPage = lazy(() => import('./modules/settings/general/MailGeneralPage'))
+const CalendarGeneralPage = lazy(() => import('./modules/settings/general/CalendarGeneralPage'))
 const AliasesPage = lazy(() => import('./modules/settings/aliases/AliasesPage'))
 const IdentitiesPage = lazy(() => import('./modules/settings/identities/IdentitiesPage'))
 const RulesPage = lazy(() => import('./modules/settings/rules/RulesPage'))
@@ -71,19 +72,22 @@ export const routes: RouteObject[] = [
                 children: [
                   { index: true, element: <Navigate to="/settings/account" replace /> },
                   {
-                    element: <Gate allow={allowPrimary} redirect="/settings/general" />,
+                    element: <Gate allow={allowPrimary} redirect="/settings/mail" />,
                     children: [
                       { path: 'account', element: loaded('account', AccountPage) },
                       { path: 'sync', element: loaded('sync', SyncPage) },
                       {
-                        element: <Gate allow={allowAliases} redirect="/settings/general" />,
+                        element: <Gate allow={allowAliases} redirect="/settings/mail" />,
                         children: [
                           { path: 'aliases', element: loaded('aliases', AliasesPage) },
                         ],
                       },
                     ],
                   },
-                  { path: 'general', element: loaded('general', GeneralPage) },
+                  { path: 'mail', element: loaded('mail-general', MailGeneralPage) },
+                  { path: 'calendar', element: loaded('calendar-general', CalendarGeneralPage) },
+                  // General was split by module; a bookmark to it lands on the mail half.
+                  { path: 'general', element: <Navigate to="/settings/mail" replace /> },
                   { path: 'accounts', element: loaded('accounts', ConnectedAccountsPage) },
                   { path: 'appearance', element: loaded('appearance', AppearancePage) },
                   { path: 'folders', element: loaded('folders', FoldersPage) },
@@ -92,7 +96,7 @@ export const routes: RouteObject[] = [
                   { path: 'identities', element: loaded('identities', IdentitiesPage) },
                   { path: 'about', element: loaded('about', AboutPage) },
                   {
-                    element: <Gate allow={allowSieve} redirect="/settings/general" />,
+                    element: <Gate allow={allowSieve} redirect="/settings/mail" />,
                     children: [{ path: 'rules', element: loaded('rules', RulesPage) }],
                   },
                   {

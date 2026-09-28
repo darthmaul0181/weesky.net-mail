@@ -253,4 +253,21 @@ public sealed class UserPreferencesTests
         Assert.Equal(valid, UserPreferences.IsValid(UserPreferences.MailSwipeRight, value));
         Assert.Equal(valid, UserPreferences.IsValid(UserPreferences.MailSwipeLeft, value));
     }
+
+    [Fact]
+    public void First_day_of_week_defaults_to_monday()
+    {
+        Assert.Equal("monday", UserPreferences.All.Single(p => p.Key == UserPreferences.CalendarFirstDayOfWeek).Default);
+    }
+
+    [Theory]
+    [InlineData("monday", true)]
+    [InlineData("sunday", true)]
+    [InlineData("saturday", false)]
+    [InlineData("Monday", false)]
+    [InlineData("", false)]
+    public void First_day_of_week_accepts_monday_or_sunday(string value, bool valid)
+    {
+        Assert.Equal(valid, UserPreferences.IsValid(UserPreferences.CalendarFirstDayOfWeek, value));
+    }
 }

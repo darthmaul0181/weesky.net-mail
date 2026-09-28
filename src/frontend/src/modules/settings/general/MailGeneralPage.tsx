@@ -3,28 +3,25 @@ import MenuSelect from '../../../components/MenuSelect'
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import LoadingBlock from '../../../components/LoadingBlock'
 import ToggleRow from '../../../components/ToggleRow'
-import Toasts from '../../../components/Toasts'
 import { useToasts } from '../../../hooks/useToasts'
 import {
   ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, SWIPE_ACTIONS, alwaysShowImagesOf,
-  birthdaysOnOf, captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming,
-  notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf,
-  showPreviewOf, showSpamScoreOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
+  captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf,
+  notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
+  showSpamScoreOf, swipeActionOf, trustContactsOf,
   type ComposeFormat, type ReadingPane, type RowAction, type SwipeAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
 } from '../../mail/notify/channels'
-import { useSetBirthdays } from '../../calendar/queries'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
-import SlidersIcon from '../../../icons/SlidersIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import SwipeActionIcon from '../../mail/SwipeActionIcon'
-import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import PreferencePage from './PreferencePage'
+import { useSavePreference } from './useSavePreference'
 
 function pageSizeToast(value: string, t: TFunction<'settings'>): string {
   return value === ALL
@@ -96,15 +93,11 @@ function swipeLabel(action: SwipeAction, t: TFunction<'settings'>): string {
   }
 }
 
-/** Settings that shape the app, not the account; the backend fills the defaults in. */
-export default function GeneralPage() {
+/** The mail module's settings; the backend fills the defaults in. */
+export default function MailGeneralPage() {
   const { t } = useTranslation('settings')
-  const { data: preferences, isLoading, isError } = usePreferences()
-  const setPreference = useSetPreference()
-  const setBirthdays = useSetBirthdays()
-  const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
-
-  const chosenActions = preferences ? rowActionsOf(preferences) : []
+  const toasts = useToasts()
+  const { save, saving } = useSavePreference(toasts.addToast)
 
   const [permission, setPermission] = useState(desktopPermission)
   const blocked = permission === 'denied'
@@ -145,15 +138,6 @@ export default function GeneralPage() {
     }
   }
 
-  async function save(key: string, value: string, message: string) {
-    try {
-      await setPreference.mutateAsync({ key, value })
-      addToast(message)
-    } catch (error) {
-      addToast(apiErrorMessage(error, t('general.saveFailed')), 'error')
-    }
-  }
-
   const swipeOptions = SWIPE_ACTIONS.map(action => ({
     value: action,
     label: swipeLabel(action, t),
@@ -161,15 +145,8 @@ export default function GeneralPage() {
   }))
 
   return (
-    <div className="settings-page">
-      <div className="settings-page-header">
-        <h1 className="settings-page-title"><SlidersIcon size={17} />{t('nav.general')}</h1>
-      </div>
-
-      {isLoading && <LoadingBlock />}
-      {!isLoading && (isError || !preferences) && <p>{t('general.loadFailed')}</p>}
-
-      {!isLoading && !isError && preferences && (
+    <PreferencePage group={t('nav.mail')} toasts={toasts}>
+      {preferences => (
         <>
           <section className="account-section">
             <h2>{t('general.layout')}</h2>
@@ -189,7 +166,7 @@ export default function GeneralPage() {
                         name="reading-pane"
                         value={value}
                         checked={readingPaneOf(preferences) === value}
-                        disabled={setPreference.isPending}
+                        disabled={saving}
                         onChange={() => void save(PREFERENCE_KEYS.readingPane, value, t(toastKey))}
                       />
                       {t(labelKey)}
@@ -210,7 +187,7 @@ export default function GeneralPage() {
               <MenuSelect
                 id="page-size"
                 value={isStreaming(preferences) ? ALL : String(requestSizeOf(preferences))}
-                disabled={setPreference.isPending}
+                disabled={saving}
                 onChange={size => void save(PREFERENCE_KEYS.pageSize, size, pageSizeToast(size, t))}
                 options={[
                   ...PAGE_SIZES.map(size => ({ value: String(size), label: String(size) })),
@@ -224,7 +201,7 @@ export default function GeneralPage() {
               label={t('general.preview.label')}
               hint={t('general.preview.hint')}
               checked={showPreviewOf(preferences)}
-              disabled={setPreference.isPending}
+              disabled={saving}
               onChange={on => void save(PREFERENCE_KEYS.showPreview, String(on),
                 t(on ? 'general.preview.on' : 'general.preview.off'))}
             />
@@ -234,7 +211,7 @@ export default function GeneralPage() {
               label={t('general.groupConversations.label')}
               hint={t('general.groupConversations.hint')}
               checked={groupConversationsOf(preferences)}
-              disabled={setPreference.isPending}
+              disabled={saving}
               onChange={on => void save(PREFERENCE_KEYS.groupConversations, String(on),
                 t(on ? 'general.groupConversations.on' : 'general.groupConversations.off'))}
             />
@@ -244,7 +221,7 @@ export default function GeneralPage() {
               label={t('general.folderIcons.label')}
               hint={t('general.folderIcons.hint')}
               checked={showFolderIconsOf(preferences)}
-              disabled={setPreference.isPending}
+              disabled={saving}
               onChange={on => void save(PREFERENCE_KEYS.showFolderIcons, String(on),
                 t(on ? 'general.folderIcons.on' : 'general.folderIcons.off'))}
             />
@@ -258,7 +235,7 @@ export default function GeneralPage() {
                   that to anything not looking at the colour. */}
               <div className="action-chips" role="group" aria-labelledby="row-actions-label">
                 {ROW_ACTION_CHOICES.map(({ value, labelKey, Icon }) => {
-                  const on = chosenActions.includes(value)
+                  const on = rowActionsOf(preferences).includes(value)
                   const label = t(labelKey)
                   return (
                     <button
@@ -266,12 +243,12 @@ export default function GeneralPage() {
                       type="button"
                       className={`action-chip${on ? ' is-on' : ''}`}
                       aria-pressed={on}
-                      disabled={setPreference.isPending}
+                      disabled={saving}
                       onClick={() => void save(
                         PREFERENCE_KEYS.rowActions,
                         // Rebuilt from the canonical order, never from click order, so the stored
                         // string is the one the list already renders.
-                        ROW_ACTIONS.filter(a => a === value ? !on : chosenActions.includes(a)).join(','),
+                        ROW_ACTIONS.filter(a => a === value ? !on : rowActionsOf(preferences).includes(a)).join(','),
                         t(on ? 'general.rowActions.off' : 'general.rowActions.on', { action: label }))}
                     >
                       <Icon size={16} />
@@ -284,23 +261,6 @@ export default function GeneralPage() {
           </section>
 
           <section className="account-section">
-            <h2>{t('general.calendar')}</h2>
-            <ToggleRow
-              id="birthdays-calendar"
-              label={t('general.birthdays.label')}
-              hint={t('general.birthdays.hint')}
-              checked={birthdaysOnOf(preferences)}
-              disabled={setBirthdays.isPending}
-              onChange={on => setBirthdays.mutate(
-                { enabled: on, tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
-                {
-                  onSuccess: () => addToast(t(on ? 'general.birthdays.on' : 'general.birthdays.off')),
-                  onError: error => addToast(apiErrorMessage(error, t('general.saveFailed')), 'error'),
-                })}
-            />
-          </section>
-
-          <section className="account-section">
             <h2>{t('general.swipe.heading')}</h2>
             <p className="svc-account-section-intro">{t('general.swipe.intro')}</p>
             <div className="field-h is-setting">
@@ -309,7 +269,7 @@ export default function GeneralPage() {
                 id="swipe-right"
                 value={swipeActionOf(preferences, 'right')}
                 options={swipeOptions}
-                disabled={setPreference.isPending}
+                disabled={saving}
                 onChange={action => void save(PREFERENCE_KEYS.swipeRight, action,
                   t('general.swipe.rightToast', { action: swipeLabel(action, t) }))}
               />
@@ -323,7 +283,7 @@ export default function GeneralPage() {
                 id="swipe-left"
                 value={swipeActionOf(preferences, 'left')}
                 options={swipeOptions}
-                disabled={setPreference.isPending}
+                disabled={saving}
                 onChange={action => void save(PREFERENCE_KEYS.swipeLeft, action,
                   t('general.swipe.leftToast', { action: swipeLabel(action, t) }))}
               />
@@ -338,7 +298,7 @@ export default function GeneralPage() {
               label={t('general.remoteImages.label')}
               hint={t('general.remoteImages.hint')}
               checked={alwaysShowImagesOf(preferences)}
-              disabled={setPreference.isPending}
+              disabled={saving}
               onChange={on => void save(PREFERENCE_KEYS.alwaysShowImages, String(on),
                 t(on ? 'general.remoteImages.on' : 'general.remoteImages.off'))}
             />
@@ -352,7 +312,7 @@ export default function GeneralPage() {
               nested
               covered={alwaysShowImagesOf(preferences)}
               checked={trustContactsOf(preferences)}
-              disabled={setPreference.isPending || alwaysShowImagesOf(preferences)}
+              disabled={saving || alwaysShowImagesOf(preferences)}
               onChange={on => void save(PREFERENCE_KEYS.trustContacts, String(on),
                 t(on ? 'general.trustContacts.on' : 'general.trustContacts.off'))}
             />
@@ -362,7 +322,7 @@ export default function GeneralPage() {
               label={t('general.spamScore.label')}
               hint={t('general.spamScore.hint')}
               checked={showSpamScoreOf(preferences)}
-              disabled={setPreference.isPending}
+              disabled={saving}
               onChange={on => void save(PREFERENCE_KEYS.showSpamScore, String(on),
                 t(on ? 'general.spamScore.on' : 'general.spamScore.off'))}
             />
@@ -386,7 +346,7 @@ export default function GeneralPage() {
                         name="compose-format"
                         value={value}
                         checked={composeFormatOf(preferences) === value}
-                        disabled={setPreference.isPending}
+                        disabled={saving}
                         onChange={() => void save(PREFERENCE_KEYS.composeFormat, value, t(toastKey))}
                       />
                       {t(labelKey)}
@@ -401,7 +361,7 @@ export default function GeneralPage() {
               label={t('general.captureRecipients.label')}
               hint={t('general.captureRecipients.hint')}
               checked={captureRecipientsOf(preferences)}
-              disabled={setPreference.isPending}
+              disabled={saving}
               onChange={on => void save(PREFERENCE_KEYS.captureRecipients, String(on),
                 t(on ? 'general.captureRecipients.on' : 'general.captureRecipients.off'))}
             />
@@ -415,7 +375,7 @@ export default function GeneralPage() {
               label={t('general.notifySound.label')}
               hint={t('general.notifySound.hint')}
               checked={notifySoundOf(preferences)}
-              disabled={setPreference.isPending}
+              disabled={saving}
               onChange={on => void toggleSound(on)}
             />
 
@@ -426,7 +386,7 @@ export default function GeneralPage() {
               label={t('general.notifyDesktop.label')}
               hint={t('general.notifyDesktop.hint')}
               checked={notifyDesktopOf(preferences) && permission === 'granted'}
-              disabled={setPreference.isPending || blocked || unsupported || insecure}
+              disabled={saving || blocked || unsupported || insecure}
               locked={blocked || unsupported || insecure}
               onChange={on => void toggleDesktop(on)}
             />
@@ -443,8 +403,6 @@ export default function GeneralPage() {
           </section>
         </>
       )}
-
-      <Toasts toasts={toasts} onRemove={removeToast} onPause={pauseToast} onResume={resumeToast} />
-    </div>
+    </PreferencePage>
   )
 }

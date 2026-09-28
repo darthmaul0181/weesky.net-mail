@@ -1,35 +1,28 @@
+import type { FirstDayOfWeek } from '../../hooks/usePreferences'
 import { dateFormat } from '../../lib/intl'
 import {
   addDays, DAY_MS, daysBetween, isoWeekdayOf, MONDAY_UTC_MS, type PlainDate, utcMidnightOf,
 } from './plainDate'
 import type { View } from './windowOf'
 
-/** Month and day names follow the interface language; the first weekday and the clock follow the
- * browser's region: a bare `en` says Sunday and 12 hours to a Belgian who counts from Monday. */
+/** Month and day names follow the interface language, the clock the browser's region, and the
+ * first weekday the account's own setting. */
 export interface WeekRules {
   /** 1 = Monday … 7 = Sunday, ISO-8601's own numbering. */
-  firstDay: 1 | 2 | 3 | 4 | 5 | 6 | 7
+  firstDay: 1 | 7
   /** How many days of January week 1 must hold: 4 for ISO, 1 where the week starts on Sunday. */
-  minimalDays: 1 | 4 | 7
+  minimalDays: 1 | 4
 }
 
-/** What the engines answer, under neither name the lib this project compiles against declares. */
-interface WeekInfo { firstDay?: number; minimalDays?: number }
-interface WeekInfoCarrier { getWeekInfo?: () => WeekInfo; weekInfo?: WeekInfo }
-
-export type WeekInfoReader = (locale: Intl.Locale) => WeekInfo | undefined
-
-/** The one seam onto a datum three platforms spell three ways: a method from V8 13 (Node 22+),
-    the older accessor on Safari and Node 20, and nothing at all before either. Reading it here
-    is what lets a test exercise the fallback table without touching `Intl.Locale`'s prototype. */
-export const weekInfoOf: WeekInfoReader = locale => {
-  const carrier = locale as unknown as WeekInfoCarrier
-  return carrier.getWeekInfo?.() ?? carrier.weekInfo
+const WEEK_RULES: Record<FirstDayOfWeek, WeekRules> = {
+  monday: { firstDay: 1, minimalDays: 4 },
+  sunday: { firstDay: 7, minimalDays: 1 },
 }
 
-/** The regions CLDR gives a Sunday week, for the engines with no `getWeekInfo` of their own. */
-const SUNDAY_REGIONS = new Set(
-  ['US', 'CA', 'JP', 'BR', 'IL', 'MX', 'PH', 'ZA', 'KR', 'TW', 'HK', 'AU'])
+/** A Sunday week counts from the week holding 1 January, a Monday one from ISO's 4 January. */
+export function weekRulesFor(firstDay: FirstDayOfWeek): WeekRules {
+  return WEEK_RULES[firstDay]
+}
 
 /** The interface language with the browser's region grafted on: names from the language, field
  * order and separators from the region. With no region, English reads `en-GB` (day first). */
@@ -43,32 +36,6 @@ export function dateLocaleOf(lang: string, navigatorLanguage: string): string {
   }
   if (region) return `${language}-${region}`
   return language === 'en' ? 'en-GB' : language
-}
-
-/** `minimalDays` is not in every engine's `getWeekInfo`, and it follows the first day anyway:
-    a Sunday week counts from the week holding 1 January, a Monday one from ISO's 4 January. */
-function minimalDaysFor(firstDay: number): 1 | 4 {
-  return firstDay === 7 ? 1 : 4
-}
-
-/** `readWeekInfo` is the seam, and it is a parameter rather than a spy: a test that stubbed
-    `Intl.Locale`'s prototype would exercise the table on one engine and skip it on the next. */
-export function weekRulesOf(region: string, readWeekInfo = weekInfoOf): WeekRules {
-  let locale: Intl.Locale
-  try {
-    locale = new Intl.Locale(region)
-  } catch {
-    return { firstDay: 1, minimalDays: 4 }
-  }
-
-  const info = readWeekInfo(locale)
-  const firstDay = info?.firstDay
-    ?? (SUNDAY_REGIONS.has(locale.maximize().region ?? '') ? 7 : 1)
-
-  return {
-    firstDay: firstDay as WeekRules['firstDay'],
-    minimalDays: (info?.minimalDays ?? minimalDaysFor(firstDay)) as WeekRules['minimalDays'],
-  }
 }
 
 export function hourCycleOf(region: string): 'h12' | 'h23' {

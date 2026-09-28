@@ -24,6 +24,7 @@ vi.mock('../../api.js', () => ({
     getOccurrences: vi.fn(), searchEvents: vi.fn(), getEvent: vi.fn(),
     createEvent: vi.fn(), updateEvent: vi.fn(), deleteEvent: vi.fn(), getContacts: vi.fn(),
     setBirthdays: vi.fn(),
+    getPreferences: vi.fn(),
   },
   // The very class the layout imports from the mocked module, so `instanceof ApiError` holds
   // against what these tests throw; a locally-declared twin fails that check.
@@ -42,7 +43,8 @@ vi.mock('../../lib/downloadBlob', () => ({ downloadBlob: vi.fn() }))
 const { api } = await import('../../api.js') as unknown as {
   api: Record<'getCalendars' | 'createCalendar' | 'updateCalendar' | 'setCalendarVisible'
     | 'deleteCalendar' | 'exportCalendar' | 'importCalendar' | 'importCalendarAsNew'
-    | 'searchEvents' | 'getEvent' | 'createEvent' | 'deleteEvent' | 'getContacts' | 'setBirthdays',
+    | 'searchEvents' | 'getEvent' | 'createEvent' | 'deleteEvent' | 'getContacts' | 'setBirthdays'
+    | 'getPreferences',
     Mock<(...args: unknown[]) => unknown>>
     & { getOccurrences: Mock<typeof realApi.getOccurrences>; updateEvent: Mock<typeof realApi.updateEvent> }
 }
@@ -73,6 +75,7 @@ beforeEach(() => {
   // still needs an answer, or the query settles on the undefined react-query refuses to hold.
   api.getEvent.mockResolvedValue(detail())
   api.getContacts.mockResolvedValue({ contacts: [] })
+  api.getPreferences.mockResolvedValue({})
 })
 
 function occurrence(eventId: string, summary: string) {
@@ -184,6 +187,37 @@ describe('CalendarLayout', () => {
 
       await waitFor(() => expect(todayHead()).toBe('2026-09-17'))
       expect(params(router).get('date')).toBe('2026-09-15')
+    })
+  })
+
+  describe('first day of the week', () => {
+    const firstColumn = () => document.querySelector('.day-column')?.getAttribute('data-day')
+
+    it('starts the week on Monday by default', async () => {
+      renderAt('/calendar?view=week&date=2026-09-16')
+      await waitFor(() => expect(firstColumn()).toBe('2026-09-14'))
+    })
+
+    it('starts the week on Sunday when the setting says so', async () => {
+      api.getPreferences.mockResolvedValue({ 'calendar.firstDayOfWeek': 'sunday' })
+      renderAt('/calendar?view=week&date=2026-09-16')
+      await waitFor(() => expect(firstColumn()).toBe('2026-09-13'))
+      expect(api.getOccurrences).toHaveBeenCalledTimes(1)
+    })
+
+    // Drawn on Monday first, a Sunday account would watch its week jump a column on every load.
+    it('waits for the setting before asking for or drawing a week', async () => {
+      api.getPreferences.mockReturnValue(new Promise(() => {}))
+      renderAt('/calendar?view=week&date=2026-09-16')
+      await settle()
+      expect(api.getOccurrences).not.toHaveBeenCalled()
+      expect(firstColumn()).toBeUndefined()
+    })
+
+    it('falls back to Monday when the setting cannot be read', async () => {
+      api.getPreferences.mockRejectedValue(new ApiError('nope', 500))
+      renderAt('/calendar?view=week&date=2026-09-16')
+      await waitFor(() => expect(firstColumn()).toBe('2026-09-14'))
     })
   })
 

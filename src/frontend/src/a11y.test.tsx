@@ -18,7 +18,8 @@ import {
 } from './modules/calendar/calendarTestHarness'
 import Modal from './components/Modal'
 import AdminPage from './modules/settings/admin/AdminPage'
-import GeneralPage from './modules/settings/general/GeneralPage'
+import MailGeneralPage from './modules/settings/general/MailGeneralPage'
+import CalendarGeneralPage from './modules/settings/general/CalendarGeneralPage'
 import DeleteConfirmModal from './components/DeleteConfirmModal'
 
 // Every surface's own test file mocks the API at the network layer; vi.mock('./api.js', ...) can
@@ -283,17 +284,29 @@ describe('accessibility sweep', () => {
     await expectNoAxeViolations(container)
   })
 
-  it('GeneralPage', async () => {
+  it('MailGeneralPage', async () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.showPreview': 'true' })
     mocks.setPreference.mockResolvedValue(undefined)
     mocks.desktopPermission.mockReturnValue('default')
 
     const client = queryClient()
-    const { container } = render(<GeneralPage />, {
+    const { container } = render(<MailGeneralPage />, {
       wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
     })
 
     await screen.findByLabelText('Messages per page')
+    await expectNoAxeViolations(container)
+  })
+
+  it('CalendarGeneralPage', async () => {
+    mocks.getPreferences.mockResolvedValue({})
+
+    const client = queryClient()
+    const { container } = render(<CalendarGeneralPage />, {
+      wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    })
+
+    await screen.findByLabelText('First day of the week')
     await expectNoAxeViolations(container)
   })
 
