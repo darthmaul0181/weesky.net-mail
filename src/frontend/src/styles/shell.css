@@ -649,6 +649,73 @@ a.dropdown-item { text-decoration: none; }
 .palette-card:hover .palette-zoom,
 .palette-card:focus-within .palette-zoom { opacity: 1; }
 .palette-zoom:hover { background: var(--pane-item-hover); }
+/* Top-left, clear of the loupe: their 44px touch insets would overlap side by side. */
+.palette-zoom.is-edit { left: 6px; right: auto; }
+
+.palette-create {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 140px;
+  border-style: dashed;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.palette-create:hover { border-color: var(--text-muted); }
+
+.custom-palette-modal { max-width: 860px; }
+.custom-palette-editor { display: flex; gap: 28px; flex-wrap: wrap; }
+.custom-palette-controls { width: 280px; display: flex; flex-direction: column; gap: 10px; }
+.custom-palette-label {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.custom-palette-editor .palette-zoom-pair { flex: 1; min-width: 0; }
+/* A permanent slot beside the buttons, two lines tall: appearing mid-drag, it resized the dialog,
+   which re-centred under the pointer. */
+.custom-palette-warning {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 2.9em;
+  margin: 0 auto 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  --status-tone: var(--warning);
+}
+
+/* The track paints the hue wheel from data, like a calendar swatch; the thumb wears role tokens. */
+.hue-slider {
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  margin: 6px 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.hue-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  background: var(--surface);
+}
+.hue-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  background: var(--surface);
+}
+.hue-slider:focus-visible { outline: 2px solid var(--action-primary); outline-offset: 4px; }
 
 .palette-zoom-modal { max-width: 760px; }
 .palette-zoom-pair { display: flex; gap: 14px; flex-wrap: wrap; }
@@ -1181,6 +1248,14 @@ a.dropdown-item { text-decoration: none; }
 @media (max-width: 639px) {
   :root { --touch: 44px; }
 
+  /* Both previews beside each other and under the sliders: stacked at full scale they pushed the
+     dark one and Save two screens down, out of sight of the slider being dragged. */
+  .custom-palette-controls { width: 100%; }
+  .custom-palette-editor .palette-zoom-pair { flex-wrap: nowrap; gap: 10px; }
+  .custom-palette-editor .palette-zoom-pair figure { min-width: 0; }
+  .custom-palette-editor .palette-preview.is-large { --pp: 1.25; }
+  .custom-palette-warning { flex: none; min-height: 4.35em; margin: 0; }
+
   /* The toast stack's clearance against the compose button in its phone position, which is
      itself lifted over the 57px tab bar: 73px inset plus 56px of button is 129px, plus the same
      8px gap as the tablet rule. */
@@ -1290,4 +1365,5 @@ a.dropdown-item { text-decoration: none; }
     bottom: -16px;
     left: -16px;
   }
+  .palette-zoom.is-edit::before { left: -6px; right: -16px; }
 }

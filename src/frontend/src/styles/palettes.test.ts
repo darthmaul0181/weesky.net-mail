@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { PALETTE_IDS } from '../contexts/ThemeContext'
 import html from '../../index.html?raw'
 import mainSource from '../main.tsx?raw'
+import { CUSTOM_PALETTE_CSS_KEY, CUSTOM_PALETTE_STYLE_ID } from '../lib/customPaletteStyle'
 
 const modules = import.meta.glob('./theme-*.css', { query: '?raw', import: 'default', eager: true })
 const files = Object.keys(modules).map(path => path.replace('./', ''))
@@ -60,6 +61,11 @@ describe('the pre-paint script in index.html', () => {
     expect(list, 'no palette list found in the pre-paint script').not.toBeNull()
     const names = [...list![1]!.matchAll(/'([^']+)'/g)].map(m => m[1])
     expect(names.sort()).toEqual([...PALETTE_IDS].sort())
+  })
+
+  it('reads the custom palette mirror the module writes', () => {
+    expect(html).toContain(`localStorage.getItem('${CUSTOM_PALETTE_CSS_KEY}')`)
+    expect(html).toContain(`s.id='${CUSTOM_PALETTE_STYLE_ID}'`)
   })
 })
 

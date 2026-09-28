@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
+import { parseCustomPalette, type CustomPaletteDef } from '../lib/customPalette'
 
 /** The account's webmail preferences, shared because the mail list reads them. The backend fills
  * every default, so none is copied here: the accessors take the map, not an optional one. */
@@ -22,6 +23,7 @@ export const PREFERENCE_KEYS = {
   language: 'ui.language',
   calendarBirthdays: 'calendar.birthdays',
   firstDayOfWeek: 'calendar.firstDayOfWeek',
+  customPalette: 'ui.customPalette',
 } as const
 
 export type Preferences = Record<string, string>
@@ -202,6 +204,10 @@ export function birthdaysOnOf(preferences: Preferences): boolean {
     show "Automatic" as the distinct choice it is. */
 export function languageOf(preferences: Preferences): string {
   return preferences[PREFERENCE_KEYS.language] ?? 'auto'
+}
+
+export function customPaletteOf(preferences: Preferences): CustomPaletteDef | null {
+  return parseCustomPalette(preferences[PREFERENCE_KEYS.customPalette])
 }
 
 export type FirstDayOfWeek = 'monday' | 'sunday'

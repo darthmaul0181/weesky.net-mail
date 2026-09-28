@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { createTestQueryClient } from '../../../test-utils'
 import { ThemeProvider, PALETTE_IDS } from '../../../contexts/ThemeContext'
 import AppearancePage from './AppearancePage'
 
@@ -9,8 +11,17 @@ vi.mock('../../../contexts/LocaleContext', () => ({
   useLocale: () => ({ locale: 'en', preference: 'auto', setPreference, saving: false }),
 }))
 
-function renderPage() {
-  return render(<ThemeProvider><AppearancePage /></ThemeProvider>)
+const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn() }))
+vi.mock('../../../api.js', () => ({ api: mocks }))
+
+function renderPage(customPalette = '') {
+  mocks.getPreferences.mockResolvedValue({ 'ui.customPalette': customPalette })
+  mocks.setPreference.mockResolvedValue(undefined)
+  return render(
+    <QueryClientProvider client={createTestQueryClient()}>
+      <ThemeProvider><AppearancePage /></ThemeProvider>
+    </QueryClientProvider>,
+  )
 }
 
 describe('AppearancePage', () => {
@@ -170,5 +181,144 @@ describe('AppearancePage — the enlarged preview', () => {
 
     expect(screen.getAllByRole('button', { name: /^Enlarge the .* preview$/ }))
       .toHaveLength(PALETTE_IDS.length)
+  })
+})
+
+describe('AppearancePage — my palette', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.clearAllMocks()
+    document.getElementById('custom-palette')?.remove()
+  })
+
+  const slider = (name: string) => screen.getByRole<HTMLInputElement>('slider', { name })
+
+  it('offers to create one when the account has none', async () => {
+    renderPage()
+    expect(await screen.findByRole('button', { name: 'Create my palette' })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'My palette' })).toBeNull()
+  })
+
+  it('starts the editor from the palette in use', async () => {
+    localStorage.setItem('appearance_palette', 'forest')
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+
+    expect(slider('Structure').value).toBe('159')
+    expect(slider('Accent').value).toBe('71')
+    expect(screen.getByRole('radio', { name: 'Subtle' })).toBeChecked()
+  })
+
+  it('saves the draft and selects it', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    fireEvent.change(slider('Accent'), { target: { value: '200' } })
+    await userEvent.click(screen.getByRole('radio', { name: 'Vivid' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('ui.customPalette', '265,vivid,200'))
+    await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('custom'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('keeps the editor open and the palette unchanged when saving fails', async () => {
+    renderPage()
+    mocks.setPreference.mockRejectedValue(new Error('offline'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Could not save your palette.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(document.documentElement.getAttribute('data-palette')).toBe('night')
+  })
+
+  it('reopens the editor on the saved palette', async () => {
+    renderPage('100,neutral,300')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit my palette' }))
+
+    expect(slider('Structure').value).toBe('100')
+    expect(screen.getByRole('radio', { name: 'Neutral' })).toBeChecked()
+  })
+
+  // The preview shows the draft; the grid keeps showing what is saved.
+  it('previews the draft, not the saved palette', async () => {
+    renderPage('100,neutral,300')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit my palette' }))
+    fireEvent.change(slider('Structure'), { target: { value: '10' } })
+
+    const draft = screen.getByRole('dialog').querySelector<HTMLElement>('.palette-preview')!
+    expect(draft.style.getPropertyValue('--topbar-bg')).not.toBe('')
+    const card = document.querySelector<HTMLElement>('.palette-card .palette-preview[data-palette="custom"]')!
+    expect(card.style.getPropertyValue('--topbar-bg')).toBe('')
+  })
+
+  it('warns when the accent sits on the error red', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    expect(screen.queryByText(/close to the red used for errors/)).toBeNull()
+
+    fireEvent.change(slider('Accent'), { target: { value: '27' } })
+    expect(screen.getByText(/close to the red used for errors/)).toBeInTheDocument()
+  })
+
+  // The ✕, Escape and the backdrop are locked while the write is in flight; Cancel is the fourth way out.
+  it('locks Cancel while the save is in flight', async () => {
+    renderPage()
+    mocks.setPreference.mockReturnValue(new Promise(() => {}))
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  })
+
+  // Unknown is not "none": offering Create here would overwrite a palette the account may own.
+  it('withholds the ninth card until the preferences are known', async () => {
+    mocks.getPreferences.mockReturnValue(new Promise(() => {}))
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <ThemeProvider><AppearancePage /></ThemeProvider>
+      </QueryClientProvider>,
+    )
+    await screen.findByRole('radio', { name: /Night & coral/ })
+
+    expect(screen.queryByRole('button', { name: 'Create my palette' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'My palette' })).toBeNull()
+  })
+
+  // Selecting `custom` with no stylesheet declared would leave every role token undefined.
+  it('declares the palette before selecting it', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('custom'))
+    expect(document.getElementById('custom-palette')).not.toBeNull()
+  })
+
+  it('opens on the structure slider, which speaks in degrees', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+
+    expect(slider('Structure')).toHaveFocus()
+    expect(slider('Structure')).toHaveAttribute('aria-valuetext', '265°')
+  })
+
+  // A slot that appears and disappears resizes the dialog, which re-centres under the dragging pointer.
+  it('keeps the warning slot mounted and announces it politely', async () => {
+    const { container } = renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    const slot = container.ownerDocument.querySelector('.custom-palette-warning')
+
+    expect(slot).toHaveAttribute('aria-live', 'polite')
+    expect(slot).toHaveTextContent('')
+    fireEvent.change(slider('Accent'), { target: { value: '27' } })
+    expect(container.ownerDocument.querySelector('.custom-palette-warning')).toBe(slot)
+    expect(slot).toHaveTextContent(/close to the red used for errors/)
+  })
+
+  it('selects the saved palette like any other', async () => {
+    renderPage('100,neutral,300')
+    await userEvent.click(await screen.findByRole('radio', { name: 'My palette' }))
+    expect(localStorage.getItem('appearance_palette')).toBe('custom')
   })
 })

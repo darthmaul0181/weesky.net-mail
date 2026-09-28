@@ -132,6 +132,40 @@ public sealed class UserPreferencesTests
         Assert.DoesNotContain("mail.retired", effective.Keys);
     }
 
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("0,neutral,0", true)]
+    [InlineData("359,vivid,359", true)]
+    [InlineData("265,muted,35", true)]
+    [InlineData("360,muted,35", false)]
+    [InlineData("265,muted,360", false)]
+    [InlineData("065,muted,35", false)]   // one spelling per value, like every other key
+    [InlineData("265,Muted,35", false)]
+    [InlineData("265,loud,35", false)]
+    [InlineData("265,muted", false)]
+    [InlineData("265,muted,35,", false)]
+    [InlineData(" 265,muted,35", false)]
+    [InlineData("-1,muted,35", false)]
+    [InlineData("1٢,muted,35", false)]   // \d is Unicode in .NET: an Arabic-Indic digit must be refused, not thrown on
+    public void IsValid_CustomPalette_AcceptsEmptyOrThreeFields(string value, bool expected)
+    {
+        Assert.Equal(expected, UserPreferences.IsValid(UserPreferences.UiCustomPalette, value));
+    }
+
+    [Fact]
+    public void Effective_HasNoCustomPaletteByDefault()
+    {
+        Assert.Equal("", UserPreferences.Effective([])[UserPreferences.UiCustomPalette]);
+    }
+
+    [Fact]
+    public void Effective_DropsACustomPaletteOutOfRange()
+    {
+        var effective = UserPreferences.Effective([Row(UserPreferences.UiCustomPalette, "400,muted,10")]);
+
+        Assert.Equal("", effective[UserPreferences.UiCustomPalette]);
+    }
+
     private static UserPreference Row(string key, string value) =>
         new() { UserId = Guid.NewGuid(), PreferenceKey = key, PreferenceValue = value };
 

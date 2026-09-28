@@ -1,10 +1,17 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocale } from '../../../contexts/LocaleContext'
-import { useTheme, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
+import { useTheme, type BuiltinPalette, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
 import Modal from '../../../components/Modal'
 import DropletIcon from '../../../icons/DropletIcon'
 import SearchIcon from '../../../icons/SearchIcon'
+import PencilIcon from '../../../icons/PencilIcon'
+import PlusIcon from '../../../icons/PlusIcon'
+import { customPaletteOf, usePreferences } from '../../../hooks/usePreferences'
+import { PALETTE_SEEDS, type CustomPaletteDef } from '../../../lib/customPalette'
+import { applyCustomPalette } from '../../../lib/customPaletteStyle'
+import PalettePreview from './PalettePreview'
+import CustomPaletteEditor from './CustomPaletteEditor'
 
 const LANGUAGES = [
   { value: 'auto', labelKey: 'appearance.language.auto' as const },
@@ -21,7 +28,7 @@ const THEMES = [
 ] as const satisfies { value: ThemePreference; labelKey: string }[]
 
 // Product names, not prose: they stay out of the catalogue. Only the "(default)" suffix moves.
-const PALETTES: { value: Palette; name: string; isDefault?: boolean }[] = [
+const PALETTES: { value: BuiltinPalette; name: string; isDefault?: boolean }[] = [
   { value: 'night', name: 'Night & coral', isDefault: true },
   { value: 'classic', name: 'Sea breeze' },
   { value: 'forest', name: 'Forest & amber' },
@@ -31,41 +38,6 @@ const PALETTES: { value: Palette; name: string; isDefault?: boolean }[] = [
   { value: 'azure', name: 'Azure' },
   { value: 'indigo', name: 'Indigo & violet' },
 ]
-
-/** Renders in the palette it advertises: the palette selectors are attribute-based and unanchored,
- * so stamping both attributes re-declares every token here. It shows --action-primary (compose,
- * attachment chip), which tells palettes apart; `large` only scales --pp. */
-function PalettePreview({ value, dark, large }: { value: Palette; dark: boolean; large?: boolean }) {
-  return (
-    <span
-      className={`palette-preview${large ? ' is-large' : ''}`}
-      data-palette={value}
-      data-theme={dark ? 'dark' : 'light'}
-      aria-hidden="true"
-    >
-      <span className="pp-bar" />
-      <span className="pp-body">
-        <span className="pp-rail">
-          <span className="pp-rail-item is-on" />
-          <span className="pp-rail-item" />
-          <span className="pp-rail-item" />
-        </span>
-        <span className="pp-pane">
-          <span className="pp-compose" />
-          <span className="pp-folder is-on" />
-          <span className="pp-folder" />
-          <span className="pp-folder" />
-        </span>
-        <span className="pp-rows">
-          <span className="pp-row is-unread" />
-          <span className="pp-row" />
-          <span className="pp-row" />
-          <span className="pp-attachments"><span className="pp-chip" /></span>
-        </span>
-      </span>
-    </span>
-  )
-}
 
 /** Both modes at once, which is the one thing a thumbnail cannot do: it can only ever show the
     mode in use, and a palette is chosen once for both. */
@@ -91,6 +63,10 @@ export default function AppearancePage() {
   const { preference, setPreference } = useLocale()
   const { t } = useTranslation('settings')
   const [zoomed, setZoomed] = useState<{ value: Palette; label: string } | null>(null)
+  const { data: preferences } = usePreferences()
+  const saved = preferences ? customPaletteOf(preferences) : null
+  const [editing, setEditing] = useState<CustomPaletteDef | null>(null)
+  const customLabel = t('appearance.custom.name')
 
   return (
     <div className="settings-page">
@@ -165,8 +141,40 @@ export default function AppearancePage() {
               </div>
             )
           })}
+          {preferences && (saved ? (
+            <div className="palette-card">
+              <label className="palette-pick">
+                <PalettePreview value="custom" dark={isDark} />
+                <span className="palette-name">
+                  <input type="radio" name="palette" value="custom" checked={palette === 'custom'}
+                    onChange={() => setPalette('custom')} />
+                  {customLabel}
+                </span>
+              </label>
+              <button type="button" className="palette-zoom is-edit" aria-label={t('appearance.custom.edit')}
+                onClick={() => setEditing(saved)}>
+                <PencilIcon size={13} />
+              </button>
+              <button type="button" className="palette-zoom"
+                aria-label={t('appearance.palette.enlarge', { name: customLabel })}
+                onClick={() => setZoomed({ value: 'custom', label: customLabel })}>
+                <SearchIcon size={14} />
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="palette-card palette-create"
+              onClick={() => setEditing(PALETTE_SEEDS[palette === 'custom' ? 'night' : palette])}>
+              <PlusIcon size={16} />
+              {t('appearance.custom.create')}
+            </button>
+          ))}
         </div>
       </section>
+
+      {editing && (
+        <CustomPaletteEditor initial={editing} onClose={() => setEditing(null)}
+          onSaved={def => { applyCustomPalette(def); setPalette('custom'); setEditing(null) }} />
+      )}
 
       {zoomed && (
         <PaletteZoomModal value={zoomed.value} label={zoomed.label} onClose={() => setZoomed(null)} />

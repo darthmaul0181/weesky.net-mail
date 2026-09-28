@@ -53,6 +53,21 @@
       "heading": "Palette",
       "default": "{{name}} (par défaut)",
       "enlarge": "Agrandir l’aperçu {{name}}"
+    },
+    "custom": {
+      "name": "Ma palette",
+      "create": "Créer ma palette",
+      "edit": "Modifier ma palette",
+      "structure": "Structure",
+      "intensity": "Intensité",
+      "neutral": "Neutre",
+      "muted": "Sobre",
+      "vivid": "Vive",
+      "accent": "Accent",
+      "nearDanger": "Cet accent est proche du rouge des erreurs : les compteurs de non-lus pourraient ressembler à une alerte.",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saveFailed": "Impossible d’enregistrer votre palette."
     }
   },
   "general": {

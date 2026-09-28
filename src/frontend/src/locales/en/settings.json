@@ -53,6 +53,21 @@
       "heading": "Palette",
       "default": "{{name}} (default)",
       "enlarge": "Enlarge the {{name}} preview"
+    },
+    "custom": {
+      "name": "My palette",
+      "create": "Create my palette",
+      "edit": "Edit my palette",
+      "structure": "Structure",
+      "intensity": "Intensity",
+      "neutral": "Neutral",
+      "muted": "Subtle",
+      "vivid": "Vivid",
+      "accent": "Accent",
+      "nearDanger": "This accent is close to the red used for errors: unread counts could read as alerts.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saveFailed": "Could not save your palette."
     }
   },
   "general": {
