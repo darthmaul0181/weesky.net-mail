@@ -30,9 +30,6 @@ const PALETTES: { value: Palette; name: string; isDefault?: boolean }[] = [
   { value: 'ink', name: 'Ink' },
   { value: 'azure', name: 'Azure' },
   { value: 'indigo', name: 'Indigo & violet' },
-  { value: 'bordeaux', name: 'Bordeaux & blush' },
-  { value: 'mocha', name: 'Mocha & sky' },
-  { value: 'graphite', name: 'Graphite & lime' },
 ]
 
 /** Renders in the palette it advertises: the palette selectors are attribute-based and unanchored,

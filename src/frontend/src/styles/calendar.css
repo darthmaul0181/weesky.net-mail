@@ -50,7 +50,7 @@
   box-shadow: inset 0 0 0 2px var(--cal);
 }
 .calendar-row-label:has(input:checked) .calendar-swatch { background: var(--cal); }
-/* --action-primary-fg is the foreground over a filled colour, white in all twenty-two blocks (a
+/* --action-primary-fg is the foreground over a filled colour, white in all sixteen blocks (a
    status fill takes --status-fg); a swatch is that surface, painted from data, not the accent. */
 .calendar-row-label:has(input:checked) .calendar-swatch::after {
   /* A 4x8 box turned 45° keeps its centre: 6/3.5 puts it on the swatch's 8/8 with the ink's
