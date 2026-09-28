@@ -2,13 +2,15 @@ using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
 using weesky.Scotty.Microservice.Data.Preferences;
+using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Microservice.Models.Calendar;
 using weesky.Scotty.Microservice.Services.Calendar;
 
 namespace weesky.Scotty.Microservice.Repositories;
 
 /// <inheritdoc cref="ICalendarStore"/>
-internal sealed partial class CalendarStore(PreferencesDbContext context, ICalendarSyncStore sync)
+internal sealed partial class CalendarStore(
+    PreferencesDbContext context, ICalendarSyncStore sync, IBirthdayProjector birthdays, IUserPreferenceStore preferences)
     : ICalendarStore
 {
     /// <summary>
@@ -46,6 +48,15 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
     internal const string NameTaken = "This URL is already taken by another calendar";
 
     internal const string NotFound = "Calendar not found";
+
+    /// <summary>The birthdays collection's own <c>dav_name</c>, suffixed <c>-2</c>, <c>-3</c>… when a
+    /// client already took it: the collection is known by its kind, never by its name.</summary>
+    internal const string BirthdaysDavName = "birthdays";
+
+    internal const string ReadOnly = "The birthdays calendar is read-only";
+    internal const string NotBirthdays = "Only the birthdays calendar has a reminder";
+    internal const string BadReminder = "Unknown birthday reminder";
+    private const string BirthdaysColour = "#be185d";
 
     /// <summary>
     /// The colour goes out verbatim on the export's <c>COLOR</c> line, so anything but six hex
@@ -105,6 +116,77 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
         }
     }
 
+    public async Task EnsureBirthdaysAsync(
+        Guid userId, string browserTimeZone, string language, CancellationToken cancellationToken)
+    {
+        if (await BirthdaysAsync(userId, cancellationToken) is not null) return;
+        var stored = UserPreferences.Effective(await preferences.GetAsync(userId, cancellationToken));
+        if (stored[UserPreferences.CalendarBirthdays] == "off") return;
+
+        var chosen = BirthdayLanguages.Of(stored[UserPreferences.UiLanguage], language);
+        var id = Guid.NewGuid();
+        try
+        {
+            await InTransactionAsync(async () =>
+            {
+                var held = await context.Calendars.AsNoTracking().Where(c => c.UserId == userId)
+                    .Select(c => new { c.DavName, c.Order }).ToListAsync(cancellationToken);
+                var row = new Calendar
+                {
+                    Id = id, UserId = userId, Kind = CalendarKinds.Birthdays,
+                    DavName = FreeName(held.Select(c => c.DavName)),
+                    DisplayName = chosen == BirthdayLanguages.Fr ? "Anniversaires" : "Birthdays",
+                    Description = string.Empty, Color = BirthdaysColour,
+                    Order = held.Count == 0 ? 0 : held.Max(c => c.Order) + 1,
+                    TimeZone = browserTimeZone, IsVisible = true,
+                    BirthdayReminder = BirthdayReminders.Default, BirthdayLanguage = chosen,
+                    CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                };
+                context.Calendars.Add(row);
+                await context.SaveChangesAsync(cancellationToken);
+                await sync.CreateStateAsync(row.Id, cancellationToken);
+                await birthdays.RebuildAsync(row, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+                return true;
+            }, cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Two first requests raced and ux_calendars_user_birthdays kept the other row. Our own row
+            // still visible means a caller's ambient transaction holds a half-filled calendar: not a race.
+            context.ChangeTracker.Clear();
+            if (await BirthdaysAsync(userId, cancellationToken) is not { } winner || winner.Id == id) throw;
+        }
+    }
+
+    public async Task SetBirthdaysEnabledAsync(
+        Guid userId, bool enabled, string browserTimeZone, string language, CancellationToken cancellationToken)
+    {
+        await preferences.SetAsync(userId, UserPreferences.CalendarBirthdays, enabled ? "on" : "off", cancellationToken);
+        if (enabled)
+        {
+            await EnsureBirthdaysAsync(userId, browserTimeZone, language, cancellationToken);
+            return;
+        }
+
+        if (await BirthdaysAsync(userId, cancellationToken) is { } row)
+            await RemoveAsync(userId, row, archive: false, cancellationToken);
+    }
+
+    public async Task SetBirthdayLanguageAsync(Guid userId, string language, CancellationToken cancellationToken)
+    {
+        if (await BirthdaysAsync(userId, cancellationToken) is not { } row || row.BirthdayLanguage == language) return;
+
+        await InTransactionAsync(async () =>
+        {
+            row.BirthdayLanguage = language;
+            row.UpdatedAt = DateTime.UtcNow;
+            await birthdays.RebuildAsync(row, cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
+    }
+
     public Task<Result<Guid>> CreateAsync(
         Guid userId, CalendarWrite write, string browserTimeZone, CancellationToken cancellationToken) =>
         // The id and not a slug of the name: a client syncs on this segment and it is never
@@ -134,11 +216,30 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
             row.Color = colour;
         }
 
+        var rebuild = false;
+        if (write.BirthdayReminder is { } reminder)
+        {
+            if (row.Kind != CalendarKinds.Birthdays) return Result.Failure(NotBirthdays);
+            if (!BirthdayReminders.All.Contains(reminder)) return Result.Failure(BadReminder);
+            rebuild = reminder != row.BirthdayReminder;
+            row.BirthdayReminder = reminder;
+        }
+
         row.DisplayName = write.DisplayName;
         if (write.Description is not null) row.Description = write.Description;
         if (write.Order is { } order) row.Order = order;
         if (write.TimeZone is not null) row.TimeZone = write.TimeZone;
         row.UpdatedAt = DateTime.UtcNow;
+
+        if (rebuild)
+        {
+            return await InTransactionAsync(async () =>
+            {
+                await birthdays.RebuildAsync(row, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            }, cancellationToken);
+        }
 
         // No rank and no transaction: a colour is not a resource, and advancing the counter here
         // would make every phone resync a collection nothing in it changed.
@@ -165,6 +266,16 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
         var row = await FindAsync(userId, calendarId, cancellationToken);
         if (row is null) return Result.Failure(NotFound);
         if (row.DavName == DefaultDavName) return Result.Failure(NotDeletable);
+        if (row.Kind == CalendarKinds.Birthdays) return Result.Failure(ReadOnly);
+
+        return await RemoveAsync(userId, row, archive: true, cancellationToken);
+    }
+
+    /// <summary>The collection and everything under it, in batches of <see cref="DeleteBatch"/>; nothing
+    /// archived without <paramref name="archive"/>, the birthdays collection holding only copies (décision 3).</summary>
+    private async Task<Result> RemoveAsync(Guid userId, Calendar row, bool archive, CancellationToken cancellationToken)
+    {
+        var calendarId = row.Id;
 
         // The ids first, so an empty collection opens no transaction and spends no rank at all.
         var doomed = await context.CalendarEvents
@@ -185,7 +296,7 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
             // collection loses everything under it without being told name by name.
             await InTransactionAsync(
                 () => CalendarBatchDelete.RunAsync(context, sync, userId, calendarId, ids,
-                    tombstones: false, cancellationToken),
+                    tombstones: false, archive, cancellationToken),
                 cancellationToken);
         }
 
@@ -294,7 +405,7 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
 
     private static CalendarView View(Calendar row) =>
         new(row.Id, row.DavName, row.DisplayName, row.Description, row.Color, row.Order,
-            row.TimeZone, row.IsVisible, row.DavName == DefaultDavName);
+            row.TimeZone, row.IsVisible, row.DavName == DefaultDavName, row.Kind, row.BirthdayReminder);
 
     /// <summary>
     /// Scoped by user on purpose: a calendar belonging to somebody else must be indistinguishable
@@ -304,6 +415,17 @@ internal sealed partial class CalendarStore(PreferencesDbContext context, ICalen
         Guid userId, Guid calendarId, CancellationToken cancellationToken) =>
         context.Calendars.FirstOrDefaultAsync(
             c => c.Id == calendarId && c.UserId == userId, cancellationToken);
+
+    private Task<Calendar?> BirthdaysAsync(Guid userId, CancellationToken cancellationToken) =>
+        BirthdayProjector.BirthdaysOfAsync(context, userId, cancellationToken);
+
+    private static string FreeName(IEnumerable<string> taken)
+    {
+        var names = taken.ToHashSet();
+        return Enumerable.Range(1, int.MaxValue)
+            .Select(n => n == 1 ? BirthdaysDavName : $"{BirthdaysDavName}-{n}")
+            .First(name => !names.Contains(name));
+    }
 
     private Task<Calendar?> FindByNameAsync(
         Guid userId, string davName, CancellationToken cancellationToken) =>

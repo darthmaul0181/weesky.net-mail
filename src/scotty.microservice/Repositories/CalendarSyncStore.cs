@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using weesky.Scotty.Microservice.Data.Preferences;
 using weesky.Scotty.Microservice.Models.Contacts;
@@ -19,20 +20,12 @@ internal sealed class CalendarSyncStore(PreferencesDbContext context) : ICalenda
 
     public async Task<ulong> NextSequenceAsync(Guid calendarId, CancellationToken cancellationToken)
     {
-        // The one precondition prose alone cannot enforce: outside a transaction ExecuteSql* runs in
-        // autocommit, the row's lock drops the instant the statement completes, and EF may hand the
-        // connection back to the pool before the re-read below runs — which can then land on a
-        // different physical connection and answer a rank two callers both hold.
-        if (context.Database.CurrentTransaction is null)
-        {
-            throw new InvalidOperationException(
-                $"{nameof(NextSequenceAsync)} must run inside a transaction the caller owns.");
-        }
+        RequireTransaction();
 
-        // Raw SQL, and the only raw SQL here, for the reason ContactSyncStore gives at length: one
-        // statement must create the row when the collection has none, take its exclusive lock and
-        // advance the counter, all inside the caller's transaction. The epoch drawn on every call is
-        // never rewritten — ON DUPLICATE KEY UPDATE touches seq alone.
+        // Raw SQL, for the reason ContactSyncStore gives at length: one statement must create the row
+        // when the collection has none, take its exclusive lock and advance the counter, all inside the
+        // caller's transaction. The epoch drawn on every call is never rewritten — ON DUPLICATE KEY
+        // UPDATE touches seq alone.
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"""
              INSERT INTO calendar_sync_state (calendar_id, epoch, seq, pruned_below)
@@ -41,13 +34,52 @@ internal sealed class CalendarSyncStore(PreferencesDbContext context) : ICalenda
              """,
             cancellationToken);
 
-        // Re-read inside the same transaction, and as a scalar: materialising the entity would let a
-        // CalendarSyncState already tracked in this context answer with its stale, pre-increment seq.
-        return await context.CalendarSyncStates
-            .Where(s => s.CalendarId == calendarId)
-            .Select(s => s.Seq)
-            .SingleAsync(cancellationToken);
+        return (await ReadRankAsync(calendarId, cancellationToken))!.Value;
     }
+
+    public async Task<ulong?> NextSequenceIfPresentAsync(Guid calendarId, CancellationToken cancellationToken)
+    {
+        RequireTransaction();
+
+        // The same statement fed by a locking read of the collection: nothing inserted once its row is
+        // gone. Zero rows affected answers null outright — a plain re-read would see this transaction's
+        // REPEATABLE READ snapshot, which may still hold the state row a removal has since deleted.
+        var affected = await context.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             INSERT INTO calendar_sync_state (calendar_id, epoch, seq, pruned_below)
+             SELECT id, {Guid.NewGuid()}, 1, 0 FROM calendars WHERE id = {calendarId}
+             ON DUPLICATE KEY UPDATE calendar_sync_state.seq = calendar_sync_state.seq + 1
+             """,
+            cancellationToken);
+        if (affected == 0) return null;
+
+        // FOR UPDATE reads the latest committed version, never the snapshot; the lock is already ours.
+        var seq = await context.Database.SqlQuery<ulong>(
+                $"SELECT seq AS `Value` FROM calendar_sync_state WHERE calendar_id = {calendarId} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+        return seq.Count == 1 ? seq[0] : null;
+    }
+
+    private void RequireTransaction([CallerMemberName] string caller = "")
+    {
+        // The one precondition prose alone cannot enforce: outside a transaction ExecuteSql* runs in
+        // autocommit, the row's lock drops the instant the statement completes, and EF may hand the
+        // connection back to the pool before the re-read below runs — which can then land on a
+        // different physical connection and answer a rank two callers both hold.
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException(
+                $"{caller} must run inside a transaction the caller owns.");
+        }
+    }
+
+    // Re-read inside the same transaction, and as a scalar: materialising the entity would let a
+    // CalendarSyncState already tracked in this context answer with its stale, pre-increment seq.
+    private Task<ulong?> ReadRankAsync(Guid calendarId, CancellationToken cancellationToken) =>
+        context.CalendarSyncStates
+            .Where(s => s.CalendarId == calendarId)
+            .Select(s => (ulong?)s.Seq)
+            .SingleOrDefaultAsync(cancellationToken);
 
     public async Task CreateStateAsync(Guid calendarId, CancellationToken cancellationToken)
     {

@@ -101,6 +101,13 @@
       "on": "{{action}} is now a quick action",
       "off": "{{action}} is no longer a quick action"
     },
+    "calendar": "Calendar",
+    "birthdays": {
+      "label": "Birthdays calendar",
+      "hint": "Your contacts’ birthdays, in the webmail and on your synced devices.",
+      "on": "Birthdays calendar turned on",
+      "off": "Birthdays calendar turned off"
+    },
     "swipe": {
       "heading": "Swipe gestures",
       "intro": "Swipe a message in the list to act on it without opening it. Touch screens only.",

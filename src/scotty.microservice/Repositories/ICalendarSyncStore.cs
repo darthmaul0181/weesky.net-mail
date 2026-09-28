@@ -18,6 +18,13 @@ public interface ICalendarSyncStore
     Task<ulong> NextSequenceAsync(Guid calendarId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// <see cref="NextSequenceAsync"/> for a collection a concurrent request may be removing: null
+    /// once its row is gone, and the row share-locked until the caller's transaction ends. A removal
+    /// already holding the state row but not yet the collection row can deadlock with it (1213).
+    /// </summary>
+    Task<ulong?> NextSequenceIfPresentAsync(Guid calendarId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The state row of a collection being created, at seq = 0 with a fresh epoch, inside that
     /// creation's own transaction (décision 2): a collection with no counter has no ctag, and a
     /// client polling it before its first write would read one out of nothing.

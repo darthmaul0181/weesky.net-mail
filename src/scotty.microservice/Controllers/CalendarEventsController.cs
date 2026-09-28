@@ -140,11 +140,13 @@ public sealed class CalendarEventsController(
     /// <response code="201">Created</response>
     /// <response code="400">A validation refusal, a <c>keepRepeat</c> that has no event to keep, or the calendar's cap reached</response>
     /// <response code="401">Not authenticated</response>
+    /// <response code="403">The birthdays calendar is read-only</response>
     /// <response code="404">No such calendar for this user</response>
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CreatedId>> Create(EventRequest request, CancellationToken cancellationToken)
     {
@@ -171,12 +173,14 @@ public sealed class CalendarEventsController(
     /// <response code="200">Saved; <c>scheduling</c> says what was sent</response>
     /// <response code="400">A validation refusal, a missing <c>ifHash</c>, a narrow scope without an instance id, or <c>attendees</c> on an event somebody else organizes (<c>not_organizer</c>)</response>
     /// <response code="401">Not authenticated</response>
+    /// <response code="403">The event is in, or would move into, the read-only birthdays calendar</response>
     /// <response code="404">No such event for this user</response>
     /// <response code="409">The event changed since <c>ifHash</c> was read; reload and retry</response>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(EventUpdated), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Update(Guid id, EventUpdateRequest request, CancellationToken cancellationToken)
@@ -217,11 +221,13 @@ public sealed class CalendarEventsController(
     /// <response code="204">Deleted (or nothing changed: the narrow scope named nothing to remove)</response>
     /// <response code="400">A narrow scope without an instance id</response>
     /// <response code="401">Not authenticated</response>
+    /// <response code="403">The birthdays calendar is read-only</response>
     /// <response code="404">No such event for this user</response>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Delete(
         Guid id, EditScope scope, string? instanceId, [FromQuery] string? language, CancellationToken cancellationToken)
@@ -264,11 +270,12 @@ public sealed class CalendarEventsController(
     private static bool RequiresInstanceId(EditScope scope) =>
         scope is EditScope.This or EditScope.ThisAndFollowing;
 
-    /// <summary>The one mapping every write door of this controller shares: a missing row is 404, a
-    /// resource that moved under an <c>ifHash</c> is 409, anything else is a rejected body.</summary>
+    /// <summary>The one mapping every write door of this controller shares: a missing row is 404, the
+    /// birthdays calendar 403, a resource that moved under an <c>ifHash</c> 409, anything else a rejected body.</summary>
     private ActionResult MapFailure(string error) => error switch
     {
         CalendarEventStore.NotFound or CalendarStore.NotFound => NotFoundEnveloppe(error),
+        CalendarStore.ReadOnly => ForbiddenEnveloppe(error),
         CalendarEventStore.EventMoved => ConflictEnveloppe(error),
         _ => BadRequestEnveloppe(error),
     };

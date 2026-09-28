@@ -81,6 +81,9 @@ export default function CalendarDialogs({
           // CALENDAR_COLORS is a fixed, non-empty literal list (see its own declaration).
           initialColor={editing.mode === 'create' ? CALENDAR_COLORS[0]! : editing.calendar.color}
           focus={editing.mode === 'colour' ? 'colour' : 'name'}
+          // `same_day` is the server's own default, should the field ever come back absent.
+          initialReminder={editing.mode === 'settings'
+            ? editing.calendar.birthdayReminder ?? 'same_day' : undefined}
           saving={writes.savingCalendar}
           onSubmit={values => void saveCalendar(values)} onClose={() => setEditing(null)} />
       )}
@@ -98,6 +101,13 @@ export default function CalendarDialogs({
           message={t('dialogs.deleteCalendarMessage', { name: pendingDelete.displayName })}
           loading={writes.deletingCalendar}
           onConfirm={() => void confirmDelete()} onClose={() => setPendingDelete(null)}
+          returnFocusRef={returnFocusRef} />
+      )}
+
+      {writes.disabling && (
+        <DeleteConfirmModal title={t('dialogs.disableTitle')} message={t('dialogs.disableBody')}
+          confirmLabel={t('dialogs.disable')} tone="primary" loading={writes.disablingBirthdays}
+          onConfirm={() => void writes.confirmDisable()} onClose={() => writes.setDisabling(null)}
           returnFocusRef={returnFocusRef} />
       )}
     </>

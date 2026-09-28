@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { isBirthday } from './birthday'
 import type { Occurrence } from './calendarTypes'
 import { columnAt, snapMinutes } from './gridGeometry'
 import { occurrenceKey } from './occurrenceStyle'
@@ -56,7 +57,7 @@ export function useDragEvent({ enabled, days, onDrop }: DragEventOptions) {
   useEffect(() => () => stop.current?.(), [])
 
   function onPointerDown(o: Occurrence, event: ReactPointerEvent) {
-    if (!enabled || event.button !== 0) return
+    if (isBirthday(o) || !enabled || event.button !== 0) return
     const area = areaOf(event.currentTarget as HTMLElement, days)
     if (!area) return
 

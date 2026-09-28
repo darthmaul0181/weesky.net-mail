@@ -164,6 +164,8 @@ internal sealed class ContactGroupStore(
             // contacts those rows pointed at are untouched (décision 7).
             await store.ClearProjectionAsync([groupId], cancellationToken);
             context.Contacts.Remove(row);
+            // A group has no birthday, but a PUT may have made this card a contact since the find.
+            await store.ProjectBirthdaysAsync(cancellationToken);
             // Décision 7 on the third door: a group nested in another (décision 9) leaves it here,
             // in the same transaction, or the parent keeps a MEMBER line naming nothing.
             await store.StripFromGroupsAsync(
@@ -275,6 +277,8 @@ internal sealed class ContactGroupStore(
             await store.ApplyCardAsync(row, card, null, cancellationToken);
             row.UpdatedAt = DateTime.UtcNow;
             row.SyncSequence = rank;
+            // The Kind the card now projects may differ from the one a PUT left since the find.
+            await store.ProjectBirthdaysAsync(cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
             return Result.Success(true);
         }, outcome => outcome.IsSuccess && outcome.Value, cancellationToken);

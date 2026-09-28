@@ -156,6 +156,18 @@ describe('useDragEvent', () => {
     expect(onDrop).toHaveBeenCalledWith(DENTIST, 0, 1)
   })
 
+  // The birthdays calendar is read-only: its chip is never picked up, wherever it sits.
+  it('never picks up a birthday', () => {
+    const chip = chipIn('band')
+    const { result, onDrop } = dragging()
+    const birthday = { ...DENTIST, contactId: 'k', isAllDay: true }
+    result.current.onPointerDown(birthday, pointerDownOn(chip, 250, 10))
+    firePointer('pointermove', 350, 94)
+    expect(result.current.drag).toBeNull()
+    firePointer('pointerup', 350, 94)
+    expect(onDrop).not.toHaveBeenCalled()
+  })
+
   it('is inert when gestures are off', () => {
     const chip = chipIn('column')
     const { result, onDrop } = dragging(vi.fn(), false)

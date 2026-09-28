@@ -24,8 +24,10 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
     internal static readonly string NeedsDisplayName = "A calendar needs a display name";
 
     /// <summary>Every calendar of the user, the <c>default</c> one created with <paramref name="tz"/>
-    /// the first time it is asked for (décision 6).</summary>
+    /// the first time it is asked for (décision 6), and the birthdays one while its switch is on.</summary>
     /// <param name="tz">the browser's IANA time zone</param>
+    /// <param name="lang">the browser's language, <c>fr</c> or <c>en</c>: the birthdays calendar's when
+    /// this call creates it and <c>ui.language</c> names none</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="200">The calendars</response>
     /// <response code="400">Unknown time zone</response>
@@ -34,11 +36,12 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<CalendarListResponse>> List(string tz, CancellationToken cancellationToken)
+    public async Task<ActionResult<CalendarListResponse>> List(string tz, string? lang, CancellationToken cancellationToken)
     {
         if (!IcsTimeZones.IsKnownIana(tz)) return BadRequestEnveloppe(IcsTimeZones.UnknownZone);
 
         await store.EnsureDefaultAsync(AuthenticatedUser.WebmailUid, tz, cancellationToken);
+        await store.EnsureBirthdaysAsync(AuthenticatedUser.WebmailUid, tz, lang ?? BirthdayLanguages.En, cancellationToken);
         var calendars = await store.ListAsync(AuthenticatedUser.WebmailUid, cancellationToken);
         return Ok(new CalendarListResponse(calendars));
     }
@@ -69,12 +72,13 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
         return StatusCode(StatusCodes.Status201Created, new CreatedId(created.Value));
     }
 
-    /// <summary>Replaces the name, the description, the colour and the rank.</summary>
+    /// <summary>Replaces the name, the description, the colour, the rank and, on the birthdays
+    /// calendar alone, the reminder.</summary>
     /// <param name="id">the calendar's identifier</param>
     /// <param name="request">the full replacement</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Saved</response>
-    /// <response code="400">No display name, or an invalid colour</response>
+    /// <response code="400">No display name, an invalid colour, or a reminder that is unknown or on a regular calendar</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">No such calendar for this user</response>
     [HttpPut("{id:guid}")]
@@ -88,10 +92,33 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
 
         var updated = await store.UpdateAsync(
             AuthenticatedUser.WebmailUid, id,
-            new CalendarWrite(request.DisplayName.Trim(), request.Description, request.Color, request.Order),
+            new CalendarWrite(request.DisplayName.Trim(), request.Description, request.Color, request.Order,
+                BirthdayReminder: request.BirthdayReminder),
             cancellationToken);
 
         return updated.IsSuccess ? NoContent() : MapFailure(updated.Error);
+    }
+
+    /// <summary>The birthdays calendar's switch (spec, décision 3): the preference, then the calendar.</summary>
+    /// <param name="tz">the browser's IANA time zone, the calendar's own when this call creates it</param>
+    /// <param name="lang">the browser's language, used as <see cref="List"/> uses it</param>
+    /// <param name="request">on or off</param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="204">Saved</response>
+    /// <response code="400">Unknown time zone</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpPut("Birthdays")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult> SetBirthdays(
+        string tz, string? lang, BirthdaysToggleRequest request, CancellationToken cancellationToken)
+    {
+        if (!IcsTimeZones.IsKnownIana(tz)) return BadRequestEnveloppe(IcsTimeZones.UnknownZone);
+
+        await store.SetBirthdaysEnabledAsync(
+            AuthenticatedUser.WebmailUid, request.Enabled, tz, lang ?? BirthdayLanguages.En, cancellationToken);
+        return NoContent();
     }
 
     /// <summary>The sidebar checkbox alone, never projected to DAV (décision 2).</summary>
@@ -113,11 +140,12 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
     }
 
     /// <summary>Removes the calendar and archives every event it held. The <c>default</c> calendar
-    /// is refused: a user with none has nowhere left to write.</summary>
+    /// is refused: a user with none has nowhere left to write. So is the birthdays one, which only
+    /// its switch removes.</summary>
     /// <param name="id">the calendar's identifier</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Deleted</response>
-    /// <response code="400">The default calendar cannot be deleted</response>
+    /// <response code="400">The default or the birthdays calendar cannot be deleted</response>
     /// <response code="401">Not authenticated</response>
     /// <response code="404">No such calendar for this user</response>
     [HttpDelete("{id:guid}")]
@@ -162,12 +190,14 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
     /// <response code="200">The report</response>
     /// <response code="400">No file, or a media type no calendar client writes</response>
     /// <response code="401">Not authenticated</response>
+    /// <response code="403">The birthdays calendar is read-only</response>
     /// <response code="404">No such calendar for this user</response>
     [HttpPost("{id:guid}/Import")]
     [RequestSizeLimit(CalendarEventStore.MaxImportBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CalendarImportReport>> Import(
         Guid id, IFormFile? file, CancellationToken cancellationToken)
@@ -176,7 +206,8 @@ public sealed class CalendarsController(ICalendarStore store, ICalendarEventStor
         if (accepted.IsFailure) return BadRequestEnveloppe(accepted.Error);
 
         var calendars = await store.ListAsync(AuthenticatedUser.WebmailUid, cancellationToken);
-        if (calendars.All(c => c.Id != id)) return NotFoundEnveloppe(CalendarStore.NotFound);
+        if (calendars.FirstOrDefault(c => c.Id == id) is not { } view) return NotFoundEnveloppe(CalendarStore.NotFound);
+        if (view.Kind == CalendarKinds.Birthdays) return ForbiddenEnveloppe(CalendarStore.ReadOnly);
 
         var vcalendar = await ReadCalendarFileAsync(file!, cancellationToken);
         return Ok(Report(await events.ImportAsync(AuthenticatedUser.WebmailUid, id, vcalendar, cancellationToken)));

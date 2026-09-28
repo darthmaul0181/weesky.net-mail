@@ -282,9 +282,17 @@ export const api = {
   exportContacts: () => requestBlob('/api/Contacts/Export'),
 
   // tz is required: it is the zone the default calendar is created with the first time it is
-  // asked for, and the backend needs it on every call to answer that lazily.
-  getCalendars: (tz: string) =>
-    request<CalendarListResponse>('GET', `/api/Calendars?tz=${encodeURIComponent(tz)}`),
+  // asked for, and the backend needs it on every call to answer that lazily. lang is the language
+  // the birthdays calendar is written in, should this read create it.
+  getCalendars: (tz: string, lang: string) =>
+    request<CalendarListResponse>('GET',
+      `/api/Calendars?tz=${encodeURIComponent(tz)}&lang=${encodeURIComponent(lang)}`),
+
+  // The birthdays switch: the preference and the calendar change together.
+  setBirthdays: (enabled: boolean, tz: string, lang: string) =>
+    request<null>('PUT',
+      `/api/Calendars/Birthdays?tz=${encodeURIComponent(tz)}&lang=${encodeURIComponent(lang)}`,
+      { enabled }),
 
   // tz here is the new calendar's own zone, asked once at creation and never again.
   createCalendar: (calendar: CalendarWrite, tz: string) =>
@@ -372,9 +380,10 @@ export const api = {
     request<DavCredentials>('PUT', '/api/DavCredentials/CardDav', { enabled }),
 
   // The zone travels with the switch: turning it on creates the default calendar, and that
-  // calendar is born in the zone of the browser that asked for it.
-  setDavCalDav: (enabled: boolean, timeZone: string) =>
-    request<DavCredentials>('PUT', '/api/DavCredentials/CalDav', { enabled, timeZone }),
+  // calendar is born in the zone of the browser that asked for it. language names the birthdays
+  // calendar when this is what creates it, before the calendar module was ever opened.
+  setDavCalDav: (enabled: boolean, timeZone: string, language?: 'fr' | 'en') =>
+    request<DavCredentials>('PUT', '/api/DavCredentials/CalDav', { enabled, timeZone, language }),
 
   regenerateDavSecret: () =>
     request<DavCredentials>('POST', '/api/DavCredentials/Regenerate'),

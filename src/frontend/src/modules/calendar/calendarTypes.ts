@@ -1,3 +1,7 @@
+export type CalendarKind = 'regular' | 'birthdays'
+
+export type BirthdayReminder = 'none' | 'same_day' | 'day_before' | 'week_before'
+
 /** One calendar (`GET /api/Calendars`). `isDefault` is derived server-side: the one no deletion
  * may take. The API omits null fields, so optional fields are `?:`, never `| null`. */
 export interface Calendar {
@@ -10,6 +14,10 @@ export interface Calendar {
   timeZone: string
   isVisible: boolean
   isDefault: boolean
+  /** `birthdays` is read-only, projected from the contacts' birthdays. */
+  kind: CalendarKind
+  /** Set on the birthdays calendar alone. */
+  birthdayReminder?: BirthdayReminder
 }
 
 /** The body of `POST /api/Calendars` and `PUT /api/Calendars/{id}`. A field the request does not
@@ -19,6 +27,8 @@ export interface CalendarWrite {
   description?: string
   color?: string
   order?: number
+  /** Accepted on the birthdays calendar alone. */
+  birthdayReminder?: BirthdayReminder
 }
 
 export type EditScope = 'This' | 'ThisAndFollowing' | 'All'
@@ -167,6 +177,9 @@ export interface Occurrence {
   /** The user's own answer to an invitation (their ATTENDEE's PARTSTAT); absent when the event
       does not invite them. The grid draws « provisoire » from it, not from the organizer's STATUS. */
   myPartStat?: string
+  /** Stamped on a birthday alone: the card it comes from, and the year when the card holds one. */
+  contactId?: string
+  birthYear?: number
 }
 
 export interface CalendarListResponse {

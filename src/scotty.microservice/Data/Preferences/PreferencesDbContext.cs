@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using weesky.Scotty.Microservice.Repositories;
 
 namespace weesky.Scotty.Microservice.Data.Preferences;
 
@@ -13,6 +14,37 @@ public class PreferencesDbContext : DbContext
     public PreferencesDbContext(DbContextOptions<PreferencesDbContext> options)
         : base(options)
     {
+    }
+
+    /// <summary>Set by <c>BirthdayProjector</c>: a relevant contact change must then pass through it.</summary>
+    internal bool BirthdayProjectionRequired { get; set; }
+
+    internal HashSet<object> BirthdayProjected { get; } = new(ReferenceEqualityComparer.Instance);
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnsureBirthdaysProjected();
+        var saved = base.SaveChanges(acceptAllChangesOnSuccess);
+        BirthdayProjected.Clear();
+        return saved;
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        EnsureBirthdaysProjected();
+        var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        BirthdayProjected.Clear();
+        return saved;
+    }
+
+    private void EnsureBirthdaysProjected()
+    {
+        if (BirthdayProjectionRequired
+            && ChangeTracker.Entries<Contact>().FirstOrDefault(e => BirthdayProjector.IsRelevant(e) && !BirthdayProjected.Contains(e.Entity)) is { } missed)
+        {
+            throw new InvalidOperationException(
+                $"Contact {missed.Entity.Id} is saved without its birthday projection: call IBirthdayProjector.ProjectTrackedAsync before SaveChanges.");
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -155,6 +187,9 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<Calendar>().HasKey(c => c.Id);
         modelBuilder.Entity<Calendar>().HasIndex(c => new { c.UserId, c.DavName }).IsUnique();
         modelBuilder.Entity<Calendar>().HasOne<WebmailUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Calendar>().Property(c => c.IsBirthdays)
+            .HasComputedColumnSql("IF(kind = 'birthdays', 1, NULL)", stored: true);
+        modelBuilder.Entity<Calendar>().HasIndex(c => new { c.UserId, c.IsBirthdays }).IsUnique();
 
         modelBuilder.Entity<CalendarEvent>().HasKey(e => e.Id);
         modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.CalendarId, e.Uid }).IsUnique();

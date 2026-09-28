@@ -11,7 +11,9 @@ namespace weesky.Scotty.Microservice.Models.Calendar;
 /// does not repeat. <c>RecurrenceText</c> is the master's RRULE value, the same for every instance.
 /// <c>MyPartStat</c> is the user's own answer to an invitation (the PARTSTAT of the ATTENDEE that
 /// is one of their addresses), null when the event has no such line — the grid draws
-/// « provisoire » from it, not from the organizer's STATUS (spec 5e).
+/// « provisoire » from it, not from the organizer's STATUS (spec 5e). <c>ContactId</c> and
+/// <c>BirthYear</c> are stamped on an occurrence of the birthdays calendar alone, from the file's own
+/// contact line: the bubble links to the card and computes the age without a second read.
 ///
 /// <c>EventId</c> and <c>CalendarId</c> are the row the instance came from: a window spans every
 /// calendar of one user at once, and the client filters and colours by calendar without a second
@@ -39,4 +41,6 @@ public sealed record EventOccurrence(
     string? Class,
     bool HasAlarm,
     string? RecurrenceText,
-    string? MyPartStat = null);
+    string? MyPartStat = null,
+    Guid? ContactId = null,
+    int? BirthYear = null);

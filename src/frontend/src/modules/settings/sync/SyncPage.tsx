@@ -10,6 +10,7 @@ import { useToasts } from '../../../hooks/useToasts'
 import { relativeFromNow } from '../../../lib/intl'
 import CopyIcon from '../../../icons/CopyIcon'
 import RefreshIcon from '../../../icons/RefreshIcon'
+import { mailLanguage } from '../../calendar/queries'
 
 /** Which switch is waiting for its round trip, and on what value. */
 type Pending = { key: 'carddav' | 'caldav'; value: boolean }
@@ -114,7 +115,8 @@ export default function SyncPage() {
             checked={pending?.key === 'caldav' ? pending.value : state.calDavEnabled}
             disabled={busy}
             onChange={on => void write(
-              () => api.setDavCalDav(on, Intl.DateTimeFormat().resolvedOptions().timeZone),
+              () => api.setDavCalDav(
+                on, Intl.DateTimeFormat().resolvedOptions().timeZone, mailLanguage()),
               { key: 'caldav', value: on })}
           />
 

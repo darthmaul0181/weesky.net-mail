@@ -34,6 +34,8 @@ internal sealed class CalendarEventImporter(
         var calendar = await store.FindCalendarAsync(userId, calendarId, cancellationToken);
         if (calendar is null)
             return new CalendarImportOutcome(0, 0, 0, 0, 1, [new(0, CalendarStore.NotFound)]);
+        if (calendar.Kind == CalendarKinds.Birthdays)
+            return new CalendarImportOutcome(0, 0, 0, 0, 1, [new(0, CalendarStore.ReadOnly)]);
 
         var split = IcsResources.Split(vcalendar);
         var errors = new List<ContactImportError>();

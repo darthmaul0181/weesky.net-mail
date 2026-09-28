@@ -15,13 +15,14 @@ public sealed class PreferencesControllerTests
     private static readonly Guid WebmailUid = Guid.NewGuid();
 
     private readonly Mock<IUserPreferenceStore> _store = new();
+    private readonly Mock<ICalendarStore> _calendars = new();
 
     private PreferencesController CreateController()
     {
         _store.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
               .ReturnsAsync(new List<UserPreference>());
 
-        return new PreferencesController(_store.Object)
+        return new PreferencesController(_store.Object, _calendars.Object)
         {
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", WebmailUid)
         };
@@ -96,6 +97,33 @@ public sealed class PreferencesControllerTests
         Assert.IsType<BadRequestObjectResult>(result);
         _store.Verify(s => s.SetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Its own route writes the preference AND creates or removes the calendar; this one would only do half.
+    [Fact]
+    public async Task Set_RefusesTheBirthdaysSwitch()
+    {
+        var result = await CreateController().SetPreference(
+            new SetPreferenceRequest { Key = UserPreferences.CalendarBirthdays, Value = "off" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _store.Verify(s => s.SetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("en", 1)]
+    [InlineData("fr", 1)]
+    [InlineData("auto", 0)]
+    public async Task Set_TheUiLanguage_RetitlesTheBirthdaysOnlyForARealLanguage(string value, int calls)
+    {
+        var result = await CreateController().SetPreference(
+            new SetPreferenceRequest { Key = UserPreferences.UiLanguage, Value = value }, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status204NoContent, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        _calendars.Verify(c => c.SetBirthdayLanguageAsync(WebmailUid, value, It.IsAny<CancellationToken>()), Times.Exactly(calls));
+        _calendars.Verify(c => c.SetBirthdayLanguageAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(calls));
     }
 
     [Fact]

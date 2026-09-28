@@ -82,6 +82,16 @@ describe('useResizeEvent', () => {
     expect(onResize).not.toHaveBeenCalled()
   })
 
+  it('never stretches a birthday', () => {
+    const grip = handle()
+    const { result, onResize } = resizing()
+    result.current.onPointerDown({ ...DENTIST, contactId: 'k' }, pointerDownOn(grip, 100, 560))
+    firePointer('pointermove', 100, 588)
+    expect(result.current.resize).toBeNull()
+    firePointer('pointerup', 100, 588)
+    expect(onResize).not.toHaveBeenCalled()
+  })
+
   it('is inert when gestures are off', () => {
     const grip = handle()
     const { result, onResize } = resizing(vi.fn(), false)

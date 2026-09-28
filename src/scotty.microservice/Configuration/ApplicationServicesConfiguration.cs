@@ -177,6 +177,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<CalendarStore>();
         services.AddScoped<ICalendarStore>(provider => provider.GetRequiredService<CalendarStore>());
         services.AddScoped<CalendarEventStore>();
+        services.AddScoped<IBirthdayProjector, BirthdayProjector>();
         services.AddScoped<ICalendarEventStore>(provider => provider.GetRequiredService<CalendarEventStore>());
         services.AddScoped<ICalendarSyncStore, CalendarSyncStore>();
         services.AddScoped<IDavCalendarReader, DavCalendarReader>();

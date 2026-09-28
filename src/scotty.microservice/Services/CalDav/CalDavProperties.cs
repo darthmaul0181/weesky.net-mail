@@ -52,7 +52,8 @@ internal static class CalDavProperties
                 (DavXml.Dav + "getlastmodified", r => FromEvent(r, DavXml.Dav + "getlastmodified",
                     e => HttpDate(e.UpdatedAt))),
                 (DavXml.Dav + "resourcetype", _ => new XElement(DavXml.Dav + "resourcetype")),
-                (DavXml.Dav + "current-user-privilege-set", _ => PrivilegeSet()),
+                (DavXml.Dav + "current-user-privilege-set",
+                    r => PrivilegeSet(r.Calendar?.IsReadOnly == true)),
                 // Both, because REPORT answers both on one resource: RFC 4791 § 7.8 and § 7.9 each
                 // define their report on a calendar object resource as much as on a collection.
                 (DavXml.Dav + "supported-report-set", _ => ReportSet(
@@ -162,9 +163,14 @@ internal static class CalDavProperties
             DavXml.CalDav + "calendar-multiget", DavXml.CalDav + "calendar-query",
             DavXml.CalDav + "free-busy-query", DavXml.Dav + "sync-collection",
             DavXml.Dav + "expand-property")),
-        (DavXml.Dav + "current-user-privilege-set", _ => PrivilegeSet()),
+        (DavXml.Dav + "current-user-privilege-set",
+            r => PrivilegeSet(r.Calendar?.IsReadOnly == true, collection: true)),
         (DavXml.Dav + "owner", r => Href(DavXml.Dav + "owner", DavPaths.Principal(r.UserId))),
-        (DavXml.Dav + "current-user-principal", CurrentUserPrincipal)),
+        (DavXml.Dav + "current-user-principal", CurrentUserPrincipal),
+        // Spec § 6: a client that computes its own availability ignores the birthdays calendar
+        // outright, since none of its events blocks time.
+        (DavXml.CalDav + "schedule-calendar-transp", r => new XElement(DavXml.CalDav + "schedule-calendar-transp",
+            new XElement(DavXml.CalDav + (r.Calendar?.IsReadOnly == true ? "transparent" : "opaque"))))),
         DavXml.CalDav + "calendar-timezone");
 
     /// <summary>

@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS `app_settings` (
 CREATE TABLE IF NOT EXISTS `calendars` (
   `id` char(36) NOT NULL,
   `user_id` char(36) NOT NULL,
+  `kind` enum('regular','birthdays') NOT NULL DEFAULT 'regular' COMMENT 'birthdays = projected from the contacts, read-only',
   `dav_name` varchar(255) NOT NULL COMMENT 'Last segment of the CalDAV URL; set at creation, never renamed',
   `display_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -81,6 +82,9 @@ CREATE TABLE IF NOT EXISTS `calendars` (
   `sort_order` int NOT NULL DEFAULT 0 COMMENT 'Rank in the sidebar; ORDER is a reserved word, hence sort_order',
   `time_zone` varchar(64) NOT NULL COMMENT 'IANA identifier; the browser''s at creation (decision 6)',
   `is_visible` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Sidebar checkbox; never projected to DAV',
+  `birthday_reminder` enum('none','same_day','day_before','week_before') DEFAULT NULL COMMENT 'birthdays only',
+  `birthday_language` char(2) DEFAULT NULL COMMENT 'fr or en; birthdays only',
+  `is_birthdays` tinyint(1) GENERATED ALWAYS AS (if(`kind` = 'birthdays',1,NULL)) STORED COMMENT 'Paired with user_id in a unique index: at most one birthdays calendar per user',
   `created_at` datetime NOT NULL COMMENT 'UTC; set by the code, never by the schema',
   `updated_at` datetime NOT NULL COMMENT 'UTC; set by the code, never by the schema'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
@@ -387,7 +391,8 @@ ALTER TABLE `app_settings`
 
 ALTER TABLE `calendars`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `ux_calendars_user_dav_name` (`user_id`,`dav_name`);
+  ADD UNIQUE KEY `ux_calendars_user_dav_name` (`user_id`,`dav_name`),
+  ADD UNIQUE KEY `ux_calendars_user_birthdays` (`user_id`,`is_birthdays`);
 
 ALTER TABLE `calendar_attendees`
   ADD PRIMARY KEY (`event_id`,`position`);

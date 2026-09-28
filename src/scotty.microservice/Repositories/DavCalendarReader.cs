@@ -22,7 +22,7 @@ internal sealed class DavCalendarReader(PreferencesDbContext context) : IDavCale
 
     private static readonly Expression<Func<CalendarRow, DavCalendar>> ToCalendar = c =>
         new DavCalendar(c.Id, c.UserId, c.DavName, c.DisplayName, c.Description, c.Color, c.Order,
-            c.TimeZone);
+            c.TimeZone, c.Kind == CalendarKinds.Birthdays);
 
     private static readonly Expression<Func<CalendarEvent, DavEvent>> ToEvent = e =>
         new DavEvent(e.Id, e.CalendarId, e.DavName, e.Uid, e.IcsRaw, e.IcsHash, e.UpdatedAt,

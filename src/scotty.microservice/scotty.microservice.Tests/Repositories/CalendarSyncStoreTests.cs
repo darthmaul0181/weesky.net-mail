@@ -58,6 +58,15 @@ public sealed class CalendarSyncStoreTests
     }
 
     [Fact]
+    public async Task NextSequenceIfPresent_WithoutATransaction_NamesItselfInTheRefusal()
+    {
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => Store(
+            nameof(NextSequenceIfPresent_WithoutATransaction_NamesItselfInTheRefusal)).NextSequenceIfPresentAsync(Guid.NewGuid(), None));
+
+        Assert.StartsWith(nameof(CalendarSyncStore.NextSequenceIfPresentAsync) + " ", refused.Message);
+    }
+
+    [Fact]
     public void TheIncrement_IsRawSqlAndThereforeUntestedHere()
     {
         // Deliberate, and written as a test so a review reads it as a decision rather than a gap.

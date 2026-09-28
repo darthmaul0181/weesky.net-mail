@@ -77,7 +77,7 @@ internal sealed class CalendarEventStore(
             .ToListAsync(cancellationToken);
         if (rows.Count == 0) return Result.Success<IReadOnlyList<EventOccurrence>>([]);
 
-        var zones = await ZonesAsync(userId, cancellationToken);
+        var calendars = await KindsAndZonesAsync(userId, cancellationToken);
         var found = new List<EventOccurrence>();
         foreach (var row in rows)
         {
@@ -88,9 +88,10 @@ internal sealed class CalendarEventStore(
                 continue;
             }
 
+            var calendar = calendars.GetValueOrDefault(row.CalendarId, UnknownCalendar);
             found.AddRange(OccurrenceExpander.Expand(
-                row.Id, row.CalendarId, parsed, fromUtc, toUtc,
-                zones.GetValueOrDefault(row.CalendarId, IcsTimeZones.Utc), viewTimeZone));
+                    row.Id, row.CalendarId, parsed, fromUtc, toUtc, calendar.Zone, viewTimeZone)
+                .Select(o => Stamp(o, parsed, calendar.Kind)));
 
             // Counted as the rows are expanded and stopped at the first excess: a budget checked
             // only at the end would have paid for the whole answer before refusing it.
@@ -126,6 +127,7 @@ internal sealed class CalendarEventStore(
     {
         var calendar = await FindCalendarAsync(userId, write.CalendarId, cancellationToken);
         if (calendar is null) return Result.Failure<EventWriteResult>(CalendarStore.NotFound);
+        if (calendar.Kind == CalendarKinds.Birthdays) return Result.Failure<EventWriteResult>(CalendarStore.ReadOnly);
 
         var id = Guid.NewGuid();
         // An event born here has no foreign UID, so its own id serves — as ContactStore does. The
@@ -178,6 +180,8 @@ internal sealed class CalendarEventStore(
             ? source
             : await FindCalendarAsync(userId, write.CalendarId, cancellationToken);
         if (source is null || target is null) return Result.Failure<EventWriteResult>(NotFound);
+        if (source.Kind == CalendarKinds.Birthdays || target.Kind == CalendarKinds.Birthdays)
+            return Result.Failure<EventWriteResult>(CalendarStore.ReadOnly);
 
         var moving = target.Id != source.Id;
         var followingId = Guid.NewGuid();
@@ -274,6 +278,7 @@ internal sealed class CalendarEventStore(
 
         var calendar = await FindCalendarAsync(userId, row.CalendarId, cancellationToken);
         if (calendar is null) return Result.Failure<EventWriteResult>(NotFound);
+        if (calendar.Kind == CalendarKinds.Birthdays) return Result.Failure<EventWriteResult>(CalendarStore.ReadOnly);
 
         // Resolved outside the lock so an invalid instance id or a deletion that removes nothing is
         // refused without opening a transaction; resolved again inside it when the row moved.
@@ -388,7 +393,7 @@ internal sealed class CalendarEventStore(
             .ToListAsync(cancellationToken);
         if (rows.Count == 0) return [];
 
-        var zones = await ZonesAsync(userId, cancellationToken);
+        var calendars = await KindsAndZonesAsync(userId, cancellationToken);
         var now = DateTime.UtcNow;
         var found = new List<EventOccurrence>();
         foreach (var row in rows)
@@ -399,8 +404,8 @@ internal sealed class CalendarEventStore(
                 continue;
             }
 
-            var zone = zones.GetValueOrDefault(row.CalendarId, IcsTimeZones.Utc);
-            if (Nearest(row, parsed, zone, now) is { } occurrence) found.Add(occurrence);
+            var calendar = calendars.GetValueOrDefault(row.CalendarId, UnknownCalendar);
+            if (Nearest(row, parsed, calendar.Zone, now) is { } occurrence) found.Add(Stamp(occurrence, parsed, calendar.Kind));
         }
 
         // Ordered on the occurrence, not on the row: what a result answers with is the instance the
@@ -710,13 +715,23 @@ internal sealed class CalendarEventStore(
             OccurrenceExpander.Expand(row.Id, row.CalendarId, parsed, from, to, zone, zone);
     }
 
-    /// <summary>Every collection's zone in one query: the window expands each row in the zone of
-    /// its own calendar, and a lookup per row would be an N+1 on the busiest read there is.</summary>
-    private async Task<Dictionary<Guid, string>> ZonesAsync(
+    private static readonly (string Zone, string Kind) UnknownCalendar = (IcsTimeZones.Utc, CalendarKinds.Regular);
+
+    /// <summary>Every collection's zone and kind in one query: the window expands each row in the zone
+    /// of its own calendar, and a lookup per row would be an N+1 on the busiest read there is.</summary>
+    private async Task<Dictionary<Guid, (string Zone, string Kind)>> KindsAndZonesAsync(
         Guid userId, CancellationToken cancellationToken) =>
         await context.Calendars.AsNoTracking()
             .Where(c => c.UserId == userId)
-            .ToDictionaryAsync(c => c.Id, c => c.TimeZone, cancellationToken);
+            .Select(c => new { c.Id, c.TimeZone, c.Kind })
+            .ToDictionaryAsync(c => c.Id, c => (c.TimeZone, c.Kind), cancellationToken);
+
+    /// <summary>The contact and birth year of a birthday, read from its own file — and only in the
+    /// birthdays collection, where no client can have written that line.</summary>
+    private static EventOccurrence Stamp(EventOccurrence occurrence, IcsCalendar parsed, string kind) =>
+        kind == CalendarKinds.Birthdays && BirthdayIcs.Identify(parsed) is { } birth
+            ? occurrence with { ContactId = birth.ContactId, BirthYear = birth.BirthYear }
+            : occurrence;
 
     private Task<CalendarEvent?> FindAsync(
         Guid userId, Guid eventId, CancellationToken cancellationToken) =>

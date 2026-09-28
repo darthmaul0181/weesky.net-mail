@@ -11,4 +11,7 @@ public sealed class CalendarRequest
     public string? Color { get; set; }
 
     public int? Order { get; set; }
+
+    /// <summary>The birthdays calendar's reminder; null keeps it, and any other calendar refuses one.</summary>
+    public string? BirthdayReminder { get; set; }
 }

@@ -201,6 +201,27 @@ public sealed class CalDavPropertiesTests
     }
 
     [Fact]
+    public void The_privileges_of_birthdays_leave_out_every_write_but_its_properties()
+    {
+        var collection = DavPropertyTables.PrivilegeSet(readOnly: true, collection: true);
+        var member = DavPropertyTables.PrivilegeSet(readOnly: true);
+
+        Assert.Equal(["read", "write-properties", "read-current-user-privilege-set"], Names(collection));
+        Assert.Equal(["read", "read-current-user-privilege-set"], Names(member));
+    }
+
+    [Fact]
+    public void Schedule_calendar_transp_is_transparent_on_birthdays_and_opaque_elsewhere()
+    {
+        var regular = Found(CalendarResource(), DavXml.CalDav + "schedule-calendar-transp")!;
+        Assert.Equal("opaque", regular.Elements().Single().Name.LocalName);
+
+        var birthdays = CalendarResource() with { Calendar = Calendar with { IsReadOnly = true } };
+        var transp = Found(birthdays, DavXml.CalDav + "schedule-calendar-transp")!;
+        Assert.Equal("transparent", transp.Elements().Single().Name.LocalName);
+    }
+
+    [Fact]
     public void AnAllpropOnACalendar_StillLeavesOutTheSyncToken()
     {
         var (found, _) = CalDavProperties.Resolve(
@@ -270,6 +291,7 @@ public sealed class CalDavPropertiesTests
         (DavResourceKind.Calendar, DavXml.CalDav + "supported-calendar-component-set"),
         (DavResourceKind.Calendar, DavXml.CalDav + "supported-calendar-data"),
         (DavResourceKind.Calendar, DavXml.CalDav + "supported-collation-set"),
+        (DavResourceKind.Calendar, DavXml.CalDav + "schedule-calendar-transp"),
         (DavResourceKind.Calendar, DavXml.CalDav + "max-resource-size"),
         (DavResourceKind.Calendar, DavXml.CalDav + "max-instances"),
         (DavResourceKind.Calendar, DavXml.CalendarServer + "getctag"),
@@ -355,6 +377,9 @@ public sealed class CalDavPropertiesTests
         CollectionName: Calendar.DavName, Calendar: Calendar, Event: Event);
 
     private static DavPropertyRequest AllProp() => new(DavPropertyMode.AllProp, []);
+
+    private static IEnumerable<string> Names(XElement privilegeSet) =>
+        privilegeSet.Elements(DavXml.Dav + "privilege").Select(p => p.Elements().Single().Name.LocalName);
 
     private static XElement? Found(DavResourceContext resource, XName name, TimeProvider? clock = null)
     {

@@ -146,6 +146,12 @@ public sealed class CalDavController(
             if (await FindCalendarOr404Async(calendarName, cancellationToken) is not { } calendar)
                 return;
 
+            if (calendar.IsReadOnly)
+            {
+                await RefuseAsync(trace, CalDavError.NeedPrivileges, null, cancellationToken);
+                return;
+            }
+
             var user = AuthenticatedUser;
             var body = await ReadBodyAsync(cancellationToken);
 
@@ -220,6 +226,12 @@ public sealed class CalDavController(
                 return;
             if (await FindEventOr404Async(calendar, davName, cancellationToken) is not { } member)
                 return;
+
+            if (calendar.IsReadOnly)
+            {
+                await RefuseAsync(trace, CalDavError.NeedPrivileges, null, cancellationToken);
+                return;
+            }
 
             if (RefusedByPreconditions(CalDavProperties.EntityTag(member)))
             {
@@ -399,6 +411,12 @@ public sealed class CalDavController(
             // any other verb.
             if (await FindCalendarOr404Async(calendarName, cancellationToken) is not { } calendar)
                 return;
+
+            if (calendar.IsReadOnly)
+            {
+                await RefuseAsync(trace, CalDavError.NeedPrivileges, null, cancellationToken);
+                return;
+            }
 
             if (calendar.DavName == CalendarStore.DefaultDavName)
             {

@@ -18,6 +18,10 @@ internal sealed class DavCalendarWriter(
         string ics, CancellationToken cancellationToken, bool createOnly = false,
         string? ifMatch = null, RevisionCause cause = RevisionCause.Put)
     {
+        // The backstop behind CalDavController's own check: a door writing by UID straight to the
+        // writer (InvitationResponder's "stored" branch) must refuse too, before the body is even
+        // parsed.
+        if (await IsReadOnlyAsync(userId, calendarId, cancellationToken)) return Refused(DavWriteStatus.ReadOnly);
         if (IcsGuards.CheckAll(ics, out var parsed) is { } refused) return Refused(refused);
 
         try
@@ -60,6 +64,8 @@ internal sealed class DavCalendarWriter(
     public async Task<DavWriteOutcome> DeleteAsync(Guid userId, Guid calendarId, string davName,
         CancellationToken cancellationToken, string? ifMatch = null)
     {
+        if (await IsReadOnlyAsync(userId, calendarId, cancellationToken)) return Refused(DavWriteStatus.ReadOnly);
+
         var row = await FindAsync(userId, calendarId, davName, cancellationToken);
         if (row is null) return Refused(DavWriteStatus.NotFound);
 
@@ -123,6 +129,11 @@ internal sealed class DavCalendarWriter(
                 return Refused(DavWriteStatus.NotFound);
             }
 
+            // The backstop, as on PutAsync and DeleteAsync: CalDavController never reaches this
+            // door for the birthdays calendar (its DavName is never CalendarStore.DefaultDavName),
+            // but nothing else in this class may assume that forever.
+            if (await IsReadOnlyAsync(userId, calendarId, cancellationToken)) return Refused(DavWriteStatus.ReadOnly);
+
             // The ids first, so an empty calendar opens no transaction and spends no rank; each
             // batch re-reads its rows under its own lock. The read sits inside the try too: a
             // transient failure here is the lock race the catch answers Busy for, not a 500.
@@ -142,7 +153,7 @@ internal sealed class DavCalendarWriter(
                 // other device learns of each resource by name rather than losing the lot.
                 buried += await store.InTransactionAsync(
                     () => CalendarBatchDelete.RunAsync(context, sync, userId, calendarId, batch,
-                        tombstones: true, cancellationToken),
+                        tombstones: true, archive: true, cancellationToken),
                     cancellationToken);
             }
 
@@ -298,6 +309,13 @@ internal sealed class DavCalendarWriter(
         Guid userId, Guid calendarId, string davName, CancellationToken cancellationToken) =>
         context.CalendarEvents.SingleOrDefaultAsync(
             e => e.CalendarId == calendarId && e.UserId == userId && e.DavName == davName,
+            cancellationToken);
+
+    /// <summary>True only for the caller's own birthdays calendar — scoped by user like every
+    /// other read here, so a foreign calendar id leaks nothing about its kind.</summary>
+    private Task<bool> IsReadOnlyAsync(Guid userId, Guid calendarId, CancellationToken cancellationToken) =>
+        context.Calendars.AsNoTracking().AnyAsync(
+            c => c.Id == calendarId && c.UserId == userId && c.Kind == CalendarKinds.Birthdays,
             cancellationToken);
 
     /// <summary>Reloads a row read before the state lock; false when it no longer exists.</summary>

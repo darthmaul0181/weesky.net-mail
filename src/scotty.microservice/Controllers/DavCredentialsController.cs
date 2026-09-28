@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using weesky.Scotty.Microservice.Authentication.Dav;
 using weesky.Scotty.Microservice.Models;
+using weesky.Scotty.Microservice.Models.Calendar;
 using weesky.Scotty.Microservice.Models.Dav;
 using weesky.Scotty.Microservice.Repositories;
 using weesky.Scotty.Microservice.Services;
@@ -134,8 +135,12 @@ public sealed class DavCredentialsController(
                 return BadRequestEnveloppe(IcsTimeZones.UnknownZone);
 
             secret = await store.EnableAsync(AuthenticatedUser.WebmailUid, DavProtocol.CalDav,
-                alongside: () => calendars.EnsureDefaultAsync(
-                    AuthenticatedUser.WebmailUid, toggle.TimeZone, cancellationToken),
+                alongside: async () =>
+                {
+                    await calendars.EnsureDefaultAsync(AuthenticatedUser.WebmailUid, toggle.TimeZone, cancellationToken);
+                    await calendars.EnsureBirthdaysAsync(
+                        AuthenticatedUser.WebmailUid, toggle.TimeZone, toggle.Language ?? BirthdayLanguages.En, cancellationToken);
+                },
                 cancellationToken);
             throttle.ForgetIdentifier(Identifier);
         }

@@ -343,7 +343,7 @@ public sealed class CalendarStoreTests
 
         var context = new RacingPreferencesDbContext(db, async () =>
             winner = await Store(db).EnsureDefaultAsync(user, "America/New_York", None));
-        var loser = await new CalendarStore(context, new TestCalendarSyncStore(context))
+        var loser = await CalendarStoreTestFactory.Calendars(context, new TestCalendarSyncStore(context))
             .EnsureDefaultAsync(user, "Europe/Brussels", None);
 
         Assert.NotNull(winner);

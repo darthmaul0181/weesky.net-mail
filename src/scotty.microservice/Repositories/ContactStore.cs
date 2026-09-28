@@ -10,7 +10,8 @@ using weesky.Scotty.Microservice.Services.Dav;
 
 namespace weesky.Scotty.Microservice.Repositories;
 
-internal sealed class ContactStore(PreferencesDbContext context, IContactSyncStore sync) : IContactStore
+internal sealed class ContactStore(
+    PreferencesDbContext context, IContactSyncStore sync, IBirthdayProjector? birthdays = null) : IContactStore
 {
     /// <summary>
     /// What bounds the table, and what bounds the payload: the whole book is fetched into the
@@ -216,6 +217,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 return Result.Failure<Guid>(written.Error);
             }
 
+            await ProjectBirthdaysAsync(cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
 
             // A name that comes back must stop being reported as deleted: a client that syncs after
@@ -315,6 +317,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
             // A single SaveChanges: the change tracker merges a Deleted+Added pair on the same key
             // into one Modified command, and splitting it would leave the contact with no child rows
             // at all between the two commits if the second one failed.
+            await ProjectBirthdaysAsync(cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
             return Result.Success();
         }, cancellationToken);
@@ -352,6 +355,8 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
             await ClearProjectionAsync([contactId], cancellationToken);
             context.Contacts.Remove(row);
+            // Before the strip: the archive of a group it rewrites saves, and flushes this removal.
+            await ProjectBirthdaysAsync(cancellationToken);
             await StripFromGroupsAsync(userId, Forms(before.Uid), [contactId], rank, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
 
@@ -442,6 +447,8 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
 
                 await ClearProjectionAsync([.. rows.Select(r => r.Id)], cancellationToken);
                 context.Contacts.RemoveRange(rows);
+                // Before the strip, as in DeleteAsync: a group's archive flushes these removals.
+                await ProjectBirthdaysAsync(cancellationToken);
                 // The exclusion is computed on the WHOLE list, never on the slice: a group the
                 // caller also condemned would otherwise be rewritten by the slice preceding its
                 // own burial — a rank and a revision spent on a card nobody will ever read. And on
@@ -713,7 +720,6 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                     Id = groupId, UserId = userId, Uid = row.Uid ?? groupId.ToString(),
                     Source = "imported", UpdatedAt = DateTime.UtcNow
                 };
-                context.Contacts.Add(group);
                 born[groupId] = group;
                 // Always non-null: a CSV never describes a group.
                 pending[groupId] = new PendingCard(group, row.Line, row.VCard!);
@@ -817,7 +823,6 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 Source = "imported",
                 UpdatedAt = DateTime.UtcNow
             };
-            context.Contacts.Add(contact);
             born[id] = contact;
             // Composed here, written once at the end: a later row of the same file may still merge
             // into this contact, and two writes would project it twice.
@@ -869,6 +874,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         // WriteCardAsync's two halves, spelled out: what it decides internally — whether the card
         // is valid, and whether storing it changes anything — is exactly what an archive and a rank
         // hang on here, and it answers Success either way.
+        var writes = new List<(Guid Id, PendingCard Item, string Card)>();
         foreach (var (id, item) in pending)
         {
             var before = new CardBefore(
@@ -880,7 +886,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 errors.Add(new ContactImportError(item.Line, prepared.Error));
                 if (!born.ContainsKey(id)) continue;
                 // Nothing of a contact whose card cannot be stored: décision 1 admits no card-less row.
-                context.Entry(item.Contact).State = EntityState.Detached;
+                born.Remove(id);
                 created--;
                 failed++;
                 continue;
@@ -913,7 +919,15 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
                 }, cancellationToken);
             }
 
-            await ApplyCardAsync(item.Contact, prepared.Value.Card, cache, cancellationToken);
+            writes.Add((id, item, prepared.Value.Card));
+        }
+
+        // Tracked and written only once every archive is kept: an archive saves, and would flush a
+        // contact born or rewritten before it ahead of its birthday projection.
+        context.Contacts.AddRange(born.Values);
+        foreach (var (id, item, card) in writes)
+        {
+            await ApplyCardAsync(item.Contact, card, cache, cancellationToken);
             item.Contact.SyncSequence = rank;
             // Under the same guard as every other write here, and as ApplyMergesAsync's own: a
             // replaced group has no other writer of it, and a card that came back byte for byte
@@ -928,6 +942,7 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         // One write for the batch, and what that buys is atomicity, not order: EF orders its own
         // commands inside SaveChangesAsync, and the archives above are the sync store's own saves.
         // What holds is that the batch's COMMIT lands all of it or none of it.
+        await ProjectBirthdaysAsync(cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
 
         return new ContactImportOutcome(created, merged, skipped, failed, errors);
@@ -948,27 +963,34 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         // hold is both what the card is reconciled against and what re-projecting them clears.
         var cache = await LoadProjectionAsync([.. batch.Select(c => c.Id)], cancellationToken);
 
-        var processed = 0;
-        foreach (var row in batch)
+        // One transaction per batch, the import's shape: the birthdays it projects commit with it.
+        var processed = await InTransactionAsync(async () =>
         {
-            IReadOnlyList<string> addresses = [.. cache.AddressesOf(row.Id)];
-            // Reconciled, never recomposed. 3a left vcard_raw untouched on every edit, so a card
-            // written before 4a may carry a stale N, FN and EMAIL while its columns are current —
-            // projecting it first would restore the old name over the edit (spec, § Le rattrapage).
-            var card = row.VCardRaw == null
-                ? VCardComposer.ComposeNew(row.Uid, WriteOf(row, addresses, cache))
-                : VCardComposer.Reconcile(row.VCardRaw, row.Uid,
-                    new ReconcileWrite(row.FirstName, row.LastName, row.Nickname, addresses));
+            var converted = 0;
+            foreach (var row in batch)
+            {
+                IReadOnlyList<string> addresses = [.. cache.AddressesOf(row.Id)];
+                // Reconciled, never recomposed. 3a left vcard_raw untouched on every edit, so a card
+                // written before 4a may carry a stale N, FN and EMAIL while its columns are current —
+                // projecting it first would restore the old name over the edit (spec, § Le rattrapage).
+                var card = row.VCardRaw == null
+                    ? VCardComposer.ComposeNew(row.Uid, WriteOf(row, addresses, cache))
+                    : VCardComposer.Reconcile(row.VCardRaw, row.Uid,
+                        new ReconcileWrite(row.FirstName, row.LastName, row.Nickname, addresses));
 
-            // A card over the ceiling leaves the row in the queue rather than half-converted; the
-            // batch then answers a Processed below its size, which is what tells the operator.
-            if ((await WriteCardAsync(row, card, cancellationToken, cache)).IsFailure) continue;
+                // A card over the ceiling leaves the row in the queue rather than half-converted; the
+                // batch then answers a Processed below its size, which is what tells the operator.
+                if ((await WriteCardAsync(row, card, cancellationToken, cache)).IsFailure) continue;
 
-            row.UpdatedAt = DateTime.UtcNow;
-            processed++;
-        }
+                row.UpdatedAt = DateTime.UtcNow;
+                converted++;
+            }
 
-        await context.SaveChangesAsync(cancellationToken);
+            await ProjectBirthdaysAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+            return converted;
+        }, cancellationToken);
+
         return new BackfillOutcome(processed,
             await context.Contacts.CountAsync(c => c.CardHash == "", cancellationToken));
     }
@@ -1279,6 +1301,10 @@ internal sealed class ContactStore(PreferencesDbContext context, IContactSyncSto
         await entry.ReloadAsync(cancellationToken);
         return entry.State is not EntityState.Detached;
     }
+
+    /// <summary>Called by every write path just before its SaveChanges (spec, décision 4).</summary>
+    internal Task ProjectBirthdaysAsync(CancellationToken cancellationToken) =>
+        birthdays?.ProjectTrackedAsync(cancellationToken) ?? Task.CompletedTask;
 
     /// <summary>
     /// The transaction with this store's own commit rule. The no-commit-on-failure predicate only

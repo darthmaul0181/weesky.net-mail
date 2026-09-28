@@ -139,7 +139,9 @@ internal sealed class InvitationResponder(
         if (stored is not null) (calendarId, davName) = (stored.CalendarId, stored.DavName);
         else
         {
-            var list = await calendars.ListAsync(user.WebmailUid, cancellationToken);
+            // Never the read-only birthdays calendar: an answer asking for it lands in the default.
+            var list = (await calendars.ListAsync(user.WebmailUid, cancellationToken))
+                .Where(c => c.Kind != CalendarKinds.Birthdays).ToList();
             var target = request.CalendarId is { } wanted ? list.FirstOrDefault(c => c.Id == wanted) : null;
             target ??= list.FirstOrDefault(c => c.IsDefault) ?? list.FirstOrDefault();
             if (target is null) return Failed(502, NoCalendar);

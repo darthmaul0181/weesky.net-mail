@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using weesky.Scotty.Microservice.Data.Preferences;
+using weesky.Scotty.Microservice.Models.Calendar;
 using weesky.Scotty.Microservice.Models.Dav;
 using weesky.Scotty.Microservice.Repositories;
 using weesky.Scotty.Microservice.Services.Calendar;
@@ -222,6 +223,25 @@ public sealed class DavCalendarWriterTests : IAsyncLifetime
         // the holder check would have excused it as the resource's own.
         Assert.Equal(DavWriteStatus.Created, outcome.Status);
         Assert.Equal(2, await context.CalendarEvents.CountAsync(e => e.Uid == "shared", None));
+    }
+
+    [Fact]
+    public async Task TheBirthdaysCalendar_RefusesPutAndDeleteWithoutWritingAnything()
+    {
+        // The backstop behind CalDavController's own check (task 4's carry-over): a door writing
+        // by UID straight to the writer — InvitationResponder's "stored" branch — must refuse too.
+        var birthdays = await GivenAnotherCalendar("birthdays", kind: CalendarKinds.Birthdays);
+
+        var put = await writer.PutAsync(userId, birthdays, "a.ics", Event("u1", "Ada"), None);
+        Assert.Equal(DavWriteStatus.ReadOnly, put.Status);
+        Assert.Empty(context.CalendarEvents);
+
+        // Seeded directly, past the writer, so a birthday event exists to try deleting.
+        await SeedBirthdayRow(birthdays, "a.ics");
+        var delete = await writer.DeleteAsync(userId, birthdays, "a.ics", None);
+        Assert.Equal(DavWriteStatus.ReadOnly, delete.Status);
+        Assert.Single(context.CalendarEvents);
+        Assert.Empty(context.CalendarTombstones);
     }
 
     [Fact]
@@ -610,17 +630,30 @@ public sealed class DavCalendarWriterTests : IAsyncLifetime
     private Task<CalendarEvent> RowOf(string davName) =>
         context.CalendarEvents.SingleAsync(e => e.CalendarId == calendarId && e.DavName == davName, None);
 
-    private async Task<Guid> GivenAnotherCalendar(string davName, Guid? owner = null)
+    private async Task<Guid> GivenAnotherCalendar(
+        string davName, Guid? owner = null, string kind = CalendarKinds.Regular)
     {
         var row = new CalendarRow
         {
             Id = Guid.NewGuid(), UserId = owner ?? userId, DavName = davName, DisplayName = davName,
             Description = string.Empty, Color = "#336699", Order = 2,
-            TimeZone = CalendarStoreTestFactory.Zone, IsVisible = true,
+            TimeZone = CalendarStoreTestFactory.Zone, IsVisible = true, Kind = kind,
         };
         context.Calendars.Add(row);
         await context.SaveChangesAsync(None);
         return row.Id;
+    }
+
+    /// <summary>Past the writer, which refuses this calendar: the row the backstop's DELETE test
+    /// then tries to remove.</summary>
+    private async Task SeedBirthdayRow(Guid calendarId, string davName)
+    {
+        context.CalendarEvents.Add(new CalendarEvent
+        {
+            Id = Guid.NewGuid(), CalendarId = calendarId, UserId = userId, Uid = "birthday-1",
+            DavName = davName, IcsRaw = "x", IcsHash = "h", SyncSequence = 1, UpdatedAt = DateTime.UtcNow,
+        });
+        await context.SaveChangesAsync(None);
     }
 
     private async Task GivenTheCalendarIsFull(int count = CalendarEventStore.MaxPerCalendar)

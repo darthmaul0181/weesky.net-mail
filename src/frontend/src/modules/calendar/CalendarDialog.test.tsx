@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import CalendarDialog from './CalendarDialog'
 import { CALENDAR_COLORS } from './calendarColors'
-import { fireEscape, pressBackdrop } from '../../test-utils'
+import { fireEscape, optionsOf, pickOption, pressBackdrop } from '../../test-utils'
 
 function open(props: Partial<Parameters<typeof CalendarDialog>[0]> = {}) {
   const onSubmit = vi.fn()
@@ -84,6 +84,26 @@ describe('CalendarDialog', () => {
   it('opens on the field its door named', () => {
     open({ initialName: 'Work', focus: 'colour' })
     expect(screen.getByLabelText('Hex code')).toHaveFocus()
+  })
+
+  // The birthdays calendar's settings: the same dialog, one row more.
+  it('offers the birthday reminder and sends the one picked', async () => {
+    const { onSubmit } = open({ initialName: 'Birthdays', initialReminder: 'same_day' })
+    const box = screen.getByRole('combobox', { name: 'Reminder' })
+    expect(await optionsOf(box))
+      .toEqual(['None', 'On the day at 9:00', 'The day before at 9:00', 'A week before'])
+    expect(screen.getByText('For every birthday, on all your synced devices.')).toBeInTheDocument()
+
+    await pickOption(box, 'The day before at 9:00')
+    await userEvent.click(save())
+    expect(onSubmit).toHaveBeenCalledWith({
+      displayName: 'Birthdays', color: CALENDAR_COLORS[0], birthdayReminder: 'day_before',
+    })
+  })
+
+  it('has no reminder row on a regular calendar', () => {
+    open({ initialName: 'Work' })
+    expect(screen.queryByRole('combobox', { name: 'Reminder' })).not.toBeInTheDocument()
   })
 
   it('opens on the name when that is the door', () => {

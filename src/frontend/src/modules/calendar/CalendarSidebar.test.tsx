@@ -18,7 +18,7 @@ function draw(props: Partial<Parameters<typeof CalendarSidebar>[0]> = {}) {
   const handlers = {
     onPickDay: vi.fn(), onNewEvent: vi.fn(), onNewCalendar: vi.fn(), onRename: vi.fn(),
     onRecolour: vi.fn(), onImport: vi.fn(), onExport: vi.fn(), onDelete: vi.fn(),
-    onToggleVisible: vi.fn(),
+    onSettings: vi.fn(), onDisable: vi.fn(), onToggleVisible: vi.fn(),
   }
   const view = render(
     <CalendarSidebar calendars={CALENDARS} anchor="2026-09-14" today="2026-09-06" rules={RULES}
@@ -63,6 +63,32 @@ describe('CalendarSidebar', () => {
       await userEvent.click(screen.getByRole('menuitem', { name: label }))
       expect(spy).toHaveBeenCalledWith(CALENDARS[1])
     }
+  })
+
+  // Nothing is written into it and nothing deleted: Settings replaces Rename and Colour, Disable
+  // replaces Delete, and Import is gone.
+  it('offers the birthdays calendar its own three actions', async () => {
+    const birthdays = calendarOf('z', undefined, 'Birthdays', { kind: 'birthdays' })
+    const { onSettings, onExport, onDisable } = draw({ calendars: [...CALENDARS, birthdays] })
+    await openMenu('Birthdays')
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent))
+      .toEqual(['Settings…', 'Export', 'Disable…'])
+    await userEvent.keyboard('{Escape}')
+
+    for (const [label, spy] of [
+      ['Settings…', onSettings], ['Export', onExport], ['Disable…', onDisable],
+    ] as const) {
+      await openMenu('Birthdays')
+      await userEvent.click(screen.getByRole('menuitem', { name: label }))
+      expect(spy).toHaveBeenCalledWith(birthdays)
+    }
+  })
+
+  it('keeps a regular calendar on its five actions', async () => {
+    draw()
+    await openMenu('Work')
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent))
+      .toEqual(['Rename…', 'Colour…', 'Import…', 'Export', 'Delete…'])
   })
 
   it('opens a create from the heading and from the primary action', async () => {

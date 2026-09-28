@@ -53,5 +53,10 @@ public enum DavWriteStatus
     NotFound,
 
     /// <summary>A lock wait or deadlock the store could not resolve — retry later, never a 500.</summary>
-    Busy
+    Busy,
+
+    /// <summary>The target is the birthdays calendar — <c>DAV:need-privileges</c>, 403. The
+    /// writer's own backstop, judged before anything else so nothing is written: it catches a door
+    /// that writes by UID without going through <c>CalDavController</c>'s own check.</summary>
+    ReadOnly
 }

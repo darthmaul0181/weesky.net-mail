@@ -25,7 +25,9 @@
     "delete": "Supprimer…",
     "deleteDefault": "L’agenda par défaut ne peut pas être supprimé",
     "previousMonth": "Mois précédent",
-    "nextMonth": "Mois suivant"
+    "nextMonth": "Mois suivant",
+    "settings": "Réglages…",
+    "disable": "Désactiver…"
   },
   "views": {
     "allDay": "Journée entière",
@@ -69,7 +71,17 @@
     "close": "Fermer",
     "reminderSet": "Rappel activé",
     "repeatsGeneric": "Se répète",
-    "organizedBy": "Organisé par {{name}}"
+    "organizedBy": "Organisé par {{name}}",
+    "age_one": "{{count}} an",
+    "age_other": "{{count}} ans",
+    "reminderAt": {
+      "same_day": "Rappel le jour même à {{hour}}:00",
+      "day_before": "Rappel la veille à {{hour}}:00",
+      "week_before": "Rappel une semaine avant"
+    },
+    "yearly": "Chaque année",
+    "openCard": "Ouvrir la fiche",
+    "birthdayTitle": "Anniversaire"
   },
   "search": {
     "capped": "Seuls les {{max}} premiers résultats sont affichés"
@@ -229,7 +241,18 @@
     },
     "save": "Enregistrer",
     "deleteCalendarMessage": "Supprimer « {{name}} » et tous les événements qu’il contient ? Cette action est irréversible.",
-    "deleteEventMessage": "Supprimer « {{name}} » ?"
+    "deleteEventMessage": "Supprimer « {{name}} » ?",
+    "reminder": "Rappel",
+    "reminders": {
+      "none": "Aucun",
+      "same_day": "Le jour même à {{hour}}:00",
+      "day_before": "La veille à {{hour}}:00",
+      "week_before": "Une semaine avant"
+    },
+    "reminderHint": "Pour chaque anniversaire, sur tous vos appareils synchronisés.",
+    "disableTitle": "Désactiver les anniversaires ?",
+    "disableBody": "Les anniversaires disparaîtront du webmail et de vos appareils. Vos contacts ne sont pas modifiés. Vous pourrez réactiver cet agenda dans Paramètres › Général.",
+    "disable": "Désactiver"
   },
   "import": {
     "title": "Importer un agenda",

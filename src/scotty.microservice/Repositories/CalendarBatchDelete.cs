@@ -16,13 +16,14 @@ internal static class CalendarBatchDelete
     /// <param name="userId">the owner the archive rows are written for</param>
     /// <param name="calendarId">the collection being emptied</param>
     /// <param name="ids">one batch of resource ids, read before the transaction opened</param>
-    /// <param name="cancellationToken">cancellation token</param>
     /// <param name="tombstones">
     /// True when the collection SURVIVES: a client that keeps it learns of each resource by name,
     /// where one losing the collection loses everything under it without being told name by name.
     /// </param>
+    /// <param name="archive">false for the birthdays calendar: its events are copies, and a copy earns no revision</param>
+    /// <param name="cancellationToken">cancellation token</param>
     internal static async Task<int> RunAsync(PreferencesDbContext context, ICalendarSyncStore sync,
-        Guid userId, Guid calendarId, List<Guid> ids, bool tombstones,
+        Guid userId, Guid calendarId, List<Guid> ids, bool tombstones, bool archive,
         CancellationToken cancellationToken)
     {
         // The state row's lock FIRST, as every other transaction of these two stores takes it, so
@@ -34,7 +35,7 @@ internal static class CalendarBatchDelete
             .Where(e => e.CalendarId == calendarId && ids.Contains(e.Id))
             .ToListAsync(cancellationToken);
 
-        foreach (var stored in batch)
+        foreach (var stored in archive ? batch : [])
         {
             // EventId NULL: a delete revision outlives the row it describes, and CalendarId
             // survives on purpose — calendar_revisions carries no FK, so the archive is not
