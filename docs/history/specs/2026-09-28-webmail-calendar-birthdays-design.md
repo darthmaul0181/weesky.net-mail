@@ -50,9 +50,11 @@ Trois colonnes s'ajoutent à `calendars` :
 | `birthday_language` | `CHAR(2) NULL` | `fr` ou `en`, la langue de la description ; `NULL` pour un agenda ordinaire |
 
 **Au plus un agenda d'anniversaires par utilisateur.** C'est la colonne générée
-`birthdays_owner` (`IF(kind='birthdays', user_id, NULL)`, `PERSISTENT`) qui le garantit, par un
-index unique. MariaDB accepte plusieurs `NULL` dans un index unique, donc les agendas ordinaires ne
-sont pas concernés.
+`is_birthdays` (`IF(kind='birthdays', 1, NULL)`, `PERSISTENT`) qui le garantit, couplée à
+`user_id` dans un index unique. L'expression ne lit que `kind` (un `ENUM`) : une colonne générée
+persistante ou indexée ne peut pas lire `user_id`, un `CHAR`, car sa valeur dépendrait du mode
+`PAD_CHAR_TO_FULL_LENGTH` de la session. MariaDB accepte plusieurs `NULL` dans un index unique,
+donc les agendas ordinaires ne sont pas concernés.
 
 **Le nom DAV** est `birthdays`. Si un client a déjà créé un agenda de ce nom (l'index
 `ux_calendars_user_dav_name` l'interdirait), c'est `birthdays-2`, puis `-3`, etc. C'est `kind`
@@ -325,8 +327,8 @@ ALTER TABLE calendars
   ADD COLUMN kind ENUM('regular','birthdays') NOT NULL DEFAULT 'regular' AFTER user_id,
   ADD COLUMN birthday_reminder ENUM('none','same_day','day_before','week_before') NULL,
   ADD COLUMN birthday_language CHAR(2) NULL,
-  ADD COLUMN birthdays_owner CHAR(36) AS (IF(kind = 'birthdays', user_id, NULL)) PERSISTENT,
-  ADD UNIQUE KEY ux_calendars_birthdays_owner (birthdays_owner);
+  ADD COLUMN is_birthdays TINYINT(1) AS (IF(kind = 'birthdays', 1, NULL)) PERSISTENT,
+  ADD UNIQUE KEY ux_calendars_user_birthdays (user_id, is_birthdays);
 ```
 
 La relation EF entre `Calendar` et `CalendarEvent` doit rester déclarée : sans arête, EF ordonne

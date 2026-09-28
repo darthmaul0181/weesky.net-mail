@@ -5,12 +5,17 @@ ALTER TABLE calendars
   ADD COLUMN kind ENUM('regular','birthdays') NOT NULL DEFAULT 'regular' AFTER user_id,
   ADD COLUMN birthday_reminder ENUM('none','same_day','day_before','week_before') NULL,
   ADD COLUMN birthday_language CHAR(2) NULL,
-  ADD COLUMN birthdays_owner CHAR(36) AS (IF(kind = 'birthdays', user_id, NULL)) PERSISTENT,
-  ADD UNIQUE KEY ux_calendars_birthdays_owner (birthdays_owner);
+  ADD COLUMN is_birthdays TINYINT(1) AS (IF(kind = 'birthdays', 1, NULL)) PERSISTENT,
+  ADD UNIQUE KEY ux_calendars_user_birthdays (user_id, is_birthdays);
 ```
 
 This is replayed by hand on each database — prod and dev — before deploying the code that reads
 these columns.
+
+L'expression générée ne doit lire que `kind` (un `ENUM`), jamais une colonne `CHAR` comme
+`user_id` : sa valeur dépendrait alors du mode `PAD_CHAR_TO_FULL_LENGTH` de la session, ce que
+MariaDB refuse pour une colonne générée persistante ou indexée (erreur #1901) — ne pas
+« simplifier » en réintroduisant `user_id` dans l'expression.
 
 Check afterwards:
 
@@ -29,7 +34,7 @@ Dans **les deux** sessions, remplacer l'identifiant par celui du compte de test�
 ```sql
 SET @user = '00000000-0000-0000-0000-000000000000';
 SET @cal = (SELECT id FROM calendars WHERE user_id = @user AND kind = 'birthdays');
-SELECT @@tx_isolation;   -- attendu : REPEATABLE-READ
+SELECT @@transaction_isolation;   -- attendu : REPEATABLE-READ
 ```
 
 **Session A** — l'enregistrement d'un contact, jusqu'à sa première lecture (qui fige la photo de la base) :

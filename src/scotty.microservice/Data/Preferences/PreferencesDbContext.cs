@@ -187,9 +187,9 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<Calendar>().HasKey(c => c.Id);
         modelBuilder.Entity<Calendar>().HasIndex(c => new { c.UserId, c.DavName }).IsUnique();
         modelBuilder.Entity<Calendar>().HasOne<WebmailUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-        modelBuilder.Entity<Calendar>().Property(c => c.BirthdaysOwner)
-            .HasComputedColumnSql("IF(kind = 'birthdays', user_id, NULL)", stored: true);
-        modelBuilder.Entity<Calendar>().HasIndex(c => c.BirthdaysOwner).IsUnique();
+        modelBuilder.Entity<Calendar>().Property(c => c.IsBirthdays)
+            .HasComputedColumnSql("IF(kind = 'birthdays', 1, NULL)", stored: true);
+        modelBuilder.Entity<Calendar>().HasIndex(c => new { c.UserId, c.IsBirthdays }).IsUnique();
 
         modelBuilder.Entity<CalendarEvent>().HasKey(e => e.Id);
         modelBuilder.Entity<CalendarEvent>().HasIndex(e => new { e.CalendarId, e.Uid }).IsUnique();

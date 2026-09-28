@@ -152,7 +152,7 @@ internal sealed partial class CalendarStore(
         }
         catch (DbUpdateException)
         {
-            // Two first requests raced and ux_calendars_birthdays_owner kept the other row. Our own row
+            // Two first requests raced and ux_calendars_user_birthdays kept the other row. Our own row
             // still visible means a caller's ambient transaction holds a half-filled calendar: not a race.
             context.ChangeTracker.Clear();
             if (await BirthdaysAsync(userId, cancellationToken) is not { } winner || winner.Id == id) throw;

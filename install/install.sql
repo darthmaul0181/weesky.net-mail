@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS `calendars` (
   `is_visible` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Sidebar checkbox; never projected to DAV',
   `birthday_reminder` enum('none','same_day','day_before','week_before') DEFAULT NULL COMMENT 'birthdays only',
   `birthday_language` char(2) DEFAULT NULL COMMENT 'fr or en; birthdays only',
-  `birthdays_owner` char(36) GENERATED ALWAYS AS (if(`kind` = 'birthdays',`user_id`,NULL)) STORED COMMENT 'At most one birthdays calendar per user',
+  `is_birthdays` tinyint(1) GENERATED ALWAYS AS (if(`kind` = 'birthdays',1,NULL)) STORED COMMENT 'Paired with user_id in a unique index: at most one birthdays calendar per user',
   `created_at` datetime NOT NULL COMMENT 'UTC; set by the code, never by the schema',
   `updated_at` datetime NOT NULL COMMENT 'UTC; set by the code, never by the schema'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
@@ -392,7 +392,7 @@ ALTER TABLE `app_settings`
 ALTER TABLE `calendars`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `ux_calendars_user_dav_name` (`user_id`,`dav_name`),
-  ADD UNIQUE KEY ux_calendars_birthdays_owner (birthdays_owner);
+  ADD UNIQUE KEY `ux_calendars_user_birthdays` (`user_id`,`is_birthdays`);
 
 ALTER TABLE `calendar_attendees`
   ADD PRIMARY KEY (`event_id`,`position`);
