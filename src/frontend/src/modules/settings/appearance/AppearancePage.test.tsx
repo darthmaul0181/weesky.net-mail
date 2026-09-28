@@ -303,6 +303,19 @@ describe('AppearancePage — my palette', () => {
     expect(slider('Structure')).toHaveAttribute('aria-valuetext', '265°')
   })
 
+  // A slot that appears and disappears resizes the dialog, which re-centres under the dragging pointer.
+  it('keeps the warning slot mounted and announces it politely', async () => {
+    const { container } = renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    const slot = container.ownerDocument.querySelector('.custom-palette-warning')
+
+    expect(slot).toHaveAttribute('aria-live', 'polite')
+    expect(slot).toHaveTextContent('')
+    fireEvent.change(slider('Accent'), { target: { value: '27' } })
+    expect(container.ownerDocument.querySelector('.custom-palette-warning')).toBe(slot)
+    expect(slot).toHaveTextContent(/close to the red used for errors/)
+  })
+
   it('selects the saved palette like any other', async () => {
     renderPage('100,neutral,300')
     await userEvent.click(await screen.findByRole('radio', { name: 'My palette' }))

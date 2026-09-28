@@ -58,7 +58,6 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
             value={draft.accent} aria-valuetext={`${draft.accent}°`}
             style={{ background: hueGradient(0.66, 0.15) }}
             onChange={e => setDraft({ ...draft, accent: Number(e.target.value) })} />
-          {isNearDanger(draft.accent) && <p className="custom-palette-warning">{t('appearance.custom.nearDanger')}</p>}
         </div>
         <div className="palette-zoom-pair">
           {[false, true].map(dark => (
@@ -71,6 +70,9 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
       </div>
       {error && <p className="alert-error" role="alert">{error}</p>}
       <div className="folder-pick-submit">
+        <p className="custom-palette-warning" aria-live="polite">
+          {isNearDanger(draft.accent) ? t('appearance.custom.nearDanger') : ''}
+        </p>
         <button type="button" className="btn btn-ghost" onClick={onClose} disabled={setPreference.isPending}>
           {t('appearance.custom.cancel')}
         </button>
