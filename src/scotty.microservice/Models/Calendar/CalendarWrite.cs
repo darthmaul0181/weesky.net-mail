@@ -13,5 +13,7 @@ namespace weesky.Scotty.Microservice.Models.Calendar;
 /// the webmail, which sends the browser's zone alongside instead. Null means the fallback zone at
 /// creation and "unchanged" on an update.
 /// </param>
+/// <param name="BirthdayReminder">null leaves it untouched; refused on any calendar but the birthdays one</param>
 public sealed record CalendarWrite(
-    string DisplayName, string? Description, string? Color, int? Order, string? TimeZone = null);
+    string DisplayName, string? Description, string? Color, int? Order, string? TimeZone = null,
+    string? BirthdayReminder = null);

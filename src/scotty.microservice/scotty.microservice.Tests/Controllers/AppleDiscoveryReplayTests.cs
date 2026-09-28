@@ -296,24 +296,27 @@ public sealed class AppleDiscoveryReplayTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TheICalHomeBody_ServesTenOfTwentySix_AndPutsTheOtherSixteenIn404()
+    public async Task TheICalHomeBody_ServesElevenOfTwentySix_AndPutsTheOtherFifteenIn404()
     {
         var response = await server.PropfindAsync(DavPaths.CalendarHome(server.UserId), "1", ICalHomeBody);
 
         Assert.Equal(207, response.StatusCode);
         var calendar = ResponsesByHref(response)[Calendar()];
 
+        // schedule-calendar-transp joined the served set with task 4: opaque here, since this
+        // calendar is not the birthdays one. Position follows the client's own request order.
         Assert.Equal(
             [DavXml.CalendarServer + "getctag", DavXml.Dav + "displayname",
              DavXml.CalDav + "calendar-description", DavXml.Apple + "calendar-color",
              DavXml.Apple + "calendar-order", DavXml.CalDav + "supported-calendar-component-set",
              DavXml.Dav + "resourcetype", DavXml.Dav + "owner",
+             DavXml.CalDav + "schedule-calendar-transp",
              DavXml.CalDav + "calendar-timezone", DavXml.Dav + "current-user-privilege-set"],
             NamesIn(calendar, 200));
         // No quota model, no scheduling, no push and no sharing: each says so in its own propstat.
         Assert.Equal(
             [DavXml.CalendarServer + "xmpp-server", DavXml.CalendarServer + "xmpp-uri",
-             DavXml.CalDav + "calendar-free-busy-set", DavXml.CalDav + "schedule-calendar-transp",
+             DavXml.CalDav + "calendar-free-busy-set",
              DavXml.CalDav + "schedule-default-calendar-URL", DavXml.Dav + "quota-available-bytes",
              DavXml.Dav + "quota-used-bytes", DavXml.CalendarServer + "source",
              DavXml.CalendarServer + "subscribed-strip-alarms",

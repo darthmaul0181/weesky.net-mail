@@ -9,15 +9,15 @@ import type { Calendar, CalendarImportReport } from './calendarTypes'
 import type { ImportChoice } from './ImportDialog'
 import {
   useCreateCalendar, useDeleteCalendar, useImportCalendar, useImportCalendarAsNew,
-  useSetCalendarVisible, useUpdateCalendar,
+  useSetBirthdays, useSetCalendarVisible, useUpdateCalendar,
 } from './queries'
 
 type Editing =
   | { mode: 'create' }
-  | { mode: 'rename' | 'colour'; calendar: Calendar }
+  | { mode: 'rename' | 'colour' | 'settings'; calendar: Calendar }
 
-/** The calendars' own writes — create, rename, recolour, show, delete, import, export — and the
-    dialog each of them opens. */
+/** The calendars' own writes — create, rename, recolour, show, delete, import, export, and the
+    birthdays calendar's settings and switch — and the dialog each of them opens. */
 export function useCalendarWrites(tz: string, addToast: AddToast) {
   const { t } = useTranslation('calendar')
   const setVisible = useSetCalendarVisible()
@@ -26,19 +26,21 @@ export function useCalendarWrites(tz: string, addToast: AddToast) {
   const deleteCalendar = useDeleteCalendar()
   const importInto = useImportCalendar()
   const importAsNew = useImportCalendarAsNew()
+  const setBirthdays = useSetBirthdays()
 
   const [editing, setEditing] = useState<Editing | null>(null)
   const [importing, setImporting] = useState<Calendar | null>(null)
   const [report, setReport] = useState<CalendarImportReport | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Calendar | null>(null)
+  const [disabling, setDisabling] = useState<Calendar | null>(null)
 
-  async function saveCalendar({ displayName, color }: CalendarValues) {
+  async function saveCalendar({ displayName, color, birthdayReminder }: CalendarValues) {
     try {
       if (editing?.mode === 'create') await createCalendar.mutateAsync({
         calendar: { displayName, color }, tz,
       })
       else if (editing) await updateCalendar.mutateAsync({
-        id: editing.calendar.id, calendar: { displayName, color },
+        id: editing.calendar.id, calendar: { displayName, color, birthdayReminder },
       })
       setEditing(null)
     } catch (error) {
@@ -56,6 +58,16 @@ export function useCalendarWrites(tz: string, addToast: AddToast) {
       addToast(apiErrorMessage(error, t('errors.calendarDelete')), 'error')
     } finally {
       setPendingDelete(null)
+    }
+  }
+
+  async function confirmDisable() {
+    try {
+      await setBirthdays.mutateAsync({ enabled: false, tz })
+    } catch (error) {
+      addToast(apiErrorMessage(error, t('errors.calendarSave')), 'error')
+    } finally {
+      setDisabling(null)
     }
   }
 
@@ -89,10 +101,12 @@ export function useCalendarWrites(tz: string, addToast: AddToast) {
 
   return {
     editing, setEditing, importing, setImporting, report, setReport, pendingDelete,
-    setPendingDelete, saveCalendar, confirmDelete, toggleVisible, exportOne, runImport,
+    setPendingDelete, disabling, setDisabling, saveCalendar, confirmDelete, confirmDisable,
+    toggleVisible, exportOne, runImport,
     savingCalendar: createCalendar.isPending || updateCalendar.isPending,
     importingFile: importInto.isPending || importAsNew.isPending,
     deletingCalendar: deleteCalendar.isPending,
+    disablingBirthdays: setBirthdays.isPending,
   }
 }
 

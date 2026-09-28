@@ -4,11 +4,15 @@ namespace weesky.Scotty.Microservice.Models.Dav;
 /// The CalDAV switch. <see cref="Enabled"/> is required for the reason
 /// <see cref="DavSyncToggle"/>'s is: a body naming no state would bind to false and read as a
 /// switch-off. <see cref="TimeZone"/> is the browser's IANA zone, mandatory on the way on — it is
-/// what the default calendar is born with — and ignored on the way off.
+/// what the default calendar is born with — and ignored on the way off. <see cref="Language"/> is the
+/// browser's, the birthdays calendar's when this switch creates it and <c>ui.language</c> names none;
+/// anything but <c>fr</c> or <c>en</c> reads as English.
 /// </summary>
 public sealed record DavCalDavToggle
 {
     public required bool Enabled { get; init; }
 
     public string? TimeZone { get; init; }
+
+    public string? Language { get; init; }
 }

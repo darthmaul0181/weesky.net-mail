@@ -20,6 +20,11 @@ internal static class DavPropertyTables
         "read-current-user-privilege-set"
     ];
 
+    /// <summary>The birthdays calendar's own set (spec § 6): read, and write-properties on the
+    /// collection alone — no bind, unbind or write-content, which is what greys "Modifier" on an
+    /// iPhone.</summary>
+    private static readonly string[] ReadOnlyPrivileges = ["read", "read-current-user-privilege-set"];
+
     /// <summary>
     /// Both cost, and a client that wants either names it — in a <c>prop</c>, or in the
     /// <c>include</c> of its <c>allprop</c>. Everything else of the closed set is poured into an
@@ -83,8 +88,13 @@ internal static class DavPropertyTables
     /// <summary>An absolute path, never a full URL: the service sits behind a reverse proxy.</summary>
     internal static XElement Href(XName name, string path) => new(name, new XElement(DavXml.Href, path));
 
-    internal static XElement PrivilegeSet() => new(DavXml.Dav + "current-user-privilege-set",
-        Privileges.Select(p => new XElement(DavXml.Dav + "privilege", new XElement(DavXml.Dav + p))));
+    /// <summary>The full set by default; the birthdays calendar's read-only one when
+    /// <paramref name="readOnly"/> — <c>write-properties</c> joins it on the collection alone, since
+    /// that is the one shape whose name and colour still write (spec § 6).</summary>
+    internal static XElement PrivilegeSet(bool readOnly = false, bool collection = false) =>
+        new(DavXml.Dav + "current-user-privilege-set",
+            (readOnly ? (collection ? ["read", "write-properties", "read-current-user-privilege-set"] : ReadOnlyPrivileges) : Privileges)
+                .Select(p => new XElement(DavXml.Dav + "privilege", new XElement(DavXml.Dav + p))));
 
     internal static XElement ReportSet(params XName[] reports) =>
         new(DavXml.Dav + "supported-report-set",

@@ -100,6 +100,8 @@ internal sealed class DavContactWriter(
 
                 await store.ClearProjectionAsync([row.Id], cancellationToken);
                 context.Contacts.Remove(row);
+                // Before the strip: the archive of a group it rewrites saves, and flushes this removal.
+                await store.ProjectBirthdaysAsync(cancellationToken);
                 // Décision 7, on the protocol's own door: the groups this card sat in are rewritten
                 // under the rank of the delete that emptied them, not one of their own.
                 await store.StripFromGroupsAsync(
@@ -325,6 +327,7 @@ internal sealed class DavContactWriter(
             // The write gate of 4a: id, user_id, is_favorite and source are untouched; everything
             // else is the projection of the card and is recomputed.
             await store.ApplyCardAsync(row, stamped, null, cancellationToken);
+            await store.ProjectBirthdaysAsync(cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
 
             // A tombstone and a living card must never coexist on one name: a sync-collection

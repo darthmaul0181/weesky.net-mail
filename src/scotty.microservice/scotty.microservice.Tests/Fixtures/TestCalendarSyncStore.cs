@@ -41,6 +41,12 @@ internal sealed class TestCalendarSyncStore(PreferencesDbContext context) : ICal
         return state.Seq;
     }
 
+    // Absent at call time means null; InMemory has no snapshots, so the stale-read race is not modelled.
+    public async Task<ulong?> NextSequenceIfPresentAsync(Guid calendarId, CancellationToken cancellationToken) =>
+        await context.Calendars.AnyAsync(c => c.Id == calendarId, cancellationToken)
+            ? await NextSequenceAsync(calendarId, cancellationToken)
+            : null;
+
     public Task CreateStateAsync(Guid calendarId, CancellationToken cancellationToken) =>
         inner.CreateStateAsync(calendarId, cancellationToken);
 

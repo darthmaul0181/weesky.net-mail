@@ -22,6 +22,7 @@ public sealed class InvitationResponderTests
     private static readonly Guid WebmailUid = Guid.NewGuid();
     private static readonly Guid Personal = Guid.NewGuid();
     private static readonly Guid Work = Guid.NewGuid();
+    private static readonly Guid Birthdays = Guid.NewGuid();
     private static readonly MailAccountConnection Conn = TestConnections.Primary("alice@weesky.be", "pw");
     private static readonly CancellationToken None = CancellationToken.None;
     private readonly User _user = new("alice@weesky.be") { WebmailUid = WebmailUid };
@@ -41,8 +42,10 @@ public sealed class InvitationResponderTests
         _addresses.Setup(a => a.ForAccountAsync(_user, Conn, None)).ReturnsAsync(["alice@weesky.be"]);
         _events.Setup(e => e.FindByUidAsync(WebmailUid, It.IsAny<string>(), None)).ReturnsAsync([]);
         _calendars.Setup(c => c.ListAsync(WebmailUid, None)).ReturnsAsync([
-            new CalendarView(Work, "work", "Travail", "", "#00f", 0, "Europe/Brussels", true, false),
-            new CalendarView(Personal, "default", "Personnel", "", "#0f0", 1, "Europe/Brussels", true, true),
+            new CalendarView(Work, "work", "Travail", "", "#00f", 0, "Europe/Brussels", true, false, CalendarKinds.Regular, null),
+            new CalendarView(Personal, "default", "Personnel", "", "#0f0", 1, "Europe/Brussels", true, true, CalendarKinds.Regular, null),
+            new CalendarView(Birthdays, "birthdays", "Anniversaires", "", "#be185d", 2, "Europe/Brussels", true, false,
+                CalendarKinds.Birthdays, BirthdayReminders.SameDay),
         ]);
         _writer.Setup(w => w.PutAsync(WebmailUid, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), None, false, null, RevisionCause.Webmail))
             .ReturnsAsync(new DavWriteOutcome(DavWriteStatus.Created, "\"e\"", null, 1));
@@ -109,6 +112,14 @@ public sealed class InvitationResponderTests
         var sut = Create();
         await sut.RespondAsync(_user, Conn, Request(InvitationAnswer.Accepted, Work), None);
         _writer.Verify(w => w.PutAsync(WebmailUid, Work, It.IsAny<string>(), It.IsAny<string>(), None, false, null, RevisionCause.Webmail), Times.Once);
+    }
+
+    [Fact]
+    public async Task Accepted_IntoTheBirthdaysCalendar_FallsBackToTheDefault()
+    {
+        var sut = Create();
+        await sut.RespondAsync(_user, Conn, Request(InvitationAnswer.Accepted, Birthdays), None);
+        _writer.Verify(w => w.PutAsync(WebmailUid, Personal, It.IsAny<string>(), It.IsAny<string>(), None, false, null, RevisionCause.Webmail), Times.Once);
     }
 
     [Fact]

@@ -20,6 +20,7 @@ export const PREFERENCE_KEYS = {
   captureRecipients: 'contacts.captureRecipients',
   trustContacts: 'mail.trustContacts',
   language: 'ui.language',
+  calendarBirthdays: 'calendar.birthdays',
 } as const
 
 export type Preferences = Record<string, string>
@@ -186,6 +187,13 @@ export function captureRecipientsOf(preferences: Preferences): boolean {
 /** Off unless explicitly on — a key the backend has not sent yet must not load remote images. */
 export function trustContactsOf(preferences: Preferences): boolean {
   return preferences[PREFERENCE_KEYS.trustContacts] === 'true'
+}
+
+/** On unless explicitly off — the backend's own default, repeated for a build that predates
+    the key. Written only through `PUT /api/Calendars/Birthdays`, never through this preference's
+    own route. */
+export function birthdaysOnOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.calendarBirthdays] !== 'off'
 }
 
 /** The raw stored value — `auto`, `en`, `fr`, or something a newer build wrote. `resolveLocale`

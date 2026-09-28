@@ -50,6 +50,9 @@ public static class UserPreferences
     public const string MailSwipeRight = "mail.swipeRight";
     public const string MailSwipeLeft = "mail.swipeLeft";
 
+    // calendar., and only readable here: switching it creates or removes a calendar (spec, décision 3).
+    public const string CalendarBirthdays = "calendar.birthdays";
+
     private static readonly string[] Booleans = ["true", "false"];
     private static readonly string[] SwipeActions = ["none", "seen", "flag", "archive", "delete"];
 
@@ -81,7 +84,11 @@ public static class UserPreferences
         new(MailSwipeRight, "seen", SwipeActions),
         new(MailSwipeLeft, "delete", SwipeActions),
         new(UiLanguage, "auto", ["auto", "en", "fr"]),
+        new(CalendarBirthdays, "on", ["on", "off"]),
     ];
+
+    /// <summary>Keys whose change has effects beyond the row: set through their own route, never PUT /api/Preferences.</summary>
+    public static bool IsManaged(string key) => key == CalendarBirthdays;
 
     public static bool IsValid(string key, string value)
     {

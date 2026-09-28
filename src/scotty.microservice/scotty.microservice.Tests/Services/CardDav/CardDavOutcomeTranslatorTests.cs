@@ -30,6 +30,7 @@ public sealed class CardDavOutcomeTranslatorTests
     [InlineData(DavWriteStatus.PreconditionFailed, 412)]
     [InlineData(DavWriteStatus.CollectionFull, 507)]
     [InlineData(DavWriteStatus.Busy, 503)]
+    [InlineData(DavWriteStatus.ReadOnly, 403)]
     public async Task EveryStatus_HasItsCode(DavWriteStatus status, int expected)
     {
         var context = NewContext();
@@ -92,6 +93,21 @@ public sealed class CardDavOutcomeTranslatorTests
         // something else about the card than what was judged.
         Assert.Equal(403, context.Response.StatusCode);
         Assert.Equal(DavXml.CalDav + condition, ConditionOf(context.Response));
+    }
+
+    [Fact]
+    public async Task AReadOnlyStatus_KeepsItsOwnCalDavElementHere_InTheDavNamespace()
+    {
+        // No address book ever answers this either — the birthdays calendar is CalDAV alone —
+        // but the branch must exist, and DAV:need-privileges, not a CardDAV element, is what it
+        // names wherever it is translated.
+        var context = NewContext();
+
+        await CardDavOutcomeTranslator.WriteAsync(
+            context.Response, Outcome(DavWriteStatus.ReadOnly), CancellationToken.None);
+
+        Assert.Equal(403, context.Response.StatusCode);
+        Assert.Equal(DavXml.Dav + "need-privileges", ConditionOf(context.Response));
     }
 
     [Fact]

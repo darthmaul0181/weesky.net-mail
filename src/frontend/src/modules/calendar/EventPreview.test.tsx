@@ -1,12 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import i18next from 'i18next'
 import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarness'
 import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import EventPreview from './EventPreview'
-import type { EventDetail, Occurrence } from './calendarTypes'
+import type { Calendar, EventDetail, Occurrence } from './calendarTypes'
 import { createTestQueryClient } from '../../test-utils'
 
 vi.mock('../../api.js', () => ({
@@ -71,16 +72,16 @@ const DENTIST = {
 
 function draw(fields: Partial<Occurrence> & { eventId: string } = DENTIST,
   anchor = anchorAt(200, 300), handlers: Partial<{
-    onClose: () => void; onEdit: () => void; onDelete: () => void
-  }> = {}) {
+    onClose: () => void; onEdit: () => void; onDelete: () => void; onOpenContact: () => void
+  }> = {}, calendar: Calendar = calendarOf('a', '#3b82c4', 'Personal')) {
   const noop = () => {}
   const client = createTestQueryClient()
   renderInCalendar(
     <QueryClientProvider client={client}>
-      <EventPreview occurrence={occurrenceOf(fields)} calendar={calendarOf('a', '#3b82c4', 'Personal')}
+      <EventPreview occurrence={occurrenceOf(fields)} calendar={calendar}
         anchor={anchor} rect={anchor.getBoundingClientRect()}
         onClose={handlers.onClose ?? noop} onEdit={handlers.onEdit ?? noop}
-        onDelete={handlers.onDelete ?? noop} />
+        onDelete={handlers.onDelete ?? noop} onOpenContact={handlers.onOpenContact ?? noop} />
     </QueryClientProvider>)
   return document.querySelector('.event-preview') as HTMLElement
 }
@@ -300,7 +301,8 @@ describe('EventPreview', () => {
           {open && (
             <EventPreview occurrence={occurrenceOf(DENTIST)} calendar={calendarOf('a')}
               anchor={anchor} rect={anchor.getBoundingClientRect()} returnFocusRef={region}
-              onClose={() => setOpen(false)} onEdit={() => {}} onDelete={() => {}} />
+              onClose={() => setOpen(false)} onEdit={() => {}} onDelete={() => {}}
+              onOpenContact={() => {}} />
           )}
         </QueryClientProvider>
       )
@@ -453,5 +455,64 @@ describe('EventPreview', () => {
     api.getEvent.mockResolvedValue(detailOf({ id: 'e1', attendees: [julie, julie] }))
     const preview = draw(DENTIST)
     await waitFor(() => expect(preview.querySelectorAll('.attendee-dot.is-declined')).toHaveLength(2))
+  })
+})
+
+describe('EventPreview on a birthday', () => {
+  const ALICE = {
+    eventId: 'b1', summary: '🎂 Alice Martin', isAllDay: true, contactId: 'k', birthYear: 1986,
+    startDate: '2026-09-30', endDateExclusive: '2026-10-01', transparency: 'TRANSPARENT',
+    hasAlarm: true, recurrenceText: 'FREQ=YEARLY',
+  }
+  const birthdays = (birthdayReminder: Calendar['birthdayReminder'] = 'day_before') =>
+    calendarOf('z', '#be185d', 'Birthdays', { kind: 'birthdays', birthdayReminder })
+  const openBirthday = (fields: Partial<Occurrence> = {}, calendar = birthdays(),
+    handlers: { onOpenContact?: () => void } = {}) =>
+    draw({ ...ALICE, ...fields }, anchorAt(200, 300), handlers, calendar)
+
+  afterEach(async () => { await i18next.changeLanguage('en') })
+
+  it('says the age, the real reminder, the rule and the calendar', () => {
+    const bubble = openBirthday()
+    expect(bubble).toHaveTextContent('🎂 Alice Martin')
+    expect(bubble).toHaveTextContent(/Wednesday.*30.*September/)
+    expect(screen.getByText('40 years old')).toHaveClass('is-strong')
+    expect(bubble).toHaveTextContent('Reminder the day before at 9:00')
+    expect(bubble).not.toHaveTextContent('Reminder set')
+    expect(bubble).toHaveTextContent('Every year')
+    expect(bubble).toHaveTextContent('Birthdays')
+  })
+
+  it('counts the age in French', async () => {
+    await i18next.changeLanguage('fr')
+    openBirthday()
+    expect(screen.getByText('40 ans')).toBeInTheDocument()
+    expect(screen.getByText('Rappel la veille à 9:00')).toBeInTheDocument()
+  })
+
+  // Nothing is written from here: one way on, to the card the date comes from.
+  it('offers the card and neither Edit nor Delete', async () => {
+    const onOpenContact = vi.fn()
+    openBirthday({}, birthdays(), { onOpenContact })
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Open card' }))
+    expect(onOpenContact).toHaveBeenCalled()
+  })
+
+  it('has no age line when the card holds no year', () => {
+    const bubble = openBirthday({ birthYear: undefined })
+    expect(bubble).not.toHaveTextContent(/years? old/)
+  })
+
+  it('has no bell line when the reminder is off', () => {
+    const bubble = openBirthday({}, birthdays('none'))
+    expect(bubble).not.toHaveTextContent(/Reminder/)
+  })
+
+  // The occurrence already says everything shown; the detail would only be a wasted request.
+  it('fetches no detail', () => {
+    openBirthday()
+    expect(api.getEvent).not.toHaveBeenCalled()
   })
 })

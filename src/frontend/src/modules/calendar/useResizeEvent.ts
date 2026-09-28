@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { isBirthday } from './birthday'
 import type { Occurrence } from './calendarTypes'
 import { SNAP_MINUTES, snapMinutes } from './gridGeometry'
 import { durationMinutesOf } from './multiDay'
@@ -27,7 +28,7 @@ export function useResizeEvent({ enabled, onResize }: ResizeEventOptions) {
   useEffect(() => () => stop.current?.(), [])
 
   function onPointerDown(o: Occurrence, event: ReactPointerEvent) {
-    if (!enabled || event.button !== 0) return
+    if (isBirthday(o) || !enabled || event.button !== 0) return
 
     const key = occurrenceKey(o)
     const base = durationMinutesOf(o)

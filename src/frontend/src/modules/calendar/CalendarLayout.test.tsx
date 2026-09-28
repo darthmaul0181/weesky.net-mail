@@ -11,7 +11,7 @@ import type { Calendar, EventUpdated, OccurrenceListResponse } from './calendarT
 import type { api as realApi } from '../../api'
 import {
   createTestQueryClient, fireEscape, firePointer, installPointerEvents, mockViewport, pickOption,
-  pressBackdrop, resetViewport, settle,
+  optionsOf, pressBackdrop, resetViewport, settle,
 } from '../../test-utils'
 
 afterEach(resetViewport)
@@ -23,6 +23,7 @@ vi.mock('../../api.js', () => ({
     importCalendar: vi.fn(), importCalendarAsNew: vi.fn(),
     getOccurrences: vi.fn(), searchEvents: vi.fn(), getEvent: vi.fn(),
     createEvent: vi.fn(), updateEvent: vi.fn(), deleteEvent: vi.fn(), getContacts: vi.fn(),
+    setBirthdays: vi.fn(),
   },
   // The very class the layout imports from the mocked module, so `instanceof ApiError` holds
   // against what these tests throw; a locally-declared twin fails that check.
@@ -41,7 +42,7 @@ vi.mock('../../lib/downloadBlob', () => ({ downloadBlob: vi.fn() }))
 const { api } = await import('../../api.js') as unknown as {
   api: Record<'getCalendars' | 'createCalendar' | 'updateCalendar' | 'setCalendarVisible'
     | 'deleteCalendar' | 'exportCalendar' | 'importCalendar' | 'importCalendarAsNew'
-    | 'searchEvents' | 'getEvent' | 'createEvent' | 'deleteEvent' | 'getContacts',
+    | 'searchEvents' | 'getEvent' | 'createEvent' | 'deleteEvent' | 'getContacts' | 'setBirthdays',
     Mock<(...args: unknown[]) => unknown>>
     & { getOccurrences: Mock<typeof realApi.getOccurrences>; updateEvent: Mock<typeof realApi.updateEvent> }
 }
@@ -109,6 +110,7 @@ const routes = [
   { path: '/calendar', element: <CalendarLayout /> },
   { path: '/calendar/new', element: <CalendarLayout /> },
   { path: '/calendar/:id/edit', element: <CalendarLayout /> },
+  { path: '/contacts', element: null },
 ]
 
 /** `previous` puts an entry under `path`, so a test can press the browser's own Back. */
@@ -220,7 +222,7 @@ describe('CalendarLayout', () => {
   // The zone decides which day a floating instance falls on, so it travels with every request.
   it('asks for the calendars in the zone the browser is in', async () => {
     renderAt()
-    await waitFor(() => expect(api.getCalendars).toHaveBeenCalledWith(BROWSER_TZ))
+    await waitFor(() => expect(api.getCalendars).toHaveBeenCalledWith(BROWSER_TZ, 'en'))
   })
 
   it('remembers the view that was chosen', async () => {
@@ -1661,5 +1663,119 @@ describe('CalendarLayout — the phone tier', () => {
 
     await waitFor(() => expect(screen.queryByLabelText('Name')).not.toBeInTheDocument())
     expect(document.querySelector('.context-drawer')).toHaveClass('is-open')
+  })
+})
+
+describe('CalendarLayout — the birthdays calendar', () => {
+  const BIRTHDAYS = calendarOf('z', '#be185d', 'Birthdays', {
+    kind: 'birthdays', birthdayReminder: 'same_day', timeZone: BROWSER_TZ,
+  })
+  const ALICE = occurrenceOf({
+    eventId: 'b1', calendarId: 'z', summary: '🎂 Alice Martin', isAllDay: true,
+    contactId: 'k', birthYear: 1986, startDate: '2026-09-16', endDateExclusive: '2026-09-17',
+    transparency: 'TRANSPARENT', hasAlarm: true,
+  })
+  const BIRTHDAY_DETAIL = { ...detail({ calendarId: 'z', summary: '🎂 Alice Martin' }), id: 'b1', calendarId: 'z' }
+  const location = (router: ReturnType<typeof renderAt>) =>
+    router.state.location.pathname + router.state.location.search
+
+  beforeEach(() => {
+    api.getCalendars.mockResolvedValue({ calendars: [...CALENDARS, BIRTHDAYS] })
+    api.getOccurrences.mockResolvedValue({ occurrences: [ALICE] })
+  })
+
+  it('opens the card from the bubble', async () => {
+    const router = renderAt('/calendar?view=week&date=2026-09-16')
+    await userEvent.click(await screen.findByRole('button', { name: /Alice Martin/ }))
+    const bubble = await screen.findByRole('dialog', { name: '🎂 Alice Martin' })
+    await userEvent.click(within(bubble).getByRole('button', { name: 'Open card' }))
+    await waitFor(() => expect(location(router)).toBe('/contacts?id=k'))
+    expect(api.getEvent).not.toHaveBeenCalled()
+  })
+
+  // What opens the editor for any other event opens the card for a birthday.
+  it('opens the card, not the editor, on a double click', async () => {
+    const router = renderAt('/calendar?view=week&date=2026-09-16')
+    await userEvent.dblClick(await screen.findByRole('button', { name: /Alice Martin/ }))
+    await waitFor(() => expect(location(router)).toBe('/contacts?id=k'))
+  })
+
+  it('opens the reading screen, not the editor, on a phone', async () => {
+    mockViewport('phone')
+    const router = renderAt('/calendar?view=day&date=2026-09-16')
+    await userEvent.click(await screen.findByRole('button', { name: /Alice Martin/ }))
+    const shown = await screen.findByRole('dialog', { name: 'Birthday' })
+    expect(router.state.location.pathname).toBe('/calendar')
+    expect(shown).toHaveTextContent('40 years old')
+
+    await userEvent.click(within(shown).getByRole('button', { name: 'Open card' }))
+    await waitFor(() => expect(location(router)).toBe('/contacts?id=k'))
+  })
+
+  it('closes the reading screen on its ✕', async () => {
+    mockViewport('phone')
+    renderAt('/calendar?view=day&date=2026-09-16')
+    await userEvent.click(await screen.findByRole('button', { name: /Alice Martin/ }))
+    const shown = await screen.findByRole('dialog', { name: 'Birthday' })
+    await userEvent.click(within(shown).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Birthday' })).toBeNull()
+  })
+
+  // A hand-typed edit URL: the card on a desktop, the grid on a phone, never the editor.
+  it('sends its edit URL to the card', async () => {
+    api.getEvent.mockResolvedValue(BIRTHDAY_DETAIL)
+    const router = renderAt('/calendar/b1/edit?view=week&date=2026-09-16')
+    await waitFor(() => expect(location(router)).toBe('/contacts?id=k'))
+    expect(screen.queryByLabelText('Calendar')).toBeNull()
+  })
+
+  it('sends its edit URL back to the grid on a phone', async () => {
+    mockViewport('phone')
+    api.getEvent.mockResolvedValue(BIRTHDAY_DETAIL)
+    const router = renderAt('/calendar/b1/edit?view=day&date=2026-09-16')
+    await waitFor(() => expect(location(router)).toBe('/calendar?view=day&date=2026-09-16'))
+    expect(screen.queryByLabelText('Calendar')).toBeNull()
+  })
+
+  it('is never offered to a new event', async () => {
+    renderAt('/calendar/new?view=week&date=2026-09-16')
+    const box = await screen.findByLabelText('Calendar')
+    expect(await optionsOf(box)).toEqual(['Personal', 'Work'])
+  })
+
+  it('is never offered as an import target', async () => {
+    renderAt()
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Work' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Import…' }))
+    const box = await screen.findByRole('combobox', { name: 'An existing calendar' })
+    expect(await optionsOf(box)).toEqual(['Personal', 'Work'])
+  })
+
+  it('saves its reminder from Settings', async () => {
+    api.updateCalendar.mockResolvedValue(null)
+    renderAt()
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Birthdays' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Settings…' }))
+    await pickOption(await screen.findByRole('combobox', { name: 'Reminder' }), 'A week before')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.updateCalendar).toHaveBeenCalledWith('z', {
+      displayName: 'Birthdays', color: '#be185d', birthdayReminder: 'week_before',
+    }))
+  })
+
+  // Nothing is lost — the dates stay on the cards — so the action is primary, not danger.
+  it('turns birthdays off behind a primary confirm', async () => {
+    api.setBirthdays.mockResolvedValue(null)
+    renderAt()
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Birthdays' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Disable…' }))
+    const confirm = await screen.findByRole('alertdialog', { name: 'Turn off birthdays?' })
+    const disable = within(confirm).getByRole('button', { name: 'Disable' })
+    expect(disable).toHaveClass('btn-primary')
+    expect(disable).not.toHaveClass('btn-danger-solid')
+
+    await userEvent.click(disable)
+    await waitFor(() => expect(api.setBirthdays).toHaveBeenCalledWith(false, BROWSER_TZ, 'en'))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
   })
 })

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using weesky.Scotty.Microservice.Data.Preferences;
 using weesky.Scotty.Microservice.Models.Calendar;
 using weesky.Scotty.Microservice.Repositories;
 using weesky.Scotty.Microservice.Tests.Infrastructure;
@@ -22,8 +23,14 @@ internal static class CalendarStoreTestFactory
     {
         var context = new PreferencesTestDbContext(databaseName);
         var sync = new TestCalendarSyncStore(context);
-        return (new CalendarStore(context, sync), sync);
+        return (Calendars(context, sync), sync);
     }
+
+    /// <summary>The store wired as the container wires it: its own projector and preferences on its context.</summary>
+    internal static CalendarStore Calendars(PreferencesDbContext context, ICalendarSyncStore sync) =>
+        new(context, sync,
+            new BirthdayProjector(context, sync, new CalendarEventStore(context, sync, NullLogger<CalendarEventStore>.Instance)),
+            new UserPreferenceStore(context));
 
     internal static CalendarEventStore Events(
         string databaseName, ILogger<CalendarEventStore>? logger = null)

@@ -70,15 +70,15 @@ interface EditorSeedInput {
   windowQuery: ReturnType<typeof useWindow>
   searchQuery: ReturnType<typeof useSearch>
   calendarsLoaded: boolean
+  /** The calendars an event may be written into: the birthdays calendar is never one. */
   calendars: Calendar[]
-  calendarById: Map<string, Calendar>
   addToast: AddToast
   navigate: NavigateFunction
 }
 
 export function useEditorSeed({
   params, routeId, instanceParam, inEditor, reloads, anchor, tz, rules, windowQuery, searchQuery,
-  calendarsLoaded, calendars, calendarById, addToast, navigate,
+  calendarsLoaded, calendars, addToast, navigate,
 }: EditorSeedInput) {
   const { t } = useTranslation('calendar')
   const eventQuery = useEvent(routeId)
@@ -110,7 +110,7 @@ export function useEditorSeed({
 
   const defaultCalendarId = () => {
     const stored = storedCalendar()
-    if (stored && calendarById.has(stored)) return stored
+    if (stored && calendars.some(one => one.id === stored)) return stored
     return calendars.find(one => one.isDefault)?.id ?? calendars[0]?.id ?? ''
   }
 

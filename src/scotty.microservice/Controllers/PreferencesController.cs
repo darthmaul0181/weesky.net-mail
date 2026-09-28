@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using weesky.Scotty.Microservice.Models;
+using weesky.Scotty.Microservice.Models.Calendar;
 using weesky.Scotty.Microservice.Repositories;
 
 namespace weesky.Scotty.Microservice.Controllers;
@@ -15,7 +16,7 @@ namespace weesky.Scotty.Microservice.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-public sealed class PreferencesController(IUserPreferenceStore store) : ApiBaseController
+public sealed class PreferencesController(IUserPreferenceStore store, ICalendarStore calendars) : ApiBaseController
 {
     /// <summary>Every known preference, with the account's value where it set one.</summary>
     /// <param name="cancellationToken">cancellation token</param>
@@ -35,7 +36,7 @@ public sealed class PreferencesController(IUserPreferenceStore store) : ApiBaseC
     /// <param name="request">key and value, both from the registry</param>
     /// <param name="cancellationToken">cancellation token</param>
     /// <response code="204">Preference stored</response>
-    /// <response code="400">Unknown key, or a value the key does not accept</response>
+    /// <response code="400">Unknown key, a value the key does not accept, or a key set through its own route</response>
     /// <response code="401">Not authenticated</response>
     [HttpPut]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -44,12 +45,17 @@ public sealed class PreferencesController(IUserPreferenceStore store) : ApiBaseC
     public async Task<ActionResult> SetPreference(SetPreferenceRequest request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequestEnveloppe("Request body is required");
+        if (UserPreferences.IsManaged(request.Key ?? string.Empty))
+            return BadRequestEnveloppe($"'{request.Key}' is set through its own route");
 
         if (!UserPreferences.IsValid(request.Key ?? string.Empty, request.Value ?? string.Empty))
             return BadRequestEnveloppe(
                 $"'{request.Value}' is not a value '{request.Key}' accepts");
 
         await store.SetAsync(AuthenticatedUser.WebmailUid, request.Key!, request.Value!, cancellationToken);
+        // "auto" names no language, so the birthdays keep the one they were written in.
+        if (request.Key == UserPreferences.UiLanguage && request.Value is BirthdayLanguages.Fr or BirthdayLanguages.En)
+            await calendars.SetBirthdayLanguageAsync(AuthenticatedUser.WebmailUid, request.Value, cancellationToken);
 
         return StatusCode(StatusCodes.Status204NoContent);
     }

@@ -11,6 +11,8 @@ interface DeleteConfirmModalProps {
   message?: ReactNode
   title?: string
   confirmLabel?: string
+  /** `primary` for a question whose answer loses nothing, such as turning a feature off. */
+  tone?: 'danger' | 'primary'
   returnFocusRef?: RefObject<HTMLElement | null>
 }
 
@@ -18,7 +20,8 @@ interface DeleteConfirmModalProps {
 // `confirmLabel` serve the one question that is not a deletion (discarding an edited form), which
 // must not put "Delete" on its button.
 export default function DeleteConfirmModal({
-  entityLabel, onConfirm, onClose, loading, message, title, confirmLabel, returnFocusRef,
+  entityLabel, onConfirm, onClose, loading, message, title, confirmLabel, tone = 'danger',
+  returnFocusRef,
 }: DeleteConfirmModalProps) {
   const { t } = useTranslation()
   // A confirmed action removes its own opener, sometimes only on a second round trip: from the
@@ -38,7 +41,9 @@ export default function DeleteConfirmModal({
         )}
       </p>
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-        <button className="btn btn-danger-solid"
+        {/* `width: auto` keeps a primary the danger button's shape rather than `.btn-primary`'s full row. */}
+        <button className={tone === 'primary' ? 'btn btn-primary' : 'btn btn-danger-solid'}
+          style={{ width: 'auto' }}
           onClick={() => {
             confirmed.current = true
             const result = onConfirm()

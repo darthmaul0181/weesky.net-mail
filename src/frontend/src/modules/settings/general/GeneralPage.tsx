@@ -9,14 +9,15 @@ import Toasts from '../../../components/Toasts'
 import { useToasts } from '../../../hooks/useToasts'
 import {
   ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, SWIPE_ACTIONS, alwaysShowImagesOf,
-  captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf,
-  notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
-  showSpamScoreOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
+  birthdaysOnOf, captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming,
+  notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf,
+  showPreviewOf, showSpamScoreOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
   type ComposeFormat, type ReadingPane, type RowAction, type SwipeAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
 } from '../../mail/notify/channels'
+import { useSetBirthdays } from '../../calendar/queries'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
@@ -100,6 +101,7 @@ export default function GeneralPage() {
   const { t } = useTranslation('settings')
   const { data: preferences, isLoading, isError } = usePreferences()
   const setPreference = useSetPreference()
+  const setBirthdays = useSetBirthdays()
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
 
   const chosenActions = preferences ? rowActionsOf(preferences) : []
@@ -279,6 +281,23 @@ export default function GeneralPage() {
                 })}
               </div>
             </div>
+          </section>
+
+          <section className="account-section">
+            <h2>{t('general.calendar')}</h2>
+            <ToggleRow
+              id="birthdays-calendar"
+              label={t('general.birthdays.label')}
+              hint={t('general.birthdays.hint')}
+              checked={birthdaysOnOf(preferences)}
+              disabled={setBirthdays.isPending}
+              onChange={on => setBirthdays.mutate(
+                { enabled: on, tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
+                {
+                  onSuccess: () => addToast(t(on ? 'general.birthdays.on' : 'general.birthdays.off')),
+                  onError: error => addToast(apiErrorMessage(error, t('general.saveFailed')), 'error'),
+                })}
+            />
           </section>
 
           <section className="account-section">

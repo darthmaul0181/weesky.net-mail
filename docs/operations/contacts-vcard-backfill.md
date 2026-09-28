@@ -46,6 +46,10 @@ table, not over one address book. Each call answers:
 Batch size is `?batchSize=N`, clamped into `1..1000`. **Pass `batchSize=500`**: the default of 200
 is cautious, but the selection sweeps the table on every call, so fewer calls cost less.
 
+A call can fail with a deadlock (MariaDB error 1213) when someone edits one of its contacts in the
+webmail at the same moment: that batch is rolled back whole, nothing is half-written, and simply
+running the backfill again resumes where it stopped.
+
 ### Open a session
 
 ```bash

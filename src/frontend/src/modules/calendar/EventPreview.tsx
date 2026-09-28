@@ -12,6 +12,8 @@ import TrashIcon from '../../icons/TrashIcon'
 import UserIcon from '../../icons/UserIcon'
 import { useCalendar } from './calendarContext'
 import AttendeeStatusList from './AttendeeStatusList'
+import { isBirthday } from './birthday'
+import BirthdayLines from './BirthdayLines'
 import type { Calendar, Occurrence } from './calendarTypes'
 import { colorOf } from './occurrenceStyle'
 import { whenPartsOf } from './occurrenceWhen'
@@ -38,12 +40,15 @@ export interface EventPreviewProps {
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
+  /** A birthday's one action, in place of Edit and Delete. */
+  onOpenContact: () => void
 }
 
 /** The bubble a click on a chip opens. It fetches the detail for the rule and the attendees but
- * not the reminder: the bell says only that one is set. */
+ * not the reminder: the bell says only that one is set. A birthday fetches nothing, being read-only
+ * and wholly described by its occurrence and its calendar. */
 export default function EventPreview({
-  occurrence, calendar, anchor, rect, returnFocusRef, onClose, onEdit, onDelete,
+  occurrence, calendar, anchor, rect, returnFocusRef, onClose, onEdit, onDelete, onOpenContact,
 }: EventPreviewProps) {
   const { t } = useTranslation('calendar')
   const { tz, lang, region, cycle, calendarById } = useCalendar()
@@ -84,7 +89,8 @@ export default function EventPreview({
 
   // Always fetched, one request per opening (`ContactCard`'s `useContact` pattern): the bubble
   // carries neither a repeating event's rule nor its participants, and the detail holds both.
-  const { data: detail } = useEvent(occurrence.eventId)
+  const birthday = isBirthday(occurrence)
+  const { data: detail } = useEvent(birthday ? null : occurrence.eventId)
   const rule = detail?.repeatIsExact ? detail.fields.repeat : undefined
   // The raw RRULE must never reach the screen: loading, a failed fetch and a rule too rich for
   // the picker (repeatIsExact false) all fall back to the same generic label as a save-in-flight.
@@ -116,51 +122,63 @@ export default function EventPreview({
 
       <p className="event-preview-when">{line}</p>
 
-      {occurrence.location && (
-        <p className="event-preview-row">
-          <MapPinIcon size={14} />{occurrence.location}
-        </p>
-      )}
-      {occurrence.hasAlarm && (
-        <p className="event-preview-row">
-          <BellIcon size={14} />{t('preview.reminderSet')}
-        </p>
-      )}
-      {occurrence.recurrenceText && (
-        <p className="event-preview-row">
-          <RepeatIcon size={14} />{recurrenceLabel}
-        </p>
-      )}
-      {calendar && (
-        <p className="event-preview-row">
-          <CalendarIcon size={14} />{calendar.displayName}
-        </p>
-      )}
-      {organizer && (
-        <p className="event-preview-row">
-          <UserIcon size={14} />{t('preview.organizedBy', { name: organizer.name || organizer.email })}
-        </p>
-      )}
-      {guests.length > 0 && (detail?.canInvite
-        ? <AttendeeStatusList guests={guests} />
-        : (
-          <p className="event-preview-row event-preview-attendees">
-            <PeopleIcon size={14} />{guests.map(a => a.name || a.email).join(', ')}
-          </p>
-        ))}
-      {myAnswer && (
-        <p className="event-preview-row event-preview-answer">
-          <UserIcon size={14} />{myAnswer}
-        </p>
+      {birthday ? <BirthdayLines occurrence={occurrence} calendar={calendar} /> : (
+        <>
+          {occurrence.location && (
+            <p className="event-preview-row">
+              <MapPinIcon size={14} />{occurrence.location}
+            </p>
+          )}
+          {occurrence.hasAlarm && (
+            <p className="event-preview-row">
+              <BellIcon size={14} />{t('preview.reminderSet')}
+            </p>
+          )}
+          {occurrence.recurrenceText && (
+            <p className="event-preview-row">
+              <RepeatIcon size={14} />{recurrenceLabel}
+            </p>
+          )}
+          {calendar && (
+            <p className="event-preview-row">
+              <CalendarIcon size={14} />{calendar.displayName}
+            </p>
+          )}
+          {organizer && (
+            <p className="event-preview-row">
+              <UserIcon size={14} />{t('preview.organizedBy', { name: organizer.name || organizer.email })}
+            </p>
+          )}
+          {guests.length > 0 && (detail?.canInvite
+            ? <AttendeeStatusList guests={guests} />
+            : (
+              <p className="event-preview-row event-preview-attendees">
+                <PeopleIcon size={14} />{guests.map(a => a.name || a.email).join(', ')}
+              </p>
+            ))}
+          {myAnswer && (
+            <p className="event-preview-row event-preview-answer">
+              <UserIcon size={14} />{myAnswer}
+            </p>
+          )}
+        </>
       )}
 
       <div className="event-preview-actions">
-        <button type="button" className="btn btn-primary" onClick={onEdit}>
-          <PencilIcon size={14} />{t('preview.edit')}
-        </button>
-        <button type="button" className="btn btn-ghost" onClick={onDelete}>
-          <TrashIcon size={14} />{t('preview.delete')}
-        </button>
+        {birthday ? (
+          <button type="button" className="btn btn-primary" onClick={onOpenContact}>
+            <UserIcon size={14} />{t('preview.openCard')}
+          </button>
+        ) : (
+          <>
+            <button type="button" className="btn btn-primary" onClick={onEdit}>
+              <PencilIcon size={14} />{t('preview.edit')}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={onDelete}>
+              <TrashIcon size={14} />{t('preview.delete')}
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

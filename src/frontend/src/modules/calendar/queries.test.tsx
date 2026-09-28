@@ -6,9 +6,10 @@ import i18next from 'i18next'
 import { occurrenceOf } from './calendarTestHarness'
 import {
   calendarKeys, isConflict, useCalendars, useCreateEvent, useDeleteEvent, useEvent,
-  useMoveOccurrence, useSearch, useSetCalendarVisible, useUpdateEvent, useWindow,
+  useMoveOccurrence, useSearch, useSetBirthdays, useSetCalendarVisible, useUpdateEvent, useWindow,
 } from './queries'
 import type { Window } from './windowOf'
+import { preferencesKey } from '../../hooks/usePreferences'
 import { createTestQueryClient, withQueryClient } from '../../test-utils'
 
 // The class lives in the hoisted block with the mocks: `vi.mock`'s factory runs before any
@@ -26,7 +27,7 @@ const { mocks, FakeApiError } = vi.hoisted(() => {
     mocks: {
       getCalendars: vi.fn(), getOccurrences: vi.fn(), getEvent: vi.fn(), searchEvents: vi.fn(),
       createEvent: vi.fn(), updateEvent: vi.fn(), deleteEvent: vi.fn(),
-      setCalendarVisible: vi.fn(),
+      setCalendarVisible: vi.fn(), setBirthdays: vi.fn(),
     },
   }
 })
@@ -100,7 +101,7 @@ describe('the queries', () => {
     const { result } = renderHook(() => useCalendars(TZ), { wrapper })
 
     await waitFor(() => expect(result.current.data).toHaveLength(1))
-    expect(mocks.getCalendars).toHaveBeenCalledWith(TZ)
+    expect(mocks.getCalendars).toHaveBeenCalledWith(TZ, 'en')
   })
 
   it('asks for the window bounds it was given and answers the occurrences', async () => {
@@ -170,6 +171,20 @@ describe('the mutations', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: calendarKeys.all('primary') })
+  })
+
+  // The switch writes the preference too, so Settings › General must not read the old one.
+  it('turns birthdays off in the screen language and resyncs calendars and preferences', async () => {
+    await i18next.changeLanguage('fr')
+    mocks.setBirthdays.mockResolvedValue(null)
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    const { result } = renderHook(() => useSetBirthdays(), { wrapper })
+    await result.current.mutateAsync({ enabled: false, tz: TZ })
+
+    expect(mocks.setBirthdays).toHaveBeenCalledWith(false, TZ, 'fr')
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: calendarKeys.all('primary') })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: preferencesKey })
   })
 })
 

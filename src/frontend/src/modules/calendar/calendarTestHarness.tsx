@@ -14,7 +14,7 @@ export function calendarOf(
 ): Calendar {
   return {
     id, davName: id, displayName, description: '', color, order: 0,
-    timeZone: TZ, isVisible: true, isDefault: false, ...overrides,
+    timeZone: TZ, isVisible: true, isDefault: false, kind: 'regular', ...overrides,
   }
 }
 

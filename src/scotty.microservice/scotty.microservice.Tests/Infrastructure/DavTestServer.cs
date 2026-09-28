@@ -192,6 +192,8 @@ internal sealed class DavTestServer : IAsyncDisposable
         services.AddScoped<CalendarStore>();
         services.AddScoped<ICalendarStore>(provider => provider.GetRequiredService<CalendarStore>());
         services.AddScoped<CalendarEventStore>();
+        services.AddScoped<IBirthdayProjector, BirthdayProjector>();
+        services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
         services.AddScoped<IDavCalendarWriter, DavCalendarWriter>();
         // The invitation hook without mail or store: a test that watches the doors replaces it through `overrides`.
         services.AddSingleton<IInvitationScheduler>(new RecordingInvitationScheduler());

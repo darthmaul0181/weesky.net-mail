@@ -2,8 +2,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using weesky.Scotty.Microservice.Configuration;
+using weesky.Scotty.Microservice.Data.Preferences;
 using weesky.Scotty.Microservice.Models.Mail;
+using weesky.Scotty.Microservice.Repositories;
 using weesky.Scotty.Microservice.Services;
+using weesky.Scotty.Microservice.Tests.Infrastructure;
 using Xunit;
 
 namespace weesky.Scotty.Microservice.Tests.Configuration;
@@ -50,6 +53,23 @@ public sealed class ApplicationServicesConfigurationTests
             () => provider.GetRequiredService<IOptions<MailOptions>>().Value);
 
         Assert.Contains("Mail:", error.Message);
+    }
+
+    /// <summary>ContactStore's projector is an optional parameter: only the container filling it arms
+    /// the guard that stops a contact write from leaving a stale birthday behind.</summary>
+    [Fact]
+    public async Task TheContainer_HandsContactStoreItsBirthdayProjector()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<PreferencesDbContext>(_ => new PreferencesTestDbContext(Guid.NewGuid().ToString()));
+        services.AddRepositories();
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        scope.ServiceProvider.GetRequiredService<ContactStore>();
+
+        Assert.True(scope.ServiceProvider.GetRequiredService<PreferencesDbContext>().BirthdayProjectionRequired);
     }
 
     [Fact]

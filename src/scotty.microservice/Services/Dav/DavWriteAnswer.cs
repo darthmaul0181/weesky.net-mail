@@ -84,6 +84,7 @@ internal static class DavWriteAnswer
         DavWriteStatus.PreconditionFailed => StatusCodes.Status412PreconditionFailed,
         DavWriteStatus.NotFound => StatusCodes.Status404NotFound,
         DavWriteStatus.Busy => StatusCodes.Status503ServiceUnavailable,
+        DavWriteStatus.ReadOnly => StatusCodes.Status403Forbidden,
     };
 
 #pragma warning restore CS8524

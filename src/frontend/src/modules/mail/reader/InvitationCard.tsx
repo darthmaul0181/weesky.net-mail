@@ -7,6 +7,7 @@ import { ApiError } from '../../../api.js'
 import CalendarSelect from '../../calendar/CalendarSelect'
 import { hourCycleOf } from '../../calendar/calendarLocale'
 import { partStatOf, type PartStat } from '../../calendar/partStat'
+import { isWritable } from '../../calendar/birthday'
 import { useCalendars } from '../../calendar/queries'
 import type { InvitationAnswer, InvitationResponse, MailInvitation, MailMessageDetail } from '../api/mailTypes'
 import { mailKeys, useAccountId, useApplyInvitationReply, useRespondInvitation } from '../queries'
@@ -159,9 +160,10 @@ export default function InvitationCard({ invitation: initial, folderPath, uid, o
     </button>
   )
   // The calendar a creation goes to: the editor's own picker, drawn only when there is a choice.
-  const chosenCalendar = calendarId ?? calendars?.find(c => c.isDefault)?.id ?? calendars?.[0]?.id ?? ''
-  const calendarPicker = calendars && calendars.length > 1 && (
-    <CalendarSelect label={t('reader.invitation.calendar')} calendars={calendars}
+  const targets = calendars?.filter(isWritable) ?? []
+  const chosenCalendar = calendarId ?? targets.find(c => c.isDefault)?.id ?? targets[0]?.id ?? ''
+  const calendarPicker = targets.length > 1 && (
+    <CalendarSelect label={t('reader.invitation.calendar')} calendars={targets}
       value={chosenCalendar} onChange={setCalendarId} />
   )
 

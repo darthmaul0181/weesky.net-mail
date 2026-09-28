@@ -30,7 +30,7 @@ public sealed class CalendarsControllerTests
 
     private static CalendarView View(Guid? id = null, string name = "Personal", bool isDefault = true) =>
         new(id ?? Guid.NewGuid(), isDefault ? "default" : Guid.NewGuid().ToString(), name, string.Empty,
-            "#3b82c4", 0, Zone, true, isDefault);
+            "#3b82c4", 0, Zone, true, isDefault, CalendarKinds.Regular, null);
 
     [Fact]
     public async Task List_EnsuresDefaultWithTheBrowserZone()
@@ -39,7 +39,7 @@ public sealed class CalendarsControllerTests
               .ReturnsAsync(View());
         _store.Setup(s => s.ListAsync(Uid, It.IsAny<CancellationToken>())).ReturnsAsync([View()]);
 
-        var result = await CreateController().List(Zone, CancellationToken.None);
+        var result = await CreateController().List(Zone, null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Single(Assert.IsType<CalendarListResponse>(ok.Value).Calendars);
@@ -49,7 +49,7 @@ public sealed class CalendarsControllerTests
     [Fact]
     public async Task List_RefusesUnknownZone()
     {
-        var result = await CreateController().List("Nowhere/Land", CancellationToken.None);
+        var result = await CreateController().List("Nowhere/Land", null, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
         _store.Verify(s => s.EnsureDefaultAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -197,7 +197,7 @@ public sealed class CalendarsControllerTests
         Assert.IsType<NotFoundObjectResult>(await CreateController().Delete(Guid.NewGuid(), CancellationToken.None));
     }
 
-    private static IFormFile IcsFile(string text, string? mediaType = "text/calendar")
+    internal static IFormFile IcsFile(string text, string? mediaType = "text/calendar")
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "calendar.ics");

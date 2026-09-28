@@ -692,6 +692,17 @@ public sealed class CalendarEventsControllerTests
     }
 
     [Fact]
+    public async Task Delete_InTheBirthdaysCalendar_Returns403()
+    {
+        _store.Setup(s => s.DeleteAsync(Uid, It.IsAny<Guid>(), EditScope.All, null, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Result.Failure<EventWriteResult>(CalendarStore.ReadOnly));
+
+        var result = await CreateController().Delete(Guid.NewGuid(), EditScope.All, null, null, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(result).StatusCode);
+    }
+
+    [Fact]
     public async Task Delete_WhenNotFound_Returns404()
     {
         _store.Setup(s => s.DeleteAsync(Uid, It.IsAny<Guid>(), EditScope.All, null, It.IsAny<CancellationToken>()))

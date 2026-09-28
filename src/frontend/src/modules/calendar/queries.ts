@@ -5,6 +5,7 @@ import {
 import i18next from 'i18next'
 import { api, ApiError } from '../../api.js'
 import { useAccountId } from '../../hooks/useAccountId'
+import { preferencesKey } from '../../hooks/usePreferences'
 import type {
   Calendar, CalendarWrite, EditScope, EventUpdateBody, EventWrite, Occurrence, OccurrenceListResponse,
 } from './calendarTypes'
@@ -35,7 +36,7 @@ export function useCalendars(tz: string) {
 
   return useQuery({
     queryKey: calendarKeys.calendars(accountId, tz),
-    queryFn: () => api.getCalendars(tz),
+    queryFn: () => api.getCalendars(tz, mailLanguage()),
     staleTime: 5 * 60_000,
     select: (data): Calendar[] => data.calendars,
   })
@@ -116,7 +117,8 @@ function invalidateEvents(queryClient: QueryClient, accountId: string) {
   }
 }
 
-/** The language the server writes the invitation mails in: the screen's, never a guess. */
+/** The language the server writes in — invitation mails, the birthdays calendar: the screen's,
+    never a guess. */
 export function mailLanguage(): 'fr' | 'en' {
   return i18next.language?.startsWith('fr') ? 'fr' : 'en'
 }
@@ -155,6 +157,21 @@ export function useUpdateCalendar() {
 export function useSetCalendarVisible() {
   return useCalendarMutation(
     ({ id, visible }: { id: string; visible: boolean }) => api.setCalendarVisible(id, visible))
+}
+
+/** The birthdays switch: the calendar appears or goes, and the preference with it. */
+export function useSetBirthdays() {
+  const accountId = useAccountId()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ enabled, tz }: { enabled: boolean; tz: string }) =>
+      api.setBirthdays(enabled, tz, mailLanguage()),
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: calendarKeys.all(accountId) }),
+      queryClient.invalidateQueries({ queryKey: preferencesKey }),
+    ]),
+  })
 }
 
 export function useDeleteCalendar() {

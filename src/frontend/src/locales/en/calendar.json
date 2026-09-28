@@ -25,7 +25,9 @@
     "delete": "Delete…",
     "deleteDefault": "The default calendar cannot be deleted",
     "previousMonth": "Previous month",
-    "nextMonth": "Next month"
+    "nextMonth": "Next month",
+    "settings": "Settings…",
+    "disable": "Disable…"
   },
   "views": {
     "allDay": "All day",
@@ -69,7 +71,17 @@
     "close": "Close",
     "reminderSet": "Reminder set",
     "repeatsGeneric": "Repeats",
-    "organizedBy": "Organised by {{name}}"
+    "organizedBy": "Organised by {{name}}",
+    "age_one": "{{count}} year old",
+    "age_other": "{{count}} years old",
+    "reminderAt": {
+      "same_day": "Reminder on the day at {{hour}}:00",
+      "day_before": "Reminder the day before at {{hour}}:00",
+      "week_before": "Reminder a week before"
+    },
+    "yearly": "Every year",
+    "openCard": "Open card",
+    "birthdayTitle": "Birthday"
   },
   "search": {
     "capped": "Only the first {{max}} results are shown"
@@ -229,7 +241,18 @@
     },
     "save": "Save",
     "deleteCalendarMessage": "Delete “{{name}}” and every event it holds? This cannot be undone.",
-    "deleteEventMessage": "Delete “{{name}}”?"
+    "deleteEventMessage": "Delete “{{name}}”?",
+    "reminder": "Reminder",
+    "reminders": {
+      "none": "None",
+      "same_day": "On the day at {{hour}}:00",
+      "day_before": "The day before at {{hour}}:00",
+      "week_before": "A week before"
+    },
+    "reminderHint": "For every birthday, on all your synced devices.",
+    "disableTitle": "Turn off birthdays?",
+    "disableBody": "Birthdays will disappear from the webmail and your devices. Your contacts are not changed. You can turn this calendar back on in Settings › General.",
+    "disable": "Disable"
   },
   "import": {
     "title": "Import a calendar",

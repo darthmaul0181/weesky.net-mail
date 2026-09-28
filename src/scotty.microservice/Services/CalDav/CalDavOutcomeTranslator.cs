@@ -38,6 +38,7 @@ internal static class CalDavOutcomeTranslator
         DavWriteStatus.PreconditionFailed => null,
         DavWriteStatus.NotFound => null,
         DavWriteStatus.Busy => null,
+        DavWriteStatus.ReadOnly => CalDavError.NeedPrivileges,
     };
 
 #pragma warning restore CS8524

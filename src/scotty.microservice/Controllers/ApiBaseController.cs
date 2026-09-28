@@ -45,6 +45,10 @@ public abstract class ApiBaseController : ControllerBase
     protected ActionResult UnauthorizedEnveloppe(string message) =>
         Unauthorized(ResultEnveloppe.CreateErrorEnveloppe(message));
 
+    /// <summary>403 carrying the error envelope — a resource the caller may read but never write.</summary>
+    protected ActionResult ForbiddenEnveloppe(string message) =>
+        StatusCode(StatusCodes.Status403Forbidden, ResultEnveloppe.CreateErrorEnveloppe(message));
+
     /// <summary>404 carrying the error envelope.</summary>
     protected ActionResult NotFoundEnveloppe(string message) =>
         NotFound(ResultEnveloppe.CreateErrorEnveloppe(message));

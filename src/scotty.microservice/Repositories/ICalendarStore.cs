@@ -23,6 +23,24 @@ public interface ICalendarStore
         Guid userId, string browserTimeZone, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The birthdays collection, created and filled in one transaction when the user has none and
+    /// <c>calendar.birthdays</c> is on (spec, décision 3). Its language is <c>ui.language</c> when that
+    /// is <c>fr</c> or <c>en</c>, else <paramref name="language"/>, else English. Idempotent, and two
+    /// cheap reads when there is nothing to do: it runs on every calendar list.
+    /// </summary>
+    Task EnsureBirthdaysAsync(
+        Guid userId, string browserTimeZone, string language, CancellationToken cancellationToken);
+
+    /// <summary>The switch: writes <c>calendar.birthdays</c>, then ensures the collection or removes
+    /// it — events, state and tombstones with it, and no revision, since it holds only copies.</summary>
+    Task SetBirthdaysEnabledAsync(
+        Guid userId, bool enabled, string browserTimeZone, string language, CancellationToken cancellationToken);
+
+    /// <summary>Rewrites every birthday in <paramref name="language"/> under one rank; nothing at all
+    /// when the collection is missing or already speaks it.</summary>
+    Task SetBirthdayLanguageAsync(Guid userId, string language, CancellationToken cancellationToken);
+
+    /// <summary>
     /// A new collection: its <c>dav_name</c> is its id, its colour the palette's next, its rank the
     /// last. Refused past <see cref="CalendarStore.MaxPerUser"/>.
     /// </summary>
@@ -43,7 +61,8 @@ public interface ICalendarStore
     /// <summary>
     /// The name, the description, the colour, the rank and — from a DAV client alone — the zone,
     /// which the caller has already resolved to an IANA id. Advances neither ctag nor sequence:
-    /// none of them is an event, and waking every phone for a colour is one sync per rename.
+    /// none of them is an event, and waking every phone for a colour is one sync per rename. The
+    /// birthdays collection's reminder is the exception: a new one rewrites every event under one rank.
     /// </summary>
     Task<Result> UpdateAsync(
         Guid userId, Guid calendarId, CalendarWrite write, CancellationToken cancellationToken);
@@ -55,7 +74,8 @@ public interface ICalendarStore
     /// <summary>
     /// Removes the collection, archiving every event it held in batches of
     /// <see cref="CalendarStore.DeleteBatch"/> and taking its sync state and its tombstones with
-    /// it. The <c>default</c> collection is refused: a user with no calendar has nowhere to write.
+    /// it. The <c>default</c> collection is refused: a user with no calendar has nowhere to write. So
+    /// is the birthdays one, which only its switch removes.
     /// </summary>
     Task<Result> DeleteAsync(Guid userId, Guid calendarId, CancellationToken cancellationToken);
 }

@@ -228,6 +228,22 @@ describe('api methods', () => {
     )
   })
 
+  // `lang` names the language the birthdays calendar is written in, should this read create it.
+  it('getCalendars sends the zone and the language', async () => {
+    const { api } = await import('./api.js')
+    await api.getCalendars('Europe/Brussels', 'fr')
+    expect(fetchCall()[0]).toMatch(/\/api\/Calendars\?tz=Europe%2FBrussels&lang=fr$/)
+    expect(fetchCall()[1].method).toBe('GET')
+  })
+
+  it('setBirthdays PUTs the switch with the zone and the language', async () => {
+    const { api } = await import('./api.js')
+    await api.setBirthdays(false, 'Europe/Brussels', 'fr')
+    expect(fetchCall()[0]).toMatch(/\/api\/Calendars\/Birthdays\?tz=Europe%2FBrussels&lang=fr$/)
+    expect(fetchCall()[1].method).toBe('PUT')
+    expect(sentJson(fetchCall()[1])).toEqual({ enabled: false })
+  })
+
   it('changePassword calls PATCH /api/Account/ChangeSecret', async () => {
     const { api } = await import('./api.js')
     await api.changePassword('old', 'new')

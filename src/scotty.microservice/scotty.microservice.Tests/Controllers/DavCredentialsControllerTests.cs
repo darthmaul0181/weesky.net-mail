@@ -127,6 +127,25 @@ public sealed class DavCredentialsControllerTests
         Assert.True(view.CalDavEnabled);
     }
 
+    [Fact]
+    public async Task SetCalDav_TurningOn_EnsuresTheBirthdaysCalendarInTheBrowsersLanguage()
+    {
+        Func<Task>? shared = null;
+        store.Setup(s => s.EnableAsync(Uid, DavProtocol.CalDav, It.IsAny<Func<Task>?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback((Guid _, DavProtocol _, Func<Task>? alongside, CancellationToken _) => shared = alongside)
+            .ReturnsAsync("ABCDEFGHIJKLMNOPQRST");
+        ArrangeState(calDav: true);
+
+        await CreateController().SetCalDav(
+            new DavCalDavToggle { Enabled = true, TimeZone = "Europe/Brussels", Language = "fr" }, calendars.Object,
+            CancellationToken.None);
+
+        await shared!();
+        calendars.Verify(c => c.EnsureBirthdaysAsync(Uid, "Europe/Brussels", "fr", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("Mars/Olympus")]

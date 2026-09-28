@@ -206,9 +206,10 @@ describe('SyncPage', () => {
     await userEvent.click(box)
 
     // The zone is what the default calendar is born in, so it travels with the switch rather than
-    // being guessed server-side from a request that carries no clock.
+    // being guessed server-side from a request that carries no clock. The language is what names
+    // the birthdays calendar if this switch is what creates it.
     expect(api.setDavCalDav).toHaveBeenCalledWith(
-      true, Intl.DateTimeFormat().resolvedOptions().timeZone)
+      true, Intl.DateTimeFormat().resolvedOptions().timeZone, 'en')
   })
 
   it('keeps each switch on its own optimistic value while the other is in flight', async () => {

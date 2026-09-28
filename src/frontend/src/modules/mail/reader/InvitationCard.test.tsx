@@ -7,7 +7,7 @@ import type { Calendar } from '../../calendar/calendarTypes'
 import type { MailInvitation, ReplyStatus } from '../api/mailTypes'
 import { useMessage } from '../queries'
 import InvitationCard from './InvitationCard'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, settle } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   respondInvitation: vi.fn(),
@@ -147,6 +147,24 @@ describe('InvitationCard', () => {
         folder: 'INBOX', uid: 7, part: '2', answer: 'Accepted', calendarId: 'c2', language: 'en',
       }),
       expect.anything()))
+  })
+
+  // The birthdays calendar is read-only: an invitation filed there would be refused.
+  it('never offers the birthdays calendar', async () => {
+    const birthdays = calendar({ id: 'c9', davName: 'birthdays', displayName: 'Anniversaires',
+      isDefault: false, kind: 'birthdays', birthdayReminder: 'same_day' })
+    mocks.getCalendars.mockResolvedValue({ calendars: [...calendars, birthdays] })
+    renderCard()
+    await waitFor(() => expect(mocks.getCalendars).toHaveBeenCalled())
+    await settle()
+    expect(screen.queryByLabelText('Calendar')).toBeNull()
+
+    cleanup()
+    mocks.getCalendars.mockResolvedValue({ calendars: [...twoCalendars, birthdays] })
+    renderCard()
+    fireEvent.click(await screen.findByLabelText('Calendar'))
+    expect(screen.getAllByRole('option').map(option => option.textContent))
+      .toEqual(['Personnel', 'Travail'])
   })
 
   it('a click disables the buttons, then redraws state 2 from the answer', async () => {

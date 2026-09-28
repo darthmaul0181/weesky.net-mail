@@ -29,6 +29,7 @@ public sealed class CalDavOutcomeTranslatorTests
     [InlineData(DavWriteStatus.PreconditionFailed, 412)]
     [InlineData(DavWriteStatus.CollectionFull, 507)]
     [InlineData(DavWriteStatus.Busy, 503)]
+    [InlineData(DavWriteStatus.ReadOnly, 403)]
     public async Task EveryStatus_HasItsCode(DavWriteStatus status, int expected)
     {
         var context = NewContext();
@@ -54,6 +55,19 @@ public sealed class CalDavOutcomeTranslatorTests
         // The namespace is asserted with the name: a max-resource-size in the CardDAV namespace
         // says nothing to a calendar client.
         Assert.Equal(DavXml.CalDav + condition, ConditionOf(context.Response));
+    }
+
+    [Fact]
+    public async Task AReadOnlyRefusal_NamesNeedPrivileges_InTheDavNamespace()
+    {
+        var context = NewContext();
+
+        await CalDavOutcomeTranslator.WriteAsync(
+            context.Response, Outcome(DavWriteStatus.ReadOnly), CancellationToken.None);
+
+        Assert.Equal(403, context.Response.StatusCode);
+        // DAV:, not CalDAV: RFC 3744's own element, unlike every other condition here.
+        Assert.Equal(DavXml.Dav + "need-privileges", ConditionOf(context.Response));
     }
 
     [Theory]

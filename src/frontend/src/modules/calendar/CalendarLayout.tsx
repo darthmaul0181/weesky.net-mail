@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import type { TFunction } from 'i18next'
@@ -12,6 +12,8 @@ import { useViewport } from '../../hooks/useViewport'
 import PlusIcon from '../../icons/PlusIcon'
 import ContextDrawer, { useContextDrawer } from '../../layouts/ContextDrawer'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
+import { contactUrlOf, isBirthday, isWritable } from './birthday'
+import BirthdayScreen from './BirthdayScreen'
 import { CalendarContext, type CalendarContextValue } from './calendarContext'
 import CalendarDialogs, { type PendingEvent, type ScopeAsk } from './CalendarDialogs'
 import CalendarSidebar from './CalendarSidebar'
@@ -92,6 +94,7 @@ export default function CalendarLayout() {
   const calendars = useMemo(() => calendarsQuery.data ?? [], [calendarsQuery.data])
   const calendarById = useMemo(
     () => new Map(calendars.map(one => [one.id, one])), [calendars])
+  const writable = useMemo(() => calendars.filter(isWritable), [calendars])
 
   const calendarWrites = useCalendarWrites(tz, addToast)
   const createEvent = useCreateEvent()
@@ -103,6 +106,9 @@ export default function CalendarLayout() {
   const savingEvent = createEvent.isPending || updateEvent.isPending
 
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [birthdayShown, setBirthdayShown] = useState<Occurrence | null>(null)
+  // The reading screen is the phone's; a window widened past it goes back to the bubble.
+  if (!phone && birthdayShown) setBirthdayShown(null)
   const [scopeAsk, setScopeAsk] = useState<ScopeAsk | null>(null)
   const [pendingEvent, setPendingEvent] = useState<PendingEvent | null>(null)
   const [discarding, setDiscarding] = useState(false)
@@ -163,9 +169,20 @@ export default function CalendarLayout() {
     query, setQuery, commitQuery, typed, term, searchQuery, clearSearch,
   } = useCalendarSearch()
 
+  const openContact = useCallback((one: Occurrence) => {
+    if (one.contactId) void navigate(contactUrlOf(one.contactId))
+  }, [navigate])
+
+  // A birthday is read-only: what opens the editor for another event opens its card, or on a
+  // phone the reading screen that stands where the editor would.
   const openFromChip = useCallback((one: Occurrence) => {
+    if (isBirthday(one)) {
+      if (phone) setBirthdayShown(one)
+      else openContact(one)
+      return
+    }
     openEditor(one.eventId, one.instanceId || undefined)
-  }, [openEditor])
+  }, [openEditor, phone, openContact])
 
   // A 300px bubble has nowhere to hang off a 360px screen, so a tap there is the editor itself.
   // The chip's rectangle is read here rather than when the bubble mounts: a search result clears
@@ -203,7 +220,7 @@ export default function CalendarLayout() {
 
   const { eventQuery, detail, occurrence, editorKey, seed, editorReady } = useEditorSeed({
     params, routeId, instanceParam, inEditor, reloads, anchor, tz, rules, windowQuery, searchQuery,
-    calendarsLoaded: calendarsQuery.data !== undefined, calendars, calendarById, addToast, navigate,
+    calendarsLoaded: calendarsQuery.data !== undefined, calendars: writable, addToast, navigate,
   })
   // The discard question dies with the editor it belongs to, whatever took the route away — the
   // browser's Back never passes through `backToGrid`. Hidden is not dropped: a flag left standing
@@ -221,6 +238,16 @@ export default function CalendarLayout() {
   }
 
   const backToGrid = () => { void navigate(`/calendar${searchWith()}`, { replace: true }) }
+
+  // A hand-typed edit URL of a birthday never draws its editor: the card it comes from, or the grid.
+  const detailCalendar = detail ? calendarById.get(detail.calendarId) : undefined
+  const readOnly = detailCalendar !== undefined && !isWritable(detailCalendar)
+  const contactId = occurrence?.contactId
+    ?? windowQuery.data?.find(one => one.eventId === routeId)?.contactId
+  useEffect(() => {
+    if (!inEditor || !readOnly || !editorReady) return
+    void navigate(!phone && contactId ? contactUrlOf(contactId) : `/calendar${searchWith()}`, { replace: true })
+  }, [inEditor, readOnly, editorReady, phone, contactId, navigate, searchWith])
   /** The editor's one way out, whichever of the four was taken — the ✕, Escape, a press on the
       backdrop, or the phone screen's own Escape. */
   const closeEditor = (dirty: boolean) => (dirty ? setDiscarding(true) : backToGrid())
@@ -254,14 +281,17 @@ export default function CalendarLayout() {
       onRecolour={calendar => calendarWrites.setEditing({ mode: 'colour', calendar })}
       onImport={calendarWrites.setImporting}
       onExport={calendar => void calendarWrites.exportOne(calendar)}
-      onDelete={calendarWrites.setPendingDelete} onToggleVisible={calendarWrites.toggleVisible} />
+      onDelete={calendarWrites.setPendingDelete}
+      onSettings={calendar => calendarWrites.setEditing({ mode: 'settings', calendar })}
+      onDisable={calendarWrites.setDisabling} onToggleVisible={calendarWrites.toggleVisible} />
   )
 
   // The ✕ is drawn before the form is: a load that never lands — a refused calendar list on
   // `/calendar/new` — would otherwise be a room whose only door is the browser's Back button.
-  const editorBody = editorReady && seed ? (
+  const calendarsSettled = calendarsQuery.data !== undefined || calendarsQuery.isError
+  const editorBody = editorReady && seed && calendarsSettled && !readOnly ? (
     <EventEditor key={seed.key} detail={detail} initial={seed.form}
-      calendars={calendars} saving={savingEvent}
+      calendars={writable} saving={savingEvent}
       error={saveError} onReload={conflict ? () => void reloadEvent() : null} fullScreen={phone}
       titleRef={editorTitleRef} onSave={(form, scope) => void saveEvent(form, scope)} onDelete={deleteEdited}
       onClose={closeEditor} onDirtyChange={setEditorDirty} />
@@ -360,7 +390,15 @@ export default function CalendarLayout() {
             anchor={preview.anchor} rect={preview.rect} returnFocusRef={mainRef}
             onClose={() => setPreview(null)}
             onEdit={() => openFromChip(preview.occurrence)}
-            onDelete={() => deletePreviewed(preview.occurrence)} />
+            onDelete={() => deletePreviewed(preview.occurrence)}
+            onOpenContact={() => openContact(preview.occurrence)} />
+        )}
+
+        {birthdayShown && (
+          <BirthdayScreen occurrence={birthdayShown}
+            calendar={calendarById.get(birthdayShown.calendarId) ?? null} returnFocusRef={mainRef}
+            onClose={() => setBirthdayShown(null)}
+            onOpenContact={() => openContact(birthdayShown)} />
         )}
 
         {/* A dialogue over the grid from 640px up, the whole screen below it. The header is the
@@ -385,12 +423,12 @@ export default function CalendarLayout() {
           pendingEvent={pendingEvent} onPendingEventClosed={() => setPendingEvent(null)}
           deletingEvent={removeEvent.isPending} onDeleteEvent={id => runDelete(id, 'All')}
           inEditor={inEditor} discarding={discarding} onDiscard={backToGrid}
-          onDiscardClosed={() => setDiscarding(false)} calendars={calendars}
+          onDiscardClosed={() => setDiscarding(false)} calendars={writable}
           writes={calendarWrites} returnFocusRef={mainRef} />
 
         {/* Anchored 73px up from the edge the tab bar owns, and the editor owns the whole screen
             below 640px: it is withheld there, exactly as mail and contacts withhold theirs. */}
-        {!inEditor && (
+        {!inEditor && !birthdayShown && (
           <FloatingAction label={t('phone.newEvent')} onClick={() => openNewEvent()}>
             <PlusIcon size={22} />
           </FloatingAction>

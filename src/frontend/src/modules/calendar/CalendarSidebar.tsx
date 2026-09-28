@@ -25,6 +25,8 @@ export interface CalendarSidebarProps {
   onImport: (calendar: Calendar) => void
   onExport: (calendar: Calendar) => void
   onDelete: (calendar: Calendar) => void
+  onSettings: (calendar: Calendar) => void
+  onDisable: (calendar: Calendar) => void
   onToggleVisible: (calendar: Calendar, visible: boolean) => void
 }
 
@@ -32,7 +34,7 @@ export interface CalendarSidebarProps {
  * its own, so it mounts in a test with neither a router nor a query client. */
 export default function CalendarSidebar({
   calendars, anchor, today, rules, locale, loading, failed, onPickDay, onNewEvent, onNewCalendar,
-  onRename, onRecolour, onImport, onExport, onDelete, onToggleVisible,
+  onRename, onRecolour, onImport, onExport, onDelete, onSettings, onDisable, onToggleVisible,
 }: CalendarSidebarProps) {
   const { t } = useTranslation('calendar')
 
@@ -76,18 +78,25 @@ export default function CalendarSidebar({
               <DropdownMenu ariaLabel={t('sidebar.actions', { name: one.displayName })}
                 className="admin-icon-btn" direction="auto"
                 trigger={<KebabIcon size={14} />}
-                items={[
-                  { label: t('sidebar.rename'), onSelect: () => onRename(one) },
-                  { label: t('sidebar.colour'), onSelect: () => onRecolour(one) },
-                  { label: t('sidebar.import'), onSelect: () => onImport(one) },
-                  { label: t('sidebar.export'), onSelect: () => onExport(one) },
-                  'separator',
-                  {
-                    label: t('sidebar.delete'), onSelect: () => onDelete(one),
-                    disabled: one.isDefault,
-                    title: one.isDefault ? t('sidebar.deleteDefault') : undefined,
-                  },
-                ]} />
+                items={one.kind === 'birthdays'
+                  ? [
+                      { label: t('sidebar.settings'), onSelect: () => onSettings(one) },
+                      { label: t('sidebar.export'), onSelect: () => onExport(one) },
+                      'separator',
+                      { label: t('sidebar.disable'), onSelect: () => onDisable(one) },
+                    ]
+                  : [
+                      { label: t('sidebar.rename'), onSelect: () => onRename(one) },
+                      { label: t('sidebar.colour'), onSelect: () => onRecolour(one) },
+                      { label: t('sidebar.import'), onSelect: () => onImport(one) },
+                      { label: t('sidebar.export'), onSelect: () => onExport(one) },
+                      'separator',
+                      {
+                        label: t('sidebar.delete'), onSelect: () => onDelete(one),
+                        disabled: one.isDefault,
+                        title: one.isDefault ? t('sidebar.deleteDefault') : undefined,
+                      },
+                    ]} />
             </div>
           ))}
         </div>

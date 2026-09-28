@@ -30,6 +30,9 @@ internal static class CalDavError
     internal static readonly XName ResourceMustBeNull = DavXml.Dav + "resource-must-be-null";
     internal static readonly XName CannotModifyProtectedProperty = DavXml.Dav + "cannot-modify-protected-property";
 
+    /// <summary>RFC 3744 § 7.1.1: the privilege a write on the birthdays calendar is missing.</summary>
+    internal static readonly XName NeedPrivileges = DavXml.Dav + "need-privileges";
+
 #pragma warning disable CS8524
 
     /// <summary>The element RFC 4791 § 5.3.2.1 gives each precondition the gate judges.</summary>
