@@ -31,6 +31,20 @@ describe('ThemeContext', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('light')
   })
 
+  it('keeps custom when its mirror exists', () => {
+    localStorage.setItem('appearance_palette', 'custom')
+    localStorage.setItem('appearance_custom_palette', '265,muted,35')
+    localStorage.setItem('appearance_custom_palette_css', "[data-palette='custom'] {}")
+    render(<ThemeProvider><Probe /></ThemeProvider>)
+    expect(document.documentElement.getAttribute('data-palette')).toBe('custom')
+  })
+
+  it('reads custom without a mirror as night', () => {
+    localStorage.setItem('appearance_palette', 'custom')
+    render(<ThemeProvider><Probe /></ThemeProvider>)
+    expect(document.documentElement.getAttribute('data-palette')).toBe('night')
+  })
+
   it('setTheme("dark") applies attribute and persists', () => {
     render(<ThemeProvider><Probe /></ThemeProvider>)
     fireEvent.click(screen.getByText('dark'))

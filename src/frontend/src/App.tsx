@@ -4,6 +4,7 @@ import { router } from './routes'
 import { AuthProvider } from './contexts/AuthContext'
 import { LocaleProvider } from './contexts/LocaleContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import CustomPaletteSync from './components/CustomPaletteSync'
 import { useWebAppManifest } from './hooks/useWebAppManifest'
 import { shouldRetry } from './lib/retryPolicy'
 
@@ -31,6 +32,7 @@ export default function App() {
       <InstallManifest />
       <ThemeProvider>
         <AuthProvider>
+          <CustomPaletteSync />
           <LocaleProvider>
             <RouterProvider router={router} />
           </LocaleProvider>

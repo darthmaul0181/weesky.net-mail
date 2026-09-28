@@ -1,12 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { readStored, writeStored } from '../lib/safeStorage'
+import { hasCustomPaletteMirror } from '../lib/customPaletteStyle'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 export const PALETTE_IDS = [
   'night', 'classic', 'forest', 'slate', 'plum', 'ink', 'azure', 'indigo',
 ] as const
-export type Palette = typeof PALETTE_IDS[number]
+export type BuiltinPalette = typeof PALETTE_IDS[number]
+export type Palette = BuiltinPalette | 'custom'
 
 interface ThemeContextValue {
   theme: ThemePreference
@@ -29,7 +31,8 @@ function readTheme(): ThemePreference {
 
 function readPalette(): Palette {
   const stored = readStored(PALETTE_KEY)
-  return PALETTE_IDS.includes(stored as Palette) ? stored as Palette : 'night'
+  if (stored === 'custom') return hasCustomPaletteMirror() ? 'custom' : 'night'
+  return PALETTE_IDS.includes(stored as BuiltinPalette) ? stored as BuiltinPalette : 'night'
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
