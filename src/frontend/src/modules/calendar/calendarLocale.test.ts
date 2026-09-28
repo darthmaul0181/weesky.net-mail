@@ -1,42 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   dateLocaleOf, dayNames, formatLongDayRange, formatRangeTitle, formatTime, hourCycleOf,
-  monthGrid, startOfWeek, weekdayNameOf, weekInfoOf, weekNumberOf, weekRulesOf,
+  monthGrid, startOfWeek, weekdayNameOf, weekNumberOf, weekRulesFor,
 } from './calendarLocale'
 
 const ISO = { firstDay: 1, minimalDays: 4 } as const
 const US = { firstDay: 7, minimalDays: 1 } as const
 
-/** An engine carrying neither `getWeekInfo()` nor `weekInfo` — Node 20 has only the second, this
-    machine's Node 24 has both, and the fallback table has to be reachable on either. */
-const noWeekInfo = () => undefined
-
-describe('weekInfoOf', () => {
-  // The datum is spelled two ways: a method from V8 13 (Node 22+), the older accessor on Safari
-  // and Node 20. Whichever this platform carries, the seam has to answer the same thing.
-  it('reads whichever spelling the platform carries', () => {
-    expect(weekInfoOf(new Intl.Locale('fr-BE'))?.firstDay).toBe(1)
-    expect(weekInfoOf(new Intl.Locale('en-US'))?.firstDay).toBe(7)
-  })
-})
-
-describe('weekRulesOf', () => {
-  it('reads the region the browser is set to', () => {
-    expect(weekRulesOf('fr-BE')).toEqual(ISO)
-    expect(weekRulesOf('en-US')).toEqual(US)
-  })
-
-  // Through the seam, never by spying on `Intl.Locale`'s prototype: a spy would exercise the
-  // table on the engine that carries the method and silently skip it on the one that does not.
-  it('falls back to the region table when the engine answers neither spelling', () => {
-    expect(weekRulesOf('fr-BE', noWeekInfo)).toEqual(ISO)
-    expect(weekRulesOf('en-US', noWeekInfo)).toEqual(US)
-    expect(weekRulesOf('en-CA', noWeekInfo)).toEqual(US)
-    expect(weekRulesOf('nl', noWeekInfo)).toEqual(ISO)
-  })
-
-  it('answers something usable for a region tag it cannot parse', () => {
-    expect(weekRulesOf('not a locale')).toEqual(ISO)
+describe('weekRulesFor', () => {
+  // Numbering follows the first day: ISO's 4 January from a Monday, 1 January from a Sunday.
+  it('numbers the weeks the way the chosen first day does', () => {
+    expect(weekRulesFor('monday')).toEqual(ISO)
+    expect(weekRulesFor('sunday')).toEqual(US)
   })
 })
 

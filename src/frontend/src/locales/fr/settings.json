@@ -1,6 +1,9 @@
 {
   "nav": {
     "label": "Paramètres",
+    "mail": "Mail",
+    "calendar": "Agenda",
+    "application": "Application",
     "account": "Compte",
     "general": "Général",
     "accounts": "Comptes connectés",
@@ -55,7 +58,7 @@
   "general": {
     "loadFailed": "Impossible de charger les paramètres.",
     "saveFailed": "Impossible d’enregistrer le réglage",
-    "layout": "Disposition",
+    "layout": "Liste des messages",
     "readingPane": {
       "label": "Volet de lecture",
       "hint": "Où s’ouvre un message — à côté de la liste, en dessous, ou en pleine largeur.",
@@ -100,13 +103,6 @@
       "delete": "Supprimer",
       "on": "{{action}} est désormais une action rapide",
       "off": "{{action}} n’est plus une action rapide"
-    },
-    "calendar": "Agenda",
-    "birthdays": {
-      "label": "Agenda des anniversaires",
-      "hint": "Les dates de naissance de vos contacts, dans le webmail et sur vos appareils synchronisés.",
-      "on": "Agenda des anniversaires activé",
-      "off": "Agenda des anniversaires désactivé"
     },
     "swipe": {
       "heading": "Gestes de glissement",
@@ -174,6 +170,24 @@
       "hint": "Votre navigateur demandera l’autorisation la première fois.",
       "on": "Les nouveaux messages déclencheront une notification",
       "off": "Les notifications de bureau sont désactivées"
+    }
+  },
+  "calendarGeneral": {
+    "calendars": "Agendas",
+    "birthdays": {
+      "label": "Agenda des anniversaires",
+      "hint": "Les dates de naissance de vos contacts, dans le webmail et sur vos appareils synchronisés.",
+      "on": "Agenda des anniversaires activé",
+      "off": "Agenda des anniversaires désactivé"
+    },
+    "week": "Semaine",
+    "firstDayOfWeek": {
+      "label": "Premier jour de la semaine",
+      "hint": "La colonne par laquelle commencent les vues semaine et mois.",
+      "monday": "Lundi",
+      "sunday": "Dimanche",
+      "mondayToast": "Les semaines commencent désormais le lundi",
+      "sundayToast": "Les semaines commencent désormais le dimanche"
     }
   },
   "accounts": {

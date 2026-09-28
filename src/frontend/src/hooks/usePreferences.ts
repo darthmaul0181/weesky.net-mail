@@ -21,6 +21,7 @@ export const PREFERENCE_KEYS = {
   trustContacts: 'mail.trustContacts',
   language: 'ui.language',
   calendarBirthdays: 'calendar.birthdays',
+  firstDayOfWeek: 'calendar.firstDayOfWeek',
 } as const
 
 export type Preferences = Record<string, string>
@@ -203,3 +204,9 @@ export function languageOf(preferences: Preferences): string {
   return preferences[PREFERENCE_KEYS.language] ?? 'auto'
 }
 
+export type FirstDayOfWeek = 'monday' | 'sunday'
+
+/** Monday unless explicitly Sunday — the backend's default, repeated for one that predates the key. */
+export function firstDayOfWeekOf(preferences: Preferences): FirstDayOfWeek {
+  return preferences[PREFERENCE_KEYS.firstDayOfWeek] === 'sunday' ? 'sunday' : 'monday'
+}

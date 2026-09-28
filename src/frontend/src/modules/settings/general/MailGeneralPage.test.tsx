@@ -1,15 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import GeneralPage from './GeneralPage'
+import MailGeneralPage from './MailGeneralPage'
 import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
   setPreference: vi.fn(),
-  setBirthdays: vi.fn(),
   playNewMailSound: vi.fn(),
   desktopPermission: vi.fn(),
   requestDesktopPermission: vi.fn(),
@@ -33,12 +31,17 @@ function renderPage(preferences: Record<string, string> =
   { 'mail.pageSize': '30', 'mail.showPreview': 'true' }) {
   mocks.getPreferences.mockResolvedValue(preferences)
   mocks.setPreference.mockResolvedValue(undefined)
-  mocks.setBirthdays.mockResolvedValue(null)
-  return render(<GeneralPage />, { wrapper })
+  return render(<MailGeneralPage />, { wrapper })
 }
 
-describe('GeneralPage', () => {
+describe('MailGeneralPage', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('names its module above the title', async () => {
+    renderPage()
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('General')
+    expect(screen.getByText('Mail')).toBeInTheDocument()
+  })
 
   it('shows the stored page size, not a value of its own', async () => {
     renderPage({ 'mail.pageSize': '100', 'mail.showPreview': 'true' })
@@ -278,7 +281,7 @@ describe('GeneralPage', () => {
 
   it('reports a load failure rather than showing empty controls', async () => {
     mocks.getPreferences.mockRejectedValue(new Error('nope'))
-    render(<GeneralPage />, { wrapper })
+    render(<MailGeneralPage />, { wrapper })
 
     expect(await screen.findByText('Could not load the settings.')).toBeInTheDocument()
   })
@@ -301,23 +304,7 @@ describe('GeneralPage', () => {
     await screen.findByLabelText('Messages per page')
 
     expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent))
-      .toEqual(['Layout', 'Calendar', 'Swipe gestures', 'Privacy & security', 'Composing', 'Notifications'])
-  })
-
-  // Spec § 7: the section sits between Layout and Privacy — not necessarily adjacent to either,
-  // since Swipe gestures already stands between the two.
-  it('puts the calendar section heading between Layout and Privacy', async () => {
-    renderPage()
-    await screen.findByLabelText('Messages per page')
-
-    const headings = screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)
-    const layout = headings.indexOf('Layout')
-    const calendar = headings.indexOf('Calendar')
-    const privacy = headings.indexOf('Privacy & security')
-
-    expect(layout).toBeGreaterThanOrEqual(0)
-    expect(calendar).toBeGreaterThan(layout)
-    expect(calendar).toBeLessThan(privacy)
+      .toEqual(['Message list', 'Swipe gestures', 'Privacy & security', 'Composing', 'Notifications'])
   })
 
   // A pressed button, not a ticked box: the multi-select must not be drawn like the reading-pane
@@ -413,7 +400,7 @@ describe('reading pane', () => {
   })
 })
 
-describe('GeneralPage notifications', () => {
+describe('MailGeneralPage notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.desktopPermission.mockReturnValue('default')
@@ -590,45 +577,7 @@ describe('the default composing editor', () => {
   })
 })
 
-describe('the birthdays calendar switch', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('shows it checked by default, with no preference stored', async () => {
-    renderPage()
-
-    expect(await screen.findByRole('checkbox', { name: 'Birthdays calendar' })).toBeChecked()
-  })
-
-  it('shows it unchecked when the preference is off', async () => {
-    renderPage({ 'mail.pageSize': '30', 'calendar.birthdays': 'off' })
-
-    expect(await screen.findByRole('checkbox', { name: 'Birthdays calendar' })).not.toBeChecked()
-  })
-
-  it('switches the birthdays calendar through its own route', async () => {
-    renderPage()
-    const toggle = await screen.findByRole('checkbox', { name: 'Birthdays calendar' })
-    expect(toggle).toBeChecked()
-
-    await userEvent.click(toggle)
-
-    expect(mocks.setBirthdays).toHaveBeenCalledWith(false, expect.any(String), 'en')
-    expect(mocks.setPreference).not.toHaveBeenCalledWith('calendar.birthdays', expect.anything())
-    expect(await screen.findByText('Birthdays calendar turned off')).toBeInTheDocument()
-  })
-
-  it('surfaces a failure to save instead of pretending', async () => {
-    renderPage()
-    mocks.setBirthdays.mockRejectedValue(new Error('Refused by the server'))
-    const toggle = await screen.findByRole('checkbox', { name: 'Birthdays calendar' })
-
-    await userEvent.click(toggle)
-
-    expect(await screen.findByText('Could not save the setting')).toBeInTheDocument()
-  })
-})
-
-describe('GeneralPage swipe gestures', () => {
+describe('MailGeneralPage swipe gestures', () => {
   it('shows the defaults when nothing is stored', async () => {
     renderPage()
     expect(await screen.findByLabelText('Swipe right')).toHaveTextContent('Read / unread')

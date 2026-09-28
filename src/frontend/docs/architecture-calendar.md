@@ -24,7 +24,7 @@ Files under `src/modules/calendar/`:
   keys. Every mutation invalidates **`onSettled`**, so a refused write leaves the screen on server
   state rather than on an optimistic lie — the one exception is `useMoveOccurrence`, below
 - `plainDate.ts` — `PlainDate` (`'2026-09-14'`, no hour, no zone) and the zone arithmetic
-- `calendarLocale.ts` — `weekRulesOf`, `hourCycleOf`, `dateLocaleOf`, `startOfWeek`, `monthGrid`,
+- `calendarLocale.ts` — `weekRulesFor`, `hourCycleOf`, `dateLocaleOf`, `startOfWeek`, `monthGrid`,
   `weekNumberOf`, `formatRangeTitle`, `formatTime`, `weekdayNameOf`, `dayNames`. The last takes
   the **resolved** locale rather than a language and a region: `MiniMonth` and `PhoneMonth` have
   already grafted one, and doing it a second time inside the helper is how two answers drift — it
@@ -63,6 +63,11 @@ Files under `src/modules/calendar/`:
   deletions, the calendars' own writes, and the seven dialogs over the grid
 - `calendarContext.ts` — the module's context, in a file of its own; `calendarTestHarness.tsx` —
   `renderInCalendar`, which mounts any view with neither a router nor a `QueryClient`
+
+**The first weekday is the account's, not the browser's.** `CalendarLayout` waits for the
+preferences before mounting the screen, then hands `weekRulesFor(calendar.firstDayOfWeek)` down;
+a refused read falls back to Monday. Mounting on Monday and correcting would make a Sunday
+account's week jump a column on every load. The clock and the date order still follow the region.
 
 **The context is the module's plumbing, and it is a file of its own for a cycle.** Every view, the
 chip and the editor read `useCalendar()` for `tz`, `rules`, `lang`, `region`, `cycle`, `today`,
