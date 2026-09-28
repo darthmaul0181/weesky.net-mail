@@ -9,6 +9,7 @@ import PencilIcon from '../../../icons/PencilIcon'
 import PlusIcon from '../../../icons/PlusIcon'
 import { customPaletteOf, usePreferences } from '../../../hooks/usePreferences'
 import { PALETTE_SEEDS, type CustomPaletteDef } from '../../../lib/customPalette'
+import { applyCustomPalette } from '../../../lib/customPaletteStyle'
 import PalettePreview from './PalettePreview'
 import CustomPaletteEditor from './CustomPaletteEditor'
 
@@ -140,7 +141,7 @@ export default function AppearancePage() {
               </div>
             )
           })}
-          {saved ? (
+          {preferences && (saved ? (
             <div className="palette-card">
               <label className="palette-pick">
                 <PalettePreview value="custom" dark={isDark} />
@@ -166,13 +167,13 @@ export default function AppearancePage() {
               <PlusIcon size={16} />
               {t('appearance.custom.create')}
             </button>
-          )}
+          ))}
         </div>
       </section>
 
       {editing && (
         <CustomPaletteEditor initial={editing} onClose={() => setEditing(null)}
-          onSaved={() => { setPalette('custom'); setEditing(null) }} />
+          onSaved={def => { applyCustomPalette(def); setPalette('custom'); setEditing(null) }} />
       )}
 
       {zoomed && (

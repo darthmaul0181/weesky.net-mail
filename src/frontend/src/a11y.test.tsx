@@ -21,6 +21,7 @@ import AdminPage from './modules/settings/admin/AdminPage'
 import MailGeneralPage from './modules/settings/general/MailGeneralPage'
 import CalendarGeneralPage from './modules/settings/general/CalendarGeneralPage'
 import DeleteConfirmModal from './components/DeleteConfirmModal'
+import CustomPaletteEditor from './modules/settings/appearance/CustomPaletteEditor'
 
 // Every surface's own test file mocks the API at the network layer; vi.mock('./api.js', ...) can
 // only be declared once per file, so this is the union of what all eight need.
@@ -307,6 +308,18 @@ describe('accessibility sweep', () => {
     })
 
     await screen.findByLabelText('First day of the week')
+    await expectNoAxeViolations(container)
+  })
+
+  // Near the error red, so the warning is drawn too.
+  it('CustomPaletteEditor', async () => {
+    const client = queryClient()
+    const { container } = render(
+      <CustomPaletteEditor initial={{ structure: 265, intensity: 'muted', accent: 27 }} onClose={vi.fn()} onSaved={vi.fn()} />,
+      { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> },
+    )
+
+    await screen.findByRole('slider', { name: 'Structure' })
     await expectNoAxeViolations(container)
   })
 

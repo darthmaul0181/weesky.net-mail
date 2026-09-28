@@ -218,7 +218,7 @@ body {
 .svc-account-test-result.is-ok, .svc-account-test-result.is-fail, .contact-scopes-error,
 .calendar-sidebar-error, .message-row-draft, .contact-editor-photo-error, .compose-attachment-error,
 .invitation-card-badge.is-cancel, .invitation-card-error, .invitation-card .btn-danger,
-.message-row-priority.is-high, .recipient-token.is-invalid, .row-tag.is-warn {
+.message-row-priority.is-high, .recipient-token.is-invalid, .row-tag.is-warn, .custom-palette-warning {
   color: color-mix(in oklab, var(--status-tone) 55%, var(--text));
 }
 .alert-error, .toast-success, .toast-error {

@@ -63,6 +63,10 @@ public static class UserPreferences
 
     private static readonly string[] Booleans = ["true", "false"];
     private static readonly string[] SwipeActions = ["none", "seen", "flag", "archive", "delete"];
+    // [0-9], not \d: .NET's \d is any Unicode digit, which int.Parse would then throw on.
+    private static readonly Regex CustomPalettePattern = new(
+        @"^(0|[1-9][0-9]{0,2}),(neutral|muted|vivid),(0|[1-9][0-9]{0,2})$",
+        RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
     public static IReadOnlyList<PreferenceDefinition> All { get; } =
     [
@@ -110,10 +114,6 @@ public static class UserPreferences
 
         return definition.IsSet ? IsValidSubset(definition, value) : definition.Allowed.Contains(value);
     }
-
-    private static readonly Regex CustomPalettePattern = new(
-        @"^(0|[1-9]\d{0,2}),(neutral|muted|vivid),(0|[1-9]\d{0,2})$",
-        RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
     /// <summary>Empty is "no palette yet"; otherwise structure hue, intensity, accent hue.</summary>
     private static bool IsCustomPalette(string value)

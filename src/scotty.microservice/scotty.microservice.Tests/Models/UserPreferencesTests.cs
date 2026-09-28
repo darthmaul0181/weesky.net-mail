@@ -146,6 +146,7 @@ public sealed class UserPreferencesTests
     [InlineData("265,muted,35,", false)]
     [InlineData(" 265,muted,35", false)]
     [InlineData("-1,muted,35", false)]
+    [InlineData("1٢,muted,35", false)]   // \d is Unicode in .NET: an Arabic-Indic digit must be refused, not thrown on
     public void IsValid_CustomPalette_AcceptsEmptyOrThreeFields(string value, bool expected)
     {
         Assert.Equal(expected, UserPreferences.IsValid(UserPreferences.UiCustomPalette, value));

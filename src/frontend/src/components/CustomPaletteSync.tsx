@@ -13,13 +13,15 @@ export default function CustomPaletteSync() {
   const def = data ? customPaletteOf(data) : undefined
   const key = def === undefined ? undefined : def && formatCustomPalette(def)
 
+  // `key` stands for `def`, which is a fresh object on every render.
   useEffect(() => {
-    if (def === undefined) return
-    applyCustomPalette(def)
-    if (!def && palette === 'custom') setPalette('night')
-    // `key` stands for `def`, which is a fresh object on every render.
+    if (def !== undefined) applyCustomPalette(def)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, palette])
+  }, [key])
+
+  useEffect(() => {
+    if (key === null && palette === 'custom') setPalette('night')
+  }, [key, palette, setPalette])
 
   return null
 }

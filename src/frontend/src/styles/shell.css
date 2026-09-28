@@ -679,7 +679,7 @@ a.dropdown-item { text-decoration: none; }
   color: var(--text-muted);
 }
 .custom-palette-editor .palette-zoom-pair { flex: 1; min-width: 0; }
-.custom-palette-warning { margin: 4px 0 0; font-size: 13px; color: var(--warning); }
+.custom-palette-warning { margin: 4px 0 0; font-size: 13px; --status-tone: var(--warning); }
 
 /* The track paints the hue wheel from data, like a calendar swatch; the thumb wears role tokens. */
 .hue-slider {

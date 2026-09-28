@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '../../../components/Modal'
 import DropletIcon from '../../../icons/DropletIcon'
@@ -13,7 +13,7 @@ import PalettePreview from './PalettePreview'
 const TRACK_CHROMA = { neutral: 0.02, muted: 0.06, vivid: 0.14 } as const
 
 export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
-  initial: CustomPaletteDef; onClose: () => void; onSaved: () => void
+  initial: CustomPaletteDef; onClose: () => void; onSaved: (def: CustomPaletteDef) => void
 }) {
   const { t } = useTranslation('settings')
   const setPreference = useSetPreference()
@@ -21,12 +21,13 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
   const [error, setError] = useState<string | null>(null)
   const tokens = useMemo(() => generateCustomPalette(draft), [draft])
   const ids = { structure: useId(), accent: useId(), intensity: useId() }
+  const structureRef = useRef<HTMLInputElement>(null)
 
   async function save() {
     setError(null)
     try {
       await setPreference.mutateAsync({ key: PREFERENCE_KEYS.customPalette, value: formatCustomPalette(draft) })
-      onSaved()
+      onSaved(draft)
     } catch (e) {
       setError(apiErrorMessage(e, t('appearance.custom.saveFailed')))
     }
@@ -34,11 +35,12 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
 
   return (
     <Modal icon={<DropletIcon size={16} />} title={t('appearance.custom.name')} onClose={onClose}
-      busy={setPreference.isPending} className="custom-palette-modal">
+      busy={setPreference.isPending} initialFocusRef={structureRef} className="custom-palette-modal">
       <div className="custom-palette-editor">
         <div className="custom-palette-controls">
           <label htmlFor={ids.structure} className="custom-palette-label">{t('appearance.custom.structure')}</label>
-          <input id={ids.structure} className="hue-slider" type="range" min={0} max={359} value={draft.structure}
+          <input ref={structureRef} id={ids.structure} className="hue-slider" type="range" min={0} max={359}
+            value={draft.structure} aria-valuetext={`${draft.structure}°`}
             style={{ background: hueGradient(0.58, TRACK_CHROMA[draft.intensity]) }}
             onChange={e => setDraft({ ...draft, structure: Number(e.target.value) })} />
           <span id={ids.intensity} className="custom-palette-label">{t('appearance.custom.intensity')}</span>
@@ -52,7 +54,8 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
             ))}
           </div>
           <label htmlFor={ids.accent} className="custom-palette-label">{t('appearance.custom.accent')}</label>
-          <input id={ids.accent} className="hue-slider" type="range" min={0} max={359} value={draft.accent}
+          <input id={ids.accent} className="hue-slider" type="range" min={0} max={359}
+            value={draft.accent} aria-valuetext={`${draft.accent}°`}
             style={{ background: hueGradient(0.66, 0.15) }}
             onChange={e => setDraft({ ...draft, accent: Number(e.target.value) })} />
           {isNearDanger(draft.accent) && <p className="custom-palette-warning">{t('appearance.custom.nearDanger')}</p>}
@@ -68,7 +71,9 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
       </div>
       {error && <p className="alert-error" role="alert">{error}</p>}
       <div className="folder-pick-submit">
-        <button type="button" className="btn btn-ghost" onClick={onClose}>{t('appearance.custom.cancel')}</button>
+        <button type="button" className="btn btn-ghost" onClick={onClose} disabled={setPreference.isPending}>
+          {t('appearance.custom.cancel')}
+        </button>
         <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={setPreference.isPending}>
           {t('appearance.custom.save')}
         </button>

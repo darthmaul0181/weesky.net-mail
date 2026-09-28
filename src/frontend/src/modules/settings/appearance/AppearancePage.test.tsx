@@ -261,6 +261,48 @@ describe('AppearancePage — my palette', () => {
     expect(screen.getByText(/close to the red used for errors/)).toBeInTheDocument()
   })
 
+  // The ✕, Escape and the backdrop are locked while the write is in flight; Cancel is the fourth way out.
+  it('locks Cancel while the save is in flight', async () => {
+    renderPage()
+    mocks.setPreference.mockReturnValue(new Promise(() => {}))
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  })
+
+  // Unknown is not "none": offering Create here would overwrite a palette the account may own.
+  it('withholds the ninth card until the preferences are known', async () => {
+    mocks.getPreferences.mockReturnValue(new Promise(() => {}))
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <ThemeProvider><AppearancePage /></ThemeProvider>
+      </QueryClientProvider>,
+    )
+    await screen.findByRole('radio', { name: /Night & coral/ })
+
+    expect(screen.queryByRole('button', { name: 'Create my palette' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'My palette' })).toBeNull()
+  })
+
+  // Selecting `custom` with no stylesheet declared would leave every role token undefined.
+  it('declares the palette before selecting it', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('custom'))
+    expect(document.getElementById('custom-palette')).not.toBeNull()
+  })
+
+  it('opens on the structure slider, which speaks in degrees', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+
+    expect(slider('Structure')).toHaveFocus()
+    expect(slider('Structure')).toHaveAttribute('aria-valuetext', '265°')
+  })
+
   it('selects the saved palette like any other', async () => {
     renderPage('100,neutral,300')
     await userEvent.click(await screen.findByRole('radio', { name: 'My palette' }))
