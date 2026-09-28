@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using weesky.Scotty.Microservice.Data.Preferences;
 
 namespace weesky.Scotty.Microservice.Models;
@@ -10,7 +12,8 @@ namespace weesky.Scotty.Microservice.Models;
 /// are sixteen combinations, and enumerating those would hide the rule inside its own expansion.
 /// </summary>
 public sealed record PreferenceDefinition(
-    string Key, string Default, IReadOnlyList<string> Allowed, bool IsSet = false);
+    string Key, string Default, IReadOnlyList<string> Allowed, bool IsSet = false,
+    Func<string, bool>? Validator = null);
 
 /// <summary>
 /// The registry of known preferences: the one place a new setting is declared.
@@ -46,6 +49,9 @@ public static class UserPreferences
     // an account that once chose French and went back to automatic is distinguishable from one that
     // never chose at all.
     public const string UiLanguage = "ui.language";
+
+    // ui., like the language: the palette is the account's, whichever device picks it.
+    public const string UiCustomPalette = "ui.customPalette";
 
     public const string MailSwipeRight = "mail.swipeRight";
     public const string MailSwipeLeft = "mail.swipeLeft";
@@ -86,6 +92,7 @@ public static class UserPreferences
         new(MailSwipeRight, "seen", SwipeActions),
         new(MailSwipeLeft, "delete", SwipeActions),
         new(UiLanguage, "auto", ["auto", "en", "fr"]),
+        new(UiCustomPalette, "", [], Validator: IsCustomPalette),
         new(CalendarBirthdays, "on", ["on", "off"]),
         new(CalendarFirstDayOfWeek, "monday", ["monday", "sunday"]),
     ];
@@ -98,8 +105,27 @@ public static class UserPreferences
         var definition = All.FirstOrDefault(p => p.Key == key);
         if (definition is null)
             return false;
+        if (definition.Validator is not null)
+            return definition.Validator(value);
 
         return definition.IsSet ? IsValidSubset(definition, value) : definition.Allowed.Contains(value);
+    }
+
+    private static readonly Regex CustomPalettePattern = new(
+        @"^(0|[1-9]\d{0,2}),(neutral|muted|vivid),(0|[1-9]\d{0,2})$",
+        RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
+    /// <summary>Empty is "no palette yet"; otherwise structure hue, intensity, accent hue.</summary>
+    private static bool IsCustomPalette(string value)
+    {
+        if (value.Length == 0)
+            return true;
+
+        var match = CustomPalettePattern.Match(value);
+
+        return match.Success
+            && int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) < 360
+            && int.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture) < 360;
     }
 
     /// <summary>
