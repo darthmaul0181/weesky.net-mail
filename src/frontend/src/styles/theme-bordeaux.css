@@ -1,0 +1,97 @@
+/* Palette "bordeaux" — Bordeaux & blush. */
+[data-palette='bordeaux'] {
+  --bg: #f0edec;
+  --folders-bg: #dfdad8;
+  --folders-item-hover: #d3caca;
+  --surface: #fcfbfa;
+  --surface-raised: #fcfbfa;
+  --surface-sunken: #edeae9;
+  --border: #dad6d3;
+  --text: #1f1a1b;
+  --text-muted: #635c5e;
+  --topbar-bg: #4a1523;
+  --topbar-fg: #ffffff;
+  --rail-bg: #4a1523;
+  --rail-fg: #d0c2c6;
+  --rail-item: #5e2f3b;
+  --rail-item-active: #ec8fa4;
+  --rail-item-active-fg: #1f1417;
+  --pane-item-hover: #e8e5e4;
+  --pane-item-active-bg: #f4e5e7;
+  --pane-item-active-fg: #4a1523;
+  --accent-unread: #b3304f;
+
+  /* Message list and reader */
+  --list-row-hover: #edeae9;
+  --list-row-selected-bg: #f4e5e7;
+  --list-row-selected-fg: #4a1523;
+  --list-separator: #e4e0dd;
+  --badge-count-bg: #b3304f;
+  --badge-count-fg: #ffffff;
+  --reader-header-border: #e4e0dd;
+  --quote-text: #797475;
+
+  --action-primary: #4a1523;
+  --action-primary-hover: #60313d;
+  --action-primary-fg: #ffffff;
+  --icon-hover-accent: #e07590;
+  --icon-hover-danger: #f87171;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #16a34a;
+  --warning: #b45309;
+  --status-fg: #ffffff;
+  --scrim: rgba(0, 0, 0, 0.35);
+
+  /* Swipe bands: semantic like --danger, darkened so white text clears 4.5:1; dark inherits. */
+  --swipe-seen: #2563eb;
+  --swipe-flag: #b45309;
+  --swipe-archive: #15803d;
+  --swipe-delete: #dc2626;
+}
+
+/* Deliberate: --action-primary shifts hue between modes (wine in light, blush in dark) — wine
+   would dissolve into a dark background. The blush is held at 2.95:1 under white, just above
+   night's coral: a lighter pink would fail the white --action-primary-fg. */
+[data-palette='bordeaux'][data-theme='dark'] {
+  --bg: #1a1617;
+  --folders-bg: #1a1617;
+  --folders-item-hover: #292426;
+  --surface: #231e1f;
+  --surface-raised: #292426;
+  --surface-sunken: #1e1a1b;
+  --border: #342e2f;
+  --text: #e9e5e6;
+  --text-muted: #a0999b;
+  --topbar-bg: #150a0d;
+  --topbar-fg: #e9e5e6;
+  --rail-bg: #150a0d;
+  --rail-fg: #baadb0;
+  --rail-item: #251b1e;
+  --rail-item-active: #e07590;
+  --rail-item-active-fg: #2a1f22;
+  --pane-item-hover: #292426;
+  --pane-item-active-bg: #412f33;
+  --pane-item-active-fg: #f3dfe3;
+  --accent-unread: #e07590;
+
+  /* Message list and reader */
+  --list-row-hover: #292426;
+  --list-row-selected-bg: #412f33;
+  --list-row-selected-fg: #f3dfe3;
+  --list-separator: #342e2f;
+  --badge-count-bg: #e07590;
+  --badge-count-fg: #2a1f22;
+  --reader-header-border: #342e2f;
+  --quote-text: #8f8a8b;
+
+  --action-primary: #e07590;
+  --action-primary-hover: #e6879f;
+  --action-primary-fg: #ffffff;
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --success: #4ade80;
+  --warning: #d97706;
+  --status-fg: #1a1617;
+  --scrim: rgba(0, 0, 0, 0.35);
+}

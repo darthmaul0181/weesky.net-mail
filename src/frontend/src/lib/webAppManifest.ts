@@ -19,7 +19,7 @@ export interface WebAppManifest {
 }
 
 // The night palette in light mode, the one an account with no preference gets. A manifest
-// carries only one colour: it cannot follow eight palettes across two modes.
+// carries only one colour: it cannot follow eleven palettes across two modes.
 const THEME_COLOR = '#182238'
 const BACKGROUND_COLOR = '#f6f3ef'
 

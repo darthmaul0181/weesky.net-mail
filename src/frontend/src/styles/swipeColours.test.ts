@@ -25,7 +25,7 @@ const onWhite = (hex: string) => 1.05 / (luminance(hex) + 0.05)
 
 describe('the swipe fills', () => {
   it('reads the stylesheets, not empty mocks', () => {
-    expect(files).toHaveLength(8)
+    expect(files).toHaveLength(11)
   })
 
   // The band's label is 14px: small text, 4.5:1. The dark block must not redeclare them, so one
