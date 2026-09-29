@@ -64,6 +64,7 @@
       "muted": "Subtle",
       "vivid": "Vivid",
       "accent": "Accent",
+      "buttons": "Buttons in light mode",
       "nearDanger": "This accent is close to the red used for errors: unread counts could read as alerts.",
       "cancel": "Cancel",
       "save": "Save",

@@ -1255,6 +1255,12 @@ a.dropdown-item { text-decoration: none; }
   .custom-palette-editor .palette-zoom-pair figure { min-width: 0; }
   .custom-palette-editor .palette-preview.is-large { --pp: 1.25; }
   .custom-palette-warning { flex: none; min-height: 4.35em; margin: 0; }
+  /* Two short actions side by side (wrapping if a label ever outgrows half the row) and tighter
+     headings: stacked, they put Save under the fold of a 736px screen once a fourth setting joined. */
+  .custom-palette-modal .folder-pick-submit { flex-direction: row; flex-wrap: wrap; }
+  .custom-palette-modal .folder-pick-submit .btn { flex: 1 1 0; width: auto; }
+  .custom-palette-modal .custom-palette-warning { flex: 1 0 100%; }
+  .custom-palette-label { margin-top: 2px; }
 
   /* The toast stack's clearance against the compose button in its phone position, which is
      itself lifted over the 57px tab bar: 73px inset plus 56px of button is 129px, plus the same

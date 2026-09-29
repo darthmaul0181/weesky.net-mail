@@ -11,18 +11,18 @@ describe('applyCustomPalette', () => {
   beforeEach(() => { localStorage.clear(); styleEl()?.remove() })
 
   it('writes one style element and the mirror', () => {
-    applyCustomPalette({ structure: 265, intensity: 'muted', accent: 35 })
-    applyCustomPalette({ structure: 100, intensity: 'vivid', accent: 200 })
+    applyCustomPalette({ structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' })
+    applyCustomPalette({ structure: 100, intensity: 'vivid', accent: 200, buttons: 'structure' })
 
     expect(document.querySelectorAll(`#${CUSTOM_PALETTE_STYLE_ID}`)).toHaveLength(1)
     expect(styleEl()!.textContent).toContain("[data-palette='custom']")
-    expect(localStorage.getItem(CUSTOM_PALETTE_MIRROR_KEY)).toBe('100,vivid,200')
+    expect(localStorage.getItem(CUSTOM_PALETTE_MIRROR_KEY)).toBe('100,vivid,200,structure')
     expect(localStorage.getItem(CUSTOM_PALETTE_CSS_KEY)).toBe(styleEl()!.textContent)
     expect(hasCustomPaletteMirror()).toBe(true)
   })
 
   it('removes both on null', () => {
-    applyCustomPalette({ structure: 265, intensity: 'muted', accent: 35 })
+    applyCustomPalette({ structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' })
     applyCustomPalette(null)
 
     expect(styleEl()).toBeNull()

@@ -315,7 +315,7 @@ describe('accessibility sweep', () => {
   it('CustomPaletteEditor', async () => {
     const client = queryClient()
     const { container } = render(
-      <CustomPaletteEditor initial={{ structure: 265, intensity: 'muted', accent: 27 }} onClose={vi.fn()} onSaved={vi.fn()} />,
+      <CustomPaletteEditor initial={{ structure: 265, intensity: 'muted', accent: 27, buttons: 'structure' }} onClose={vi.fn()} onSaved={vi.fn()} />,
       { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> },
     )
 

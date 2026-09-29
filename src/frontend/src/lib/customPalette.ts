@@ -2,11 +2,14 @@ import type { Palette } from '../contexts/ThemeContext'
 
 export type Intensity = 'neutral' | 'muted' | 'vivid'
 export const INTENSITIES: readonly Intensity[] = ['neutral', 'muted', 'vivid']
-export interface CustomPaletteDef { structure: number; intensity: Intensity; accent: number }
+/** What the light-mode buttons wear; dark ones wear the accent either way, a dark structure dissolving there. */
+export type Buttons = 'structure' | 'accent'
+export const BUTTONS: readonly Buttons[] = ['structure', 'accent']
+export interface CustomPaletteDef { structure: number; intensity: Intensity; accent: number; buttons: Buttons }
 export type TokenSet = Record<`--${string}`, string>
 export interface CustomPaletteTokens { light: TokenSet; dark: TokenSet }
 
-const PATTERN = /^(0|[1-9]\d{0,2}),(neutral|muted|vivid),(0|[1-9]\d{0,2})$/
+const PATTERN = /^(0|[1-9]\d{0,2}),(neutral|muted|vivid),(0|[1-9]\d{0,2})(?:,(structure|accent))?$/
 const WHITE = '#ffffff'
 const DANGER_HUE = 27
 
@@ -15,11 +18,11 @@ export function parseCustomPalette(value: string | null | undefined): CustomPale
   if (!match) return null
   const structure = Number(match[1]), accent = Number(match[3])
   if (structure >= 360 || accent >= 360) return null
-  return { structure, intensity: match[2] as Intensity, accent }
+  return { structure, intensity: match[2] as Intensity, accent, buttons: (match[4] ?? 'structure') as Buttons }
 }
 
-export function formatCustomPalette({ structure, intensity, accent }: CustomPaletteDef): string {
-  return `${structure},${intensity},${accent}`
+export function formatCustomPalette({ structure, intensity, accent, buttons }: CustomPaletteDef): string {
+  return `${structure},${intensity},${accent},${buttons}`
 }
 
 function hueGap(a: number, b: number): number {
@@ -101,7 +104,7 @@ const SEMANTIC_DARK = {
   '--scrim': 'rgba(0, 0, 0, 0.35)',
 }
 
-export function generateCustomPalette({ structure: hs, intensity, accent: ha }: CustomPaletteDef): CustomPaletteTokens {
+export function generateCustomPalette({ structure: hs, intensity, accent: ha, buttons }: CustomPaletteDef): CustomPaletteTokens {
   const s = STRUCTURE[intensity], t = s.tint, dt = t * 1.4
   const accentLight = solve(0.55, 0.16, ha, -0.01, c => contrast(WHITE, c) >= 4.6)
   const accentDark = solve(0.74, 0.14, ha, -0.01, c => contrast(WHITE, c) >= 2.8)
@@ -110,6 +113,7 @@ export function generateCustomPalette({ structure: hs, intensity, accent: ha }: 
   const surface = oklch(0.99, t / 2, hs), foldersHover = oklch(0.895, t * 2.6, hs)
   const topbar = solve(s.L, s.C, hs, -0.01, c => contrast(WHITE, c) >= 7)
   const selected = mix(surface, accentLight, 0.11), separator = oklch(0.915, t, hs)
+  const action = buttons === 'accent' ? accentLight : topbar
   const light: TokenSet = {
     '--bg': oklch(0.958, t, hs), '--folders-bg': oklch(0.925, t * 2.2, hs), '--folders-item-hover': foldersHover,
     '--surface': surface, '--surface-raised': surface, '--surface-sunken': oklch(0.948, t, hs),
@@ -124,7 +128,7 @@ export function generateCustomPalette({ structure: hs, intensity, accent: ha }: 
     '--list-separator': separator, '--badge-count-bg': accentLight, '--badge-count-fg': WHITE,
     '--reader-header-border': separator,
     '--quote-text': solve(0.56, t * 1.5, hs, -0.01, c => contrast(c, surface) >= 4.6),
-    '--action-primary': topbar, '--action-primary-hover': mix(topbar, WHITE, 0.12), '--action-primary-fg': WHITE,
+    '--action-primary': action, '--action-primary-hover': mix(action, WHITE, 0.12), '--action-primary-fg': WHITE,
     '--icon-hover-accent': accentDark,
     ...SEMANTIC_LIGHT,
   }
@@ -171,12 +175,12 @@ export function customPaletteCss({ light, dark }: CustomPaletteTokens): string {
 
 /** Where the editor starts: the hues of the palette in use, measured from its stylesheet. */
 export const PALETTE_SEEDS: Record<Exclude<Palette, 'custom'>, CustomPaletteDef> = {
-  night: { structure: 265, intensity: 'muted', accent: 35 },
-  classic: { structure: 267, intensity: 'vivid', accent: 267 },
-  forest: { structure: 159, intensity: 'muted', accent: 71 },
-  slate: { structure: 228, intensity: 'muted', accent: 190 },
-  plum: { structure: 320, intensity: 'muted', accent: 81 },
-  ink: { structure: 286, intensity: 'neutral', accent: 263 },
-  azure: { structure: 242, intensity: 'muted', accent: 244 },
-  indigo: { structure: 288, intensity: 'vivid', accent: 288 },
+  night: { structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' },
+  classic: { structure: 267, intensity: 'vivid', accent: 267, buttons: 'structure' },
+  forest: { structure: 159, intensity: 'muted', accent: 71, buttons: 'structure' },
+  slate: { structure: 228, intensity: 'muted', accent: 190, buttons: 'accent' },
+  plum: { structure: 320, intensity: 'muted', accent: 81, buttons: 'structure' },
+  ink: { structure: 286, intensity: 'neutral', accent: 263, buttons: 'structure' },
+  azure: { structure: 242, intensity: 'muted', accent: 244, buttons: 'structure' },
+  indigo: { structure: 288, intensity: 'vivid', accent: 288, buttons: 'structure' },
 }
