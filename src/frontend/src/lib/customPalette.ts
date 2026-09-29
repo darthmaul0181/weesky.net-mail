@@ -9,7 +9,8 @@ export interface CustomPaletteDef { structure: number; intensity: Intensity; acc
 export type TokenSet = Record<`--${string}`, string>
 export interface CustomPaletteTokens { light: TokenSet; dark: TokenSet }
 
-const PATTERN = /^(0|[1-9]\d{0,2}),(neutral|muted|vivid),(0|[1-9]\d{0,2})(?:,(structure|accent))?$/
+// Fields a later version appends are ignored: a tab still running this build must not read them as no palette.
+const PATTERN = /^(0|[1-9]\d{0,2}),(neutral|muted|vivid),(0|[1-9]\d{0,2})(?:,(structure|accent)(?:,[^,]+)*)?$/
 const WHITE = '#ffffff'
 const DANGER_HUE = 27
 
