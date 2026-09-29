@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  contrast, customPaletteCss, formatCustomPalette, generateCustomPalette, INTENSITIES,
+  BUTTONS, contrast, customPaletteCss, formatCustomPalette, generateCustomPalette, INTENSITIES,
   isNearDanger, parseCustomPalette, PALETTE_SEEDS, type CustomPaletteDef, type TokenSet,
 } from './customPalette'
 import nightCss from '../styles/theme-night.css?raw'
@@ -13,14 +13,20 @@ function rolesIn(selector: string): string[] {
 
 describe('parseCustomPalette / formatCustomPalette', () => {
   it.each([
-    ['265,muted,35', { structure: 265, intensity: 'muted', accent: 35 }],
-    ['0,neutral,359', { structure: 0, intensity: 'neutral', accent: 359 }],
+    ['265,muted,35,structure', { structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' }],
+    ['0,neutral,359,accent', { structure: 0, intensity: 'neutral', accent: 359, buttons: 'accent' }],
   ])('reads %s', (value, expected) => {
     expect(parseCustomPalette(value)).toEqual(expected)
     expect(formatCustomPalette(expected as CustomPaletteDef)).toBe(value)
   })
 
-  it.each(['', null, undefined, '360,muted,35', '065,muted,35', '265,loud,35', '265,muted', ' 265,muted,35'])(
+  // Saved before the buttons choice existed: it keeps what it always showed.
+  it('reads a three-field palette as structure buttons', () => {
+    expect(parseCustomPalette('265,muted,35')).toEqual({ structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' })
+  })
+
+  it.each(['', null, undefined, '360,muted,35', '065,muted,35', '265,loud,35', '265,muted', ' 265,muted,35',
+    '265,muted,35,both', '265,muted,35,accent,'])(
     'refuses %s', value => expect(parseCustomPalette(value)).toBeNull(),
   )
 })
@@ -49,7 +55,7 @@ function mixOklab(a: string, b: string, t: number): string {
 }
 
 describe('generateCustomPalette', () => {
-  const sample = generateCustomPalette({ structure: 265, intensity: 'muted', accent: 35 })
+  const sample = generateCustomPalette({ structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' })
 
   // A role missing here falls back to whatever the cascade holds, silently.
   it('declares exactly the roles night declares, in both modes', () => {
@@ -65,18 +71,19 @@ describe('generateCustomPalette', () => {
   })
 
   it('is deterministic', () => {
-    expect(generateCustomPalette({ structure: 265, intensity: 'muted', accent: 35 })).toEqual(sample)
+    expect(generateCustomPalette({ structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' })).toEqual(sample)
   })
 
   // Every combination the sliders can reach, at 5° steps: the guarantee is the product.
   it('keeps every pair legible for every combination', () => {
     const failures: string[] = []
     const need = (ok: boolean, label: string) => { if (!ok) failures.push(label) }
+    for (const buttons of BUTTONS)
     for (const intensity of INTENSITIES)
       for (let structure = 0; structure < 360; structure += 5)
         for (let accent = 0; accent < 360; accent += 5) {
-          const { light, dark } = generateCustomPalette({ structure, intensity, accent })
-          const id = `${structure},${intensity},${accent}`
+          const { light, dark } = generateCustomPalette({ structure, intensity, accent, buttons })
+          const id = `${structure},${intensity},${accent},${buttons}`
           for (const [mode, t] of [['light', light], ['dark', dark]] as [string, TokenSet][]) {
             const at = (a: `--${string}`, b: `--${string}`, min: number) =>
               need(contrast(t[a]!, t[b]!) >= min, `${id} ${mode} ${a}/${b}`)
@@ -105,6 +112,15 @@ describe('generateCustomPalette', () => {
     expect(failures.slice(0, 10)).toEqual([])
   }, 60_000)
 
+  // The choice only moves the light buttons: dark ones wear the accent either way.
+  it('dresses the light buttons in the colour asked for', () => {
+    const accent = generateCustomPalette({ structure: 265, intensity: 'muted', accent: 35, buttons: 'accent' })
+    expect(sample.light['--action-primary']).toBe(sample.light['--topbar-bg'])
+    expect(accent.light['--action-primary']).toBe(accent.light['--accent-unread'])
+    expect(accent.light['--action-primary-hover']).not.toBe(sample.light['--action-primary-hover'])
+    expect(accent.dark).toEqual(sample.dark)
+  })
+
   it('keeps white on the primary action in both modes', () => {
     expect(sample.light['--action-primary-fg']).toBe('#ffffff')
     expect(sample.dark['--action-primary-fg']).toBe('#ffffff')
@@ -119,7 +135,7 @@ describe('isNearDanger', () => {
 
 describe('customPaletteCss', () => {
   it('writes two unanchored blocks', () => {
-    const css = customPaletteCss(generateCustomPalette({ structure: 10, intensity: 'vivid', accent: 200 }))
+    const css = customPaletteCss(generateCustomPalette({ structure: 10, intensity: 'vivid', accent: 200, buttons: 'accent' }))
     expect(css).toMatch(/^\[data-palette='custom'\] \{/)
     expect(css).toContain("[data-palette='custom'][data-theme='dark'] {")
     expect(css).not.toContain('html[')
@@ -127,6 +143,12 @@ describe('customPaletteCss', () => {
 })
 
 describe('PALETTE_SEEDS', () => {
+  // Slate is the one built-in palette whose light buttons already wear its accent.
+  it('seeds Slate with accent buttons, the others with structure', () => {
+    expect(PALETTE_SEEDS.slate.buttons).toBe('accent')
+    expect(Object.entries(PALETTE_SEEDS).filter(([, seed]) => seed.buttons === 'accent').map(([id]) => id)).toEqual(['slate'])
+  })
+
   it('seeds the editor from every built-in palette', () => {
     expect(Object.keys(PALETTE_SEEDS).sort())
       .toEqual(['azure', 'classic', 'forest', 'indigo', 'ink', 'night', 'plum', 'slate'])

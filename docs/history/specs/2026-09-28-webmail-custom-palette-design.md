@@ -11,7 +11,7 @@ illisible ou étrangère au site. Il choisit des teintes ; le webmail décide de
 Critères de réussite :
 
 - une 9e carte « My palette » s'ajoute aux 8 palettes prédéfinies de l'onglet Apparence ;
-- trois réglages suffisent : teinte de structure, intensité de structure, teinte d'accent ;
+- quatre réglages suffisent : teinte de structure, intensité de structure, teinte d'accent, couleur des boutons en mode clair ;
 - quelle que soit la combinaison, tous les couples texte/fond respectent les seuils du site
   (décision 3), en clair comme en sombre ;
 - la palette perso suit le compte d'un appareil à l'autre ; le **choix** de la palette active
@@ -29,13 +29,16 @@ n'apportent pas assez face aux 8 existantes, et la palette perso couvre ce besoi
 Une préférence locale qui nommait l'une d'elles retombe sur `night`, comme le prévoit déjà la
 résolution.
 
-### 2. Trois réglages, pas de pipette
+### 2. Quatre réglages, pas de pipette
 
 | Réglage | Valeurs | Rôle |
 |---|---|---|
 | Teinte de structure | entier 0–359 (OKLCH) | barre du haut, rail, boutons en clair, teinte des fonds |
 | Intensité de structure | `neutral`, `muted`, `vivid` | gris anthracite (Ink), couleur éteinte (Night, Slate), couleur franche (Sea breeze) |
 | Teinte d'accent | entier 0–359 | non-lus, compteurs, icône active, boutons en sombre |
+| Boutons en mode clair | `structure`, `accent` | la couleur des boutons principaux en mode clair |
+
+Le 4e réglage a été ajouté le 2026-09-29, après comparaison sur la maquette : la structure garde le comportement de Night, Forest et Plum, l'accent celui de Slate. Il ne vaut qu'en mode clair, puisqu'en sombre les boutons portent l'accent de toute façon (une structure foncée s'y dissout) ; le libellé le dit, sans quoi « Structure » en mode sombre semblerait sans effet. Choisir l'accent sur des teintes jaunes ou orangées donne des boutons plus ternes en clair, l'accent étant assombri pour porter du texte blanc : l'aperçu le montre avant l'enregistrement.
 
 Pas de barre du haut claire, pas d'intensité pour l'accent (un accent doit rester vif), pas de
 couleur exacte : une pipette obligerait à afficher une autre couleur que celle choisie.
@@ -67,11 +70,13 @@ combinaisons (teintes par pas de 5°, 3 intensités).
 ### 4. Stockage : la définition sur le compte, le choix sur l'appareil
 
 - **Définition** : une préférence serveur `ui.customPalette`, valeur `""` (aucune palette) ou
-  `"<structure>,<intensité>,<accent>"`, par exemple `"265,muted,35"`. Défaut `""`.
+  `"<structure>,<intensité>,<accent>,<boutons>"`, par exemple `"265,muted,35,structure"`. Défaut `""`.
+  Le 4e champ est facultatif à la lecture : une palette enregistrée sur 3 champs garde des boutons
+  en structure, et le client écrit toujours les 4.
 - Le registre `UserPreferences` ne connaît que des listes fermées ; `PreferenceDefinition` gagne
   un validateur optionnel. Celui de `ui.customPalette` accepte `""` ou le motif strict
-  `^(\d{1,3}),(neutral|muted|vivid),(\d{1,3})$` avec deux teintes entre 0 et 359, sans zéro de
-  tête. Une ligne stockée devenue invalide retombe sur le défaut, comme les autres clés.
+  `^(0|[1-9][0-9]{0,2}),(neutral|muted|vivid),(0|[1-9][0-9]{0,2})(,structure|,accent)?$` avec deux
+  teintes entre 0 et 359, sans zéro de tête. Une ligne stockée devenue invalide retombe sur le défaut, comme les autres clés.
 - **Choix** : `appearance_palette` en `localStorage`, comme aujourd'hui, accepte en plus
   `custom`. Le thème ne change pas.
 - **Copie locale** : `appearance_custom_palette` garde la définition et

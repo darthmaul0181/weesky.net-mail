@@ -5,7 +5,7 @@ import DropletIcon from '../../../icons/DropletIcon'
 import { PREFERENCE_KEYS, useSetPreference } from '../../../hooks/usePreferences'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import {
-  formatCustomPalette, generateCustomPalette, hueGradient, INTENSITIES, isNearDanger, type CustomPaletteDef,
+  BUTTONS, formatCustomPalette, generateCustomPalette, hueGradient, INTENSITIES, isNearDanger, type CustomPaletteDef,
 } from '../../../lib/customPalette'
 import PalettePreview from './PalettePreview'
 
@@ -20,7 +20,7 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
   const [draft, setDraft] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const tokens = useMemo(() => generateCustomPalette(draft), [draft])
-  const ids = { structure: useId(), accent: useId(), intensity: useId() }
+  const ids = { structure: useId(), accent: useId(), intensity: useId(), buttons: useId() }
   const structureRef = useRef<HTMLInputElement>(null)
 
   async function save() {
@@ -58,6 +58,17 @@ export default function CustomPaletteEditor({ initial, onClose, onSaved }: {
             value={draft.accent} aria-valuetext={`${draft.accent}°`}
             style={{ background: hueGradient(0.66, 0.15) }}
             onChange={e => setDraft({ ...draft, accent: Number(e.target.value) })} />
+          {/* Light mode only: dark buttons wear the accent either way, and the label has to say so. */}
+          <span id={ids.buttons} className="custom-palette-label">{t('appearance.custom.buttons')}</span>
+          <div className="seg" role="radiogroup" aria-labelledby={ids.buttons}>
+            {BUTTONS.map(buttons => (
+              <label key={buttons}>
+                <input type="radio" name="custom-palette-buttons" checked={draft.buttons === buttons}
+                  onChange={() => setDraft({ ...draft, buttons })} />
+                {t(buttons === 'accent' ? 'appearance.custom.accent' : 'appearance.custom.structure')}
+              </label>
+            ))}
+          </div>
         </div>
         <div className="palette-zoom-pair">
           {[false, true].map(dark => (

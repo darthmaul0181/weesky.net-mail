@@ -137,6 +137,11 @@ public sealed class UserPreferencesTests
     [InlineData("0,neutral,0", true)]
     [InlineData("359,vivid,359", true)]
     [InlineData("265,muted,35", true)]
+    [InlineData("265,muted,35,structure", true)]
+    [InlineData("265,muted,35,accent", true)]
+    [InlineData("265,muted,35,Accent", false)]
+    [InlineData("265,muted,35,both", false)]
+    [InlineData("265,muted,35,accent,", false)]
     [InlineData("360,muted,35", false)]
     [InlineData("265,muted,360", false)]
     [InlineData("065,muted,35", false)]   // one spelling per value, like every other key

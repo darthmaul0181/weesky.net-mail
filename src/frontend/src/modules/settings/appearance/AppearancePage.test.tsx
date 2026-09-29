@@ -216,7 +216,7 @@ describe('AppearancePage — my palette', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Vivid' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('ui.customPalette', '265,vivid,200'))
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('ui.customPalette', '265,vivid,200,structure'))
     await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('custom'))
     expect(screen.queryByRole('dialog')).toBeNull()
   })
@@ -314,6 +314,35 @@ describe('AppearancePage — my palette', () => {
     fireEvent.change(slider('Accent'), { target: { value: '27' } })
     expect(container.ownerDocument.querySelector('.custom-palette-warning')).toBe(slot)
     expect(slot).toHaveTextContent(/close to the red used for errors/)
+  })
+
+  it('saves accent buttons when asked, and previews them in light mode only', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    expect(screen.getByRole('radiogroup', { name: 'Buttons in light mode' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Accent' }))
+
+    const [light, dark] = screen.getByRole('dialog').querySelectorAll<HTMLElement>('.palette-preview')
+    expect(light!.style.getPropertyValue('--action-primary')).toBe(light!.style.getPropertyValue('--accent-unread'))
+    expect(dark!.style.getPropertyValue('--action-primary')).toBe(dark!.style.getPropertyValue('--accent-unread'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('ui.customPalette', '265,muted,35,accent'))
+  })
+
+  it('starts from Slate with accent buttons, as Slate wears them', async () => {
+    localStorage.setItem('appearance_palette', 'slate')
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+
+    expect(screen.getByRole('radio', { name: 'Accent' })).toBeChecked()
+  })
+
+  it('reopens on the saved buttons choice', async () => {
+    renderPage('100,neutral,300,accent')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit my palette' }))
+
+    expect(screen.getByRole('radio', { name: 'Accent' })).toBeChecked()
   })
 
   it('selects the saved palette like any other', async () => {
