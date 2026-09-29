@@ -25,6 +25,11 @@ describe('parseCustomPalette / formatCustomPalette', () => {
     expect(parseCustomPalette('265,muted,35')).toEqual({ structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' })
   })
 
+  // A tab still running this build must not read a later, longer format as "no palette".
+  it('ignores the fields a later version appends', () => {
+    expect(parseCustomPalette('265,muted,35,accent,round')).toEqual({ structure: 265, intensity: 'muted', accent: 35, buttons: 'accent' })
+  })
+
   it.each(['', null, undefined, '360,muted,35', '065,muted,35', '265,loud,35', '265,muted', ' 265,muted,35',
     '265,muted,35,both', '265,muted,35,accent,'])(
     'refuses %s', value => expect(parseCustomPalette(value)).toBeNull(),

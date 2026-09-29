@@ -36,16 +36,26 @@ describe('CustomPaletteSync', () => {
     expect(localStorage.getItem('appearance_custom_palette')).toBe('265,muted,35,structure')
   })
 
-  // Another account on the same device: its choice of "custom" named someone else's palette.
-  it('falls back to night when the account has none', async () => {
+  // Another account on the same device, or an answer that names no palette for a while: night is
+  // drawn, but the device's choice is not overwritten — it is the owner's, and the palette may return.
+  it('draws night when the account has none, without forgetting the choice', async () => {
     localStorage.setItem('appearance_palette', 'custom')
     localStorage.setItem('appearance_custom_palette', '100,vivid,200')
     localStorage.setItem(CUSTOM_PALETTE_CSS_KEY, "[data-palette='custom'] {}")
     renderSync('')
 
     await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('night'))
-    expect(localStorage.getItem('appearance_palette')).toBe('night')
+    expect(localStorage.getItem('appearance_palette')).toBe('custom')
     expect(localStorage.getItem(CUSTOM_PALETTE_CSS_KEY)).toBeNull()
+  })
+
+  // The reported bug: a device left on "custom" whose mirror was lost reopened on night for good.
+  it('returns to the custom palette once the account names it again', async () => {
+    localStorage.setItem('appearance_palette', 'custom')
+    renderSync('265,muted,35,accent')
+
+    await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('custom'))
+    expect(localStorage.getItem('appearance_palette')).toBe('custom')
   })
 })
 

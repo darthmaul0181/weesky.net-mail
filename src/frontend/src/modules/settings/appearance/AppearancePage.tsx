@@ -9,7 +9,6 @@ import PencilIcon from '../../../icons/PencilIcon'
 import PlusIcon from '../../../icons/PlusIcon'
 import { customPaletteOf, usePreferences } from '../../../hooks/usePreferences'
 import { PALETTE_SEEDS, type CustomPaletteDef } from '../../../lib/customPalette'
-import { applyCustomPalette } from '../../../lib/customPaletteStyle'
 import PalettePreview from './PalettePreview'
 import CustomPaletteEditor from './CustomPaletteEditor'
 
@@ -59,7 +58,7 @@ function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: st
 }
 
 export default function AppearancePage() {
-  const { theme, setTheme, palette, setPalette, isDark } = useTheme()
+  const { theme, setTheme, palette, setPalette, isDark, declareCustomPalette } = useTheme()
   const { preference, setPreference } = useLocale()
   const { t } = useTranslation('settings')
   const [zoomed, setZoomed] = useState<{ value: Palette; label: string } | null>(null)
@@ -173,7 +172,7 @@ export default function AppearancePage() {
 
       {editing && (
         <CustomPaletteEditor initial={editing} onClose={() => setEditing(null)}
-          onSaved={def => { applyCustomPalette(def); setPalette('custom'); setEditing(null) }} />
+          onSaved={def => { declareCustomPalette(def); setPalette('custom'); setEditing(null) }} />
       )}
 
       {zoomed && (
