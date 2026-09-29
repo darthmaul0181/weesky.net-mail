@@ -33,7 +33,7 @@ describe('CustomPaletteSync', () => {
   it("writes the account's palette", async () => {
     renderSync('265,muted,35')
     await waitFor(() => expect(document.getElementById(CUSTOM_PALETTE_STYLE_ID)).not.toBeNull())
-    expect(localStorage.getItem('appearance_custom_palette')).toBe('265,muted,35')
+    expect(localStorage.getItem('appearance_custom_palette')).toBe('265,muted,35,structure')
   })
 
   // Another account on the same device: its choice of "custom" named someone else's palette.
