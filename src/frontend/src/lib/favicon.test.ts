@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-let loads: { src: string; crossOrigin: string | null; fire: () => void }[]
+let loads: { src: string; crossOrigin: string | null; fire: () => void; fail: () => void }[]
 
 beforeEach(async () => {
   vi.resetModules()
@@ -15,7 +15,9 @@ beforeEach(async () => {
     onload: (() => void) | null = null
     onerror: (() => void) | null = null
     crossOrigin: string | null = null
-    set src(value: string) { loads.push({ src: value, crossOrigin: this.crossOrigin, fire: () => this.onload?.() }) }
+    set src(value: string) { loads.push({
+      src: value, crossOrigin: this.crossOrigin, fire: () => this.onload?.(), fail: () => this.onerror?.(),
+    }) }
   })
 })
 
@@ -47,6 +49,31 @@ describe('favicon base', () => {
     setFaviconBadge(true)
     setFaviconBadge(false)
     expect(link().getAttribute('href')).toBe('/org-32.png')
+  })
+
+  // Left on the old drawing, the tab would show the replaced logo with its dot for as long as mail stays unread.
+  it('falls back to the plain new base when the drawing over it fails', async () => {
+    const { setFaviconBadge, setFaviconBase } = await import('./favicon')
+    setFaviconBadge(true)
+    loads[0]!.fire()
+    await flush()
+    setFaviconBase('/org-32.png')
+    loads[1]!.fail()
+    await flush()
+
+    expect(link().getAttribute('href')).toBe('/org-32.png')
+  })
+
+  it('ignores the failure of a drawing over a replaced base', async () => {
+    const { setFaviconBadge, setFaviconBase } = await import('./favicon')
+    setFaviconBadge(true)
+    setFaviconBase('/org-32.png')
+    loads[1]!.fire()
+    await flush()
+    loads[0]!.fail()
+    await flush()
+
+    expect(link().getAttribute('href')).toBe('data:badge-1')
   })
 
   // An API on another origin would taint the canvas and the badge would silently vanish.

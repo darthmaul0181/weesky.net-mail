@@ -75,7 +75,12 @@ export function setFaviconBadge(on: boolean): void {
   const base = originalHref
   void paint(base, colour).then(url => {
     // Dropped if the logo changed while it was drawing: its dot would sit on the old one.
-    if (!url || base !== originalHref) return
+    if (base !== originalHref) return
+    // A failed drawing must not leave a previous logo's dot on the tab.
+    if (!url) {
+      if (wanted) link.href = base
+      return
+    }
     drawn.set(colour, url)
     // The mail may have been read while the drawing was in flight; the later state wins.
     if (wanted) link.href = url
