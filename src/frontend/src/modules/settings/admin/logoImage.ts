@@ -36,7 +36,10 @@ function isSvg(file: File): boolean {
   return file.type === 'image/svg+xml' || /\.svg$/i.test(file.name)
 }
 
-const ABSOLUTE_LENGTH = /^\d+(\.\d+)?(px)?$/
+const ABSOLUTE_LENGTH = /^(\d+(?:\.\d+)?)(px|pt|pc|mm|cm|in)?$/
+const PX_PER_UNIT: Record<string, number> = { px: 1, pt: 4 / 3, pc: 16, mm: 96 / 25.4, cm: 96 / 2.54, in: 96 }
+/** Lent to an SVG's long side: Firefox rasterises at the natural size before scaling, so 24x24 would blur at 512. */
+const SVG_LONG_SIDE = 1024
 
 /** Firefox gives an SVG with no width/height a zero natural size: the viewBox lends it one. */
 async function sized(file: File): Promise<Blob> {
@@ -44,16 +47,24 @@ async function sized(file: File): Promise<Blob> {
   const root = doc.documentElement
   if (root.localName !== 'svg') throw new Error(LOGO_UNREADABLE)
   const box = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
-  if (box?.length === 4 && box.every(Number.isFinite) && box[2]! > 0 && box[3]! > 0) {
-    root.setAttribute('width', String(box[2]))
-    root.setAttribute('height', String(box[3]))
-    return new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' })
+  const boxed = box?.length === 4 && box.every(Number.isFinite) && box[2]! > 0 && box[3]! > 0
+  const width = boxed ? box[2]! : pixels(root.getAttribute('width'))
+  const height = boxed ? box[3]! : pixels(root.getAttribute('height'))
+  if (!boxed) {
+    // Without a viewBox only absolute sizes are well defined: Chrome would crop anything else to 300x150.
+    if (!width || !height) throw new Error(LOGO_UNREADABLE)
+    root.setAttribute('viewBox', `0 0 ${width} ${height}`)
   }
-  // Without a viewBox only absolute sizes are well defined: Chrome would crop anything else to 300x150.
-  if (!['width', 'height'].every(name => ABSOLUTE_LENGTH.test(root.getAttribute(name)?.trim() ?? ''))) {
-    throw new Error(LOGO_UNREADABLE)
-  }
-  return file
+  const k = SVG_LONG_SIDE / Math.max(width, height)
+  root.setAttribute('width', String(width * k))
+  root.setAttribute('height', String(height * k))
+  return new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' })
+}
+
+/** An absolute length in CSS pixels, the user unit of an SVG with no viewBox; 0 when it is not one. */
+function pixels(value: string | null): number {
+  const match = ABSOLUTE_LENGTH.exec(value?.trim() ?? '')
+  return match ? Number(match[1]) * PX_PER_UNIT[match[2] ?? 'px']! : 0
 }
 
 async function decode(blob: Blob): Promise<HTMLImageElement> {
@@ -72,6 +83,9 @@ async function decode(blob: Blob): Promise<HTMLImageElement> {
   return image
 }
 
+/** iOS Safari refuses a canvas over 16 777 216 pixels: a first step that big would read as unreadable. */
+const CANVAS_MAX_AREA = 16_000_000
+
 /** Halving until near the target: one big step down aliases in Firefox and Safari. */
 function stepDown(image: HTMLImageElement, target: number): CanvasImageSource {
   let source: CanvasImageSource = image
@@ -79,8 +93,9 @@ function stepDown(image: HTMLImageElement, target: number): CanvasImageSource {
   let height = image.naturalHeight
   while (Math.max(width, height) > target * 2) {
     const half = document.createElement('canvas')
-    width = half.width = Math.ceil(width / 2)
-    height = half.height = Math.ceil(height / 2)
+    const k = Math.min(0.5, Math.sqrt(CANVAS_MAX_AREA / (width * height)))
+    width = half.width = Math.max(1, Math.floor(width * k))
+    height = half.height = Math.max(1, Math.floor(height * k))
     const context = half.getContext('2d')
     if (!context) throw new Error(LOGO_UNREADABLE)
     context.imageSmoothingQuality = 'high'

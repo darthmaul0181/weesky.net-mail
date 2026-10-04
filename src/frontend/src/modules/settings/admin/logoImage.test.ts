@@ -134,23 +134,56 @@ describe('prepareLogo', () => {
     expect(drawn).toHaveLength(3)
   })
 
+  it('keeps every intermediate canvas of a huge raster under the iOS area limit', async () => {
+    natural = { width: 10000, height: 10000 }
+    await prepareLogo(png())
+    const steps = drawn.filter(([x, y]) => x === 0 && y === 0)
+    expect(steps[0]).toEqual([0, 0, 4000, 4000])
+    for (const [, , width, height] of steps) expect(width! * height!).toBeLessThanOrEqual(16_000_000)
+  })
+
   const svgFile = (markup: string) => new File([markup], 'logo.svg', { type: 'image/svg+xml' })
 
+  const lent = (read: { mock: { results: { value: unknown }[] } }) => {
+    const root = new DOMParser().parseFromString(String(read.mock.results[0]!.value), 'image/svg+xml').documentElement
+    return { width: Number(root.getAttribute('width')), height: Number(root.getAttribute('height')), viewBox: root.getAttribute('viewBox') }
+  }
+
   // Review Focus 1. jsdom stubs the natural size, so this proves our rewrite, not the browser's sizing.
-  it('lends a viewBox-only SVG its size, and never calls it low resolution', async () => {
+  it('lends a viewBox-only SVG a 1024 px long side, ratio kept, and never calls it low resolution', async () => {
     natural = { width: 100, height: 50 }
     const svg = svgFile('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect width="100" height="50"/></svg>')
     const read = vi.spyOn(XMLSerializer.prototype, 'serializeToString')
 
     const prepared = await prepareLogo(svg)
 
-    expect(read.mock.results[0]!.value).toMatch(/width="100" height="50"|height="50" width="100"/)
+    expect(lent(read)).toEqual({ width: 1024, height: 512, viewBox: '0 0 100 50' })
     expect(prepared.lowResolution).toBe(false)
     expect(decodedSources).toEqual(['image/svg+xml'])
   })
 
-  it('accepts an SVG with absolute width and height and no viewBox', async () => {
-    await expect(prepareLogo(svgFile('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60px"/>'))).resolves.toBeDefined()
+  it('lends an icon-sized viewBox 1024 px, so no engine rasterises it at 24 px', async () => {
+    const read = vi.spyOn(XMLSerializer.prototype, 'serializeToString')
+    await prepareLogo(svgFile('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"/>'))
+    expect(lent(read)).toEqual({ width: 1024, height: 1024, viewBox: '0 0 24 24' })
+  })
+
+  it.each([
+    ['unitless and px', '120', '60px', 120, 60],
+    ['pt', '72pt', '36pt', 96, 48],
+    ['pc', '6pc', '3pc', 96, 48],
+    ['mm', '50.8mm', '25.4mm', 192, 96],
+    ['cm', '5.08cm', '2.54cm', 192, 96],
+    ['in', '1in', '0.5in', 96, 48],
+  ])('gives an SVG sized in %s with no viewBox a viewBox in px, then the 1024 px side', async (_unit, width, height, w, h) => {
+    const read = vi.spyOn(XMLSerializer.prototype, 'serializeToString')
+    await prepareLogo(svgFile(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"/>`))
+    const { viewBox, ...size } = lent(read)
+    expect(size).toEqual({ width: 1024, height: 512 })
+    const [x, y, boxW, boxH] = viewBox!.split(' ').map(Number)
+    expect([x, y]).toEqual([0, 0])
+    expect(boxW).toBeCloseTo(w, 9)
+    expect(boxH).toBeCloseTo(h, 9)
   })
 
   it.each([
