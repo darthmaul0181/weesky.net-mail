@@ -141,9 +141,9 @@ describe('LogoSection', () => {
     prepare.prepareLogo.mockImplementationOnce(() => new Promise((resolve, reject) => {
       handle.resolve = resolve; handle.reject = reject
     }))
+    mocks.getAppSettings.mockResolvedValue({ 'app.logo': '' })
     render(<><LogoSection addToast={addToast} /><button type="button">Elsewhere</button></>,
       { wrapper: withQueryClient(createTestQueryClient()) })
-    mocks.getAppSettings.mockResolvedValue({ 'app.logo': '' })
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
     screen.getByRole('button', { name: 'Elsewhere' }).focus()

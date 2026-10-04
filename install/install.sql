@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS `app_logo` (
   `updated_at` datetime(3) NOT NULL COMMENT 'UTC; set by the code, never by the schema'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
-
 CREATE TABLE IF NOT EXISTS `calendars` (
   `id` char(36) NOT NULL,
   `user_id` char(36) NOT NULL,
