@@ -36,6 +36,7 @@ import type {
   CompatibilityCheckResult, RuleProvider, SieveRawScript, SieveRuleSet, SieveRuleWrite,
 } from './modules/settings/rules/rulesTypes'
 import type { ServerVersion } from './modules/settings/about/aboutTypes'
+import { LOGO_SIZES, type LogoSize } from './lib/appLogo'
 import { readStored, removeStored, writeStored } from './lib/safeStorage'
 import { anySignal, withTimeout } from './lib/withTimeout'
 
@@ -637,6 +638,14 @@ export const api = {
 
   setAppSetting: (key: string, value: string) =>
     request<null>('PUT', '/api/AppSettings', { key, value }),
+
+  setAppLogo: (images: Record<LogoSize, Blob>) => {
+    const form = new FormData()
+    for (const size of LOGO_SIZES) form.append(`logo${size}`, images[size], `logo-${size}.png`)
+    return request<null>('PUT', '/api/AppSettings/logo', form)
+  },
+
+  deleteAppLogo: () => request<null>('DELETE', '/api/AppSettings/logo'),
 }
 
 /** The attachment download URL, encoded in one place. A subresource fetch cannot carry a header,

@@ -1,5 +1,6 @@
-/** Paints an unread dot over the tab icon `index.html` carries, read from the link element since
- * Vite hashes it. Degrades to "no badge" rather than throwing: jsdom has no canvas. */
+/** Paints an unread dot over the tab icon: the one `index.html` carries, read from the link element
+ * since Vite hashes it, until `setFaviconBase` names the administrator's logo.
+ * Degrades to "no badge" rather than throwing: jsdom has no canvas. */
 const SIZE = 32
 const RADIUS = 7
 const FALLBACK = '#e2674a'
@@ -47,6 +48,7 @@ function paint(href: string, colour: string): Promise<string | null> {
       }
     }
     image.onerror = () => resolve(null)
+    image.crossOrigin = 'anonymous'
     image.src = href
   })
 }
@@ -70,10 +72,27 @@ export function setFaviconBadge(on: boolean): void {
     return
   }
 
-  void paint(originalHref, colour).then(url => {
-    if (!url) return
+  const base = originalHref
+  void paint(base, colour).then(url => {
+    // Dropped if the logo changed while it was drawing: its dot would sit on the old one.
+    if (base !== originalHref) return
+    // A failed drawing must not leave a previous logo's dot on the tab.
+    if (!url) {
+      if (wanted) link.href = base
+      return
+    }
     drawn.set(colour, url)
     // The mail may have been read while the drawing was in flight; the later state wins.
     if (wanted) link.href = url
   })
+}
+
+/** The admin may replace the logo under an open tab: every drawing made over the old one is stale. */
+export function setFaviconBase(href: string): void {
+  const link = iconLink()
+  if (!link || href === originalHref) return
+  originalHref = href
+  drawn.clear()
+  if (wanted) setFaviconBadge(true)
+  else link.href = href
 }

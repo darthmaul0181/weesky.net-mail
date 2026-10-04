@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { buildManifest } from '../lib/webAppManifest'
+import { useAppLogo } from './useAppLogo'
 import { useAppSettings } from './useAppSettings'
 
 /** Posts the install manifest as an in-memory blob: start_url must share the manifest's origin,
@@ -10,9 +11,10 @@ export function useWebAppManifest(): void {
   const { data } = useAppSettings()
   // A new `t` on each language change: the shortcuts are posted again under their new names.
   const { t } = useTranslation(['mail', 'common'])
+  const logo = useAppLogo()
 
   useEffect(() => {
-    const manifest = buildManifest(data, window.location.origin, t)
+    const manifest = buildManifest(data, window.location.origin, t, logo)
     if (!manifest) return
 
     const url = URL.createObjectURL(
@@ -26,5 +28,5 @@ export function useWebAppManifest(): void {
       link.remove()
       URL.revokeObjectURL(url)
     }
-  }, [data, t])
+  }, [data, t, logo])
 }

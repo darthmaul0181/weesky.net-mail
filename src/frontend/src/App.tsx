@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { LocaleProvider } from './contexts/LocaleContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import CustomPaletteSync from './components/CustomPaletteSync'
+import { useBrandIcons } from './hooks/useBrandIcons'
 import { useWebAppManifest } from './hooks/useWebAppManifest'
 import { shouldRetry } from './lib/retryPolicy'
 
@@ -19,10 +20,11 @@ const queryClient = new QueryClient({
   },
 })
 
-/** Renders nothing: it posts the <link rel="manifest">. Outside the router so it covers /login,
-    the first page a new user sees — and so where installation is offered. */
+/** Renders nothing: it posts the manifest and the brand icons. Outside the router so it covers
+    /login, the first page a new user sees — and so where installation is offered. */
 function InstallManifest() {
   useWebAppManifest()
+  useBrandIcons()
   return null
 }
 

@@ -1,0 +1,280 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import LogoSection from './LogoSection'
+import { createTestQueryClient, withQueryClient } from '../../../test-utils'
+
+const mocks = vi.hoisted(() => ({ getAppSettings: vi.fn(), setAppLogo: vi.fn(), deleteAppLogo: vi.fn() }))
+vi.mock('../../../api.js', () => ({ api: mocks }))
+const prepare = vi.hoisted(() => ({ prepareLogo: vi.fn() }))
+vi.mock('./logoImage', async importOriginal => ({ ...(await importOriginal<object>()), ...prepare }))
+
+const addToast = vi.fn()
+const images = { 32: new Blob(['a']), 192: new Blob(['b']), 512: new Blob(['c']) }
+
+function renderSection(settings: Record<string, string> = { 'app.logo': '' }) {
+  mocks.getAppSettings.mockResolvedValue(settings)
+  return render(<LogoSection addToast={addToast} />, { wrapper: withQueryClient(createTestQueryClient()) })
+}
+
+async function choose(file = new File(['x'], 'logo.png', { type: 'image/png' })) {
+  await userEvent.upload(screen.getByLabelText('Logo file'), file)
+}
+
+let previews = 0
+
+interface Settle { resolve: (value: unknown) => void; reject: (reason: Error) => void }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  previews = 0
+  URL.createObjectURL = vi.fn(() => `blob:preview-${++previews}`)
+  URL.revokeObjectURL = vi.fn()
+  prepare.prepareLogo.mockResolvedValue({ images, lowResolution: false })
+  mocks.setAppLogo.mockResolvedValue(null)
+  mocks.deleteAppLogo.mockResolvedValue(null)
+})
+
+describe('LogoSection', () => {
+  it('offers no restore while Scotty is the logo', async () => {
+    renderSection()
+    expect(await screen.findByRole('button', { name: 'Change logo…' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Restore default' })).not.toBeInTheDocument()
+  })
+
+  it('previews a chosen file without sending it', async () => {
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+
+    expect(await screen.findByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Top bar preview' })).toHaveAttribute('src', 'blob:preview-1')
+    expect(screen.getByRole('img', { name: 'Browser tab preview' })).toHaveAttribute('src', 'blob:preview-2')
+    expect(mocks.setAppLogo).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save' }))
+  })
+
+  it('shows the file is being prepared, then lets go of the button', async () => {
+    let finish: (value: unknown) => void = () => {}
+    prepare.prepareLogo.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    renderSection()
+    const change = await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+
+    expect(change).toBeDisabled()
+    expect(change).toHaveAttribute('aria-busy', 'true')
+    finish({ images, lowResolution: false })
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Change logo…' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Change logo…' })).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('lets go of the button when the file is refused, and puts the focus back on it', async () => {
+    let refuse: (reason: unknown) => void = () => {}
+    prepare.prepareLogo.mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject }))
+    renderSection()
+    const change = await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    expect(change).toBeDisabled()
+    refuse(new Error('application.logoUnreadable'))
+
+    await screen.findByRole('alert')
+    expect(change).toBeEnabled()
+    expect(document.activeElement).toBe(change)
+  })
+
+  it('saves the three renditions, says so and lets the previews go', async () => {
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mocks.setAppLogo).toHaveBeenCalledWith(images))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('The logo was saved'))
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-2')
+  })
+
+  // jsdom keeps focus on the disabled Save, where Chrome drops it to <body>; jsdom will not blur a disabled
+  // control either, so focus is parked on a stand-in that then leaves the document.
+  function dropFocusToBody() {
+    const standIn = document.body.appendChild(document.createElement('button'))
+    act(() => { standIn.focus(); standIn.remove() })
+    expect(document.activeElement).toBe(document.body)
+  }
+
+  it('hands a focus the pending save dropped to the heading once the save succeeds', async () => {
+    let finish: (value: null) => void = () => {}
+    mocks.setAppLogo.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    dropFocusToBody()
+    finish(null)
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('The logo was saved'))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' })))
+  })
+
+  it('hands a focus the pending save dropped back to Save once the save is refused', async () => {
+    let refuse: (reason: Error) => void = () => {}
+    mocks.setAppLogo.mockReturnValue(new Promise((_, reject) => { refuse = reject }))
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    dropFocusToBody()
+    refuse(new Error('refused'))
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the logo', 'error'))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save' })))
+  })
+
+  it.each([
+    ['ready', (settle: Settle) => settle.resolve({ images, lowResolution: false }), 'button'],
+    ['refused', (settle: Settle) => settle.reject(new Error('application.logoUnreadable')), 'alert'],
+  ] as const)('leaves a focus moved elsewhere alone when a preparation settles %s', async (_, settle, shown) => {
+    const handle: Settle = { resolve: () => {}, reject: () => {} }
+    prepare.prepareLogo.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      handle.resolve = resolve; handle.reject = reject
+    }))
+    mocks.getAppSettings.mockResolvedValue({ 'app.logo': '' })
+    render(<><LogoSection addToast={addToast} /><button type="button">Elsewhere</button></>,
+      { wrapper: withQueryClient(createTestQueryClient()) })
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    screen.getByRole('button', { name: 'Elsewhere' }).focus()
+    settle(handle)
+
+    if (shown === 'button') await screen.findByRole('button', { name: 'Save' })
+    else await screen.findByRole('alert')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Elsewhere' }))
+  })
+
+  it('cancel drops the preview and sends nothing', async () => {
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-2')
+    expect(mocks.setAppLogo).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
+  })
+
+  it('lets the previews go when the section closes on a pending choice', async () => {
+    const { unmount } = renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await screen.findByRole('button', { name: 'Save' })
+    unmount()
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-2')
+  })
+
+  it('keeps the latest choice when an earlier one finishes preparing last', async () => {
+    let finishFirst: (value: unknown) => void = () => {}
+    const second = { 32: new Blob(['d']), 192: new Blob(['e']), 512: new Blob(['f']) }
+    prepare.prepareLogo
+      .mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve }))
+      .mockResolvedValueOnce({ images: second, lowResolution: false })
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await choose(new File(['y'], 'other.png', { type: 'image/png' }))
+    await screen.findByRole('button', { name: 'Save' })
+    finishFirst({ images, lowResolution: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(screen.queryByText(/blurry/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // Blobs compare equal by value, so the renditions sent are checked by identity.
+    await waitFor(() => expect(mocks.setAppLogo).toHaveBeenCalled())
+    expect(mocks.setAppLogo.mock.calls[0]?.[0]).toBe(second)
+  })
+
+  it('warns that a small image will be blurry once installed', async () => {
+    prepare.prepareLogo.mockResolvedValue({ images, lowResolution: true })
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/blurry/)
+  })
+
+  it('names an unreadable file and offers no save', async () => {
+    prepare.prepareLogo.mockRejectedValue(new Error('application.logoUnreadable'))
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This file isn’t a readable image')
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('names an image too detailed to fit the size limits', async () => {
+    prepare.prepareLogo.mockRejectedValue(new Error('application.logoTooDetailed'))
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/too detailed/)
+  })
+
+  // The API's refusal carries prose, not a known code: the toast falls back to the section's own words.
+  it('reports a refused save in a toast and keeps the preview', async () => {
+    mocks.setAppLogo.mockRejectedValue(new Error('The 512 px logo is over 1024 KB'))
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the logo', 'error'))
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('restores Scotty after confirmation', async () => {
+    mocks.deleteAppLogo.mockImplementation(() => {
+      mocks.getAppSettings.mockResolvedValue({ 'app.logo': '' })
+      return Promise.resolve(null)
+    })
+    renderSection({ 'app.logo': 'v1' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Restore default' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(mocks.deleteAppLogo).toHaveBeenCalled()
+    expect(addToast).toHaveBeenCalledWith('The default logo is back')
+    expect(screen.queryByRole('button', { name: 'Restore default' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
+  })
+
+  it('drops a stale file error once Scotty is restored', async () => {
+    prepare.prepareLogo.mockRejectedValue(new Error('application.logoUnreadable'))
+    renderSection({ 'app.logo': 'v1' })
+    await screen.findByRole('button', { name: 'Restore default' })
+    await choose()
+    await screen.findByRole('alert')
+    await userEvent.click(screen.getByRole('button', { name: 'Restore default' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('The default logo is back'))
+    expect(screen.queryByText('This file isn’t a readable image')).not.toBeInTheDocument()
+  })
+
+  it('reports a refused restore in a toast', async () => {
+    mocks.deleteAppLogo.mockRejectedValue(new Error('boom'))
+    renderSection({ 'app.logo': 'v1' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Restore default' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not restore the default logo', 'error'))
+  })
+})

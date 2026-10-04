@@ -51,9 +51,11 @@ public class PreferencesDbContext : DbContext
     {
         modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.AccountId, o.Role });
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
-        // No relation edge on these three, unlike the five per-account tables below: none of them
+        // No relation edge on these four, unlike the five per-account tables below: none of them
         // belongs to anyone, so there is nothing to order ahead of users.
         modelBuilder.Entity<AppSetting>().HasKey(s => s.SettingKey);
+        modelBuilder.Entity<AppLogoImage>().HasKey(l => l.Size);
+        modelBuilder.Entity<AppLogoImage>().Property(l => l.Size).ValueGeneratedNever();
         modelBuilder.Entity<SchedulingServiceAccount>().HasKey(a => a.Id);
         modelBuilder.Entity<SchedulingServiceAccount>().Property(a => a.Id).ValueGeneratedNever();
         modelBuilder.Entity<SchedulingServiceAccount>().Property(a => a.UpdatedAt).IsConcurrencyToken();
@@ -229,6 +231,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<UserPreference> UserPreferences { get; set; }
 
     public DbSet<AppSetting> AppSettings { get; set; }
+
+    public DbSet<AppLogoImage> AppLogoImages { get; set; }
 
     public DbSet<SchedulingServiceAccount> SchedulingServiceAccounts { get; set; }
 

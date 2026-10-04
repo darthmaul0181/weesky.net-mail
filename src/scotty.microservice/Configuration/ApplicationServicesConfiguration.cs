@@ -156,6 +156,7 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IFolderRoleStore, FolderRoleStore>();
         services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
         services.AddScoped<IAppSettingStore, AppSettingStore>();
+        services.AddScoped<IAppLogoStore, AppLogoStore>();
         services.AddScoped<ISchedulingAccountStore, SchedulingAccountStore>();
         services.AddScoped<IDeliveryKeyStore, DeliveryKeyStore>();
         services.AddScoped<ISendingIdentityStore, SendingIdentityStore>();
