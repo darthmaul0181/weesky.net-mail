@@ -14,13 +14,14 @@ namespace weesky.Scotty.Microservice.Tests.Controllers;
 public sealed class AppSettingsControllerTests
 {
     private readonly Mock<IAppSettingStore> _store = new();
+    private readonly Mock<IAppLogoStore> _logos = new();
 
     private AppSettingsController CreateController()
     {
         _store.Setup(s => s.GetAsync(It.IsAny<CancellationToken>()))
               .ReturnsAsync(new List<AppSetting>());
 
-        return new AppSettingsController(_store.Object);
+        return new AppSettingsController(_store.Object, _logos.Object);
     }
 
     [Fact]
@@ -114,6 +115,41 @@ public sealed class AppSettingsControllerTests
     public async Task Set_Returns400OnAnEmptyBody()
     {
         var result = await CreateController().SetAppSetting(null!, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Get_AnswersAnEmptyLogoVersionWhenNoLogoIsStored()
+    {
+        var result = await CreateController().GetAppSettings(CancellationToken.None);
+
+        var values = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(string.Empty, values[AppLogo.VersionKey]);
+    }
+
+    [Fact]
+    public async Task Get_AnswersTheLogoVersion()
+    {
+        var controller = CreateController();
+        _logos.Setup(l => l.GetUpdatedAtAsync(It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new DateTime(2026, 10, 4, 10, 15, 0, 123, DateTimeKind.Utc));
+
+        var result = await controller.GetAppSettings(CancellationToken.None);
+
+        var values = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("20261004T101500123", values[AppLogo.VersionKey]);
+    }
+
+    // The version is computed: the generic PUT must not let anyone forge it.
+    [Fact]
+    public async Task Set_RefusesTheLogoVersionKey()
+    {
+        var result = await CreateController().SetAppSetting(
+            new SetAppSettingRequest { Key = AppLogo.VersionKey, Value = "20261004T101500123" },
+            CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
     }

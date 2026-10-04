@@ -365,7 +365,7 @@
         <member name="T:weesky.Scotty.Microservice.Controllers.AppSettingsController">
              <summary>
              The instance's settings — today, whether the webmail advertises itself as an installable
-             application, and under what name.
+             application, and under what name and logo.
             
              Reading is anonymous: an application name is not a secret, and the manifest must be reachable
              from the login page, where there is no session. Writing is reserved to administrators. As with
@@ -373,10 +373,10 @@
              filled in, so the client keeps no copy of its own to drift from.
              </summary>
         </member>
-        <member name="M:weesky.Scotty.Microservice.Controllers.AppSettingsController.#ctor(weesky.Scotty.Microservice.Repositories.IAppSettingStore)">
+        <member name="M:weesky.Scotty.Microservice.Controllers.AppSettingsController.#ctor(weesky.Scotty.Microservice.Repositories.IAppSettingStore,weesky.Scotty.Microservice.Repositories.IAppLogoStore)">
              <summary>
              The instance's settings — today, whether the webmail advertises itself as an installable
-             application, and under what name.
+             application, and under what name and logo.
             
              Reading is anonymous: an application name is not a secret, and the manifest must be reachable
              from the login page, where there is no session. Writing is reserved to administrators. As with
@@ -387,7 +387,7 @@
         <member name="M:weesky.Scotty.Microservice.Controllers.AppSettingsController.GetAppSettings(System.Threading.CancellationToken)">
             <summary>Every known setting, with the stored value where one exists.</summary>
             <param name="cancellationToken">cancellation token</param>
-            <response code="200">Key/value map covering every known setting</response>
+            <response code="200">Key/value map covering every known setting, plus <c>app.logo</c>, the logo's version or empty</response>
         </member>
         <member name="M:weesky.Scotty.Microservice.Controllers.AppSettingsController.SetAppSetting(weesky.Scotty.Microservice.Models.SetAppSettingRequest,System.Threading.CancellationToken)">
             <summary>Sets one setting.</summary>
@@ -395,6 +395,31 @@
             <param name="cancellationToken">cancellation token</param>
             <response code="204">Setting stored</response>
             <response code="400">Unknown key, or a value the key does not accept</response>
+            <response code="401">Not authenticated</response>
+            <response code="403">Not an administrator</response>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.AppSettingsController.GetLogo(System.Int32,System.Threading.CancellationToken)">
+            <summary>One rendition of the instance logo. Its URL carries the version, so it may be cached for good.</summary>
+            <param name="size">32, 192 or 512</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The PNG</response>
+            <response code="404">An unknown size, or no logo stored (the client then uses the bundled one)</response>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.AppSettingsController.SetLogo(Microsoft.AspNetCore.Http.IFormFile,Microsoft.AspNetCore.Http.IFormFile,Microsoft.AspNetCore.Http.IFormFile,System.Threading.CancellationToken)">
+            <summary>Replaces the instance logo: the three renditions together, or none of them.</summary>
+            <param name="logo32">the 32×32 PNG</param>
+            <param name="logo192">the 192×192 PNG</param>
+            <param name="logo512">the 512×512 PNG</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Logo stored</response>
+            <response code="400">A rendition missing, not a PNG, of the wrong size or too heavy</response>
+            <response code="401">Not authenticated</response>
+            <response code="403">Not an administrator</response>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.AppSettingsController.DeleteLogo(System.Threading.CancellationToken)">
+            <summary>Back to the bundled Scotty logo.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Logo removed</response>
             <response code="401">Not authenticated</response>
             <response code="403">Not an administrator</response>
         </member>
