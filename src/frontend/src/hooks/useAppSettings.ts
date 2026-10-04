@@ -5,6 +5,7 @@ import { api } from '../api.js'
  * so the login page uses it too. The backend fills every default: no copy here to drift. */
 export const APP_SETTING_KEYS = {
   installable: 'app.installable',
+  logo: 'app.logo',
   name: 'app.name',
   shortName: 'app.shortName',
 } as const
