@@ -104,6 +104,7 @@ public sealed class AppSettingsLogoTests
         Assert.Equal("image/png", file.ContentType);
         Assert.Equal(png, file.FileContents);
         Assert.Equal("public, max-age=31536000, immutable", controller.Response.Headers.CacheControl.ToString());
+        Assert.Equal("Origin", controller.Response.Headers.Vary.ToString());
     }
 
     [Fact]
@@ -116,6 +117,7 @@ public sealed class AppSettingsLogoTests
 
         Assert.IsType<NotFoundObjectResult>(result);
         Assert.False(controller.Response.Headers.ContainsKey("Cache-Control"));
+        Assert.False(controller.Response.Headers.ContainsKey("Vary"));
     }
 
     // Never reaches the store with a size it does not hold.

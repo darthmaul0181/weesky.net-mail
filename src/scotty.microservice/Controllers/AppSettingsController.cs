@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Net.Http.Headers;
 using weesky.Scotty.Microservice.Authentication.Authorization;
 using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Microservice.Repositories;
@@ -83,6 +84,8 @@ public sealed class AppSettingsController(IAppSettingStore store, IAppLogoStore 
         if (image is null) return NotFoundEnveloppe(NoLogo);
 
         Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        // Cached for a year: a no-CORS load must not answer a later crossOrigin one.
+        Response.Headers.Append(HeaderNames.Vary, "Origin");
         return File(image, "image/png");
     }
 
