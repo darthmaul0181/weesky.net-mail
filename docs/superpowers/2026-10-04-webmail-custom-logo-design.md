@@ -12,7 +12,7 @@ Critères de réussite :
 - un réglage **Logo** dans Administration › Application permet d'envoyer une image et de revenir
   au logo Scotty ;
 - le nouveau logo apparaît aux quatre endroits qui portent aujourd'hui le logo Scotty : barre du
-  haut (et tête du tiroir sur téléphone), onglet du navigateur avec sa pastille « non lu »,
+  haut (masquée sur téléphone, où aucun logo ne s'affiche), onglet du navigateur avec sa pastille « non lu »,
   notifications de bureau, application installée (manifeste et icône iOS) ;
 - le logo s'affiche tel qu'envoyé, sans découpe ronde, transparence conservée ;
 - le serveur ne décode jamais une image venue de l'extérieur ;
@@ -56,7 +56,7 @@ sur fond transparent : son rendu ne change pas.
 |--------------|---------------|----------------------------------------|
 | `size`       | `smallint`    | 32, 192 ou 512 — clé primaire          |
 | `image`      | `mediumblob`  | le PNG                                 |
-| `updated_at` | `datetime`    | UTC, posé par le code                  |
+| `updated_at` | `datetime(3)` | UTC, posé par le code ; les millisecondes distinguent deux envois dans la même seconde |
 
 Ajoutée à `install/install.sql` ; un script SQL à lancer à la main pour les serveurs existants.
 Table vide = logo Scotty. `app_settings` n'est pas utilisée : `setting_value` est un
@@ -113,7 +113,7 @@ ces adresses.
 
 ### Les quatre usages
 
-1. **Barre du haut** (`TopBar.tsx`) et tête du tiroir : `src192`.
+1. **Barre du haut** (`TopBar.tsx`) : `src192`.
 2. **Onglet** (`favicon.ts`) : une fonction pour changer l'icône de base, qui remplace
    `originalHref`, vide le cache `drawn` et redessine la pastille si elle est voulue. L'image est
    chargée en `crossOrigin = 'anonymous'` : sans cela, un logo servi par l'API sur un autre domaine
