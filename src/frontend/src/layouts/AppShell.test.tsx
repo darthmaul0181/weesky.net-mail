@@ -1,16 +1,21 @@
 import { render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
+import { createTestQueryClient, withQueryClient } from '../test-utils'
 
 // The three ambient hooks are the shell's own business and none of them touches the tab bar.
 vi.mock('../modules/mail/notify/useMailNotifications', () => ({ useMailNotifications: () => {} }))
 vi.mock('../hooks/useTabTitle', () => ({ useTabTitle: () => {} }))
 vi.mock('../modules/mail/notify/useFaviconBadge', () => ({ useFaviconBadge: () => {} }))
+vi.mock('../api.js', () => ({ api: { getAppSettings: vi.fn().mockResolvedValue({}) } }))
 
 const { default: AppShell } = await import('./AppShell')
 
+// Seeded, so the top bar's logo never fetches: a sync test would end with that answer still in flight.
 function renderAt(path: string) {
-  return render(<MemoryRouter initialEntries={[path]}><AppShell /></MemoryRouter>)
+  const client = createTestQueryClient()
+  client.setQueryData(['appSettings'], {})
+  return render(<MemoryRouter initialEntries={[path]}><AppShell /></MemoryRouter>, { wrapper: withQueryClient(client) })
 }
 
 function hasTabBar(path: string) {

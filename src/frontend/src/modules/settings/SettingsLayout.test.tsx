@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   getConnectedAccounts: vi.fn(),
   getDavCredentials: vi.fn(),
   getVersion: vi.fn(() => Promise.resolve({ version: '1.0.0-dev', commit: 'f4e5d6c' })),
+  getAppSettings: vi.fn(() => Promise.resolve({})),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -41,6 +42,7 @@ vi.mock('../../api.js', () => ({
     getConnectedAccounts: mocks.getConnectedAccounts,
     getDavCredentials: mocks.getDavCredentials,
     getVersion: mocks.getVersion,
+    getAppSettings: mocks.getAppSettings,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,

@@ -1,4 +1,5 @@
 import { APP_SETTING_KEYS, installableOf, type AppSettings } from '../hooks/useAppSettings'
+import type { LogoUrls } from './appLogo'
 
 interface Icon { src: string; sizes: string; type: string }
 interface Shortcut { name: string; url: string }
@@ -27,6 +28,7 @@ const BACKGROUND_COLOR = '#f6f3ef'
  * opaque path), built from the current origin so it holds on every deployment. */
 export function buildManifest(
   settings: AppSettings | undefined, origin: string, t: (key: 'mail:layout.newMessage' | 'common:rail.contacts') => string,
+  logo: LogoUrls,
 ): WebAppManifest | null {
   if (!settings || !installableOf(settings)) return null
 
@@ -44,8 +46,8 @@ export function buildManifest(
     theme_color: THEME_COLOR,
     background_color: BACKGROUND_COLOR,
     icons: [
-      { src: `${origin}/icon-192.png`, sizes: '192x192', type: 'image/png' },
-      { src: `${origin}/icon-512.png`, sizes: '512x512', type: 'image/png' },
+      { src: new URL(logo[192], origin).href, sizes: '192x192', type: 'image/png' },
+      { src: new URL(logo[512], origin).href, sizes: '512x512', type: 'image/png' },
     ],
     shortcuts: [
       { name: t('mail:layout.newMessage'), url: `${origin}/mail/compose` },

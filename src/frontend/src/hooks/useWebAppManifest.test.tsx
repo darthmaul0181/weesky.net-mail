@@ -133,6 +133,18 @@ describe('useWebAppManifest', () => {
     }
   })
 
+  // The installed app's icon is the administrator's logo, read from the posted blob itself.
+  it('names the custom logo as the installed icon', async () => {
+    mocks.getAppSettings.mockResolvedValue({ ...enabled, 'app.logo': 'v1' })
+
+    renderHook(() => useWebAppManifest(), { wrapper })
+    await waitFor(() => expect(manifestLink()).not.toBeNull())
+
+    const blob = vi.mocked(URL.createObjectURL).mock.lastCall![0] as Blob
+    const manifest = JSON.parse(await blob.text()) as { icons: { src: string; sizes: string }[] }
+    expect(manifest.icons.find(i => i.sizes === '512x512')!.src).toMatch(/\/api\/AppSettings\/logo\/512[?]v=v1$/)
+  })
+
   // Without revocation, every pass would leave a Blob alive for the lifetime of the document.
   it('removes the link and revokes its url on unmount', async () => {
     mocks.getAppSettings.mockResolvedValue(enabled)

@@ -3,6 +3,7 @@ import {
   claimNotification, desktopPermission, forgetNotificationClaim, playNewMailSound,
   requestDesktopPermission, showDesktopNotification,
 } from './channels'
+import { logoUrls, setCurrentLogo } from '../../../lib/appLogo'
 
 const play = vi.fn()
 // A `function`, not an arrow: vitest 4 constructs the mock implementation via Reflect.construct
@@ -82,6 +83,22 @@ describe('showDesktopNotification', () => {
     }))
     ;(instance.onclick as () => void)()
     expect(onClick).toHaveBeenCalled()
+  })
+
+  // Read when the bubble is raised, not when the module loads: the logo arrives with the settings.
+  it('shows the logo current at the time it is raised', () => {
+    const ctor = vi.fn(function () { return {} })
+    vi.stubGlobal('Notification', Object.assign(ctor, { permission: 'granted' }))
+    setCurrentLogo(logoUrls('v1'))
+
+    try {
+      showDesktopNotification('body', 'tag', vi.fn())
+    } finally {
+      setCurrentLogo(logoUrls(''))
+    }
+
+    const icon: unknown = expect.stringMatching(/logo\/192[?]v=v1$/)
+    expect(ctor).toHaveBeenCalledWith('New mail', expect.objectContaining({ icon }))
   })
 
   it('does nothing without permission', () => {

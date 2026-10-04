@@ -1,7 +1,7 @@
 import i18next from 'i18next'
-import logo from '../../../assets/logo-192.png'
 import newMailSound from '../../../assets/new-mail.mp3'
 import { onSessionEnd } from '../../../contexts/sessionEvents'
+import { currentLogo } from '../../../lib/appLogo'
 import { readStored, removeStored, storedKeys, writeStored } from '../../../lib/safeStorage'
 
 const CLAIM_PREFIX = 'mail.lastNotifiedUidNext'
@@ -33,7 +33,7 @@ export function showDesktopNotification(body: string, tag: string, onClick: () =
 
   // The tag is what makes two tabs raise one bubble: an identical tag replaces rather than
   // stacks, so the browser dedupes for us.
-  const notification = new Notification(i18next.t('mail:notify.title'), { body, tag, icon: logo })
+  const notification = new Notification(i18next.t('mail:notify.title'), { body, tag, icon: currentLogo()[192] })
   notification.onclick = onClick
 }
 
