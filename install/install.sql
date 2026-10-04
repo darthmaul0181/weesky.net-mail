@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS `app_settings` (
   `updated_at` datetime NOT NULL COMMENT 'UTC; set by the code, never by the schema'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
+CREATE TABLE IF NOT EXISTS `app_logo` (
+  `size` smallint NOT NULL COMMENT '32, 192 or 512',
+  `image` mediumblob NOT NULL COMMENT 'PNG, checked by the API, never decoded',
+  `updated_at` datetime(3) NOT NULL COMMENT 'UTC; set by the code, never by the schema'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
 
 CREATE TABLE IF NOT EXISTS `calendars` (
   `id` char(36) NOT NULL,
@@ -388,6 +394,9 @@ CREATE TABLE IF NOT EXISTS `user_preferences` (
 
 ALTER TABLE `app_settings`
   ADD PRIMARY KEY (`setting_key`);
+
+ALTER TABLE `app_logo`
+  ADD PRIMARY KEY (`size`);
 
 ALTER TABLE `calendars`
   ADD PRIMARY KEY (`id`),
