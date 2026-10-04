@@ -1054,6 +1054,15 @@ body {
 .svc-account-section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0 0 4px; }
 .svc-account-section-intro { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 560px; }
 
+/* The top bar's own colours, so the admin judges the logo against the palette it will sit on. */
+.logo-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 12px; }
+.logo-preview-bar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px;
+  border-radius: 8px; background: var(--topbar-bg); color: var(--topbar-fg); }
+.logo-preview-bar .topbar-name { white-space: nowrap; }
+.logo-preview-tab { width: 32px; height: 32px; object-fit: contain; }
+.logo-preview + .setting-hint { margin: 0 0 12px; }
+.logo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* Configured, not-configured and password-unreadable share the tile skin (.card):
    centered like every other .admin-list-item. Green by default — the account works — muted when
    there is none, red when its password cannot be read. */

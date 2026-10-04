@@ -9,6 +9,8 @@ import { createTestQueryClient } from '../../../test-utils'
 const mocks = vi.hoisted(() => ({
   getAppSettings: vi.fn(),
   setAppSetting: vi.fn(),
+  setAppLogo: vi.fn(),
+  deleteAppLogo: vi.fn(),
   adminGetSchedulingAccount: vi.fn(),
   adminSaveSchedulingAccount: vi.fn(),
   adminDeleteSchedulingAccount: vi.fn(),

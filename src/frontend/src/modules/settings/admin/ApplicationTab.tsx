@@ -6,6 +6,7 @@ import {
 } from '../../../hooks/useAppSettings'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import DeliveryRepliesSection from './DeliveryRepliesSection'
+import LogoSection from './LogoSection'
 import SchedulingAccountSection from './SchedulingAccountSection'
 import type { AddToast } from '../../../hooks/useToasts'
 
@@ -125,6 +126,7 @@ export default function ApplicationTab({ addToast }: Props) {
         {setSetting.isPending ? <span className="spinner" /> : t('actions.save', { ns: 'common' })}
       </button>
 
+      <LogoSection addToast={addToast} />
       <SchedulingAccountSection addToast={addToast} />
       <DeliveryRepliesSection addToast={addToast} />
     </>
