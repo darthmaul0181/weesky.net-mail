@@ -218,7 +218,8 @@ body {
 .svc-account-test-result.is-ok, .svc-account-test-result.is-fail, .contact-scopes-error,
 .calendar-sidebar-error, .message-row-draft, .contact-editor-photo-error, .compose-attachment-error,
 .invitation-card-badge.is-cancel, .invitation-card-error, .invitation-card .btn-danger,
-.message-row-priority.is-high, .recipient-token.is-invalid, .row-tag.is-warn, .custom-palette-warning {
+.message-row-priority.is-high, .recipient-token.is-invalid, .row-tag.is-warn, .custom-palette-warning,
+.logo-warning {
   color: color-mix(in oklab, var(--status-tone) 55%, var(--text));
 }
 .alert-error, .toast-success, .toast-error {
@@ -1060,7 +1061,7 @@ body {
   border-radius: 8px; background: var(--topbar-bg); color: var(--topbar-fg); }
 .logo-preview-bar .topbar-name { white-space: nowrap; }
 .logo-preview-tab { width: 32px; height: 32px; object-fit: contain; }
-.logo-preview + .setting-hint { margin: 0 0 12px; }
+.logo-warning { margin: 0 0 12px; font-size: 12px; line-height: 1.4; --status-tone: var(--warning); }
 .logo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* Configured, not-configured and password-unreadable share the tile skin (.card):

@@ -49,6 +49,36 @@ describe('LogoSection', () => {
     expect(screen.getByRole('img', { name: 'Top bar preview' })).toHaveAttribute('src', 'blob:preview-1')
     expect(screen.getByRole('img', { name: 'Browser tab preview' })).toHaveAttribute('src', 'blob:preview-2')
     expect(mocks.setAppLogo).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save' }))
+  })
+
+  it('shows the file is being prepared, then lets go of the button', async () => {
+    let finish: (value: unknown) => void = () => {}
+    prepare.prepareLogo.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    renderSection()
+    const change = await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+
+    expect(change).toBeDisabled()
+    expect(change).toHaveAttribute('aria-busy', 'true')
+    finish({ images, lowResolution: false })
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Change logo…' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Change logo…' })).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('lets go of the button when the file is refused, and puts the focus back on it', async () => {
+    let refuse: (reason: unknown) => void = () => {}
+    prepare.prepareLogo.mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject }))
+    renderSection()
+    const change = await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    expect(change).toBeDisabled()
+    refuse(new Error('application.logoUnreadable'))
+
+    await screen.findByRole('alert')
+    expect(change).toBeEnabled()
+    expect(document.activeElement).toBe(change)
   })
 
   it('saves the three renditions, says so and lets the previews go', async () => {
@@ -59,9 +89,11 @@ describe('LogoSection', () => {
 
     await waitFor(() => expect(mocks.setAppLogo).toHaveBeenCalledWith(images))
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The logo was saved'))
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-2')
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
   })
 
   it('cancel drops the preview and sends nothing', async () => {
@@ -74,6 +106,7 @@ describe('LogoSection', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-2')
     expect(mocks.setAppLogo).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
   })
 
   it('lets the previews go when the section closes on a pending choice', async () => {
@@ -114,7 +147,7 @@ describe('LogoSection', () => {
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
 
-    expect(await screen.findByText(/blurry/)).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent(/blurry/)
   })
 
   it('names an unreadable file and offers no save', async () => {
@@ -150,12 +183,32 @@ describe('LogoSection', () => {
   })
 
   it('restores Scotty after confirmation', async () => {
+    mocks.deleteAppLogo.mockImplementation(() => {
+      mocks.getAppSettings.mockResolvedValue({ 'app.logo': '' })
+      return Promise.resolve(null)
+    })
     renderSection({ 'app.logo': 'v1' })
     await userEvent.click(await screen.findByRole('button', { name: 'Restore default' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
 
-    await waitFor(() => expect(mocks.deleteAppLogo).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(mocks.deleteAppLogo).toHaveBeenCalled()
     expect(addToast).toHaveBeenCalledWith('The default logo is back')
+    expect(screen.queryByRole('button', { name: 'Restore default' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
+  })
+
+  it('drops a stale file error once Scotty is restored', async () => {
+    prepare.prepareLogo.mockRejectedValue(new Error('application.logoUnreadable'))
+    renderSection({ 'app.logo': 'v1' })
+    await screen.findByRole('button', { name: 'Restore default' })
+    await choose()
+    await screen.findByRole('alert')
+    await userEvent.click(screen.getByRole('button', { name: 'Restore default' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('The default logo is back'))
+    expect(screen.queryByText('This file isn’t a readable image')).not.toBeInTheDocument()
   })
 
   it('reports a refused restore in a toast', async () => {
