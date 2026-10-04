@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import LogoSection from './LogoSection'
 import { createTestQueryClient, withQueryClient } from '../../../test-utils'
@@ -22,6 +22,8 @@ async function choose(file = new File(['x'], 'logo.png', { type: 'image/png' }))
 }
 
 let previews = 0
+
+interface Settle { resolve: (value: unknown) => void; reject: (reason: Error) => void }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -93,7 +95,63 @@ describe('LogoSection', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-2')
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' }))
+  })
+
+  // jsdom keeps focus on the disabled Save, where Chrome drops it to <body>; jsdom will not blur a disabled
+  // control either, so focus is parked on a stand-in that then leaves the document.
+  function dropFocusToBody() {
+    const standIn = document.body.appendChild(document.createElement('button'))
+    act(() => { standIn.focus(); standIn.remove() })
+    expect(document.activeElement).toBe(document.body)
+  }
+
+  it('hands a focus the pending save dropped to the heading once the save succeeds', async () => {
+    let finish: (value: null) => void = () => {}
+    mocks.setAppLogo.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    dropFocusToBody()
+    finish(null)
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('The logo was saved'))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Logo' })))
+  })
+
+  it('hands a focus the pending save dropped back to Save once the save is refused', async () => {
+    let refuse: (reason: Error) => void = () => {}
+    mocks.setAppLogo.mockReturnValue(new Promise((_, reject) => { refuse = reject }))
+    renderSection()
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    dropFocusToBody()
+    refuse(new Error('refused'))
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the logo', 'error'))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save' })))
+  })
+
+  it.each([
+    ['ready', (settle: Settle) => settle.resolve({ images, lowResolution: false }), 'button'],
+    ['refused', (settle: Settle) => settle.reject(new Error('application.logoUnreadable')), 'alert'],
+  ] as const)('leaves a focus moved elsewhere alone when a preparation settles %s', async (_, settle, shown) => {
+    const handle: Settle = { resolve: () => {}, reject: () => {} }
+    prepare.prepareLogo.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      handle.resolve = resolve; handle.reject = reject
+    }))
+    render(<><LogoSection addToast={addToast} /><button type="button">Elsewhere</button></>,
+      { wrapper: withQueryClient(createTestQueryClient()) })
+    mocks.getAppSettings.mockResolvedValue({ 'app.logo': '' })
+    await screen.findByRole('button', { name: 'Change logo…' })
+    await choose()
+    screen.getByRole('button', { name: 'Elsewhere' }).focus()
+    settle(handle)
+
+    if (shown === 'button') await screen.findByRole('button', { name: 'Save' })
+    else await screen.findByRole('alert')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Elsewhere' }))
   })
 
   it('cancel drops the preview and sends nothing', async () => {

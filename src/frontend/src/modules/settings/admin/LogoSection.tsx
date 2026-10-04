@@ -28,13 +28,28 @@ export default function LogoSection({ addToast }: { addToast: AddToast }) {
   const [pending, setPending] = useState<Pending | null>(null)
   const [error, setError] = useState<LogoErrorKey | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const section = useRef<HTMLDivElement>(null)
+  const wasBusy = useRef(false)
+  const custom = Boolean(settings?.[APP_SETTING_KEYS.logo])
+  const busy = save.isPending || restore.isPending
 
   useEffect(() => () => {
     if (pending) { URL.revokeObjectURL(pending.previewBar); URL.revokeObjectURL(pending.previewTab) }
   }, [pending])
-  // The choice replaced Change logo… under the focus, or disabled it while preparing: hand it on.
-  useEffect(() => { if (pending) saveRef.current?.focus() }, [pending])
-  useEffect(() => { if (error) changeRef.current?.focus() }, [error])
+  // The choice replaced Change logo… under the focus, or disabled it while preparing: hand it on,
+  // unless the admin has since moved somewhere else.
+  const focusIsOurs = () => document.activeElement === document.body || !!section.current?.contains(document.activeElement)
+  useEffect(() => { if (pending && focusIsOurs()) saveRef.current?.focus() }, [pending])
+  useEffect(() => { if (error && focusIsOurs()) changeRef.current?.focus() }, [error])
+  // Disabling the focused Save drops focus to <body>: once the write settles, back to Save if it is
+  // still usable, else to the heading.
+  useEffect(() => {
+    const settled = wasBusy.current && !busy
+    wasBusy.current = busy
+    if (!settled || document.activeElement !== document.body) return
+    const button = saveRef.current
+    ;(button?.isConnected && !button.disabled ? button : headingRef.current)?.focus()
+  }, [busy])
   // A preparation still running when the section closes, or overtaken by a newer choice, is dropped.
   useEffect(() => () => { latest.current++ }, [])
 
@@ -80,11 +95,8 @@ export default function LogoSection({ addToast }: { addToast: AddToast }) {
     }
   }
 
-  const custom = Boolean(settings?.[APP_SETTING_KEYS.logo])
-  const busy = save.isPending || restore.isPending
-
   return (
-    <div className="svc-account-section">
+    <div className="svc-account-section" ref={section}>
       <h2 className="svc-account-section-title" ref={headingRef} tabIndex={-1}>{t('application.logo')}</h2>
       <p className="svc-account-section-intro">{t('application.logoIntro')}</p>
 
