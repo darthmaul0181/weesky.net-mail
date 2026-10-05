@@ -1,7 +1,10 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CalendarToolbar from './CalendarToolbar'
+import { setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 function draw(props: Partial<Parameters<typeof CalendarToolbar>[0]> = {}) {
   const handlers = {
@@ -30,15 +33,15 @@ describe('CalendarToolbar', () => {
 
   it('steps a period each way', async () => {
     const { onStep } = draw()
-    await userEvent.click(screen.getByRole('button', { name: 'Previous period' }))
+    await user.click(screen.getByRole('button', { name: 'Previous period' }))
     expect(onStep).toHaveBeenCalledWith(-1)
-    await userEvent.click(screen.getByRole('button', { name: 'Next period' }))
+    await user.click(screen.getByRole('button', { name: 'Next period' }))
     expect(onStep).toHaveBeenCalledWith(1)
   })
 
   it('returns to today', async () => {
     const { onToday } = draw()
-    await userEvent.click(screen.getByRole('button', { name: 'Today' }))
+    await user.click(screen.getByRole('button', { name: 'Today' }))
     expect(onToday).toHaveBeenCalled()
   })
 
@@ -54,7 +57,7 @@ describe('CalendarToolbar', () => {
     const views = screen.getAllByRole('radio').map(input => (input as HTMLInputElement).value)
     expect(views).toEqual(['day', 'week', 'month', 'list'])
     expect(screen.getByRole('radio', { name: 'Week' })).toBeChecked()
-    await userEvent.click(screen.getByRole('radio', { name: 'Month' }))
+    await user.click(screen.getByRole('radio', { name: 'Month' }))
     expect(onView).toHaveBeenCalledWith('month')
   })
 
@@ -62,7 +65,7 @@ describe('CalendarToolbar', () => {
   // finished typing should not have to wait to find out.
   it('commits the query on Enter', async () => {
     const { onCommitQuery } = draw({ query: 'retro' })
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search events' }), '{Enter}')
+    await user.type(screen.getByRole('searchbox', { name: 'Search events' }), '{Enter}')
     expect(onCommitQuery).toHaveBeenCalled()
   })
 
@@ -77,7 +80,7 @@ describe('CalendarToolbar', () => {
 
   it('carries the drawer handle only where the sidebar is a drawer', async () => {
     const { onOpenDrawer } = draw({ inDrawer: true })
-    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    await user.click(screen.getByRole('button', { name: 'Open navigation' }))
     expect(onOpenDrawer).toHaveBeenCalled()
   })
 })

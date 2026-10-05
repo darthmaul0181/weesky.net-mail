@@ -20,20 +20,13 @@ const DATED = {
 }
 
 describe('EventChip', () => {
-  it('draws a busy event', () => {
-    expect(draw({ eventId: 'e1', summary: 'Stand-up' }).button).toHaveClass('is-busy')
-  })
-
-  it('draws a free event', () => {
-    expect(draw({ eventId: 'e1', transparency: 'TRANSPARENT' }).button).toHaveClass('is-free')
-  })
-
-  it('draws a tentative event', () => {
-    expect(draw({ eventId: 'e1', status: 'TENTATIVE' }).button).toHaveClass('is-tentative')
-  })
-
-  it('draws a cancelled event', () => {
-    expect(draw({ eventId: 'e1', status: 'CANCELLED' }).button).toHaveClass('is-cancelled')
+  it.each([
+    ['busy', {}, 'is-busy'],
+    ['free', { transparency: 'TRANSPARENT' }, 'is-free'],
+    ['tentative', { status: 'TENTATIVE' }, 'is-tentative'],
+    ['cancelled', { status: 'CANCELLED' }, 'is-cancelled'],
+  ] as const)('draws a %s event', (_kind, fields, className) => {
+    expect(draw({ eventId: 'e1', summary: 'Stand-up', ...fields }).button).toHaveClass(className)
   })
 
   it('names an event that has no title', () => {

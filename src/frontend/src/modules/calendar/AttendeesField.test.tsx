@@ -1,8 +1,11 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Contact } from '../contacts/contactTypes'
 import AttendeesField from './AttendeesField'
+import { setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 const contacts: Contact[] = [
   { id: 'c1', firstName: 'Marc', isFavorite: false, addresses: ['marc@example.org'] },
@@ -16,11 +19,11 @@ describe('AttendeesField', () => {
     render(<AttendeesField value={[{ email: 'marc@example.org', name: 'Marc' }]} onChange={onChange} />)
     // The chip shows the contact's name when the book has one.
     expect(screen.getByText('Marc')).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Attendees'), 'jul')
-    await userEvent.click(await screen.findByText(/Julie/))
+    await user.type(screen.getByLabelText('Attendees'), 'jul')
+    await user.click(await screen.findByText(/Julie/))
     expect(onChange).toHaveBeenLastCalledWith([
       { email: 'marc@example.org', name: 'Marc' }, { email: 'julie@example.net', name: 'Julie Martin' }])
-    await userEvent.click(screen.getByRole('button', { name: 'Remove Marc' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Marc' }))
     expect(onChange).toHaveBeenLastCalledWith([])
   })
 
@@ -28,7 +31,7 @@ describe('AttendeesField', () => {
   it('keeps the name a guest came with, and names a typed address from the book', async () => {
     const onChange = vi.fn()
     render(<AttendeesField value={[{ email: 'lea@example.net', name: 'Léa' }]} onChange={onChange} />)
-    await userEvent.type(screen.getByLabelText('Attendees'), 'Julie@Example.net{Enter}')
+    await user.type(screen.getByLabelText('Attendees'), 'Julie@Example.net{Enter}')
     expect(onChange).toHaveBeenLastCalledWith([
       { email: 'lea@example.net', name: 'Léa' }, { email: 'Julie@Example.net', name: 'Julie Martin' }])
   })

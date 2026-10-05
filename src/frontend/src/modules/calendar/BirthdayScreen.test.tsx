@@ -29,10 +29,8 @@ describe('BirthdayScreen', () => {
     expect(screenDialog).toHaveAttribute('aria-modal', 'true')
     expect(screenDialog).toHaveTextContent('🎂 Alice Martin')
     expect(screenDialog).toHaveTextContent(/Wednesday.*30.*September/)
-    expect(screen.getByText('40 years old')).toBeInTheDocument()
-    expect(screenDialog).toHaveTextContent('Reminder the day before at 9:00')
-    expect(screenDialog).toHaveTextContent('Every year')
-    expect(screenDialog).toHaveTextContent('Birthdays')
+    // The rows under the date are `BirthdayLines`', read one by one in EventPreview's tests.
+    expect(screenDialog).toHaveTextContent('40 years old')
   })
 
   it('opens on its ✕, which closes it, as Escape does', async () => {

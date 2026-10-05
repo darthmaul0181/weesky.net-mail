@@ -1,16 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ImportDialog from './ImportDialog'
-import { calendarOf } from './calendarTestHarness'
-import type { Calendar } from './calendarTypes'
-import { fireEscape, pressBackdrop } from '../../test-utils'
+import { CALENDAR_PAIR as CALENDARS } from './calendarTestHarness'
+import { fireEscape, pressBackdrop, setupUser } from '../../test-utils'
 
-function calendar(id: string, displayName: string, isDefault = false): Calendar {
-  return calendarOf(id, undefined, displayName, { isDefault })
-}
-
-const CALENDARS = [calendar('a', 'Personal', true), calendar('b', 'Work')]
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 const ICS = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n'
   + 'X-WR-CALNAME:Belgian holidays\r\nX-APPLE-CALENDAR-COLOR:#15803d\r\n'
@@ -40,15 +35,6 @@ describe('ImportDialog', () => {
     expect(screen.getByRole('combobox')).toHaveTextContent('Work')
   })
 
-  // The file says what it is; asking the user to retype it is asking them to get it wrong.
-  it('pre-fills the new calendar from the file header', async () => {
-    open()
-    await userEvent.upload(screen.getByLabelText('File'), icsFile())
-    await userEvent.click(screen.getByRole('radio', { name: 'A new calendar' }))
-    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Belgian holidays'))
-    expect(screen.getByLabelText('Hex code')).toHaveValue('#15803d')
-  })
-
   // A head the browser cannot read (the file moved or lost its permission since the pick) says
   // nothing: the file's own name still names the calendar, so Save is not left inert and unexplained.
   it('names the new calendar after the file when its head cannot be read', async () => {
@@ -57,8 +43,8 @@ describe('ImportDialog', () => {
     const head = new Blob([ICS])
     vi.spyOn(head, 'text').mockRejectedValue(new DOMException('unreadable', 'NotReadableError'))
     vi.spyOn(file, 'slice').mockReturnValue(head)
-    await userEvent.upload(screen.getByLabelText('File'), file)
-    await userEvent.click(screen.getByRole('radio', { name: 'A new calendar' }))
+    await user.upload(screen.getByLabelText('File'), file)
+    await user.click(screen.getByRole('radio', { name: 'A new calendar' }))
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Team events'))
     expect(submit()).toBeEnabled()
   })
@@ -67,19 +53,21 @@ describe('ImportDialog', () => {
     const { onImport } = open()
     expect(submit()).toBeDisabled()
     const file = icsFile()
-    await userEvent.upload(screen.getByLabelText('File'), file)
+    await user.upload(screen.getByLabelText('File'), file)
     await waitFor(() => expect(submit()).toBeEnabled())
-    await userEvent.click(submit())
+    await user.click(submit())
     expect(onImport).toHaveBeenCalledWith({ mode: 'existing', id: 'b', file })
   })
 
-  it('creates the calendar and pours into it in one gesture', async () => {
+  // The file says what it is; asking the user to retype it is asking them to get it wrong.
+  it('creates the calendar the file header names and pours into it in one gesture', async () => {
     const { onImport } = open()
     const file = icsFile()
-    await userEvent.upload(screen.getByLabelText('File'), file)
-    await userEvent.click(screen.getByRole('radio', { name: 'A new calendar' }))
+    await user.upload(screen.getByLabelText('File'), file)
+    await user.click(screen.getByRole('radio', { name: 'A new calendar' }))
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Belgian holidays'))
-    await userEvent.click(submit())
+    expect(screen.getByLabelText('Hex code')).toHaveValue('#15803d')
+    await user.click(submit())
     expect(onImport).toHaveBeenCalledWith(
       { mode: 'new', file, displayName: 'Belgian holidays', color: '#15803d' })
   })
@@ -89,12 +77,12 @@ describe('ImportDialog', () => {
   it('clears the box so the same file can be picked twice', async () => {
     open()
     const input = screen.getByLabelText<HTMLInputElement>('File')
-    await userEvent.upload(input, icsFile())
+    await user.upload(input, icsFile())
     await waitFor(() => expect(input).toHaveValue(''))
 
-    await userEvent.click(screen.getByRole('radio', { name: 'A new calendar' }))
-    await userEvent.clear(screen.getByLabelText('Name'))
-    await userEvent.upload(input, icsFile())
+    await user.click(screen.getByRole('radio', { name: 'A new calendar' }))
+    await user.clear(screen.getByLabelText('Name'))
+    await user.upload(input, icsFile())
     await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Belgian holidays'))
   })
 
@@ -123,7 +111,7 @@ describe('ImportDialog', () => {
   it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
     const { onClose } = open()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledTimes(1)
 
     fireEscape()

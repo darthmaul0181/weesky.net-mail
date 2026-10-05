@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CalendarDialog from './CalendarDialog'
 import { CALENDAR_COLORS } from './calendarColors'
-import { fireEscape, optionsOf, pickOption, pressBackdrop } from '../../test-utils'
+import { fireEscape, optionsOf, pickOption, pressBackdrop, setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 function open(props: Partial<Parameters<typeof CalendarDialog>[0]> = {}) {
   const onSubmit = vi.fn()
@@ -21,16 +23,16 @@ describe('CalendarDialog', () => {
   it('keeps Save inert while the name is empty', async () => {
     const { onSubmit } = open()
     expect(save()).toBeDisabled()
-    await userEvent.type(screen.getByLabelText('Name'), 'Work')
+    await user.type(screen.getByLabelText('Name'), 'Work')
     expect(save()).toBeEnabled()
-    await userEvent.click(save())
+    await user.click(save())
     expect(onSubmit).toHaveBeenCalledWith({ displayName: 'Work', color: CALENDAR_COLORS[0] })
   })
 
   it('takes the colour from a clicked swatch', async () => {
     const { onSubmit } = open({ initialName: 'Work' })
-    await userEvent.click(screen.getByRole('button', { name: 'Coral' }))
-    await userEvent.click(save())
+    await user.click(screen.getByRole('button', { name: 'Coral' }))
+    await user.click(save())
     expect(onSubmit).toHaveBeenCalledWith({ displayName: 'Work', color: CALENDAR_COLORS[3] })
   })
 
@@ -39,14 +41,14 @@ describe('CalendarDialog', () => {
   it('refuses a hex code that is not one', async () => {
     const { onSubmit } = open({ initialName: 'Work' })
     const hex = screen.getByLabelText('Hex code')
-    await userEvent.clear(hex)
-    await userEvent.type(hex, 'xyz')
+    await user.clear(hex)
+    await user.type(hex, 'xyz')
     expect(save()).toBeDisabled()
 
-    await userEvent.clear(hex)
-    await userEvent.type(hex, '#abcdef')
+    await user.clear(hex)
+    await user.type(hex, '#abcdef')
     expect(save()).toBeEnabled()
-    await userEvent.click(save())
+    await user.click(save())
     expect(onSubmit).toHaveBeenCalledWith({ displayName: 'Work', color: '#abcdef' })
   })
 
@@ -59,7 +61,7 @@ describe('CalendarDialog', () => {
   it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
     const { onClose } = open()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledTimes(1)
 
     fireEscape()
@@ -81,9 +83,12 @@ describe('CalendarDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  it('opens on the field its door named', () => {
-    open({ initialName: 'Work', focus: 'colour' })
-    expect(screen.getByLabelText('Hex code')).toHaveFocus()
+  it.each([
+    ['colour', 'Hex code'],
+    ['name', 'Name'],
+  ] as const)('opens on the field its door named: %s', (focus, label) => {
+    open({ initialName: 'Work', focus })
+    expect(screen.getByLabelText(label)).toHaveFocus()
   })
 
   // The birthdays calendar's settings: the same dialog, one row more.
@@ -95,7 +100,7 @@ describe('CalendarDialog', () => {
     expect(screen.getByText('For every birthday, on all your synced devices.')).toBeInTheDocument()
 
     await pickOption(box, 'The day before at 9:00')
-    await userEvent.click(save())
+    await user.click(save())
     expect(onSubmit).toHaveBeenCalledWith({
       displayName: 'Birthdays', color: CALENDAR_COLORS[0], birthdayReminder: 'day_before',
     })
@@ -104,10 +109,5 @@ describe('CalendarDialog', () => {
   it('has no reminder row on a regular calendar', () => {
     open({ initialName: 'Work' })
     expect(screen.queryByRole('combobox', { name: 'Reminder' })).not.toBeInTheDocument()
-  })
-
-  it('opens on the name when that is the door', () => {
-    open()
-    expect(screen.getByLabelText('Name')).toHaveFocus()
   })
 })

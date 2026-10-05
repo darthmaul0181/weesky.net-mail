@@ -27,47 +27,45 @@ const DST_CROSSING = occurrenceOf({
 })
 
 describe('DayColumn resize preview', () => {
-  it("sizes an overnight tail by its own slice, not the whole event's new duration", () => {
-    const key = occurrenceKey(OVERNIGHT)
-    const tail: SliceEntry = {
-      occurrence: OVERNIGHT,
-      slice: { day: '2026-09-17', startMinute: 0, endMinute: 120 },
-      first: false, last: true,
-    }
-    renderInCalendar(
-      <DayColumn day="2026-09-17" isToday={false} entries={[tail]}
-        onOpen={noop} onOpenEditor={noop}
-        gestures={{
-          drag: null, resize: { key, durationMinutes: 255, baseMinutes: 240 }, ghost: null,
-          onChipDown: noop, onResizeDown: noop, onEmptyDown: noop,
-        }} />,
-    )
-
+  it.each([
     // The tail's own slice is 120 min; the whole event grew from 240 to 255, so the tail grows
     // by the same 15 min rather than being redrawn at the full 255.
-    expect(screen.getByText('Overnight').closest('button')).toHaveStyle({
-      height: `${minutesToPx(135)}px`,
-    })
-  })
-
-  it('keeps minutesToPx(durationMinutes) for a same-day resize', () => {
-    const key = occurrenceKey(SAME_DAY)
-    const entry: SliceEntry = {
-      occurrence: SAME_DAY,
-      slice: { day: '2026-09-16', startMinute: 540, endMinute: 600 },
-      first: true, last: true,
-    }
+    { name: "sizes an overnight tail by its own slice, not the whole event's new duration",
+      occurrence: OVERNIGHT, slice: { day: '2026-09-17', startMinute: 0, endMinute: 120 },
+      first: false, last: true, durationMinutes: 255, baseMinutes: 240, expected: 135 },
+    { name: 'keeps minutesToPx(durationMinutes) for a same-day resize',
+      occurrence: SAME_DAY, slice: { day: '2026-09-16', startMinute: 540, endMinute: 600 },
+      first: true, last: true, durationMinutes: 90, baseMinutes: 60, expected: 90 },
+    // The real tail lives on 2026-09-17, off screen in a day view: this slice is both the first
+    // and the last *visible* one, not the event's true last day. The drag grew the event to 255,
+    // but the head's own day only ever held 120 (22:00 to midnight), so the head stays capped.
+    { name: 'caps a lone visible head at its own midnight when the drag grows the event',
+      occurrence: OVERNIGHT, slice: { day: '2026-09-16', startMinute: 1320, endMinute: 1440 },
+      first: true, last: true, durationMinutes: 255, baseMinutes: 240, expected: 120 },
+    // The event shrank from 240 to 180, still more than the head's own 120 min: the real result
+    // is 22:00 -> 01:00, and the head is capped at 120 exactly as it was before the drag.
+    { name: 'leaves a lone visible head unchanged when the drag shrinks the event',
+      occurrence: OVERNIGHT, slice: { day: '2026-09-16', startMinute: 1320, endMinute: 1440 },
+      first: true, last: true, durationMinutes: 180, baseMinutes: 240, expected: 120 },
+    // Stored in UTC the event is 270 min; Brussels reads 210 across this DST change. The drag
+    // added 15 min in UTC (270 -> 285): the preview adds that same 15 to the grid's own 210
+    // (-> 225), not to the UTC number, or the chip would jump by the 60-min zone gap.
+    { name: 'previews a resize in the grid zone even when the event is stored in another one',
+      occurrence: DST_CROSSING, slice: { day: '2026-10-25', startMinute: 30, endMinute: 240 },
+      first: true, last: true, durationMinutes: 285, baseMinutes: 270, expected: 225 },
+  ].map(row => [row.name, row] as const))('%s', (_name, { occurrence, slice, first, last, durationMinutes, baseMinutes, expected }) => {
+    const entry: SliceEntry = { occurrence, slice, first, last }
     renderInCalendar(
-      <DayColumn day="2026-09-16" isToday={false} entries={[entry]}
+      <DayColumn day={slice.day} isToday={false} entries={[entry]}
         onOpen={noop} onOpenEditor={noop}
         gestures={{
-          drag: null, resize: { key, durationMinutes: 90, baseMinutes: 60 }, ghost: null,
-          onChipDown: noop, onResizeDown: noop, onEmptyDown: noop,
+          drag: null, resize: { key: occurrenceKey(occurrence), durationMinutes, baseMinutes },
+          ghost: null, onChipDown: noop, onResizeDown: noop, onEmptyDown: noop,
         }} />,
     )
 
-    expect(screen.getByText('Same day').closest('button')).toHaveStyle({
-      height: `${minutesToPx(90)}px`,
+    expect(screen.getByText(occurrence.summary!).closest('button')).toHaveStyle({
+      height: `${minutesToPx(expected)}px`,
     })
   })
 
@@ -102,79 +100,5 @@ describe('DayColumn resize preview', () => {
     const chips = screen.getAllByText('Overnight')
     expect(chips).toHaveLength(1)
     expect(chips[0]!.closest('button')).toHaveStyle({ height: `${minutesToPx(90)}px` })
-  })
-
-  it('caps a lone visible head at its own midnight when the drag grows the event', () => {
-    const key = occurrenceKey(OVERNIGHT)
-    const head: SliceEntry = {
-      occurrence: OVERNIGHT,
-      slice: { day: '2026-09-16', startMinute: 1320, endMinute: 1440 },
-      // The real tail lives on 2026-09-17, off screen in a day view: this slice is both the
-      // first and the last *visible* one, but it is not the event's true last day.
-      first: true, last: true,
-    }
-    renderInCalendar(
-      <DayColumn day="2026-09-16" isToday={false} entries={[head]}
-        onOpen={noop} onOpenEditor={noop}
-        gestures={{
-          drag: null, resize: { key, durationMinutes: 255, baseMinutes: 240 }, ghost: null,
-          onChipDown: noop, onResizeDown: noop, onEmptyDown: noop,
-        }} />,
-    )
-
-    // The drag grew the event to 255 min, but the head's own day only ever held 120 (22:00 to
-    // midnight): the real growth belongs to the tail, off screen, so the head stays capped.
-    expect(screen.getByText('Overnight').closest('button')).toHaveStyle({
-      height: `${minutesToPx(120)}px`,
-    })
-  })
-
-  it('leaves a lone visible head unchanged when the drag shrinks the event', () => {
-    const key = occurrenceKey(OVERNIGHT)
-    const head: SliceEntry = {
-      occurrence: OVERNIGHT,
-      slice: { day: '2026-09-16', startMinute: 1320, endMinute: 1440 },
-      first: true, last: true,
-    }
-    renderInCalendar(
-      <DayColumn day="2026-09-16" isToday={false} entries={[head]}
-        onOpen={noop} onOpenEditor={noop}
-        gestures={{
-          drag: null, resize: { key, durationMinutes: 180, baseMinutes: 240 }, ghost: null,
-          onChipDown: noop, onResizeDown: noop, onEmptyDown: noop,
-        }} />,
-    )
-
-    // The event shrank from 240 to 180, still more than the head's own 120 min: the real result
-    // is 22:00 -> 01:00, and the head — which never held more than its own midnight — is capped
-    // at 120 exactly as it was before the drag.
-    expect(screen.getByText('Overnight').closest('button')).toHaveStyle({
-      height: `${minutesToPx(120)}px`,
-    })
-  })
-
-  it('previews a resize in the grid zone even when the event is stored in another one', () => {
-    const key = occurrenceKey(DST_CROSSING)
-    const entry: SliceEntry = {
-      occurrence: DST_CROSSING,
-      slice: { day: '2026-10-25', startMinute: 30, endMinute: 240 },
-      first: true, last: true,
-    }
-    renderInCalendar(
-      <DayColumn day="2026-10-25" isToday={false} entries={[entry]}
-        onOpen={noop} onOpenEditor={noop}
-        gestures={{
-          drag: null, resize: { key, durationMinutes: 285, baseMinutes: 270 }, ghost: null,
-          onChipDown: noop, onResizeDown: noop, onEmptyDown: noop,
-        }} />,
-    )
-
-    // Stored in UTC the event is 270 min; Brussels reads 210 across this DST change. The drag
-    // added 15 min in UTC (270 -> 285): the preview adds that same 15 to the grid's own 210
-    // (-> 225), not to the UTC number, or the chip would jump by the 60-min zone gap at the
-    // very first pointer move.
-    expect(screen.getByText('Crossing DST').closest('button')).toHaveStyle({
-      height: `${minutesToPx(225)}px`,
-    })
   })
 })

@@ -33,19 +33,13 @@ describe('ColorSwatches', () => {
     expect(swatch('Blue')).toHaveAttribute('aria-pressed', 'false')
   })
 
-  it('offers one tab stop for the twelve swatches', () => {
-    mount()
+  // One stop for the twelve, opening where the state is: a dialog reopened on Coral must not
+  // offer Blue to Tab.
+  it.each([0, 3])('offers one tab stop for the twelve swatches, on the picked one (#%i)', index => {
+    mount(CALENDAR_COLORS[index])
 
     expect(screen.getAllByRole('button').map(button => button.getAttribute('tabindex')))
-      .toEqual(['0', ...Array<string>(11).fill('-1')])
-  })
-
-  // The stop opens where the state is: a dialog reopened on Coral must not offer Blue to Tab.
-  it('puts the tab stop on the picked colour', () => {
-    mount(CALENDAR_COLORS[3])
-
-    expect(screen.getAllByRole('button').map(button => button.getAttribute('tabindex')))
-      .toEqual(['-1', '-1', '-1', '0', ...Array<string>(8).fill('-1')])
+      .toEqual(CALENDAR_COLORS.map((_colour, at) => (at === index ? '0' : '-1')))
   })
 
   it('walks the grid with the arrow keys', async () => {

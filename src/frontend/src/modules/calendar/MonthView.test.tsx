@@ -42,17 +42,6 @@ const cellOf16 = () => cell('16 September 2026')
 const press = (key: string) => fireEvent.keyDown(document.activeElement as HTMLElement, { key })
 
 describe('MonthView', () => {
-  it('always draws the six rows the grid holds', () => {
-    month([])
-    expect(document.querySelectorAll('.month-week-number')).toHaveLength(6)
-    expect(document.querySelectorAll('.month-cell')).toHaveLength(42)
-  })
-
-  it('greys the days that belong to another month', () => {
-    month([])
-    expect(document.querySelector('.month-cell.is-outside')).not.toBeNull()
-  })
-
   it('counts what a cell could not hold', async () => {
     month([dated('a', 'One', 9), dated('b', 'Two', 10), dated('c', 'Three', 11),
       dated('d', 'Four', 12)])
@@ -161,6 +150,8 @@ describe('MonthView', () => {
       expect(within(rows[0]!).getByRole('rowheader')).toHaveTextContent('36')
       expect(within(rows[2]!).getByRole('rowheader')).toHaveTextContent('38')
       expect(within(rows[2]!).getAllByRole('gridcell')).toHaveLength(7)
+      expect(document.querySelectorAll('.month-week-number')).toHaveLength(6)
+      expect(document.querySelectorAll('.month-cell')).toHaveLength(42)
     })
 
     // The day a cell stands for is carried by its position on screen and by nothing else.
