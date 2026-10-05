@@ -55,8 +55,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Data\Migrations\*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CryptSharp.Core" Version="2.0.0" />
     <PackageReference Include="CSharpFunctionalExtensions" Version="2.27.1" />
+    <PackageReference Include="dbup-mysql" Version="6.1.0" />
     <PackageReference Include="FolkerKinzel.VCards" Version="8.2.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.1.949-beta" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
