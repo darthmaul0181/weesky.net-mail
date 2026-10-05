@@ -1,5 +1,8 @@
 # Logo personnalisé — migration du schéma
 
+> **Historical.** Already part of `0001_initial.sql`: a database created or updated after schema
+> migrations (October 2026) needs nothing from this page.
+
 ```sql
 CREATE TABLE IF NOT EXISTS app_logo (
   size smallint NOT NULL,

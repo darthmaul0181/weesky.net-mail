@@ -1,5 +1,8 @@
 # Birthdays calendar — schema migration
 
+> **Historical.** Already part of `0001_initial.sql`: a database created or updated after schema
+> migrations (October 2026) needs nothing from this page.
+
 ```sql
 ALTER TABLE calendars
   ADD COLUMN kind ENUM('regular','birthdays') NOT NULL DEFAULT 'regular' AFTER user_id,
