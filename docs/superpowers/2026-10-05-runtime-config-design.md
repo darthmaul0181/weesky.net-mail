@@ -25,6 +25,10 @@ Critères de réussite :
 Hors champ : le Dockerfile, le compose, l'écriture de `config.js` par le conteneur, le guide
 Docker, le workflow GHCR (lot 3) ; les migrations (lot 2). **`deploy.yml` n'est pas modifié.**
 
+La base de données n'est pas touchée : l'API lit déjà sa chaîne de connexion au démarrage
+(`ConnectionStrings__WebmailPreferencesDatabase`). Le lot 3 ne fournit qu'un conteneur, celui du
+webmail ; la base est toujours fournie par l'installateur, distante ou déjà en place.
+
 ## L'état de départ
 
 - L'adresse de l'API est gravée dans le bundle au build : `import.meta.env.VITE_API_BASE`, lu
@@ -105,6 +109,9 @@ par une adresse contenant des guillemets.
 - Le calcul du dossier d'état sort de `AddCredentialKeyRing` dans une fonction partagée, utilisée
   par le trousseau et par la clé. Le refus actuel sans `STATE_DIRECTORY` hors développement est
   conservé.
+- En développement, sans `STATE_DIRECTORY`, le dossier d'état est `<ContentRoot>/keys`, déjà ignoré
+  par git : la clé ne peut pas finir dans un commit. Le trousseau local passe donc de `keys/` à
+  `keys/keys/` (une reconnexion, une fois, en local).
 - La clé est résolue une fois au démarrage, puis injectée dans `TokenConstants` avant la
   validation existante. `AuthorizationExtension` et `TokenManager` ne changent pas.
 
