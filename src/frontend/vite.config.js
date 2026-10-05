@@ -5,6 +5,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import license from 'rollup-plugin-license'
 import { versionStamp } from './src/lib/versionStamp.ts'
+import { assertApiBase, runtimeConfigPlugin } from './src/lib/runtimeConfigPlugin.ts'
 
 // The web app's own version; the API keeps its own in src/scotty.microservice/VERSION.
 const WEB_VERSION = readFileSync(new URL('./VERSION', import.meta.url), 'utf8').trim()
@@ -153,17 +154,14 @@ const emitNotices = {
 }
 
 export default defineConfig(({ command, mode }) => {
-  // No built-in default: a forgotten .env.production would ship a build posting credentials to
-  // someone else's API. The gate and Vite both read envDir (this folder, whatever the cwd), and a
-  // blank value is trimmed so it does not count as set.
+  // The gate and Vite both read envDir (this folder, whatever the cwd).
   const envDir = fileURLToPath(new URL('.', import.meta.url))
-  if (command === 'build' && !loadEnv(mode, envDir, 'VITE_').VITE_API_BASE?.trim()) {
-    throw new Error(`VITE_API_BASE is not set. Write it to .env.${mode} before building (install/README.md, step 1.2).`)
-  }
+  const apiBase = loadEnv(mode, envDir, 'VITE_').VITE_API_BASE
+  assertApiBase(command, mode, apiBase)
 
   return {
     envDir,
-    plugins: [react()],
+    plugins: [react(), runtimeConfigPlugin(mode, apiBase)],
     // Build-only plugins, so they belong to the output rather than to Vite's own list.
     build: { rolldownOptions: { plugins: [collectNotices, emitNotices] } },
     define: {
