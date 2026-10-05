@@ -6,7 +6,7 @@ using weesky.Scotty.Providers.Weesky;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseScottyLogging();
+builder.Host.UseScottyLogging(builder.Configuration);
 
 // Read before anything is registered: the platform decides which directory answers for accounts,
 // aliases and admin rights, and a deployment that does not say refuses to start.
