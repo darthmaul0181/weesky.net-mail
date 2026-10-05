@@ -150,18 +150,28 @@ export function holdNextCall(mock: Mock) {
   }
 }
 
+/** userEvent without its per-action `setTimeout`, which costs a macrotask per keystroke. Call it once
+    per test, before stubbing `navigator.clipboard` (with `Object.defineProperty`): each `setup()`
+    installs its own clipboard over whatever is there. */
+export function setupUser() {
+  return userEvent.setup({ delay: null })
+}
+
+/** The direct API leaves `navigator.clipboard` alone, so these helpers can run beside a test's stub. */
+const NO_DELAY = { delay: null }
+
 /** Chooses in a `MenuSelect` the way a user does: open the box, click the row. What
     `userEvent.selectOptions` did for a native `<select>`. */
 export async function pickOption(box: HTMLElement, name: string | RegExp) {
-  await userEvent.click(box)
-  await userEvent.click(within(document.getElementById(box.getAttribute('aria-controls')!)!).getByRole('option', { name }))
+  await userEvent.click(box, NO_DELAY)
+  await userEvent.click(within(document.getElementById(box.getAttribute('aria-controls')!)!).getByRole('option', { name }), NO_DELAY)
 }
 
 /** The rows a `MenuSelect` offers, read by opening it and closed again. */
 export async function optionsOf(box: HTMLElement): Promise<string[]> {
-  await userEvent.click(box)
+  await userEvent.click(box, NO_DELAY)
   const rows = within(document.getElementById(box.getAttribute('aria-controls')!)!).getAllByRole('option')
     .map(row => row.textContent ?? '')
-  await userEvent.click(box)
+  await userEvent.click(box, NO_DELAY)
   return rows
 }
