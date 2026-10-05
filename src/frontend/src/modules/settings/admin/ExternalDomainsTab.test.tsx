@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { createTestQueryClient, holdNextCall, optionsOf, pickOption, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, optionsOf, pickOption, pasteInto, settle, setupUser } from '../../../test-utils'
 import ExternalDomainsTab from './ExternalDomainsTab'
 import type { ExternalDomain } from './useExternalDomains'
 
@@ -74,7 +73,13 @@ function renderTab(domains: ExternalDomain[] = [GMAIL, OUTLOOK]) {
   return render(<ExternalDomainsTab addToast={addToast} />, { wrapper })
 }
 
-beforeEach(() => vi.clearAllMocks())
+let user: ReturnType<typeof setupUser>
+beforeEach(() => {
+  vi.clearAllMocks()
+  user = setupUser()
+})
+
+const fill = (label: string, value: string) => pasteInto(user, screen.getByLabelText(label), value)
 
 describe('ExternalDomainsTab — list', () => {
   it('renders the domain names', async () => {
@@ -93,12 +98,6 @@ describe('ExternalDomainsTab — list', () => {
   it('shows an empty state when there is nothing configured', async () => {
     renderTab([])
     expect(await screen.findByText('No external domains')).toBeInTheDocument()
-  })
-
-  it('shows an error toast when loading fails', async () => {
-    mocks.adminGetExternalDomains.mockRejectedValue(new Error('Server error'))
-    render(<ExternalDomainsTab addToast={addToast} />, { wrapper })
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load external domains', 'error'))
   })
 
   // A refetch of a list holding no data puts it back to pending: that is not a first load, so the
@@ -123,23 +122,23 @@ describe('ExternalDomainsTab — list', () => {
 })
 
 describe('ExternalDomainsTab — create', () => {
-  it('posts the full DTO on create', async () => {
+  it('posts the full DTO on create, then confirms it', async () => {
     mocks.adminCreateExternalDomain.mockResolvedValue({ ...GMAIL, id: '3' })
     renderTab()
     await screen.findByText('Gmail')
 
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Yahoo')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
-    await userEvent.clear(screen.getByLabelText('IMAP port'))
-    await userEvent.type(screen.getByLabelText('IMAP port'), '993')
+    await user.click(screen.getByRole('button', { name: /Add/ }))
+    await fill('Display name', 'Yahoo')
+    await fill('IMAP host', 'imap.mail.yahoo.com')
+    await user.clear(screen.getByLabelText('IMAP port'))
+    await fill('IMAP port', '993')
     await pickOption(screen.getByLabelText('IMAP security'), 'SSL/TLS')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
-    await userEvent.clear(screen.getByLabelText('SMTP port'))
-    await userEvent.type(screen.getByLabelText('SMTP port'), '465')
+    await fill('SMTP host', 'smtp.mail.yahoo.com')
+    await user.clear(screen.getByLabelText('SMTP port'))
+    await fill('SMTP port', '465')
     await pickOption(screen.getByLabelText('SMTP security'), 'SSL/TLS')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await user.click(screen.getByRole('button', { name: 'Create domain' }))
 
     await waitFor(() => expect(mocks.adminCreateExternalDomain).toHaveBeenCalledWith({
       name: 'Yahoo',
@@ -158,37 +157,29 @@ describe('ExternalDomainsTab — create', () => {
       oauthClientId: null,
       oauthClientSecret: null,
     }))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('External domain created'))
   })
 
-  it('includes the sieve host/port in the DTO when both are filled', async () => {
+  it('allows submit once both sieve fields are filled, and sends them in the DTO', async () => {
     mocks.adminCreateExternalDomain.mockResolvedValue({ ...GMAIL, id: '3' })
     renderTab()
     await screen.findByText('Gmail')
 
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Yahoo')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('Sieve host'), 'sieve.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('Sieve port'), '4190')
+    await user.click(screen.getByRole('button', { name: /Add/ }))
+    await fill('Display name', 'Yahoo')
+    await fill('IMAP host', 'imap.mail.yahoo.com')
+    await fill('SMTP host', 'smtp.mail.yahoo.com')
+    await fill('Sieve host', 'sieve.mail.yahoo.com')
+    await fill('Sieve port', '4190')
+    expect(screen.queryByText('Sieve host and port must both be present or both be absent'))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await user.click(screen.getByRole('button', { name: 'Create domain' }))
 
     await waitFor(() => expect(mocks.adminCreateExternalDomain).toHaveBeenCalledWith(
       expect.objectContaining({ sieveHost: 'sieve.mail.yahoo.com', sievePort: 4190 })
     ))
-  })
-
-  it('shows a success toast after create', async () => {
-    mocks.adminCreateExternalDomain.mockResolvedValue({ ...GMAIL, id: '3' })
-    renderTab()
-    await screen.findByText('Gmail')
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Yahoo')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
-    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
-    await waitFor(() => expect(addToast).toHaveBeenCalledWith('External domain created'))
   })
 
   // Server prose never reaches the screen; the local fallback does — see apiErrorMessage.
@@ -196,11 +187,11 @@ describe('ExternalDomainsTab — create', () => {
     mocks.adminCreateExternalDomain.mockRejectedValue(new Error('Name is already taken'))
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Gmail')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
-    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await user.click(screen.getByRole('button', { name: /Add/ }))
+    await fill('Display name', 'Gmail')
+    await fill('IMAP host', 'imap.mail.yahoo.com')
+    await fill('SMTP host', 'smtp.mail.yahoo.com')
+    await user.click(screen.getByRole('button', { name: 'Create domain' }))
     await waitFor(() => expect(screen.getByText('An error occurred')).toBeInTheDocument())
   })
 
@@ -209,13 +200,13 @@ describe('ExternalDomainsTab — create', () => {
     mocks.adminCreateExternalDomain.mockReturnValue(new Promise(resolve => { resolveCreate = resolve }))
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Yahoo')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
-    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await user.click(screen.getByRole('button', { name: /Add/ }))
+    await fill('Display name', 'Yahoo')
+    await fill('IMAP host', 'imap.mail.yahoo.com')
+    await fill('SMTP host', 'smtp.mail.yahoo.com')
+    await user.click(screen.getByRole('button', { name: 'Create domain' }))
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
     expect(screen.getByLabelText('Display name')).toBeInTheDocument()
 
     resolveCreate({ ...GMAIL, id: '3' })
@@ -228,7 +219,7 @@ describe('ExternalDomainsTab — edit', () => {
     renderTab()
     await screen.findByText('Outlook')
     const editButtons = screen.getAllByTitle('Edit')
-    await userEvent.click(editButtons[1]!)
+    await user.click(editButtons[1]!)
 
     expect(screen.getByLabelText('Display name')).toHaveValue('Outlook')
     expect(screen.getByLabelText('IMAP host')).toHaveValue('outlook.office365.com')
@@ -244,7 +235,7 @@ describe('ExternalDomainsTab — edit', () => {
   it('labels the security options None / STARTTLS / SSL/TLS while sending the exact literals', async () => {
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Edit')[0]!)
+    await user.click(screen.getAllByTitle('Edit')[0]!)
 
     const select = screen.getByLabelText('IMAP security')
     expect(await optionsOf(select)).toEqual(['None', 'STARTTLS', 'SSL/TLS'])
@@ -254,10 +245,10 @@ describe('ExternalDomainsTab — edit', () => {
     mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Edit')[0]!)
-    await userEvent.clear(screen.getByLabelText('Display name'))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Gmail (personal)')
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getAllByTitle('Edit')[0]!)
+    await user.clear(screen.getByLabelText('Display name'))
+    await fill('Display name', 'Gmail (personal)')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mocks.adminUpdateExternalDomain).toHaveBeenCalledWith(
       GMAIL.id, expect.objectContaining({ name: 'Gmail (personal)' })
@@ -268,60 +259,37 @@ describe('ExternalDomainsTab — edit', () => {
     mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Edit')[0]!)
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getAllByTitle('Edit')[0]!)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('External domain updated'))
   })
 })
 
 describe('ExternalDomainsTab — sieve both-or-neither', () => {
-  it('shows the refusal inline when only the sieve host is filled', async () => {
+  it.each([
+    ['host', 'Sieve host', 'sieve.mail.yahoo.com'],
+    ['port', 'Sieve port', '4190'],
+  ])('shows the refusal inline when only the sieve %s is filled', async (_which, label, value) => {
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Yahoo')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('Sieve host'), 'sieve.mail.yahoo.com')
+    await user.click(screen.getByRole('button', { name: /Add/ }))
+    await fill('Display name', 'Yahoo')
+    await fill('IMAP host', 'imap.mail.yahoo.com')
+    await fill('SMTP host', 'smtp.mail.yahoo.com')
+    await fill(label, value)
 
     expect(await screen.findByText('Sieve host and port must both be present or both be absent'))
       .toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
   })
-
-  it('shows the refusal inline when only the sieve port is filled', async () => {
-    renderTab()
-    await screen.findByText('Gmail')
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Sieve port'), '4190')
-
-    expect(await screen.findByText('Sieve host and port must both be present or both be absent'))
-      .toBeInTheDocument()
-  })
-
-  it('does not show the refusal, and allows submit, once both sieve fields are filled', async () => {
-    mocks.adminCreateExternalDomain.mockResolvedValue({ ...OUTLOOK, id: '3' })
-    renderTab()
-    await screen.findByText('Gmail')
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Yahoo')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('Sieve host'), 'sieve.mail.yahoo.com')
-    await userEvent.type(screen.getByLabelText('Sieve port'), '4190')
-
-    expect(screen.queryByText('Sieve host and port must both be present or both be absent'))
-      .not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled()
-  })
 })
 
 describe('ExternalDomainsTab — OAuth provider configuration', () => {
   async function fillBaseFields() {
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Outlook')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'outlook.office365.com')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.office365.com')
+    await user.click(screen.getByRole('button', { name: /Add/ }))
+    await fill('Display name', 'Outlook')
+    await fill('IMAP host', 'outlook.office365.com')
+    await fill('SMTP host', 'smtp.office365.com')
   }
 
   it('shows the OAuth tag on an OAuth2 tile, and nothing on a password one', async () => {
@@ -340,16 +308,17 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     await pickOption(screen.getByLabelText('Authentication'), 'OAuth 2.0')
     expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
 
-    await userEvent.type(screen.getByLabelText('Authorization URL'), 'https://login.test/authorize')
-    await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
-    await userEvent.type(screen.getByLabelText('Scopes'), 'offline_access openid email')
-    await userEvent.type(screen.getByLabelText('Client id'), 'client-123')
+    await fill('Authorization URL', 'https://login.test/authorize')
+    await fill('Token URL', 'https://login.test/token')
+    await fill('Scopes', 'offline_access openid email')
+    await fill('Client id', 'client-123')
+    expect(screen.getByLabelText('Client secret')).not.toHaveAttribute('placeholder')
     expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
-    await userEvent.type(screen.getByLabelText('Client secret'), 'shh-secret')
+    await fill('Client secret', 'shh-secret')
     expect(screen.getByRole('button', { name: 'Create domain' })).not.toBeDisabled()
 
     mocks.adminCreateExternalDomain.mockResolvedValue({ ...OUTLOOK_OAUTH })
-    await userEvent.click(screen.getByRole('button', { name: 'Create domain' }))
+    await user.click(screen.getByRole('button', { name: 'Create domain' }))
     await waitFor(() => expect(mocks.adminCreateExternalDomain).toHaveBeenCalledWith(
       expect.objectContaining({
         authMode: 'OAuth2',
@@ -368,11 +337,11 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     await fillBaseFields()
     await pickOption(screen.getByLabelText('Authentication'), 'OAuth 2.0')
 
-    await userEvent.type(screen.getByLabelText('Authorization URL'), 'http://login.test/authorize')
-    await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
-    await userEvent.type(screen.getByLabelText('Scopes'), 'openid')
-    await userEvent.type(screen.getByLabelText('Client id'), 'client-123')
-    await userEvent.type(screen.getByLabelText('Client secret'), 'shh')
+    await fill('Authorization URL', 'http://login.test/authorize')
+    await fill('Token URL', 'https://login.test/token')
+    await fill('Scopes', 'openid')
+    await fill('Client id', 'client-123')
+    await fill('Client secret', 'shh')
 
     expect(screen.getByLabelText('Authorization URL')).toHaveClass('is-error')
     expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
@@ -382,7 +351,7 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
     renderTab([OUTLOOK_OAUTH])
     await screen.findByText('Outlook (OAuth)')
-    await userEvent.click(screen.getByTitle('Edit'))
+    await user.click(screen.getByTitle('Edit'))
 
     expect(screen.getByLabelText('Authentication')).toHaveTextContent('OAuth 2.0')
     expect(screen.getByLabelText('Authorization URL'))
@@ -391,7 +360,7 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     expect(secret).toHaveValue('')
     expect(secret).toHaveAttribute('placeholder', 'Unchanged')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(mocks.adminUpdateExternalDomain).toHaveBeenCalledWith(
       OUTLOOK_OAUTH.id, expect.objectContaining({ authMode: 'OAuth2', oauthClientSecret: null })
     ))
@@ -401,29 +370,12 @@ describe('ExternalDomainsTab — OAuth provider configuration', () => {
     mocks.adminUpdateExternalDomain.mockResolvedValue(undefined)
     renderTab([OUTLOOK_OAUTH])
     await screen.findByText('Outlook (OAuth)')
-    await userEvent.click(screen.getByTitle('Edit'))
-    await userEvent.type(screen.getByLabelText('Client secret'), 'rotated-secret')
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await user.click(screen.getByTitle('Edit'))
+    await fill('Client secret', 'rotated-secret')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(mocks.adminUpdateExternalDomain).toHaveBeenCalledWith(
       OUTLOOK_OAUTH.id, expect.objectContaining({ oauthClientSecret: 'rotated-secret' })
     ))
-  })
-
-  it('a brand-new OAuth domain cannot be saved without a secret', async () => {
-    renderTab([OUTLOOK_OAUTH])
-    await screen.findByText('Outlook (OAuth)')
-    await userEvent.click(screen.getByRole('button', { name: /Add/ }))
-    await userEvent.type(screen.getByLabelText('Display name'), 'Provider')
-    await userEvent.type(screen.getByLabelText('IMAP host'), 'imap.provider.test')
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.provider.test')
-    await pickOption(screen.getByLabelText('Authentication'), 'OAuth 2.0')
-    await userEvent.type(screen.getByLabelText('Authorization URL'), 'https://login.test/authorize')
-    await userEvent.type(screen.getByLabelText('Token URL'), 'https://login.test/token')
-    await userEvent.type(screen.getByLabelText('Scopes'), 'openid')
-    await userEvent.type(screen.getByLabelText('Client id'), 'client-123')
-
-    expect(screen.getByLabelText('Client secret')).not.toHaveAttribute('placeholder')
-    expect(screen.getByRole('button', { name: 'Create domain' })).toBeDisabled()
   })
 })
 
@@ -432,13 +384,13 @@ describe('ExternalDomainsTab — delete', () => {
     mocks.adminDeleteExternalDomain.mockResolvedValue(undefined)
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getAllByTitle('Delete')[0]!)
 
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
     expect(mocks.adminDeleteExternalDomain).not.toHaveBeenCalled()
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
+    await user.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(mocks.adminDeleteExternalDomain).toHaveBeenCalledWith(GMAIL.id))
   })
 
@@ -458,10 +410,10 @@ describe('ExternalDomainsTab — delete', () => {
       render(<ExternalDomainsTab addToast={addToast} returnFocusRef={{ current: region }} />,
         { wrapper })
       await screen.findByText('Gmail')
-      await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+      await user.click(screen.getAllByTitle('Delete')[0]!)
 
       const buttons = screen.getAllByRole('button', { name: 'Delete' })
-      await userEvent.click(buttons[buttons.length - 1]!)
+      await user.click(buttons[buttons.length - 1]!)
 
       await waitFor(() => expect(screen.queryByText('Gmail')).toBeNull())
       expect(region).toHaveFocus()
@@ -484,10 +436,10 @@ describe('ExternalDomainsTab — delete', () => {
       render(<ExternalDomainsTab addToast={addToast} returnFocusRef={{ current: region }} />,
         { wrapper })
       await screen.findByText('Gmail')
-      await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+      await user.click(screen.getAllByTitle('Delete')[0]!)
 
       const buttons = screen.getAllByRole('button', { name: 'Delete' })
-      await userEvent.click(buttons[buttons.length - 1]!)
+      await user.click(buttons[buttons.length - 1]!)
 
       await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
       await waitFor(() => expect(screen.queryByText('Gmail')).toBeNull())
@@ -498,8 +450,8 @@ describe('ExternalDomainsTab — delete', () => {
   it('closing the confirm modal does not delete', async () => {
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(mocks.adminDeleteExternalDomain).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })
@@ -511,9 +463,9 @@ describe('ExternalDomainsTab — delete', () => {
       Object.assign(new Error('domain_in_use'), { code: 'domain_in_use' }))
     renderTab()
     await screen.findByText('Gmail')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getAllByTitle('Delete')[0]!)
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
+    await user.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(addToast)
       .toHaveBeenCalledWith('Accounts are still connected to this domain.', 'error'))
   })

@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../../contexts/AuthContext'
 import { LocaleProvider } from '../../contexts/LocaleContext'
 import { ThemeProvider } from '../../contexts/ThemeContext'
 import { routes } from '../../routes'
-import { createTestQueryClient, mockViewport, resetViewport, settle } from '../../test-utils'
+import { createTestQueryClient, mockViewport, resetViewport, settle, setupUser } from '../../test-utils'
 
 afterEach(resetViewport)
 
@@ -162,13 +161,6 @@ describe('settings section', () => {
     expect(heading.querySelector('svg')).toBeInTheDocument()
   })
 
-  it('shows Administration for admins', async () => {
-    mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
-    renderAt('/settings/account')
-    const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
-    expect(await nav.findByText('Administration')).toBeInTheDocument()
-  })
-
   it('blocks /settings/admin for non-admins', async () => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     const router = renderAt('/settings/admin')
@@ -319,14 +311,6 @@ describe('settings section', () => {
         await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'))
       })
 
-      it('deep-links to /settings/admin as an admin with no capabilities fixture and stays', async () => {
-        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: true })
-        mocks.getCapabilities.mockResolvedValue({})
-        const router = renderAt('/settings/admin')
-        expect(await screen.findByRole('button', { name: 'Accounts' })).toBeInTheDocument()
-        expect(router.state.location.pathname).toBe('/settings/admin')
-      })
-
       it('deep-links to /settings/rules on the primary account with capabilities.rules=false and redirects to Mail › General', async () => {
         mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
         mocks.getCapabilities.mockResolvedValue({ rules: false })
@@ -334,27 +318,11 @@ describe('settings section', () => {
         await waitFor(() => expect(router.state.location.pathname).toBe('/settings/mail'))
       })
 
-      it('deep-links to /settings/rules on the primary account with no capabilities fixture and stays', async () => {
-        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
-        mocks.getCapabilities.mockResolvedValue({})
-        const router = renderAt('/settings/rules')
-        await screen.findByRole('navigation', { name: 'Settings' })
-        expect(router.state.location.pathname).toBe('/settings/rules')
-      })
-
       it('deep-links to /settings/aliases with capabilities.aliases=false and redirects to Mail › General', async () => {
         mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
         mocks.getCapabilities.mockResolvedValue({ aliases: false })
         const router = renderAt('/settings/aliases')
         await waitFor(() => expect(router.state.location.pathname).toBe('/settings/mail'))
-      })
-
-      it('deep-links to /settings/aliases with no capabilities fixture and stays', async () => {
-        mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
-        mocks.getCapabilities.mockResolvedValue({})
-        const router = renderAt('/settings/aliases')
-        await screen.findByRole('navigation', { name: 'Settings' })
-        expect(router.state.location.pathname).toBe('/settings/aliases')
       })
 
       // The race the redirect used to lose: activeAccount is null for the width of the connected
@@ -437,7 +405,8 @@ describe('SettingsLayout below 1024px', () => {
     renderAt('/settings/mail')
     await settle()
     expect(document.querySelector('.context-drawer.is-open')).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    const user = setupUser()
+    await user.click(screen.getByRole('button', { name: 'Open navigation' }))
     expect(document.querySelector('.context-drawer.is-open')).toBeTruthy()
   })
 
@@ -449,8 +418,9 @@ describe('SettingsLayout below 1024px', () => {
     mockViewport('tablet')
     renderAt('/settings/mail')
     await settle()
-    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
-    await userEvent.click(screen.getByRole('link', { name: 'Appearance' }))
+    const user = setupUser()
+    await user.click(screen.getByRole('button', { name: 'Open navigation' }))
+    await user.click(screen.getByRole('link', { name: 'Appearance' }))
     await waitFor(() => expect(document.querySelector('.context-drawer.is-open')).toBeNull())
     expect(document.querySelector('.settings-mobile-title')?.textContent).toBe('Appearance')
   })

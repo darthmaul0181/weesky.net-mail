@@ -13,9 +13,7 @@ const mocks = vi.hoisted(() => ({
   requestDesktopPermission: vi.fn(),
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 vi.mock('../../../modules/mail/notify/channels', () => ({
   playNewMailSound: mocks.playNewMailSound,
   desktopPermission: mocks.desktopPermission,
@@ -88,55 +86,45 @@ describe('MailGeneralPage', () => {
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.pageSize', '50'))
   })
 
-  it('shows the preview toggle on when it is on', async () => {
-    renderPage()
+  const SPAM = 'Show the spam score in the message reader'
 
-    expect(await screen.findByLabelText('Preview in the message list')).toBeChecked()
+  // Each switch reads its stored value, falling back to its own default: the folder column has
+  // never carried icons, so folder icons are off unless the account asked for them.
+  it.each([
+    ['Preview in the message list', 'on when it is on', {}, true],
+    ['Preview in the message list', 'off when it is off', { 'mail.showPreview': 'false' }, false],
+    ['Group conversations', 'off by default', {}, false],
+    ['Folder icons', 'off when nothing is stored', {}, false],
+    ['Folder icons', 'on when it is stored', { 'mail.showFolderIcons': 'true' }, true],
+    [SPAM, 'on by default', {}, true],
+    [SPAM, 'off when stored off', { 'mail.showSpamScore': 'false' }, false],
+  ])('shows the %s switch %s', async (label, _state, stored, checked) => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', ...stored })
+
+    const toggle = await screen.findByLabelText<HTMLInputElement>(label)
+    expect(toggle.checked).toBe(checked)
   })
 
-  it('shows it off when it is off', async () => {
-    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'false' })
+  it.each([
+    ['Preview in the message list', {}, 'mail.showPreview', 'false'],
+    ['Group conversations', {}, 'mail.groupConversations', 'true'],
+    ['Folder icons', {}, 'mail.showFolderIcons', 'true'],
+    ['Save new recipients to my contacts', { 'contacts.captureRecipients': 'true' }, 'contacts.captureRecipients', 'false'],
+    ['Always show images from my contacts', { 'mail.trustContacts': 'false' }, 'mail.trustContacts', 'true'],
+    [SPAM, { 'mail.showSpamScore': 'true' }, 'mail.showSpamScore', 'false'],
+  ])('saves the %s switch as a string the backend accepts', async (label, stored, key, value) => {
+    renderPage({ 'mail.pageSize': '30', 'mail.showPreview': 'true', ...stored })
 
-    expect(await screen.findByLabelText('Preview in the message list')).not.toBeChecked()
-  })
+    fireEvent.click(await screen.findByLabelText(label))
 
-  it('saves the toggle as a string the backend accepts', async () => {
-    renderPage()
-
-    fireEvent.click(await screen.findByLabelText('Preview in the message list'))
-
-    await waitFor(() =>
-      expect(mocks.setPreference).toHaveBeenCalledWith('mail.showPreview', 'false'))
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith(key, value))
   })
 
   // A boolean shown as a switch, like every other boolean in the app.
   it('uses the house toggle switch', async () => {
-    const { container } = renderPage()
-    await screen.findByLabelText('Preview in the message list')
-
-    expect(container.querySelector('.toggle-switch')).toBeTruthy()
-  })
-
-  it('shows the group-conversations toggle off by default', async () => {
     renderPage()
 
-    expect(await screen.findByLabelText('Group conversations')).not.toBeChecked()
-  })
-
-  it('saves the group-conversations toggle as a string the backend accepts', async () => {
-    renderPage()
-
-    fireEvent.click(await screen.findByLabelText('Group conversations'))
-
-    await waitFor(() =>
-      expect(mocks.setPreference).toHaveBeenCalledWith('mail.groupConversations', 'true'))
-  })
-
-  // Off unless the account asked for it — the folder column has never carried icons.
-  it('shows the folder-icon toggle off when nothing is stored', async () => {
-    renderPage()
-
-    expect(await screen.findByLabelText('Folder icons')).not.toBeChecked()
+    expect((await screen.findByLabelText('Preview in the message list')).closest('.toggle-switch')).not.toBeNull()
   })
 
   it('puts the group-conversations row straight under the preview row', async () => {
@@ -153,26 +141,6 @@ describe('MailGeneralPage', () => {
 
     expect(group?.nextElementSibling)
       .toBe(screen.getByLabelText('Folder icons').closest('.field-h'))
-  })
-
-  it('shows the folder-icon toggle on when it is stored', async () => {
-    renderPage({ 'mail.pageSize': '30', 'mail.showFolderIcons': 'true' })
-
-    expect(await screen.findByLabelText('Folder icons')).toBeChecked()
-  })
-
-  it('saves the folder-icon toggle as a string the backend accepts', async () => {
-    renderPage()
-
-    fireEvent.click(await screen.findByLabelText('Folder icons'))
-
-    await waitFor(() =>
-      expect(mocks.setPreference).toHaveBeenCalledWith('mail.showFolderIcons', 'true'))
-  })
-
-  it('shows the images toggle off by default and on when it is stored', async () => {
-    renderPage()
-    expect(await screen.findByLabelText('Always show remote images')).not.toBeChecked()
   })
 
   it('saves the images toggle and warns about what it costs', async () => {
@@ -224,49 +192,12 @@ describe('MailGeneralPage', () => {
     expect(await screen.findByLabelText('Always show images from my contacts')).toBeEnabled()
   })
 
-  it('saves the capture preference', async () => {
-    renderPage({ 'contacts.captureRecipients': 'true' })
-
-    fireEvent.click(await screen.findByLabelText('Save new recipients to my contacts'))
-
-    await waitFor(() => expect(mocks.setPreference)
-      .toHaveBeenCalledWith('contacts.captureRecipients', 'false'))
-  })
-
-  it('saves the contact-images preference', async () => {
-    renderPage({ 'mail.trustContacts': 'false' })
-
-    fireEvent.click(await screen.findByLabelText('Always show images from my contacts'))
-
-    await waitFor(() => expect(mocks.setPreference)
-      .toHaveBeenCalledWith('mail.trustContacts', 'true'))
-  })
-
   // It shipped disabled under "Available once Contacts ships". Contacts has shipped.
   it('no longer says the contacts setting is unavailable', async () => {
     renderPage({})
 
     expect(await screen.findByLabelText('Always show images from my contacts')).toBeEnabled()
     expect(screen.queryByText('Available once Contacts ships.')).toBeNull()
-  })
-
-  it('shows the spam score toggle on by default', async () => {
-    renderPage()
-    expect(await screen.findByLabelText('Show the spam score in the message reader')).toBeChecked()
-  })
-
-  it('shows the spam score toggle off when stored off', async () => {
-    renderPage({ 'mail.pageSize': '30', 'mail.showSpamScore': 'false' })
-    expect(await screen.findByLabelText('Show the spam score in the message reader')).not.toBeChecked()
-  })
-
-  it('saves the spam score toggle', async () => {
-    renderPage({ 'mail.pageSize': '30', 'mail.showSpamScore': 'true' })
-
-    fireEvent.click(await screen.findByLabelText('Show the spam score in the message reader'))
-
-    await waitFor(() =>
-      expect(mocks.setPreference).toHaveBeenCalledWith('mail.showSpamScore', 'false'))
   })
 
   // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
@@ -448,7 +379,7 @@ describe('MailGeneralPage notifications', () => {
     expect(mocks.playNewMailSound).not.toHaveBeenCalled()
   })
 
-  it('asks the browser when the desktop toggle is switched on', async () => {
+  it('saves the desktop toggle on once the browser grants it', async () => {
     mocks.requestDesktopPermission.mockResolvedValue('granted')
     renderPage()
 

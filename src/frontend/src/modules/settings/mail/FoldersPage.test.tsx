@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import FoldersPage from './FoldersPage'
 import type { MailFolderNode } from '../../mail/api/mailTypes'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, setupUser } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -19,9 +18,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = createTestQueryClient()
@@ -54,6 +51,9 @@ function renderPage() {
   return render(<FoldersPage />, { wrapper })
 }
 
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
+
 describe('FoldersPage', () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -73,18 +73,8 @@ describe('FoldersPage', () => {
     expect(screen.getByLabelText('Show INBOX')).toBeInTheDocument()
   })
 
-  // These act across the whole set, so they sit above the list, not on a row.
-  it('offers both whole-set actions', async () => {
-    renderPage()
-    await screen.findByLabelText('Show Projects')
-
-    expect(screen.getByRole('button', { name: 'New folder' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'System folders' })).toBeInTheDocument()
-  })
-
-  // Creating is the page's primary action and wears the filled button; the other stays ghost —
-  // a bare `.btn` has no border or background and reads as text. jsdom applies no stylesheet,
-  // so the variant class is all this can hold on to.
+  // The two whole-set actions sit above the list; creating wears the filled button, the other
+  // stays ghost. jsdom applies no stylesheet, so the class is all this can hold on to.
   it.each([
     ['New folder', 'btn-primary'],
     ['System folders', 'btn-ghost'],
@@ -104,21 +94,12 @@ describe('FoldersPage', () => {
     expect(screen.getByRole('button', { name: 'Create folder' })).toBeInTheDocument()
   })
 
-  it('opens the system-folders dialog', async () => {
+  it('opens the system-folders dialog and closes it again', async () => {
     renderPage()
     await screen.findByLabelText('Show Projects')
-
     fireEvent.click(screen.getByRole('button', { name: 'System folders' }))
-
     // The role selects are what distinguishes it from the create dialog.
     expect(await screen.findByLabelText('Trash')).toBeInTheDocument()
-  })
-
-  it('closes the system-folders dialog again', async () => {
-    renderPage()
-    await screen.findByLabelText('Show Projects')
-    fireEvent.click(screen.getByRole('button', { name: 'System folders' }))
-    await screen.findByLabelText('Trash')
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
@@ -137,9 +118,9 @@ describe('FoldersPage', () => {
     })
     const { container } = render(<FoldersPage />, { wrapper })
     await screen.findByLabelText('Show Projects')
-    await userEvent.click(screen.getByRole('button', { name: 'Delete Projects' }))
+    await user.click(screen.getByRole('button', { name: 'Delete Projects' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByLabelText('Show Projects')).toBeNull())
     expect(container.querySelector('.folder-list')).toHaveFocus()
@@ -158,9 +139,9 @@ describe('FoldersPage', () => {
     })
     const { container } = render(<FoldersPage />, { wrapper })
     await screen.findByLabelText('Show Projects')
-    await userEvent.click(screen.getByRole('button', { name: 'Delete Projects' }))
+    await user.click(screen.getByRole('button', { name: 'Delete Projects' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
     await waitFor(() => expect(screen.queryByLabelText('Show Projects')).toBeNull())

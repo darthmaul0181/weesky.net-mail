@@ -163,6 +163,12 @@ export function setupUser() {
   return userEvent.setup({ delay: null })
 }
 
+/** Puts a fixture value in a field in one input event, where the keystrokes are not what is tested. */
+export async function pasteInto(user: ReturnType<typeof setupUser>, field: HTMLElement, value: string) {
+  await user.click(field)
+  await user.paste(value)
+}
+
 /** The direct API leaves `navigator.clipboard` alone, so these helpers can run beside a test's stub. */
 const NO_DELAY = { delay: null }
 

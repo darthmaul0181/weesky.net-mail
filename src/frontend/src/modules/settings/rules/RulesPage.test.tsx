@@ -1,22 +1,17 @@
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Profiler } from 'react'
-import type { ComponentProps, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
   QueryClientProvider, defaultScheduler, focusManager, notifyManager, onlineManager,
   type QueryClient,
 } from '@tanstack/react-query'
 import { api } from '../../../api.js'
-import { createTestQueryClient, holdNextCall, optionsOf, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, settle, setupUser } from '../../../test-utils'
 import RulesPage from './RulesPage'
 import { RequestTimeoutError } from '../../../lib/withTimeout'
-import { RuleEditorModal } from './RuleEditorModal'
-import { ConvertConfirmModal } from './ConvertConfirmModal'
-import { RuleCard } from './RuleCard'
-import { isConditionValid, isActionValid } from './ruleDraft'
-import type { MailFolderNode } from '../../mail/api/mailTypes'
-import type { SieveCondition, SieveRule, SieveRuleSet, SieveRuleWrite } from './rulesTypes'
+import { checkboxIn, fileIntoRule, found, ruleSet, wizardNameInput } from './rulesTestFixtures'
+import type { SieveRuleSet } from './rulesTypes'
 
 vi.mock('../../../api.js', () => ({
   api: {
@@ -34,36 +29,6 @@ const auth = vi.hoisted(() => ({ activeAccountId: 'primary' }))
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({ activeAccountId: auth.activeAccountId }),
 }))
-
-function fileIntoRule(id: string, name: string): SieveRule {
-  return {
-    id,
-    name,
-    enabled: true,
-    matchAll: false,
-    stopAfter: false,
-    conditions: [{ field: 'Subject', operator: 'Contains', value: 'x' }],
-    actions: [{ type: 'FileInto', argument: 'X', autoCreate: false }],
-  }
-}
-
-function ruleSet(providerId: string, rules: SieveRule[]): SieveRuleSet {
-  return { kind: 'Structured', providerId, rules, rawScript: '' }
-}
-
-/** A lookup the test depends on: a miss fails here, by name, rather than as a TypeError later. */
-function found<T>(value: T | null | undefined, what: string): T {
-  if (value === null || value === undefined) throw new Error(`${what} not found`)
-  return value
-}
-
-function wizardNameInput(): HTMLInputElement {
-  return found(document.querySelector<HTMLInputElement>('.rule-wizard-input'), 'name input')
-}
-
-function checkboxIn(element: Element): HTMLInputElement {
-  return found(element.querySelector<HTMLInputElement>('input[type="checkbox"]'), 'checkbox')
-}
 
 let queryClient: QueryClient
 /** Called on every commit of the page, so a test can read the DOM of each committed frame. */
@@ -88,8 +53,10 @@ function renderPage() {
   return render(<RulesPage />, { wrapper: WithClient })
 }
 
+let user: ReturnType<typeof setupUser>
 beforeEach(() => {
   vi.clearAllMocks()
+  user = setupUser()
   queryClient = createTestQueryClient()
   onCommit = null
   auth.activeAccountId = 'primary'
@@ -101,22 +68,15 @@ beforeEach(() => {
 // ── Slider state derived from provider ────────────────────────
 
 describe('Extended rules slider', () => {
-  it('is OFF when the active provider is rainloop', async () => {
-    vi.mocked(api.getRules).mockResolvedValue(ruleSet('rainloop', [fileIntoRule('a', 'r1')]))
+  it.each([
+    ['OFF', 'rainloop', false],
+    ['ON', 'weesky', true],
+  ])('is %s when the active provider is %s', async (_state, provider, checked) => {
+    vi.mocked(api.getRules).mockResolvedValue(ruleSet(provider, [fileIntoRule('a', 'r1')]))
     renderPage()
 
     const toggle = await screen.findByTitle('Extended rules')
-    const checkbox = checkboxIn(toggle)
-    expect(checkbox.checked).toBe(false)
-  })
-
-  it('is ON when the active provider is weesky', async () => {
-    vi.mocked(api.getRules).mockResolvedValue(ruleSet('weesky', [fileIntoRule('a', 'r1')]))
-    renderPage()
-
-    const toggle = await screen.findByTitle('Extended rules')
-    const checkbox = checkboxIn(toggle)
-    expect(checkbox.checked).toBe(true)
+    expect(checkboxIn(toggle).checked).toBe(checked)
   })
 
   it('turning ON switches to weesky without a compatibility check', async () => {
@@ -186,847 +146,6 @@ describe('Extended rules slider', () => {
   })
 })
 
-// ── Editor folder picker ───────────────────────────
-
-describe('RuleEditorModal folder picker', () => {
-  const tree: MailFolderNode[] = [
-    { path: 'Archive', name: 'Archive', selectable: true, subscribed: true, uidValidity: 1, children: [
-      { path: 'Archive/2026', name: '2026', selectable: true, subscribed: true, uidValidity: 1, children: [] },
-    ] },
-    { path: 'Containers', name: 'Containers', selectable: false, subscribed: true, uidValidity: 1, children: [] },
-  ]
-
-  // The rule is written to the active mailbox's script: a picker listing another mailbox's
-  // folders files mail into a folder that may not exist there, and nothing errors.
-  it('offers the active account folders, containers excluded', async () => {
-    auth.activeAccountId = 'linked-1'
-    vi.mocked(api.getMailFolders).mockResolvedValue(tree)
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
-
-    await waitFor(() => expect(api.getMailFolders).toHaveBeenCalledWith({ accountId: 'linked-1' }))
-    await waitFor(() => expect(document.querySelector('#rule-editor-folders')).toBeInTheDocument())
-    const offered = [...document.querySelectorAll<HTMLOptionElement>('#rule-editor-folders option')].map(o => o.value)
-    expect(offered).toEqual(['Archive', 'Archive/2026'])
-  })
-})
-
-describe('RuleEditorModal help button', () => {
-  // A tab stop called "?" is read as "question mark, button": it carries the same name the shared
-  // HelpTooltip's own trigger was given.
-  it('names itself Help rather than ?', () => {
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
-
-    expect(screen.getByRole('button', { name: 'Help' })).toHaveTextContent('?')
-  })
-})
-
-describe('RuleEditorModal validation error', () => {
-  // The submit button gates on the same three checks, so it is disabled rather than clickable
-  // with an empty name; the form is submitted directly to reach handleSubmit's own guard.
-  it('announces the validation error assertively', () => {
-    const { container } = render(
-      <RuleEditorModal rule={fileIntoRule('a', '')} onSave={() => {}} onClose={() => {}} />)
-
-    fireEvent.submit(found(container.querySelector('form'), 'form'))
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Name is required')
-  })
-
-  // PlusIcon is the same ad hoc-svg-in-this-file shape as RuleCard's icons.
-  it('hides its PlusIcon from assistive tech', () => {
-    const { container } = render(
-      <RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={() => {}} />)
-    const svgs = container.querySelectorAll('svg')
-
-    expect(svgs.length).toBeGreaterThan(0)
-    svgs.forEach(svg => {
-      expect(svg).toHaveAttribute('aria-hidden', 'true')
-      expect(svg).toHaveAttribute('focusable', 'false')
-    })
-  })
-})
-
-describe('RuleEditorModal close buttons', () => {
-  it('names the editor ✕ and the help ✕, each closing its own dialog', async () => {
-    const onClose = vi.fn()
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} onSave={() => {}} onClose={onClose} />)
-    await userEvent.click(screen.getByTitle('Help'))
-    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2)
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]!)
-    expect(screen.queryByText('Rule editor — help')).not.toBeInTheDocument()
-    expect(onClose).not.toHaveBeenCalled()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onClose).toHaveBeenCalled()
-  })
-})
-
-// ── Editor gating ─────────────────────────────────────────────
-
-describe('RuleEditorModal action gating', () => {
-  it('hides the add-action button when not extended and one action exists', () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={false}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const addButtons = screen.getAllByRole('button', { name: /Add/ })
-    // Only the "Add" for conditions remains; the actions one is hidden.
-    expect(addButtons).toHaveLength(1)
-  })
-
-  it('shows the add-action button when extended', () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const addButtons = screen.getAllByRole('button', { name: /Add/ })
-    expect(addButtons).toHaveLength(2)
-  })
-})
-
-// ── Extended action types (Keep) ──────────────────────────────
-
-describe('ActionRow extended types', () => {
-  it('shows Keep in inbox option in extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const actionSelect = screen.getByRole('combobox', { name: 'Action' })
-    expect(await optionsOf(actionSelect)).toContain('Keep in inbox')
-  })
-
-  it('hides Keep in inbox option in non-extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={false}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const actionSelect = screen.getByRole('combobox', { name: 'Action' })
-    expect(await optionsOf(actionSelect)).not.toContain('Keep in inbox')
-  })
-})
-
-// ── Mark as flagged checkbox ───────────────────────────────────
-
-describe('Mark as flagged', () => {
-  it('shows mark-as-flagged checkbox in extended mode', () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    expect(screen.getByText('Mark as flagged ⭐')).toBeInTheDocument()
-  })
-
-  it('hides mark-as-flagged checkbox in non-extended mode', () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={false}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    expect(screen.queryByText('Mark as flagged ⭐')).not.toBeInTheDocument()
-  })
-
-  it('initialises markAsFlagged=true when rule has \\Flagged action', () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      actions: [
-        { type: 'SetFlag', argument: '\\Flagged' },
-        { type: 'FileInto', argument: 'X' },
-      ],
-    }
-    render(
-      <RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-
-    const checkbox = found(screen.getByText('Mark as flagged ⭐').previousElementSibling?.querySelector('input')
-      ?? document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1], 'checkbox')
-    expect(checkbox.checked).toBe(true)
-  })
-
-  it('includes \\Flagged action on save when markAsFlagged is checked', async () => {
-    const onSave = vi.fn()
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={onSave}
-        onClose={() => {}}
-      />)
-
-    const flaggedLabel = screen.getByText('Mark as flagged ⭐')
-    const toggle = found(found(flaggedLabel.closest('.rule-wizard-toggle-row'), 'toggle row').querySelector('input'), 'input')
-    await userEvent.click(toggle)
-
-    await userEvent.click(screen.getByText('Save changes'))
-
-    const actions: unknown = expect.arrayContaining([
-      expect.objectContaining({ type: 'SetFlag', argument: '\\Flagged' }),
-      expect.objectContaining({ type: 'FileInto', argument: 'X' }),
-    ])
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ actions })
-    )
-  })
-})
-
-// ── Body condition (extended only) ────────────────────────────
-
-describe('ConditionRow body field', () => {
-  it('shows Body option in extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    expect(await optionsOf(condFieldSelect)).toContain('Body')
-  })
-
-  it('hides Body option in non-extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={false}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    expect(await optionsOf(condFieldSelect)).not.toContain('Body')
-  })
-
-  it('limits operators to Contains, NotContains and Regex when Body is selected', async () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      conditions: [{ field: 'Body', operator: 'Contains', value: 'casino' }],
-    }
-    render(
-      <RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-
-    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
-    expect(await optionsOf(opSelect)).toEqual(['contains', 'not contains', 'matches (regex)'])
-  })
-})
-
-// ── Envelope / subaddress fields (extended only) ──────────────
-
-describe('ConditionRow envelope and subaddress fields', () => {
-  it('shows EnvelopeFrom, EnvelopeTo, RecipientDetail in extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    const values = await optionsOf(condFieldSelect)
-    expect(values).toContain('Envelope from')
-    expect(values).toContain('Envelope to')
-    expect(values).toContain('Recipient +detail')
-  })
-
-  it('hides envelope/subaddress fields in non-extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={false}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    const values = await optionsOf(condFieldSelect)
-    expect(values).not.toContain('Envelope from')
-    expect(values).not.toContain('Envelope to')
-    expect(values).not.toContain('Recipient +detail')
-  })
-})
-
-// ── Regex operator (extended only) ────────────────────────────
-
-describe('Regex operator', () => {
-  it('shows regex option in extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
-    expect(await optionsOf(opSelect)).toContain('matches (regex)')
-  })
-
-  it('shows regex option in non-extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={false}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
-    expect(await optionsOf(opSelect)).toContain('matches (regex)')
-  })
-})
-
-// ── Duplicate condition (extended only) ───────────────────────
-
-describe('Duplicate condition', () => {
-  it('shows Duplicate field in extended mode', async () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    const condFieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    expect(await optionsOf(condFieldSelect)).toContain('Duplicate message')
-  })
-
-  it('hides operator select when Duplicate field is active', () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      conditions: [{ field: 'Duplicate', operator: 'Contains', value: '' }],
-    }
-    render(
-      <RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-
-    expect(screen.queryByRole('combobox', { name: 'Operator' })).not.toBeInTheDocument()
-  })
-})
-
-// ── :create (mailbox) ─────────────────────────────────────────
-
-describe('FileInto :create checkbox', () => {
-  it('shows Create checkbox for FileInto in extended mode', () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    expect(screen.getByText('Create')).toBeInTheDocument()
-  })
-
-  it('hides Create checkbox in non-extended mode', () => {
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={false}
-        onSave={() => {}}
-        onClose={() => {}}
-      />)
-
-    expect(screen.queryByText('Create')).not.toBeInTheDocument()
-  })
-
-  it('includes autoCreate on save when checkbox is checked', async () => {
-    const onSave = vi.fn()
-    render(
-      <RuleEditorModal
-        rule={fileIntoRule('a', 'r1')}
-        extended={true}
-        onSave={onSave}
-        onClose={() => {}}
-      />)
-
-    // clicking the label toggles the checkbox inside it
-    await userEvent.click(found(screen.getByText('Create').firstElementChild, 'checkbox'))
-    await userEvent.click(screen.getByText('Save changes'))
-
-    const actions: unknown = expect.arrayContaining([
-      expect.objectContaining({ type: 'FileInto', autoCreate: true }),
-    ])
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ actions })
-    )
-  })
-})
-
-// ── Date conditions ───────────────────────────────────────────
-
-describe('Date condition fields', () => {
-  function condFieldSelect() {
-    return screen.getByRole('combobox', { name: 'Field' })
-  }
-  it('CurrentDate and MessageDate appear in extended mode', async () => {
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const opts = await optionsOf(condFieldSelect())
-    expect(opts).toContain('Current date')
-    expect(opts).toContain('Message date')
-  })
-
-  it('CurrentDate and MessageDate are hidden in non-extended mode', async () => {
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
-    const opts = await optionsOf(condFieldSelect())
-    expect(opts).not.toContain('Current date')
-    expect(opts).not.toContain('Message date')
-  })
-
-  it('shows Before and OnOrAfter operators when CurrentDate is selected', async () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      conditions: [{ field: 'CurrentDate', operator: 'Before', value: '2026-12-31' }],
-    }
-    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    // When CurrentDate is selected the op select shows date operators (no 'contains')
-    const dateOpSelect = screen.getByRole('combobox', { name: 'Operator' })
-    const ops = await optionsOf(dateOpSelect)
-    expect(ops).toContain('is before')
-    expect(ops).toContain('is on or after')
-    expect(ops).toContain('equals')
-    expect(ops).not.toContain('contains')
-    expect(ops).not.toContain('matches (wildcard)')
-  })
-
-  it('shows a date input instead of text when CurrentDate is selected', () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      conditions: [{ field: 'CurrentDate', operator: 'Before', value: '2026-12-31' }],
-    }
-    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    expect(document.querySelector('input[type="date"]')).toBeInTheDocument()
-  })
-
-  it('Before and OnOrAfter operators are absent in non-extended mode', async () => {
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
-    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
-    const ops = await optionsOf(opSelect)
-    expect(ops).not.toContain('is before')
-    expect(ops).not.toContain('is on or after')
-  })
-})
-
-// ── Weekday / hour conditions ─────────────────────────────────
-
-describe('CurrentWeekday condition', () => {
-  it('appears in extended mode', async () => {
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const fieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    expect(await optionsOf(fieldSelect)).toContain('Current weekday')
-  })
-
-  it('is absent in non-extended mode', async () => {
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={false} onSave={() => {}} onClose={() => {}} />)
-    const fieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    expect(await optionsOf(fieldSelect)).not.toContain('Current weekday')
-  })
-
-  it('shows weekday dropdown with preset options when selected', async () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      conditions: [{ field: 'CurrentWeekday', operator: 'Contains', value: '1,2,3,4,5' }],
-    }
-    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const daySelect = screen.getByRole('combobox', { name: 'Day' })
-    const opts = await optionsOf(daySelect)
-    expect(opts).toContain('Weekend (Sat–Sun)')
-    expect(opts).toContain('Monday')
-    expect(opts).toContain('Sunday')
-  })
-
-  it('hides the operator select when CurrentWeekday is active', () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      conditions: [{ field: 'CurrentWeekday', operator: 'Contains', value: '1,2,3,4,5' }],
-    }
-    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    expect(screen.queryByRole('combobox', { name: 'Operator' })).not.toBeInTheDocument()
-  })
-})
-
-describe('CurrentHour condition', () => {
-  it('appears in extended mode', async () => {
-    render(<RuleEditorModal rule={fileIntoRule('a', 'r1')} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const fieldSelect = screen.getByRole('combobox', { name: 'Field' })
-    expect(await optionsOf(fieldSelect)).toContain('Current hour')
-  })
-
-  it('shows number input 0-23 and Before/OnOrAfter operators when selected', async () => {
-    const rule: SieveRuleWrite = {
-      ...fileIntoRule('a', 'r1'),
-      conditions: [{ field: 'CurrentHour', operator: 'Before', value: '9' }],
-    }
-    render(<RuleEditorModal rule={rule} extended={true} onSave={() => {}} onClose={() => {}} />)
-    const hourInput = document.querySelector('input[type="number"][min="0"][max="23"]')
-    expect(hourInput).toBeInTheDocument()
-    const opSelect = screen.getByRole('combobox', { name: 'Operator' })
-    const ops = await optionsOf(opSelect)
-    expect(ops).toContain('is before')
-    expect(ops).toContain('is on or after')
-    expect(ops).not.toContain('contains')
-  })
-})
-
-// ── Validity helpers ──────────────────────────────────────────
-
-describe('isConditionValid', () => {
-  it('rejects an empty value on a text field', () => {
-    expect(isConditionValid({ field: 'Subject', operator: 'Contains', value: '' })).toBe(false)
-    expect(isConditionValid({ field: 'Subject', operator: 'Contains', value: '   ' })).toBe(false)
-  })
-  it('accepts a non-empty value on a text field', () => {
-    expect(isConditionValid({ field: 'Subject', operator: 'Contains', value: 'x' })).toBe(true)
-  })
-  it('requires a header name for the Header field', () => {
-    expect(isConditionValid({ field: 'Header', operator: 'Contains', value: 'x', headerName: '' })).toBe(false)
-    expect(isConditionValid({ field: 'Header', operator: 'Contains', value: 'x', headerName: 'X-Spam' })).toBe(true)
-  })
-  it('treats Duplicate as always valid (seconds optional)', () => {
-    expect(isConditionValid({ field: 'Duplicate', operator: 'Contains', value: '' })).toBe(true)
-  })
-})
-
-describe('isActionValid', () => {
-  it('requires an argument for FileInto/Redirect/Reject/SetFlag', () => {
-    expect(isActionValid({ type: 'FileInto', argument: '' })).toBe(false)
-    expect(isActionValid({ type: 'FileInto', argument: 'Inbox' })).toBe(true)
-    expect(isActionValid({ type: 'Redirect', argument: '' })).toBe(false)
-  })
-  it('treats Discard and Keep as always valid', () => {
-    expect(isActionValid({ type: 'Discard' })).toBe(true)
-    expect(isActionValid({ type: 'Keep' })).toBe(true)
-  })
-})
-
-// ── Wizard step gating (new rule) ─────────────────────────────
-
-describe('Wizard step gating', () => {
-  function circle(n: number) {
-    return found(Array.from(document.querySelectorAll('.rule-wizard-circle')).find(c => c.textContent === String(n)), 'circle')
-  }
-
-  it('locks steps 2-4 and disables Create rule on a fresh rule', () => {
-    render(<RuleEditorModal rule={null} extended={false} onSave={() => {}} onClose={() => {}} />)
-
-    expect(circle(1).className).toContain('rule-wizard-circle--active')
-    expect(circle(2).className).toContain('rule-wizard-circle--locked')
-    expect(circle(3).className).toContain('rule-wizard-circle--locked')
-    expect(circle(4).className).toContain('rule-wizard-circle--locked')
-    expect(screen.getByText('Create rule')).toBeDisabled()
-  })
-
-  it('unlocks only step 2 once the name is filled', async () => {
-    render(<RuleEditorModal rule={null} extended={false} onSave={() => {}} onClose={() => {}} />)
-
-    await userEvent.type(wizardNameInput(), 'My rule')
-
-    expect(circle(1).className).not.toContain('rule-wizard-circle--locked')
-    expect(circle(2).className).toContain('rule-wizard-circle--active')
-    expect(circle(3).className).toContain('rule-wizard-circle--locked')
-    expect(circle(4).className).toContain('rule-wizard-circle--locked')
-    expect(screen.getByText('Create rule')).toBeDisabled()
-  })
-
-  it('unlocks step 3 only once a valid condition exists', async () => {
-    render(<RuleEditorModal rule={null} extended={false} onSave={() => {}} onClose={() => {}} />)
-
-    await userEvent.type(wizardNameInput(), 'My rule')
-    await userEvent.type(screen.getByPlaceholderText('Value'), 'urgent')
-
-    expect(circle(2).className).not.toContain('rule-wizard-circle--locked')
-    expect(circle(2).className).not.toContain('rule-wizard-circle--active')
-    expect(circle(3).className).toContain('rule-wizard-circle--active')
-    expect(circle(4).className).toContain('rule-wizard-circle--locked')
-    expect(screen.getByText('Create rule')).toBeDisabled()
-  })
-
-  it('enables Create rule only once a valid action exists', async () => {
-    render(<RuleEditorModal rule={null} extended={false} onSave={() => {}} onClose={() => {}} />)
-
-    await userEvent.type(wizardNameInput(), 'My rule')
-    await userEvent.type(screen.getByPlaceholderText('Value'), 'urgent')
-    await userEvent.type(screen.getByPlaceholderText('Folder name'), 'Urgent')
-
-    expect(circle(3).className).not.toContain('rule-wizard-circle--locked')
-    expect(circle(4).className).not.toContain('rule-wizard-circle--locked')
-    expect(screen.getByText('Create rule')).toBeEnabled()
-  })
-
-  it('re-locks later steps and disables Save when a value is cleared (edit mode)', async () => {
-    const rule: SieveRuleWrite = {
-      id: 'a',
-      name: 'Existing',
-      enabled: true,
-      matchAll: false,
-      stopAfter: false,
-      conditions: [{ field: 'Subject', operator: 'Contains', value: 'urgent' }],
-      actions: [{ type: 'FileInto', argument: 'Urgent' }],
-    }
-    render(<RuleEditorModal rule={rule} extended={false} onSave={() => {}} onClose={() => {}} />)
-
-    expect(screen.getByText('Save changes')).toBeEnabled()
-
-    await userEvent.clear(screen.getByPlaceholderText('Value'))
-
-    expect(circle(2).className).toContain('rule-wizard-circle--active')
-    expect(circle(3).className).toContain('rule-wizard-circle--locked')
-    expect(screen.getByText('Save changes')).toBeDisabled()
-  })
-})
-
-// ── RuleCard ──────────────────────────────────────────────────
-
-describe('RuleCard', () => {
-  function makeCardProps(overrides: Partial<ComponentProps<typeof RuleCard>> = {}) {
-    return {
-      rule: fileIntoRule('r1', 'My Rule'),
-      onEdit: vi.fn(),
-      onDelete: vi.fn(),
-      onToggleEnabled: vi.fn(),
-      isFirst: false,
-      isLast: false,
-      onMoveUp: vi.fn(),
-      onMoveDown: vi.fn(),
-      isDragOver: false,
-      onDragStart: vi.fn(),
-      onDragOver: vi.fn(),
-      onDrop: vi.fn(),
-      onDragEnd: vi.fn(),
-      ...overrides,
-    }
-  }
-
-  it('renders rule name', () => {
-    render(<RuleCard {...makeCardProps()} />)
-    expect(screen.getByText('My Rule')).toBeInTheDocument()
-  })
-
-  // The grip, the two reorder arrows and the collapse chevron are ad hoc inline svgs, local to
-  // this file — icons.test.tsx's glob over src/icons/ structurally cannot see them.
-  it('hides its ad hoc icons (grip, reorder arrows, chevron) from assistive tech', () => {
-    const { container } = render(<RuleCard {...makeCardProps()} />)
-    const svgs = container.querySelectorAll('svg')
-
-    expect(svgs.length).toBeGreaterThan(0)
-    svgs.forEach(svg => {
-      expect(svg).toHaveAttribute('aria-hidden', 'true')
-      expect(svg).toHaveAttribute('focusable', 'false')
-    })
-  })
-
-  it('starts collapsed with inline action pill and no body', () => {
-    render(<RuleCard {...makeCardProps()} />)
-    expect(document.querySelector('.rule-card-inline-actions')).toBeInTheDocument()
-    expect(document.querySelector('.rule-card-body')).not.toBeInTheDocument()
-  })
-
-  it('expand toggle shows body and hides inline pills', () => {
-    render(<RuleCard {...makeCardProps()} />)
-    fireEvent.click(screen.getByTitle('Expand'))
-    expect(document.querySelector('.rule-card-body')).toBeInTheDocument()
-    expect(document.querySelector('.rule-card-inline-actions')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Collapse'))
-    expect(document.querySelector('.rule-card-body')).not.toBeInTheDocument()
-  })
-
-  it('isDragOver adds drop-over class', () => {
-    const { container } = render(<RuleCard {...makeCardProps({ isDragOver: true })} />)
-    expect(container.querySelector('.rule-card-drop-over')).toBeInTheDocument()
-  })
-
-  it('disabled rule adds disabled class', () => {
-    const rule: SieveRuleWrite = { ...fileIntoRule('r1', 'My Rule'), enabled: false }
-    const { container } = render(<RuleCard {...makeCardProps({ rule })} />)
-    expect(container.querySelector('.rule-card-disabled')).toBeInTheDocument()
-  })
-
-  it('Move up is disabled when isFirst', () => {
-    render(<RuleCard {...makeCardProps({ isFirst: true })} />)
-    expect(screen.getByTitle('Move up')).toBeDisabled()
-  })
-
-  it('Move down is disabled when isLast', () => {
-    render(<RuleCard {...makeCardProps({ isLast: true })} />)
-    expect(screen.getByTitle('Move down')).toBeDisabled()
-  })
-
-  it('calls onEdit when Edit is clicked', () => {
-    const onEdit = vi.fn()
-    render(<RuleCard {...makeCardProps({ onEdit })} />)
-    fireEvent.click(screen.getByTitle('Edit'))
-    expect(onEdit).toHaveBeenCalled()
-  })
-
-  it('calls onDelete when Delete is clicked', () => {
-    const onDelete = vi.fn()
-    render(<RuleCard {...makeCardProps({ onDelete })} />)
-    fireEvent.click(screen.getByTitle('Delete'))
-    expect(onDelete).toHaveBeenCalled()
-  })
-
-  // "Disable, checkbox, checked" is the state read twice and the rule never named: the switch is
-  // named by what it toggles, and `checked` is what says which way it stands.
-  it('names the enable switch by its rule, not by the action', () => {
-    render(<RuleCard {...makeCardProps()} />)
-    expect(screen.getByRole('checkbox', { name: 'My Rule' })).toBeChecked()
-  })
-
-  // The editor asks for a name, but the list is parsed from a Sieve script another client wrote:
-  // the same fallback the convert dialog already spells out keeps the control named.
-  it('names the switch of a rule the script left unnamed', () => {
-    render(<RuleCard {...makeCardProps({ rule: fileIntoRule('r1', '') })} />)
-    expect(screen.getByRole('checkbox', { name: '(unnamed rule)' })).toBeInTheDocument()
-  })
-
-  it('calls onToggleEnabled with false when enabled rule checkbox is clicked', () => {
-    const onToggleEnabled = vi.fn()
-    render(<RuleCard {...makeCardProps({ onToggleEnabled })} />)
-    fireEvent.click(checkboxIn(screen.getByTitle('Disable')))
-    expect(onToggleEnabled).toHaveBeenCalledWith(false)
-  })
-
-  it('calls onMoveUp when Move up is clicked', () => {
-    const onMoveUp = vi.fn()
-    render(<RuleCard {...makeCardProps({ onMoveUp })} />)
-    fireEvent.click(screen.getByTitle('Move up'))
-    expect(onMoveUp).toHaveBeenCalled()
-  })
-
-  it('calls onMoveDown when Move down is clicked', () => {
-    const onMoveDown = vi.fn()
-    render(<RuleCard {...makeCardProps({ onMoveDown })} />)
-    fireEvent.click(screen.getByTitle('Move down'))
-    expect(onMoveDown).toHaveBeenCalled()
-  })
-})
-
-// ── summarize helpers (via RuleCard expand) ────────────────────
-
-describe('summarize helpers', () => {
-  function baseProps() {
-    return {
-      onEdit: vi.fn(), onDelete: vi.fn(), onToggleEnabled: vi.fn(),
-      isFirst: false, isLast: false,
-      onMoveUp: vi.fn(), onMoveDown: vi.fn(), isDragOver: false,
-      onDragStart: vi.fn(), onDragOver: vi.fn(), onDrop: vi.fn(), onDragEnd: vi.fn(),
-    }
-  }
-  function cardWithCondition(cond: SieveCondition): SieveRuleWrite {
-    return { id: 'r1', name: 'R', enabled: true, matchAll: false, stopAfter: false,
-      conditions: [cond], actions: [{ type: 'Keep', argument: '' }] }
-  }
-  function cardWithAction(action: SieveRuleWrite['actions'][number]): SieveRuleWrite {
-    return { id: 'r1', name: 'R', enabled: true, matchAll: false, stopAfter: false,
-      conditions: [{ field: 'Subject', operator: 'Contains', value: 'x' }],
-      actions: [action] }
-  }
-  function renderExpanded(rule: SieveRuleWrite) {
-    render(<RuleCard rule={rule} {...baseProps()} />)
-    fireEvent.click(screen.getByTitle('Expand'))
-  }
-
-  it('Subject Contains', () => {
-    renderExpanded(cardWithCondition({ field: 'Subject', operator: 'Contains', value: 'urgent' }))
-    expect(screen.getByText('Subject contains "urgent"')).toBeInTheDocument()
-  })
-
-  it('Duplicate without value', () => {
-    renderExpanded(cardWithCondition({ field: 'Duplicate', operator: 'Contains', value: '' }))
-    expect(screen.getByText('Duplicate message')).toBeInTheDocument()
-  })
-
-  it('Duplicate with seconds window', () => {
-    renderExpanded(cardWithCondition({ field: 'Duplicate', operator: 'Contains', value: '60' }))
-    expect(screen.getByText('Duplicate (within 60s)')).toBeInTheDocument()
-  })
-
-  it('CurrentDate', () => {
-    renderExpanded(cardWithCondition({ field: 'CurrentDate', operator: 'Before', value: '2024-01-01' }))
-    expect(screen.getByText('Current date is before 2024-01-01')).toBeInTheDocument()
-  })
-
-  it('MessageDate', () => {
-    renderExpanded(cardWithCondition({ field: 'MessageDate', operator: 'OnOrAfter', value: '2024-06-01' }))
-    expect(screen.getByText('Message date is on or after 2024-06-01')).toBeInTheDocument()
-  })
-
-  it('CurrentWeekday', () => {
-    renderExpanded(cardWithCondition({ field: 'CurrentWeekday', operator: 'Contains', value: '1,2,3,4,5' }))
-    expect(screen.getByText('Weekday is Weekday (Mon–Fri)')).toBeInTheDocument()
-  })
-
-  it('CurrentHour', () => {
-    renderExpanded(cardWithCondition({ field: 'CurrentHour', operator: 'Before', value: '9' }))
-    expect(screen.getByText('Hour is before 9:00')).toBeInTheDocument()
-  })
-
-  it('Custom header uses headerName', () => {
-    renderExpanded(cardWithCondition({ field: 'Header', operator: 'Contains', value: 'spam', headerName: 'X-Spam' }))
-    expect(screen.getByText('X-Spam contains "spam"')).toBeInTheDocument()
-  })
-
-  it('Redirect action', () => {
-    renderExpanded(cardWithAction({ type: 'Redirect', argument: 'a@b.com' }))
-    expect(screen.getByText('⇥ a@b.com')).toBeInTheDocument()
-  })
-
-  it('SetFlag Seen', () => {
-    renderExpanded(cardWithAction({ type: 'SetFlag', argument: '\\Seen' }))
-    expect(screen.getByText('Mark as read')).toBeInTheDocument()
-  })
-
-  it('SetFlag Flagged', () => {
-    renderExpanded(cardWithAction({ type: 'SetFlag', argument: '\\Flagged' }))
-    expect(screen.getByText('⭐ Flagged')).toBeInTheDocument()
-  })
-
-  it('Keep action', () => {
-    renderExpanded(cardWithAction({ type: 'Keep', argument: '' }))
-    expect(screen.getByText('Keep in inbox')).toBeInTheDocument()
-  })
-
-  it('Discard action', () => {
-    renderExpanded(cardWithAction({ type: 'Discard', argument: '' }))
-    expect(screen.getByText('Discard')).toBeInTheDocument()
-  })
-
-  it('FileInto with autoCreate shows ✚ in expanded view', () => {
-    renderExpanded(cardWithAction({ type: 'FileInto', argument: 'Archive', autoCreate: true }))
-    expect(screen.getByText('→ Archive ✚')).toBeInTheDocument()
-  })
-
-  it('FileInto collapsed pill shows → prefix', () => {
-    render(<RuleCard rule={cardWithAction({ type: 'FileInto', argument: 'Inbox' })} {...baseProps()} />)
-    expect(screen.getByText('→ Inbox')).toBeInTheDocument()
-  })
-})
-
 // ── RulesPage — initial load ──────────────────────────────────
 
 describe('RulesPage — initial load', () => {
@@ -1034,12 +153,6 @@ describe('RulesPage — initial load', () => {
     vi.mocked(api.getRules).mockReturnValue(new Promise(() => {}))
     renderPage()
     expect(document.querySelector('.loading-center')).toBeInTheDocument()
-  })
-
-  it('shows error toast when getRules rejects', async () => {
-    vi.mocked(api.getRules).mockRejectedValue(new Error('network failure'))
-    renderPage()
-    await screen.findByText('network failure')
   })
 
   it('words a timed-out load in the reader’s language, not in the error’s', async () => {
@@ -1052,18 +165,6 @@ describe('RulesPage — initial load', () => {
     vi.mocked(api.getRules).mockResolvedValue(ruleSet('weesky', []))
     renderPage()
     await screen.findByText(/No rules yet/)
-  })
-
-  it('renders rule cards when rules exist', async () => {
-    vi.mocked(api.getRules).mockResolvedValue(ruleSet('weesky', [fileIntoRule('a', 'My Test Rule')]))
-    renderPage()
-    await screen.findByText('My Test Rule')
-  })
-
-  it('shows Advanced notice for Advanced kind', async () => {
-    vi.mocked(api.getRules).mockResolvedValue({ kind: 'Advanced', providerId: 'weesky', scriptName: 'custom', rules: [], rawScript: '' })
-    renderPage()
-    await screen.findByText(/cannot be parsed/)
   })
 
   // The script is the active mailbox's: without the id every read and write would land on the
@@ -1239,8 +340,8 @@ describe('RulesPage — initial load', () => {
   // Every dialog was opened for the previous account's rules: none of them stands in any frame
   // committed under the new one.
   it.each([
-    ['the editor', () => userEvent.click(screen.getByTitle('Edit'))],
-    ['a rule’s delete confirmation', () => userEvent.click(screen.getByTitle('Delete'))],
+    ['the editor', () => user.click(screen.getByTitle('Edit'))],
+    ['a rule’s delete confirmation', () => user.click(screen.getByTitle('Delete'))],
   ])('closes %s with the account it was opened for', async (_, open) => {
     vi.mocked(api.getRules)
       .mockResolvedValueOnce(ruleSet('weesky', [fileIntoRule('a', 'Primary Rule')]))
@@ -1265,7 +366,7 @@ describe('RulesPage — initial load', () => {
       .mockResolvedValueOnce({ kind: 'Advanced', providerId: 'weesky', scriptName: 'custom', rules: [], rawScript: '' })
       .mockResolvedValueOnce(ruleSet('weesky', [fileIntoRule('b', 'Linked Rule')]))
     const { rerender } = renderPage()
-    await userEvent.click(await screen.findByText('Delete script'))
+    await user.click(await screen.findByText('Delete script'))
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
 
     const frames = recordDialogFrames()
@@ -1382,24 +483,16 @@ describe('RulesPage — CRUD', () => {
     vi.mocked(api.getRules).mockResolvedValue(ruleSet('weesky', [fileIntoRule('a', 'Existing Rule')]))
   })
 
-  it('click New rule opens editor with empty name', async () => {
-    renderPage()
-    await screen.findByText('Existing Rule')
-    await userEvent.click(screen.getByRole('button', { name: /New rule/i }))
-    const nameInput = wizardNameInput()
-    expect(nameInput).toBeInTheDocument()
-    expect(nameInput.value).toBe('')
-  })
-
-  it('create new rule calls saveRules with the new rule appended', async () => {
+  it('New rule opens an empty editor, and creating calls saveRules with the rule appended', async () => {
     renderPage()
     await screen.findByText('Existing Rule')
 
-    await userEvent.click(screen.getByRole('button', { name: /New rule/i }))
-    await userEvent.type(wizardNameInput(), 'New Test Rule')
-    await userEvent.type(screen.getByPlaceholderText('Value'), 'spam')
-    await userEvent.type(screen.getByPlaceholderText('Folder name'), 'Spam')
-    await userEvent.click(screen.getByText('Create rule'))
+    await user.click(screen.getByRole('button', { name: /New rule/i }))
+    expect(wizardNameInput().value).toBe('')
+    await user.type(wizardNameInput(), 'New Test Rule')
+    await user.type(screen.getByPlaceholderText('Value'), 'spam')
+    await user.type(screen.getByPlaceholderText('Folder name'), 'Spam')
+    await user.click(screen.getByText('Create rule'))
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -1414,7 +507,7 @@ describe('RulesPage — CRUD', () => {
     renderPage()
     await screen.findByText('Existing Rule')
 
-    await userEvent.click(screen.getByTitle('Edit'))
+    await user.click(screen.getByTitle('Edit'))
     expect(wizardNameInput().value).toBe('Existing Rule')
   })
 
@@ -1422,11 +515,11 @@ describe('RulesPage — CRUD', () => {
     renderPage()
     await screen.findByText('Existing Rule')
 
-    await userEvent.click(screen.getByTitle('Edit'))
+    await user.click(screen.getByTitle('Edit'))
     const nameInput = wizardNameInput()
-    await userEvent.clear(nameInput)
-    await userEvent.type(nameInput, 'Renamed Rule')
-    await userEvent.click(screen.getByText('Save changes'))
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Renamed Rule')
+    await user.click(screen.getByText('Save changes'))
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'Renamed Rule' })],
@@ -1434,20 +527,13 @@ describe('RulesPage — CRUD', () => {
     ))
   })
 
-  it('click Delete opens confirm modal', async () => {
+  it('Delete asks for confirmation, then calls saveRules without the deleted rule', async () => {
     renderPage()
     await screen.findByText('Existing Rule')
 
-    await userEvent.click(screen.getByTitle('Delete'))
+    await user.click(screen.getByTitle('Delete'))
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
-  })
-
-  it('confirm delete calls saveRules without the deleted rule', async () => {
-    renderPage()
-    await screen.findByText('Existing Rule')
-
-    await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+    await user.click(screen.getByText('Delete', { selector: 'button' }))
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith([], 'weesky', undefined, { accountId: 'primary' }))
   })
@@ -1493,8 +579,8 @@ describe('RulesPage — CRUD', () => {
     renderPage()
     await screen.findByText('Existing Rule')
 
-    await userEvent.click(screen.getByTitle('Edit'))
-    await userEvent.click(screen.getByText('Save changes'))
+    await user.click(screen.getByTitle('Edit'))
+    await user.click(screen.getByText('Save changes'))
 
     await screen.findByText('connection refused')
   })
@@ -1510,25 +596,14 @@ describe('RulesPage — reordering', () => {
     ]))
   })
 
-  it('Move up swaps the rule with the one above it', async () => {
+  it.each([
+    ['Move up', 'the one above it', 1],
+    ['Move down', 'the one below it', 0],
+  ])('%s swaps the rule with %s', async (title, _other, card) => {
     renderPage()
     await screen.findByText('Second')
 
-    const moveUpBtns = screen.getAllByTitle('Move up')
-    await userEvent.click(moveUpBtns[1]!)
-
-    await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
-      [expect.objectContaining({ name: 'Second' }), expect.objectContaining({ name: 'First' })],
-      'weesky', undefined, { accountId: 'primary' }
-    ))
-  })
-
-  it('Move down swaps the rule with the one below it', async () => {
-    renderPage()
-    await screen.findByText('First')
-
-    const moveDownBtns = screen.getAllByTitle('Move down')
-    await userEvent.click(moveDownBtns[0]!)
+    await user.click(screen.getAllByTitle(title)[card]!)
 
     await waitFor(() => expect(api.saveRules).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'Second' }), expect.objectContaining({ name: 'First' })],
@@ -1556,9 +631,9 @@ describe('RulesPage — reordering across a concurrent delete', () => {
     await screen.findByText('Third')
 
     // Delete First: the confirm closes at once, the save (held) is still in flight.
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getAllByTitle('Delete')[0]!)
     const hold = holdNextCall(vi.mocked(api.saveRules))
-    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+    await user.click(screen.getByText('Delete', { selector: 'button' }))
 
     // First's own card is still on screen — nothing has been patched yet — and still draggable.
     fireEvent.dragStart(cardOf('First'), { dataTransfer: {} })
@@ -1584,9 +659,9 @@ describe('RulesPage — reordering across a concurrent delete', () => {
     renderPage()
     await screen.findByText('Fourth')
 
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getAllByTitle('Delete')[0]!)
     const hold = holdNextCall(vi.mocked(api.saveRules))
-    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+    await user.click(screen.getByText('Delete', { selector: 'button' }))
 
     // Dragging Third, captured by id before First's deletion shrinks the list under it.
     fireEvent.dragStart(cardOf('Third'), { dataTransfer: {} })
@@ -1623,9 +698,9 @@ describe('RulesPage — delete one rule', () => {
     vi.mocked(api.saveRules).mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(null), 30)))
     renderPage()
     await screen.findByText('r1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getAllByTitle('Delete')[0]!)
 
-    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+    await user.click(screen.getByText('Delete', { selector: 'button' }))
 
     await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
     await waitFor(() => expect(screen.queryByText('r1')).toBeNull())
@@ -1638,22 +713,13 @@ describe('RulesPage — delete all script', () => {
     return { kind: 'Advanced', providerId: 'weesky', scriptName: 'custom', rules: [], rawScript: '' }
   }
 
-  it('Delete script button opens confirm modal', async () => {
-    vi.mocked(api.getRules).mockResolvedValue(advancedRuleSet())
-    renderPage()
-    await screen.findByText(/cannot be parsed/)
-
-    await userEvent.click(screen.getByText('Delete script'))
-    expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
-  })
-
   it('confirm calls deleteRules and switches to structured view', async () => {
     vi.mocked(api.getRules).mockResolvedValue(advancedRuleSet())
     renderPage()
     await screen.findByText(/cannot be parsed/)
 
-    await userEvent.click(screen.getByText('Delete script'))
-    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+    await user.click(screen.getByText('Delete script'))
+    await user.click(screen.getByText('Delete', { selector: 'button' }))
 
     await waitFor(() => expect(api.deleteRules).toHaveBeenCalledWith({ accountId: 'primary' }))
     await screen.findByText('Script deleted')
@@ -1666,9 +732,9 @@ describe('RulesPage — delete all script', () => {
     vi.mocked(api.getRules).mockResolvedValue(advancedRuleSet())
     renderPage()
     await screen.findByText(/cannot be parsed/)
-    await userEvent.click(screen.getByText('Delete script'))
+    await user.click(screen.getByText('Delete script'))
 
-    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+    await user.click(screen.getByText('Delete', { selector: 'button' }))
 
     await waitFor(() => expect(screen.queryByText('Delete script')).toBeNull())
     expect(screen.getByRole('heading', { name: /Rules/ })).toHaveFocus()
@@ -1680,43 +746,9 @@ describe('RulesPage — delete all script', () => {
     renderPage()
     await screen.findByText(/cannot be parsed/)
 
-    await userEvent.click(screen.getByText('Delete script'))
-    await userEvent.click(screen.getByText('Delete', { selector: 'button' }))
+    await user.click(screen.getByText('Delete script'))
+    await user.click(screen.getByText('Delete', { selector: 'button' }))
 
     await screen.findByText('IMAP connection lost')
-  })
-})
-
-// ── ConvertConfirmModal ───────────────────────────────────────
-
-describe('ConvertConfirmModal', () => {
-  it('lists every incompatible rule with its reason', () => {
-    const incompatible = [
-      { id: '1', name: 'A', reason: 'reason A' },
-      { id: '2', name: 'B', reason: 'reason B' },
-    ]
-    render(<ConvertConfirmModal incompatible={incompatible} onConfirm={() => {}} onClose={() => {}} />)
-
-    expect(screen.getByText('A')).toBeInTheDocument()
-    expect(screen.getByText('reason A')).toBeInTheDocument()
-    expect(screen.getByText('B')).toBeInTheDocument()
-    expect(screen.getByText('reason B')).toBeInTheDocument()
-  })
-
-  it('calls onConfirm when the confirm button is clicked', async () => {
-    const onConfirm = vi.fn()
-    render(<ConvertConfirmModal incompatible={[{ id: '1', name: 'A', reason: 'r' }]}
-      onConfirm={onConfirm} onClose={() => {}} />)
-
-    await userEvent.click(screen.getByText('Delete & switch'))
-    expect(onConfirm).toHaveBeenCalled()
-  })
-
-  it('closes on its named ✕', async () => {
-    const onClose = vi.fn()
-    render(<ConvertConfirmModal incompatible={[]} onConfirm={() => {}} onClose={onClose} />)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onClose).toHaveBeenCalled()
   })
 })

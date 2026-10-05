@@ -62,10 +62,10 @@ describe('AccountPage', () => {
   })
 
   it('shows identity, other domains and quota', async () => {
-    renderPage()
+    const { container } = renderPage()
     expect(await screen.findByText('mick@weesky.be')).toBeInTheDocument()
     expect(screen.getByText('example.org')).toBeInTheDocument()
-    await waitFor(() => expect(mocks.getQuota).toHaveBeenCalled())
+    await waitFor(() => expect(container.querySelector('.panel-quota')).not.toBeNull())
   })
 
   // R9: a `.catch(() => {})` used to swallow this forever, with no error and no retry — an empty
@@ -106,7 +106,7 @@ describe('AccountPage', () => {
 
   // jsdom applies no stylesheet, so the class carrying `list-style: none` is all this can hold
   // on to — the domains are read-only names, not an outline.
-  it('lists the other domains without bullets', async () => {
+  it('pins the class that lists the other domains without bullets', async () => {
     const { container } = renderPage()
     await screen.findByText('example.org')
 

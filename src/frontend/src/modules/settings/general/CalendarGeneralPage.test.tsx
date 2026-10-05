@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import CalendarGeneralPage from './CalendarGeneralPage'
-import { createTestQueryClient, pickOption } from '../../../test-utils'
+import { createTestQueryClient, pickOption, setupUser } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
@@ -12,9 +11,7 @@ const mocks = vi.hoisted(() => ({
   setBirthdays: vi.fn(),
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = createTestQueryClient()
@@ -27,6 +24,9 @@ function renderPage(preferences: Record<string, string> = { 'mail.pageSize': '30
   mocks.setBirthdays.mockResolvedValue(null)
   return render(<CalendarGeneralPage />, { wrapper })
 }
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 describe('CalendarGeneralPage', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -65,24 +65,18 @@ describe('the first day of the week', () => {
 describe('the birthdays calendar switch', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('shows it checked by default, with no preference stored', async () => {
-    renderPage()
-
-    expect(await screen.findByRole('checkbox', { name: 'Birthdays calendar' })).toBeChecked()
-  })
-
   it('shows it unchecked when the preference is off', async () => {
     renderPage({ 'mail.pageSize': '30', 'calendar.birthdays': 'off' })
 
     expect(await screen.findByRole('checkbox', { name: 'Birthdays calendar' })).not.toBeChecked()
   })
 
-  it('switches the birthdays calendar through its own route', async () => {
+  it('shows it checked by default, and switches it through its own route', async () => {
     renderPage()
     const toggle = await screen.findByRole('checkbox', { name: 'Birthdays calendar' })
     expect(toggle).toBeChecked()
 
-    await userEvent.click(toggle)
+    await user.click(toggle)
 
     expect(mocks.setBirthdays).toHaveBeenCalledWith(false, expect.any(String), 'en')
     expect(mocks.setPreference).not.toHaveBeenCalledWith('calendar.birthdays', expect.anything())
@@ -94,7 +88,7 @@ describe('the birthdays calendar switch', () => {
     mocks.setBirthdays.mockRejectedValue(new Error('Refused by the server'))
     const toggle = await screen.findByRole('checkbox', { name: 'Birthdays calendar' })
 
-    await userEvent.click(toggle)
+    await user.click(toggle)
 
     expect(await screen.findByText('Could not save the setting')).toBeInTheDocument()
   })
