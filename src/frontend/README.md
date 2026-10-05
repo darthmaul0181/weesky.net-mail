@@ -1,6 +1,6 @@
 # frontend
 
-Scotty webmail's React SPA: mail, calendar, contacts and settings for the weesky.net mail service. It talks to the backend named by `VITE_API_BASE`. `CLAUDE.md` and `docs/` hold the architecture.
+Scotty webmail's React SPA: mail, calendar, contacts and settings for the weesky.net mail service. It talks to the backend named by `/config.js`, which the build writes from `VITE_API_BASE`. `CLAUDE.md` and `docs/` hold the architecture.
 
 ## Stack
 

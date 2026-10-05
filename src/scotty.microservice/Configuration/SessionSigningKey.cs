@@ -13,6 +13,8 @@ internal static class SessionSigningKey
 {
     public const string FileName = "session-signing.key";
     private const int GeneratedBytes = 64;
+    private const int ReadAttempts = 10;
+    private static readonly TimeSpan ReadRetryDelay = TimeSpan.FromMilliseconds(50);
 
     /// <returns>The key, and the file's path when this call created it, for the startup log.</returns>
     public static (string Key, string? GeneratedIn) Resolve(string? configured, string stateDirectory)
@@ -25,55 +27,52 @@ internal static class SessionSigningKey
         return (Read(path), created ? path : null);
     }
 
-    // Written aside, then moved in without overwriting: a concurrent start either wins the move or
-    // reads the winner's complete file, never a half-written one.
+    // CreateNew is an exclusive create on every OS: of two concurrent starts exactly one writes, and
+    // the other reads what it wrote (Read waits out the instant between that create and that write).
     private static bool TryCreate(string path)
     {
-        if (Path.Exists(path)) return false;
-
-        var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         try
         {
-            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
-            if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            using (var writer = new StreamWriter(temporary, Encoding.ASCII, options))
-                writer.Write(Convert.ToBase64String(RandomNumberGenerator.GetBytes(GeneratedBytes)));
-
-            File.Move(temporary, path, overwrite: false);
+            using var writer = new StreamWriter(path, Encoding.ASCII, options);
+            writer.Write(Convert.ToBase64String(RandomNumberGenerator.GetBytes(GeneratedBytes)));
             return true;
         }
-        catch (IOException) when (Path.Exists(path))
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException && Path.Exists(path))
         {
             return false;
-        }
-        finally
-        {
-            File.Delete(temporary);
         }
     }
 
     private static string Read(string path)
     {
-        string key;
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            key = File.ReadAllText(path).Trim();
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException(
-                $"The session signing key {path} cannot be read: {e.Message} " +
-                "Give the service user read access to it.", e);
-        }
+            try
+            {
+                var key = File.ReadAllText(path).Trim();
+                if (Encoding.UTF8.GetByteCount(key) >= AuthorizationExtension.MinimumSigningKeyBytes) return key;
+                if (attempt == ReadAttempts)
+                {
+                    throw new InvalidOperationException(
+                        $"The session signing key {path} is empty or shorter than " +
+                        $"{AuthorizationExtension.MinimumSigningKeyBytes} bytes. Delete it to have a new one " +
+                        "generated — which signs every user out.");
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException && attempt == ReadAttempts)
+            {
+                throw new InvalidOperationException(
+                    $"The session signing key {path} cannot be read: {e.Message} " +
+                    "Give the service user read access to it.", e);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Another start may still hold it open for its write; the last attempt reports it.
+            }
 
-        if (Encoding.UTF8.GetByteCount(key) < AuthorizationExtension.MinimumSigningKeyBytes)
-        {
-            throw new InvalidOperationException(
-                $"The session signing key {path} is empty or shorter than " +
-                $"{AuthorizationExtension.MinimumSigningKeyBytes} bytes. Restore it from a backup, or delete " +
-                "it to have a new one generated — which signs every user out.");
+            Thread.Sleep(ReadRetryDelay);
         }
-
-        return key;
     }
 }

@@ -150,7 +150,8 @@ cd ../..
 ```
 
 If the API's address ever changes, correct it in `config.js` on the server
-(`/var/www/scotty/config.js`, step 4.1): no need to build again. Without the `.env.production`
+(`/var/www/scotty/config.js`, step 4.1): no need to build again. Put the new address in
+`.env.production` too, or the next update brings the old one back. Without the `.env.production`
 file the build stops with an error naming `VITE_API_BASE` rather than shipping a page pointed
 nowhere.
 
@@ -491,7 +492,7 @@ journalctl -u scotty.microservice -n 30
 | `'Generic:Administrators' holds '…', which is not an email address` | Fix that entry in `Generic__Administrators` |
 | `STATE_DIRECTORY is not set` | Start the service with `systemctl`, not by hand, and keep the `StateDirectory=` line of the service file |
 | `The session signing key … cannot be read` | Give the service access to it: `chown scotty:scotty /var/lib/scotty.microservice/session-signing.key` |
-| `The session signing key … is empty or shorter than 32 bytes` | Restore the file from a backup, or delete it: a new key is generated, and everyone signs in again |
+| `The session signing key … is empty or shorter than 32 bytes` | Delete it: a new key is generated, and everyone signs in again |
 | `ForwardedHeaders:KnownNetworks holds '…'` | Write the range as its first address and a length, such as `172.16.0.0/12`. `/0` is refused: it would trust every address |
 | `Logs:Output is "…"` | Remove the line, or set it to `file` or `console` |
 

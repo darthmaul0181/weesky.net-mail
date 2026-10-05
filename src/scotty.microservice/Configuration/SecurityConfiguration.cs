@@ -166,11 +166,19 @@ internal static class SecurityConfiguration
 
     private static System.Net.IPNetwork ParseNetwork(string value)
     {
-        if (!System.Net.IPNetwork.TryParse(value, out var network) || !StartsItsRange(value, network))
+        if (!System.Net.IPNetwork.TryParse(value, out var network))
         {
             throw new InvalidOperationException(
                 $"ForwardedHeaders:KnownNetworks holds '{value}', which is not a range. Write the range's " +
                 "first address and its length, such as 172.16.0.0/12 or fd00::/8.");
+        }
+
+        // .NET reads 10.1.2.3/8 as 10.0.0.0/8: refused, since it is a typo for either one.
+        if (!StartsItsRange(value, network))
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks holds '{value}', which does not start at its range's first " +
+                $"address. Write {network} for that range, or the address alone in KnownProxies.");
         }
 
         if (network.PrefixLength == 0)
@@ -183,7 +191,6 @@ internal static class SecurityConfiguration
         return network;
     }
 
-    // .NET reads 10.1.2.3/8 as 10.0.0.0/8: refused, since it is a typo for either one.
     private static bool StartsItsRange(string value, System.Net.IPNetwork network) =>
         value.Split('/') is [var address, _]
         && IPAddress.TryParse(address, out var written)

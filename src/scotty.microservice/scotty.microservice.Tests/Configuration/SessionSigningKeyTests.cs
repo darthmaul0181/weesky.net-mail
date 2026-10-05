@@ -72,6 +72,26 @@ public sealed class SessionSigningKeyTests : IDisposable
         Assert.Equal(content, File.ReadAllText(KeyFile));
     }
 
+    // On Linux a losing start can open the file between the winner's create and its write.
+    [Fact]
+    public async Task Resolve_WaitsForAKeyAnotherStartIsStillWriting()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(KeyFile, "");
+        var written = new string('w', 88);
+        var winner = Task.Run(async () =>
+        {
+            await Task.Delay(100);
+            File.WriteAllText(KeyFile, written);
+        });
+
+        var (key, generatedIn) = SessionSigningKey.Resolve(null, _directory);
+        await winner;
+
+        Assert.Equal(written, key);
+        Assert.Null(generatedIn);
+    }
+
     [Fact]
     public void Resolve_RefusesToStartOnAnUnreadableFile()
     {

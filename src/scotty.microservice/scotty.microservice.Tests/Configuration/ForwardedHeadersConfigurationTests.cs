@@ -28,23 +28,15 @@ public sealed class ForwardedHeadersConfigurationTests
         return environment.Object;
     }
 
-    private static IConfiguration Configuration(params string[] knownProxies)
-    {
-        var values = new Dictionary<string, string?>();
-        for (var i = 0; i < knownProxies.Length; i++)
-            values[$"ForwardedHeaders:KnownProxies:{i}"] = knownProxies[i];
+    private static IConfiguration Configuration(params string[] knownProxies) => List("KnownProxies", knownProxies);
 
-        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
-    }
+    private static IConfiguration Networks(params string[] knownNetworks) => List("KnownNetworks", knownNetworks);
 
-    private static IConfiguration Networks(params string[] knownNetworks)
-    {
-        var values = new Dictionary<string, string?>();
-        for (var i = 0; i < knownNetworks.Length; i++)
-            values[$"ForwardedHeaders:KnownNetworks:{i}"] = knownNetworks[i];
-
-        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
-    }
+    private static IConfiguration List(string key, string[] entries) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(entries.Select((entry, i) =>
+                new KeyValuePair<string, string?>($"ForwardedHeaders:{key}:{i}", entry)))
+            .Build();
 
     private static ForwardedHeadersOptions Build(IConfiguration configuration, string environmentName)
     {
@@ -138,6 +130,15 @@ public sealed class ForwardedHeadersConfigurationTests
             () => Build(Networks(range), Environments.Production));
 
         Assert.Contains($"'{range}'", error.Message);
+    }
+
+    [Fact]
+    public void AddProxyForwardedHeaders_NamesTheRangeAMisplacedAddressMeant()
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Networks("10.1.2.3/8"), Environments.Production));
+
+        Assert.Contains("10.0.0.0/8", error.Message);
     }
 
     /// <summary>
