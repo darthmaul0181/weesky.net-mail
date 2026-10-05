@@ -71,10 +71,43 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
         Skip.If(db.Unavailable, "Docker is not running");
         var connection = await db.NewDatabaseAsync();
         await db.ExecuteAsync(SchemaMigrations.Embedded[0].Contents, connection);
-        await db.ExecuteAsync(await File.ReadAllTextAsync(BootstrapJournalPath()), connection);
+        await db.ExecuteAsync(await File.ReadAllTextAsync(AdoptionScriptPath()), connection);
 
         Assert.Empty(SchemaMigrations.Pending(connection));
         Assert.Empty(SchemaMigrations.Apply(connection));
+    }
+
+    /// <summary>
+    /// A migrate that runs before the adoption creates an empty journal, then fails on the tables that
+    /// already exist. The adoption script must still finish the job, and running it twice must not hurt.
+    /// </summary>
+    [SkippableFact]
+    public async Task TheAdoptionScriptRepairsTheJournalAnEarlyMigrateLeftEmpty()
+    {
+        Skip.If(db.Unavailable, "Docker is not running");
+        var connection = await db.NewDatabaseAsync();
+        await db.ExecuteAsync(SchemaMigrations.Embedded[0].Contents, connection);
+        Assert.Throws<InvalidOperationException>(() => SchemaMigrations.Apply(connection));
+
+        var adoption = await File.ReadAllTextAsync(AdoptionScriptPath());
+        await db.ExecuteAsync(adoption, connection);
+        await db.ExecuteAsync(adoption, connection);
+
+        Assert.Empty(SchemaMigrations.Pending(connection));
+        Assert.Equal(1L, await ScalarAsync(connection, "SELECT COUNT(*) FROM schema_migrations"));
+    }
+
+    [SkippableFact]
+    public async Task Apply_LeavesNoSchemaSessionOpenBehindIt()
+    {
+        Skip.If(db.Unavailable, "Docker is not running");
+        var connection = await db.NewDatabaseAsync();
+
+        SchemaMigrations.Apply(connection);
+
+        // The one session left is the query's own.
+        Assert.Equal(1L, await ScalarAsync(connection,
+            "SELECT COUNT(*) FROM information_schema.processlist WHERE db = DATABASE()"));
     }
 
     [SkippableFact]
@@ -126,8 +159,8 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
         Assert.Empty(missing);
     }
 
-    private static string BootstrapJournalPath() =>
-        Path.Combine(AppContext.BaseDirectory, "Data", "schema-migrations-bootstrap-journal.sql");
+    private static string AdoptionScriptPath() =>
+        Path.Combine(AppContext.BaseDirectory, "Data", "adopt-existing-database.sql");
 
     private static async Task<int> CountTablesAsync(string connection) =>
         Convert.ToInt32(await ScalarAsync(connection,

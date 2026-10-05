@@ -1,7 +1,8 @@
 # Migrations de schéma — mise en route d'une base existante
 
-À jouer **une fois** sur chaque base déjà en service — prod et dev —, **avant** le premier
-déploiement de l'API 1.3.0. Une base créée après cette version n'en a pas besoin : `install.sql`
+À jouer **une fois** sur chaque base déjà en service — prod et dev —, **avant** de pousser la
+branche : un push sur une branche déploie sur dev, sur `master` en prod. Les étapes 1 à 4 se font
+avant le push, dans l'ordre. Une base créée après cette version n'en a pas besoin : `install.sql`
 crée les comptes, et le service crée ses tables.
 
 Prérequis : les deux fiches historiques (`birthdays-calendar-migration.md`, `app-logo-migration.md`)
@@ -21,23 +22,13 @@ FLUSH PRIVILEGES;
 
 ## 2. Inscrire l'état actuel comme `0001`
 
-La table que DbUp tient, dans la forme exacte où il la crée, avec la migration initiale marquée
-comme appliquée (même contenu que
-`src/scotty.microservice/scotty.microservice.Tests/Data/schema-migrations-bootstrap-journal.sql`, que
-les tests jouent sur une base créée par l'ancien `install.sql`) :
-
-```sql
-USE `<base>`;
-
-CREATE TABLE `schema_migrations` (
-  `schemaversionid` int(11) NOT NULL AUTO_INCREMENT,
-  `scriptname` varchar(255) NOT NULL,
-  `applied` timestamp NOT NULL,
-  PRIMARY KEY (`schemaversionid`)
-) ENGINE=InnoDB;
-
-INSERT INTO `schema_migrations` (`scriptname`, `applied`) VALUES ('0001_initial.sql', UTC_TIMESTAMP());
+```bash
+mysql -u root -p <base> < install/adopt-existing-database.sql
 ```
+
+Le script est rejouable, et il répare aussi le cas où un `migrate` aurait tourné avant lui : DbUp
+crée alors une table `schema_migrations` vide, puis échoue sur `Multiple primary key defined`. Les
+tests le jouent dans les deux situations.
 
 Vérifier : `SELECT scriptname FROM schema_migrations;` → une ligne, `0001_initial.sql`.
 

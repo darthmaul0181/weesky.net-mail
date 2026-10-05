@@ -46,7 +46,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Data\*.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\install\adopt-existing-database.sql" Link="Data\adopt-existing-database.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -144,6 +144,7 @@ ending with a check:
 weesky.net-mail/
 ├── install/                       # Everything a new deployment needs
 │   ├── install.sql                #   the database and its two MySQL accounts
+│   ├── adopt-existing-database.sql #  once, for a database installed before 1.3.0
 │   ├── README.md                  #   the five steps
 │   └── optional/                  #   OAuth mailboxes, calendar replies at delivery
 ├── src/

@@ -74,6 +74,18 @@ public sealed class SchemaMigrationsEntryPointsTests(MariaDbFixture db)
         Assert.Contains("ConnectionStrings__WebmailSchema", error.ToString());
     }
 
+    [Theory]
+    [InlineData("garbage")]
+    [InlineData("Server=127.0.0.1;Bogus=1")]
+    public void RunCommand_ExitsOneWithAReadableMessageOnAMalformedConnection(string connection)
+    {
+        var error = new StringWriter();
+
+        Assert.Equal(1, SchemaMigrations.RunCommand(connection, TextReader.Null, TextWriter.Null, error));
+        Assert.NotEmpty(error.ToString());
+        Assert.DoesNotContain("   at ", error.ToString());
+    }
+
     [Fact]
     public void RunCommand_ExitsOneWithAReadableMessageOnAnUnreachableDatabase()
     {

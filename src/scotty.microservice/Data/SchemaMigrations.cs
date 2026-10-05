@@ -28,22 +28,27 @@ internal static class SchemaMigrations
     public static IReadOnlyList<string> Apply(string schemaConnectionString, IReadOnlyList<SqlScript>? scripts = null)
     {
         using var lockConnection = new MySqlConnection(schemaConnectionString);
-        lockConnection.Open();
-        if (Convert.ToInt64(Scalar(lockConnection, $"SELECT GET_LOCK('{LockName}', {LockTimeoutSeconds})") ?? 0L) != 1)
-            throw new InvalidOperationException(
-                $"Could not take the schema lock within {LockTimeoutSeconds} s: another start is migrating this database.");
-
         try
         {
-            var result = Engine(schemaConnectionString, scripts ?? Embedded).PerformUpgrade();
-            if (!result.Successful)
-                throw new InvalidOperationException(
-                    $"Schema migration {result.ErrorScript?.Name} failed: {result.Error.Message}", result.Error);
-            return [.. result.Scripts.Select(script => script.Name)];
+            lockConnection.Open();
+            TakeLock(lockConnection);
+            try
+            {
+                var result = Engine(schemaConnectionString, scripts ?? Embedded).PerformUpgrade();
+                if (!result.Successful)
+                    throw new InvalidOperationException(
+                        $"Schema migration {result.ErrorScript?.Name} failed: {result.Error.Message}", result.Error);
+                return [.. result.Scripts.Select(script => script.Name)];
+            }
+            finally
+            {
+                ReleaseLock(lockConnection);
+            }
         }
         finally
         {
-            Scalar(lockConnection, $"SELECT RELEASE_LOCK('{LockName}')");
+            // The schema account's sessions would otherwise idle in the pool beside the service's.
+            MySqlConnection.ClearPool(lockConnection);
         }
     }
 
@@ -80,7 +85,7 @@ internal static class SchemaMigrations
             if (applied.Count == 0) output.WriteLine("Schema is current.");
             return 0;
         }
-        catch (Exception e) when (e is InvalidOperationException or MySqlException)
+        catch (Exception e) when (e is InvalidOperationException or MySqlException or ArgumentException)
         {
             error.WriteLine(e.Message);
             return 1;
@@ -105,6 +110,32 @@ internal static class SchemaMigrations
             .WithVariablesDisabled()
             .LogToNowhere()
             .Build();
+
+    private static void TakeLock(MySqlConnection connection)
+    {
+        switch (Scalar(connection, $"SELECT GET_LOCK('{LockName}', {LockTimeoutSeconds})"))
+        {
+            case 1 or 1L:
+                return;
+            case 0 or 0L:
+                throw new InvalidOperationException(
+                    $"Could not take the schema lock within {LockTimeoutSeconds} s: another start is migrating this database.");
+            default:
+                throw new InvalidOperationException("Could not take the schema lock: the database refused it.");
+        }
+    }
+
+    // A lost connection has released the lock with it, and the upgrade's own error is the one to report.
+    private static void ReleaseLock(MySqlConnection connection)
+    {
+        try
+        {
+            Scalar(connection, $"SELECT RELEASE_LOCK('{LockName}')");
+        }
+        catch (MySqlException)
+        {
+        }
+    }
 
     private static object? Scalar(MySqlConnection connection, string sql) =>
         new MySqlCommand(sql, connection).ExecuteScalar();

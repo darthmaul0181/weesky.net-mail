@@ -495,7 +495,8 @@ journalctl -u scotty.microservice -n 30
 | `'Generic:Administrators' holds '…', which is not an email address` | Fix that entry in `Generic__Administrators` |
 | `STATE_DIRECTORY is not set` | Start the service with `systemctl`, not by hand, and keep the `StateDirectory=` line of the service file |
 | `Schema is behind: … not applied` | `ConnectionStrings__WebmailSchema` is missing from the settings file. Put it back, then restart |
-| `Schema migration … failed` | The database refused to change a table; the rest of the message says why. Fix that, then restart |
+| `Schema migration … failed` | The database refused to change a table; the rest of the message says why. Fix that, then restart. `Multiple primary key defined` on `0001_initial.sql` means the database was installed before version 1.3.0: see "Installed before version 1.3.0?" below |
+| `Access denied for user 'scotty_webmail_schema'` | The second password in `ConnectionStrings__WebmailSchema` is wrong |
 | `Could not take the schema lock` | Another start is updating the tables. Wait a minute, then restart |
 | `The session signing key … cannot be read` | Give the service access to it: `chown scotty:scotty /var/lib/scotty.microservice/session-signing.key` |
 | `The session signing key … is empty or shorter than 32 bytes` | Delete it: a new key is generated, and everyone signs in again |
@@ -511,6 +512,16 @@ After any change to the settings: `systemctl restart scotty.microservice`.
 **Updating.** Build the new version (step 1), copy the files again (3.2 and 4.1), then
 `systemctl restart scotty.microservice`. The service updates its tables itself when it starts:
 there is nothing to run on the database.
+
+**Installed before version 1.3.0?** Once, before restarting on 1.3.0 or later:
+
+1. Fill in `install/install.sql` again (step 2.1) and run it. It only adds the second account; the
+   database and the first account are left as they are.
+2. Mark your existing tables as installed:
+   ```bash
+   mysql -u root -p scotty_webmail < install/adopt-existing-database.sql
+   ```
+3. Add the `ConnectionStrings__WebmailSchema` line to the settings file (step 3.3).
 
 **Backups.** Back up the `scotty_webmail` database. After restoring it, follow
 [`../docs/operations/restore-sync-epoch-rotation.md`](../docs/operations/restore-sync-epoch-rotation.md)
