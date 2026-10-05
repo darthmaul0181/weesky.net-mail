@@ -37,9 +37,6 @@ export interface AuthContextValue {
   /** What the platform wires up. Null before it loads and for a backend that predates
    *  the endpoint — every gate elsewhere reads a field `!== false` for exactly that reason. */
   capabilities: Capabilities | null
-  /** The capabilities call has answered, success or failure: until then a platform-dependent
-   *  screen cannot pick its variant. */
-  capabilitiesLoaded: boolean
   identity: AccountIdentity | null
   /** The active account's metadata, absent until the list holding it has loaded. */
   activeAccount: ActiveAccount | null
@@ -87,7 +84,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null)
   const [accountLoaded, setAccountLoaded] = useState(false)
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null)
-  const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<string>(
     () => readStored(ACTIVE_ACCOUNT_KEY) ?? PRIMARY_ACCOUNT_ID)
   const queryClient = useQueryClient()
@@ -120,10 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (current()) setAccountLoaded(true)
     }
     const caps = await capabilitiesPromise
-    if (current()) {
-      setCapabilities(caps)
-      setCapabilitiesLoaded(true)
-    }
+    if (current()) setCapabilities(caps)
   }, [])
 
   useEffect(() => {
@@ -149,7 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccount(null)
       setAccountLoaded(false)
       setCapabilities(null)
-      setCapabilitiesLoaded(false)
       // Flushed here, not in logout(), so a 401 is covered: account-scoped keys still hand one
       // session's cache to the next. resetQueries, never clear(), which detaches the observers above
       // the router (the install manifest). Only on a transition: a first-mount flush killed their reads.
@@ -223,7 +215,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       account,
       accountLoaded,
       capabilities,
-      capabilitiesLoaded,
       identity,
       activeAccount,
       activeAccountId,

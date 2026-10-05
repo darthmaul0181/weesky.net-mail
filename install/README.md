@@ -81,7 +81,9 @@ Scotty runs in one of two modes, chosen by a single line of its settings.
 
 **`generic` — any mail service.** Scotty is a webmail and nothing more: it reads and sends through
 whatever IMAP and SMTP service you point it at, and knows nothing about how the mailboxes behind
-them are managed. You keep managing them where you already do.
+them are managed. You keep managing them where you already do. An administrator named in its
+settings still sets the product name and logo, the calendar service account for invitations sent
+from phones, and the external mail services, such as Outlook, users can connect.
 
 **`weesky` — everything in one place.** Scotty is also the control panel of the mail server itself.
 The same interface users read their mail in lets an administrator create mailboxes, domains and
@@ -97,7 +99,6 @@ what a plain webmail cannot:
 | Users manage their own aliases | — | ✓ |
 | Sending only from addresses the user really owns | left to your SMTP server | checked by Scotty |
 | A mailbox disabled by the administrator is signed out on its next action | — | ✓ |
-| Administrator settings: product name and logo, calendar service account for invitations sent from phones, connecting Outlook mailboxes | ✓ | ✓ |
 
 The price of `weesky` is that it only works with the mail server it was built for: Dovecot and
 Postfix, reading their mailboxes from a MySQL or MariaDB database that Scotty administers. It cannot be

@@ -1,17 +1,12 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using Moq;
 using weesky.Scotty.Microservice.Authentication.Authorization;
 using weesky.Scotty.Providers.Weesky.Controllers;
-using weesky.Scotty.Microservice.Data.Preferences;
 using weesky.Scotty.Microservice.Models;
-using weesky.Scotty.Microservice.Models.Mail;
-using weesky.Scotty.Microservice.Repositories;
 using weesky.Scotty.Providers.Weesky.Repositories;
 using weesky.Scotty.Providers.Weesky.Services;
-using weesky.Scotty.Microservice.Services;
 using weesky.Scotty.Microservice.Tests.Infrastructure;
 using weesky.Scotty.Providers.Weesky.Tests.Infrastructure;
 using Xunit;

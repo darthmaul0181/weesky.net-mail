@@ -44,9 +44,10 @@ function helpTextOf(tab: Tab, t: TFunction<'admin'>) {
 export default function AdminPage() {
   const { t } = useTranslation('admin')
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
-  const { capabilities } = useAuth()
-  const tabs = capabilities?.platform === 'generic' ? TABS.filter(tab => !DIRECTORY_TABS.includes(tab)) : TABS
-  const [chosenTab, setActiveTab] = useState<Tab>(tabs[0])
+  // Off the account, not the capabilities: those open an IMAP session, and may fail or lag.
+  const { account } = useAuth()
+  const tabs = account?.platform === 'generic' ? TABS.filter(tab => !DIRECTORY_TABS.includes(tab)) : TABS
+  const [chosenTab, setChosenTab] = useState<Tab>(tabs[0])
   const activeTab = tabs.includes(chosenTab) ? chosenTab : tabs[0]
   const helpText = helpTextOf(activeTab, t)
   // Where a confirmed delete hands focus when it takes its own row with it: the row's button
@@ -63,7 +64,7 @@ export default function AdminPage() {
           <nav className="admin-tab-bar">
             {tabs.map(tab => (
               <button key={tab} className={`admin-tab${activeTab === tab ? ' is-active' : ''}`}
-                onClick={() => setActiveTab(tab)}>{tabLabelOf(tab, t)}</button>
+                onClick={() => setChosenTab(tab)}>{tabLabelOf(tab, t)}</button>
             ))}
           </nav>
           <div className="admin-tab-content" ref={tabRegion} tabIndex={-1}>

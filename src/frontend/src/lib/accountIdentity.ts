@@ -6,6 +6,8 @@ export interface Account {
   mailbox?: string
   fullName?: string
   isAdmin?: boolean
+  /** Absent on a backend that predates the field, which reads as weesky. */
+  platform?: 'weesky' | 'generic'
   domains?: AccountDomain[]
 }
 

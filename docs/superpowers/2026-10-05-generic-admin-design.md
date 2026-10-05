@@ -79,7 +79,11 @@ admin » n'existe donc qu'en un seul endroit.
 - `ClaimsAccountInfoProvider` renvoie `IsAdmin = true` pour une adresse de la liste. Le front
   reçoit donc `isAdmin` par `/api/Account`, comme en `weesky`.
 - `CapabilitiesController` : `Admin` vaut le drapeau admin du compte, sans la condition
-  `isWeesky`. Le champ `Platform` existe déjà et dit au front quels onglets montrer.
+  `isWeesky`.
+- `GET /api/Account` porte `platform` (`weesky` ou `generic`). C'est lui qui dit au front quels
+  onglets montrer, et non `capabilities.platform` : les capabilities ouvrent une session IMAP, et un
+  serveur IMAP lent ou injoignable ferait attendre la page, ou lui ferait afficher la version
+  weesky.
 
 ### 4. Les routes des domaines externes passent dans le cœur
 
@@ -106,7 +110,7 @@ pas.
 `AdminPage` filtre ses onglets :
 
 - toujours : **Domaines externes**, **Application** ;
-- seulement si `capabilities.platform !== 'generic'` : **Comptes**, **Domaines**, **Domaines
+- seulement si `account.platform !== 'generic'` : **Comptes**, **Domaines**, **Domaines
   virtuels**.
 
 `!== 'generic'` suit la convention `!== false` du projet : pendant le chargement, ou face à un
@@ -116,13 +120,10 @@ L'onglet ouvert par défaut est le premier onglet visible : Comptes en `weesky`,
 en `generic`. Si l'onglet choisi n'est plus visible, l'écran retombe sur le premier visible : aucun
 onglet masqué ne reste affiché.
 
-**La page attend les capabilities.** Sans cette attente, un rechargement de `/settings/admin` en
-`generic` monterait l'onglet Comptes avant que la plateforme soit connue. Sa route n'existe pas en
-`generic` : l'utilisateur verrait une erreur 404 pendant un instant. `AuthContext` expose donc
-`capabilitiesLoaded`, qui passe à vrai une fois la réponse arrivée, qu'elle soit un succès ou un
-échec. Le gate `allowAdmin` répond `'wait'` tant que ce drapeau est faux. Un backend antérieur qui
-répond 404 donne `capabilitiesLoaded = true` avec `capabilities = null`, et la page montre alors la
-version weesky.
+**La plateforme est connue avant l'ouverture de la page.** Le gate `allowAdmin` attend déjà le
+compte (`accountLoaded`), qui porte `platform`. Un rechargement de `/settings/admin` en `generic` ne
+monte donc jamais l'onglet Comptes, dont la route n'existe pas en `generic`, et la page s'affiche
+sans attendre IMAP. Un backend antérieur au champ montre la version weesky.
 
 ### 7. La documentation
 
@@ -151,4 +152,4 @@ Frontend :
 - `SettingsLayout` : entrée Administration visible avec un compte connecté actif ;
 - `AdminPage` : cinq onglets en `weesky` (et capabilities nulles), deux en `generic` ; onglet par
   défaut ; repli quand l'onglet actif disparaît ;
-- `allowAdmin` : `'wait'` tant que les capabilities ne sont pas chargées.
+- `AdminPage` : onglets `generic` même quand les capabilities n'ont pas pu être chargées.

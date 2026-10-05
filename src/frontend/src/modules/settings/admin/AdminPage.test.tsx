@@ -36,7 +36,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../api.js', () => ({ api: mocks, clearSession: vi.fn() }))
 
-const auth = vi.hoisted(() => ({ capabilities: null as { platform?: 'weesky' | 'generic' } | null }))
+const auth = vi.hoisted(() => ({
+  account: null as { platform?: 'weesky' | 'generic' } | null,
+  capabilities: null as { platform?: 'weesky' | 'generic' } | null,
+}))
 vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => auth }))
 
 function newClient() {
@@ -76,6 +79,7 @@ const MOCK_APP_SETTINGS = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  auth.account = null
   auth.capabilities = null
   mocks.adminGetUsers.mockResolvedValue(MOCK_USERS)
   mocks.adminGetVirtualDomains.mockResolvedValue(MOCK_VIRTUAL_DOMAINS)
@@ -1325,8 +1329,8 @@ describe('AdminPage tabs by platform', () => {
   const tabNames = (container: HTMLElement) =>
     [...container.querySelectorAll('.admin-tab-bar button')].map(button => button.textContent)
 
-  it.each([null, { platform: 'weesky' as const }])('shows the five tabs on weesky (capabilities %o), Accounts open', async caps => {
-    auth.capabilities = caps
+  it.each([null, {}, { platform: 'weesky' as const }])('shows the five tabs on weesky (account %o), Accounts open', async account => {
+    auth.account = account
     const { container } = renderAdminPage()
     expect(tabNames(container)).toEqual(['Accounts', 'Domains', 'Virtual domains', 'External domains', 'Application'])
     expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
@@ -1334,7 +1338,7 @@ describe('AdminPage tabs by platform', () => {
   })
 
   it('shows only External domains and Application on generic, External domains open', async () => {
-    auth.capabilities = { platform: 'generic' }
+    auth.account = { platform: 'generic' }
     const { container } = renderAdminPage()
     expect(tabNames(container)).toEqual(['External domains', 'Application'])
     expect(screen.getByRole('button', { name: 'External domains' })).toHaveClass('is-active')
@@ -1342,10 +1346,18 @@ describe('AdminPage tabs by platform', () => {
     expect(mocks.adminGetUsers).not.toHaveBeenCalled()
   })
 
+  it('reads the platform off the account, so capabilities that failed to load still show the generic page', () => {
+    auth.account = { platform: 'generic' }
+    auth.capabilities = null
+    const { container } = renderAdminPage()
+    expect(tabNames(container)).toEqual(['External domains', 'Application'])
+    expect(mocks.adminGetUsers).not.toHaveBeenCalled()
+  })
+
   it('falls back to the first visible tab when the open one disappears', async () => {
     const { container, rerender } = renderAdminPage()
     await userEvent.click(screen.getByRole('button', { name: 'Domains' }))
-    auth.capabilities = { platform: 'generic' }
+    auth.account = { platform: 'generic' }
     rerender(<AdminPage />)
     expect(tabNames(container)).toEqual(['External domains', 'Application'])
     expect(screen.getByRole('button', { name: 'External domains' })).toHaveClass('is-active')

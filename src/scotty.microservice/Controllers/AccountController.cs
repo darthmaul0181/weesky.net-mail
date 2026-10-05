@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Microservice.Platform;
 using weesky.Scotty.Microservice.Services;
@@ -11,6 +12,7 @@ namespace weesky.Scotty.Microservice.Controllers;
 [ApiController]
 [Authorize]
 public sealed class AccountController(
+    IOptions<PlatformOptions> platformOptions,
     IAccountInfoProvider accountInfo,
     IAccountConnectionResolver connections,
     IImapSessionProvider imapSessions) : ApiBaseController
@@ -28,6 +30,7 @@ public sealed class AccountController(
     public async Task<ActionResult<AccountInfo>> GetAccountInfo(CancellationToken cancellationToken)
     {
         Result<AccountInfo> result = await accountInfo.GetAccountInfoAsync(AuthenticatedUser, cancellationToken);
+        if (result.IsSuccess) result.Value.Platform = platformOptions.Value.Platform;
         return FromResult(result, errorStatusCode: StatusCodes.Status404NotFound);
     }
 
