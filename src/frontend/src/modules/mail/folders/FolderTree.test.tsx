@@ -250,6 +250,29 @@ describe('FolderTree', () => {
     expect(screen.getByText('Junk')).toBeInTheDocument()
   })
 
+  // A draft is work left unfinished whether or not it was ever opened, so its badge counts them all.
+  it('badges the drafts folder with its total, read drafts included', () => {
+    const folders = [
+      node({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts', total: 3, unread: 0 }),
+    ]
+
+    render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Drafts, 3 drafts' })).toBeInTheDocument()
+  })
+
+  it('shows no drafts badge when the folder is empty', () => {
+    render(<FolderTree
+      folders={[node({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts', total: 0 })]}
+      selectedPath={null}
+      onSelect={vi.fn()}
+    />)
+
+    expect(screen.getByRole('button', { name: 'Drafts' })).toBeInTheDocument()
+    expect(screen.queryByText('0')).not.toBeInTheDocument()
+  })
+
   // The visible badge says "Inbox 4" to a sighted user; a bare aria-hidden count would say only
   // "Inbox" to a screen reader and the four waiting messages would never be announced. The name
   // must carry both pieces of information — and only when a badge is actually rendered.

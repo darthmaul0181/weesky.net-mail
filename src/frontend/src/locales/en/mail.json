@@ -19,6 +19,9 @@
     "unreadAria_one": "{{label}}, {{count}} unread",
     "unreadAria_many": "{{label}}, {{count}} unread",
     "unreadAria_other": "{{label}}, {{count}} unread",
+    "draftsAria_one": "{{label}}, {{count}} draft",
+    "draftsAria_many": "{{label}}, {{count}} drafts",
+    "draftsAria_other": "{{label}}, {{count}} drafts",
     "create": {
       "title": "New folder",
       "name": "Name",

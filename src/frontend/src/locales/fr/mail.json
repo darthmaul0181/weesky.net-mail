@@ -19,6 +19,9 @@
     "unreadAria_one": "{{label}}, {{count}} non lu",
     "unreadAria_many": "{{label}}, {{count}} non lus",
     "unreadAria_other": "{{label}}, {{count}} non lus",
+    "draftsAria_one": "{{label}}, {{count}} brouillon",
+    "draftsAria_many": "{{label}}, {{count}} brouillons",
+    "draftsAria_other": "{{label}}, {{count}} brouillons",
     "create": {
       "title": "Nouveau dossier",
       "name": "Nom",
