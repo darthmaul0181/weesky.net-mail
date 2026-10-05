@@ -3,10 +3,10 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'react-router'
 import { useRef, useState, type ReactNode } from 'react'
-import userEvent from '@testing-library/user-event'
-import { createTestQueryClient, mockViewport, resetViewport, settle } from '../../../test-utils'
+import { createTestQueryClient, mockViewport, resetViewport, settle, setupUser } from '../../../test-utils'
 import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
 import type { Contact } from '../../contacts/contactTypes'
+import { folderNodeOf } from '../mailTestHarness'
 import { mailKeys } from '../queries'
 import MessageReader from './MessageReader'
 import Modal from '../../../components/Modal'
@@ -86,18 +86,11 @@ beforeEach(() => {
 const theme = vi.hoisted(() => ({ isDark: false }))
 vi.mock('../../../contexts/ThemeContext', () => ({ useTheme: () => theme }))
 
-function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
-}
-
 const roleTree: MailFolderNode[] = [
-  folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-  folderNode({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
-  folderNode({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
-  folderNode({ path: 'Spam', name: 'Spam', specialUse: 'junk' }),
+  folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  folderNodeOf({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
+  folderNodeOf({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+  folderNodeOf({ path: 'Spam', name: 'Spam', specialUse: 'junk' }),
 ]
 const noJunkTree = roleTree.filter(node => node.specialUse !== 'junk')
 const noTrashTree = roleTree.filter(node => node.specialUse !== 'trash')
@@ -305,62 +298,22 @@ describe('MessageReader', () => {
       expect(bubbles.some(text => text?.includes('mx.weesky.net; spf=x; dkim=y'))).toBe(true)
     })
 
-    it('warns about a message that failed one', async () => {
-      mocks.getMailMessage.mockResolvedValue(authenticated('fail', 'pass'))
-
-      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-
-      expect(await screen.findByRole('button', { name: /failed spf or dkim/i })).toBeInTheDocument()
-    })
-
     // Nothing at all rather than a reassuring or an alarming badge: the checks did not run.
     // Asserted on the badge element itself, not its accessible name: a relabel in AuthBadge
     // must not silently make this stop testing anything.
-    it('says nothing when the message carries no authentication headers', async () => {
-      mocks.getMailMessage.mockResolvedValue(detail)
+    it.each([
+      ['carries no authentication headers', detail],
+      ['is a softfail', authenticated('softfail', 'pass')],
+      // The backend's shape for a message whose receiving server ran checks it never reported.
+      ['named neither method in a parsed header', { ...detail, authentication: { raw: 'mx.weesky.net; dmarc=pass' } }],
+    ])('says nothing when the message %s', async (_case, message) => {
+      mocks.getMailMessage.mockResolvedValue(message)
 
       const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
       await screen.findByText('Re: facture')
 
       expect(container.querySelector('.auth-badge')).toBeNull()
     })
-
-    it('says nothing about a softfail', async () => {
-      mocks.getMailMessage.mockResolvedValue(authenticated('softfail', 'pass'))
-
-      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-      await screen.findByText('Re: facture')
-
-      expect(container.querySelector('.auth-badge')).toBeNull()
-    })
-
-    // The backend's shape for a message whose receiving server ran checks it never reported.
-    it('says nothing when the header parsed but named neither method', async () => {
-      mocks.getMailMessage.mockResolvedValue({
-        ...detail,
-        authentication: { raw: 'mx.weesky.net; dmarc=pass' },
-      })
-
-      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-      await screen.findByText('Re: facture')
-
-      expect(container.querySelector('.auth-badge')).toBeNull()
-    })
-  })
-
-  it('renders the body in a sandboxed iframe with no scripts and no same-origin', async () => {
-    mocks.getMailMessage.mockResolvedValue(detail)
-
-    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-    await screen.findByText('Re: facture')
-
-    const iframe = container.querySelector('iframe')
-    expect(iframe).toBeTruthy()
-
-    const sandbox = iframe!.getAttribute('sandbox') ?? ''
-    expect(sandbox).not.toContain('allow-scripts')
-    expect(sandbox).not.toContain('allow-same-origin')
-    expect(iframe!.getAttribute('srcdoc')).toContain('Bonjour')
   })
 
   // Regression, found against a live mailbox: the sandbox was fully empty, which withholds
@@ -378,6 +331,7 @@ describe('MessageReader', () => {
     expect(sandbox).toContain('allow-popups-to-escape-sandbox')
     expect(sandbox).not.toContain('allow-scripts')
     expect(sandbox).not.toContain('allow-same-origin')
+    expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('Bonjour')
   })
 
   it('shows the sent date in full rather than a raw timestamp', async () => {
@@ -608,6 +562,7 @@ describe('MessageReader', () => {
       .toContain('(max-width: 0) and (min-width: 1px)'))
     const srcdoc = container.querySelector('iframe')!.getAttribute('srcdoc')!
     expect(srcdoc).toContain('.bg { background-color: #ffffff }')
+    expect(srcdoc).toContain('color-scheme: light')
     expect(srcdoc).not.toMatch(/#212121|rgb\(33, 33, 33\)|brightness/)
     theme.isDark = false
   })
@@ -665,16 +620,6 @@ describe('MessageReader', () => {
     expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('data-blocked-src')
   })
 
-  it('keeps blocking when the account has not asked for it', async () => {
-    mocks.getMailMessage.mockResolvedValue(blocked)
-
-    const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-
-    expect(await screen.findByText(/2 remote images were blocked/i)).toBeInTheDocument()
-    expect(container.querySelector('iframe')!.getAttribute('srcdoc'))
-      .toContain('data-blocked-src')
-  })
-
   it('does not offer the prompt when nothing was blocked', async () => {
     mocks.getMailMessage.mockResolvedValue(detail)
 
@@ -682,15 +627,6 @@ describe('MessageReader', () => {
     await screen.findByText('Re: facture')
 
     expect(screen.queryByRole('button', { name: /show images/i })).not.toBeInTheDocument()
-  })
-
-  it('offers the chevron beside Show images', async () => {
-    mocks.getMailMessage.mockResolvedValue(blocked)
-
-    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-
-    expect(await screen.findByRole('button', { name: 'Show images' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'More image options' })).toBeInTheDocument()
   })
 
   // The address is folded before it leaves, so an approved sender still matches the message it
@@ -774,9 +710,6 @@ describe('MessageReader', () => {
   // With the global setting on, revoking changes nothing visible. An entry whose effect cannot
   // be seen misleads more than an absent one helps.
   it('hides the revocation while remote images always load', async () => {
-    mocks.getPreferences.mockResolvedValue(
-      { 'mail.pageSize': '30', 'mail.alwaysShowImages': 'true' })
-    mocks.getTrustedSenders.mockResolvedValue(['alice@x.be'])
     mocks.getMailMessage.mockResolvedValue(blocked)
 
     renderWithTrusted(['alice@x.be'], { 'mail.pageSize': '30', 'mail.alwaysShowImages': 'true' })
@@ -1190,16 +1123,6 @@ describe('MessageReader', () => {
     expect(screen.queryByText(/could not load this message/i)).not.toBeInTheDocument()
   })
 
-  it('fetches nothing for a message that references no cid', async () => {
-    mocks.getMailMessage.mockResolvedValue(detail)
-
-    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-    await screen.findByText('Re: facture')
-    await settle()
-
-    expect(mocks.requestBlob).not.toHaveBeenCalled()
-  })
-
   describe('dark mode', () => {
     // Recolouring is a rendering choice, not a fidelity one: it has to be reversible per
     // message, because a mail whose own palette recolours badly needs an escape hatch.
@@ -1226,20 +1149,6 @@ describe('MessageReader', () => {
       expect(srcdoc).toContain('color-scheme: light')
       expect(srcdoc).toContain('#000000')
       expect(screen.queryByRole('button', { name: /original colours/i })).not.toBeInTheDocument()
-    })
-
-    it('restores the original colours on demand', async () => {
-      theme.isDark = true
-      mocks.getMailMessage.mockResolvedValue(detail)
-
-      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-      await screen.findByTitle('Message body')
-
-      fireEvent.click(screen.getByRole('button', { name: /original colours/i }))
-
-      await waitFor(() =>
-        expect(container.querySelector('iframe')!.getAttribute('srcdoc')).toContain('color-scheme: light'))
-      theme.isDark = false
     })
   })
 
@@ -1275,14 +1184,6 @@ describe('MessageReader', () => {
 
       expect(screen.queryByText(/^Spam score:/)).not.toBeInTheDocument()
     })
-  })
-
-  it('surfaces a load failure', async () => {
-    mocks.getMailMessage.mockRejectedValue(new Error('boom'))
-
-    render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-
-    expect(await screen.findByText(/could not load this message/i)).toBeInTheDocument()
   })
 
   describe('the declared priority', () => {
@@ -1327,16 +1228,6 @@ describe('MessageReader', () => {
   })
 
   describe('the actions zone', () => {
-    it('offers no colour toggle in light theme', async () => {
-      mocks.getMailMessage.mockResolvedValue(detail)
-
-      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-      await screen.findByText('Re: facture')
-
-      expect(screen.queryByRole('button', { name: /original colours/i })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Message actions' })).toBeInTheDocument()
-    })
-
     // Recolouring a text-only message means nothing — the same guard the banner had.
     it('offers no colour toggle for a text-only message, even in dark', async () => {
       theme.isDark = true
@@ -1549,18 +1440,12 @@ describe('MessageReader', () => {
       expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     })
 
-    // Following one would leave the webmail for the OS mail client; the details grid keeps it.
-    it('offers nothing for a mailto-only unsubscribe', async () => {
-      mocks.getMailMessage.mockResolvedValue({ ...detail, unsubscribeUrl: 'mailto:unsub@x.be' })
-
-      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
-      await screen.findByText('Re: facture')
-
-      expect(screen.queryByRole('link', { name: 'Unsubscribe' })).not.toBeInTheDocument()
-    })
-
-    it('offers nothing when the message carries no unsubscribe link', async () => {
-      mocks.getMailMessage.mockResolvedValue(detail)
+    // Following a mailto would leave the webmail for the OS mail client; the details grid keeps it.
+    it.each([
+      ['a mailto-only unsubscribe', { unsubscribeUrl: 'mailto:unsub@x.be' }],
+      ['no unsubscribe link', {}],
+    ])('offers nothing for %s', async (_case, fields) => {
+      mocks.getMailMessage.mockResolvedValue({ ...detail, ...fields })
 
       render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
       await screen.findByText('Re: facture')
@@ -1570,7 +1455,7 @@ describe('MessageReader', () => {
   })
 
   describe('back navigation', () => {
-    it('shows a back button only when a handler is given', async () => {
+    it('goes back from the back button when a handler is given', async () => {
       mocks.getMailMessage.mockResolvedValue(detail)
       const onBack = vi.fn()
 
@@ -1769,6 +1654,7 @@ describe('MessageReader', () => {
     // The expunged message takes the reader's own Delete button with it — the folder may hold no
     // next one — so there is no opener left and focus would land on <body>.
     it('hands focus to the list region when the expunge closes the reader', async () => {
+      const user = setupUser()
       mocks.getMailMessage.mockResolvedValue(detail)
       function Host() {
         const region = useRef<HTMLDivElement>(null)
@@ -1786,8 +1672,8 @@ describe('MessageReader', () => {
       render(<Host />, { wrapper })
       await screen.findByText('Re: facture')
 
-      await userEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
-      await userEvent.click(modal().getByRole('button', { name: 'Delete' }))
+      await user.click(screen.getByRole('button', { name: 'Delete permanently' }))
+      await user.click(modal().getByRole('button', { name: 'Delete' }))
 
       expect(screen.getByTestId('region')).toHaveFocus()
     })

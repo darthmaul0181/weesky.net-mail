@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '../../../test-utils'
 import SelectionToolbar, { type SelectionToolbarProps } from './SelectionToolbar'
 
 const noop = { onRun: vi.fn() }
@@ -187,17 +187,19 @@ describe('SelectionToolbar narrow states', () => {
   })
 
   it('offers Refresh in the kebab when the layout supplies one', async () => {
+    const user = setupUser()
     const onRun = vi.fn()
     render(<SelectionToolbar {...props({ count: 0 })} refresh={{ onRun }} />)
-    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Refresh' }))
+    await user.click(screen.getByRole('button', { name: 'More actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Refresh' }))
     expect(onRun).toHaveBeenCalled()
   })
 
   // Nothing to refresh with means no entry: a dead row in the kebab reads as a broken action.
   it('leaves Refresh out when no handler was supplied', async () => {
+    const user = setupUser()
     render(<SelectionToolbar {...props({ count: 0 })} />)
-    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await user.click(screen.getByRole('button', { name: 'More actions' }))
     expect(screen.queryByRole('menuitem', { name: 'Refresh' })).toBeNull()
   })
 })

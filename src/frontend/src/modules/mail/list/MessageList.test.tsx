@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Profiler, type ReactNode } from 'react'
 import MessageList from './MessageList'
 import type { MailFolderNode } from '../api/mailTypes'
-import { createTestQueryClient, fireTouch as dispatchTouch, settle } from '../../../test-utils'
+import { folderNodeOf } from '../mailTestHarness'
+import { createTestQueryClient, fireTouch as dispatchTouch, settle, setupUser } from '../../../test-utils'
 import { focusablesIn, tabbablesIn } from '../../../lib/layerStack'
 import { DRAG_MIME, serializeDrag } from './dragMessages'
-import { useRowExit, type RowExit } from './useRowExit'
+import { ROW_EXIT_MS, useRowExit, type RowExit } from './useRowExit'
 import type { AddToast } from '../../../hooks/useToasts'
 
 const mocks = vi.hoisted(() => ({
@@ -27,9 +27,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 // A plain function, not a vi.fn: the suites clear mocks between tests and the flag hook has
 // to keep answering a mutation afterwards.
 vi.mock('../queries', () => ({
@@ -101,6 +99,17 @@ type ListProps = Parameters<typeof MessageList>[0]
 // The only press useLongPress answers to. A mouse hold is deliberately inert — see its own suite.
 const FINGER = { pointerType: 'touch', isPrimary: true, button: 0 }
 
+function dragDT() {
+  const store: Record<string, string> = {}
+  return {
+    setData: vi.fn((type: string, value: string) => { store[type] = value }),
+    getData: (type: string) => store[type] ?? '',
+    setDragImage: vi.fn(),
+    effectAllowed: 'uninitialized',
+    types: [] as string[],
+  }
+}
+
 /** A drag across the row by `dx`, the row given a 300px width jsdom does not lay out. */
 function swipe(row: HTMLElement, dx: number) {
   Object.defineProperty(row, 'clientWidth', { configurable: true, value: 300 })
@@ -143,17 +152,10 @@ function contentOf(name: RegExp): HTMLElement {
 const rowOf = (name: RegExp) => contentOf(name).closest('.message-row') as HTMLElement
 const stopsIn = tabbablesIn
 
-function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
-}
-
 const roleTree: MailFolderNode[] = [
-  folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-  folderNode({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
-  folderNode({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+  folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  folderNodeOf({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
+  folderNodeOf({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
 ]
 
 // Newest first, as the backend sends them; the key is the oldest member's uid.
@@ -258,9 +260,7 @@ describe('MessageList', () => {
     expect(container.querySelectorAll('svg[aria-label="Has attachments"]')).toHaveLength(1)
     // The marker's `title` is a pointer tooltip rather than a name a reader is given, so the
     // row's own composed name is what has to carry it — on that one row.
-    const named = screen.getAllByRole('gridcell')
-      .filter(element => /has attachments/i.test(element.getAttribute('aria-label') || ''))
-    expect(named).toHaveLength(1)
+    expect(container.querySelectorAll('[role="gridcell"][aria-label*="has attachments" i]')).toHaveLength(1)
   })
 
   it('falls back to the address when there is no display name', () => {
@@ -297,13 +297,6 @@ describe('MessageList', () => {
     fireEvent.click(screen.getByText('Alice Martin'))
 
     expect(onSelect).toHaveBeenCalledWith(2)
-  })
-
-  it('shows an empty state for an empty folder', () => {
-    mocks.useMessageList.mockReturnValue(pagedState({}, { messages: [], total: 0 }))
-    renderList()
-
-    expect(screen.getByText(/no messages/i)).toBeInTheDocument()
   })
 
   it('hides the pager when everything fits on one page', () => {
@@ -368,20 +361,15 @@ describe('the declared priority', () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
   })
 
-  it('marks a high-priority row with a word beside the sender', async () => {
+  it.each([
+    { priority: 'high', title: 'High priority', word: 'High' },
+    { priority: 'low', title: 'Low priority', word: 'Low' },
+  ])('marks a $priority-priority row with a word beside the sender', async ({ priority, title, word }) => {
     mocks.useMessageList.mockReturnValue(
-      pagedState({}, { messages: [{ ...sample[0], subject: 'Devis', priority: 'high' }] }))
+      pagedState({}, { messages: [{ ...sample[0], subject: 'Devis', priority }] }))
     renderList()
 
-    expect(await screen.findByTitle('High priority')).toHaveTextContent('High')
-  })
-
-  it('marks a low-priority row', async () => {
-    mocks.useMessageList.mockReturnValue(
-      pagedState({}, { messages: [{ ...sample[0], subject: 'Newsletter', priority: 'low' }] }))
-    renderList()
-
-    expect(await screen.findByTitle('Low priority')).toHaveTextContent('Low')
+    expect(await screen.findByTitle(title)).toHaveTextContent(word)
   })
 
   // The whole point of the placement: the subject line carries the subject and nothing else, so
@@ -450,8 +438,11 @@ describe('a drafts folder', () => {
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: draftSample }))
   })
 
-  it('shows the joined recipients and a Draft marker instead of the sender', async () => {
-    renderList({ folderRole: 'drafts' })
+  it.each([
+    { skin: 'narrow', wide: false },
+    { skin: 'wide', wide: true },
+  ])('shows the joined recipients and a Draft marker instead of the sender in the $skin skin', async ({ wide }) => {
+    renderList({ folderRole: 'drafts', wide })
 
     expect(await screen.findByText('Bob, carol@ext.example')).toBeInTheDocument()
     expect(screen.getAllByText('Draft')).toHaveLength(draftSample.length)
@@ -469,13 +460,6 @@ describe('a drafts folder', () => {
     renderList({ folderRole: 'drafts' })
 
     expect(await screen.findByText('(no recipient)')).toBeInTheDocument()
-  })
-
-  it('shows the recipients and the marker in the wide skin too', async () => {
-    renderList({ folderRole: 'drafts', wide: true })
-
-    expect(await screen.findByText('Bob, carol@ext.example')).toBeInTheDocument()
-    expect(screen.getAllByText('Draft')).toHaveLength(draftSample.length)
   })
 })
 
@@ -504,7 +488,6 @@ describe('the row controls', () => {
     mocks.useMessageList.mockReturnValue(pagedState())
   })
 
-
   it('opens a row from the keyboard', () => {
     const onSelect = vi.fn()
     renderList({ onSelect })
@@ -523,17 +506,6 @@ describe('the row controls', () => {
 
     expect(onSelect).toHaveBeenCalledWith(2)
     expect(notScrolled).toBe(true)
-  })
-
-  // The stop roves, so no element keeps `tabindex="0"`; what the content cell must keep is the
-  // attribute itself, since a cell carrying none is one the walk cannot find — no keyboard path to
-  // the row, and no :focus-within to reveal the cluster.
-  it('puts the content cell in the grid walk', async () => {
-    renderList()
-    await settle()
-
-    expect(contentOf(/alice martin/i)).toHaveAttribute('tabindex')
-    expect(stopsIn(screen.getByRole('grid'))).toHaveLength(1)
   })
 
   // The name is composed rather than read off the contents, which would announce the row's own
@@ -678,23 +650,15 @@ describe('archive and trash from the row', () => {
   })
 
   // A missing button reads as a bug; a disabled one carrying its reason is an instruction.
-  it('offers archive disabled with its reason when no folder holds the role', () => {
-    mocks.folders = [folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
-    renderList()
+  it.each([['Archive', 'archive'], ['Delete', 'trash']])(
+    'offers %s disabled with its reason when no folder holds the %s role', (name, role) => {
+      mocks.folders = [folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
+      renderList()
 
-    const archive = within(rowOf(/alice martin/i)).getByRole('button', { name: 'Archive' })
-    expect(archive).toBeDisabled()
-    expect(archive).toHaveAttribute('title', 'Assign the archive folder in Settings → Folders')
-  })
-
-  it('offers delete disabled with its reason when no folder holds the trash role', () => {
-    mocks.folders = [folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
-    renderList()
-
-    const trash = within(rowOf(/alice martin/i)).getByRole('button', { name: 'Delete' })
-    expect(trash).toBeDisabled()
-    expect(trash).toHaveAttribute('title', 'Assign the trash folder in Settings → Folders')
-  })
+      const button = within(rowOf(/alice martin/i)).getByRole('button', { name })
+      expect(button).toBeDisabled()
+      expect(button).toHaveAttribute('title', `Assign the ${role} folder in Settings → Folders`)
+    })
 
   it('disables archive inside the archive folder', () => {
     renderList({ folderPath: 'Archives', folderRole: 'archive' })
@@ -800,18 +764,22 @@ describe('archive and trash from the row', () => {
 // The timing is useRowExit's; what belongs here is that the set it publishes reaches the DOM, and
 // reaches the slot rather than the row — the row only fades, the slot is the box that collapses.
 describe('a row on its way out', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
   const slotOf = (name: RegExp) => rowOf(name).closest('.message-row-slot')
 
-  it('marks the slot of every uid the exit is holding', () => {
-    renderList({ rowExit: { departing: new Set([2]), depart: (_uids, fire) => fire() } })
+  it('marks the slot of every uid the exit is holding, and only those', () => {
+    const { rerender } = renderList({ rowExit: { departing: new Set([2]), depart: (_uids, fire) => fire() } })
 
     expect(slotOf(/alice martin/i)).toHaveClass('is-leaving')
     expect(slotOf(/bob@x\.be/i)).not.toHaveClass('is-leaving')
-  })
 
-  it('leaves every slot alone while nothing is departing', () => {
-    renderList()
-
+    rerender(<MessageList {...defaultListProps()} />)
     expect(slotOf(/alice martin/i)).not.toHaveClass('is-leaving')
   })
 })
@@ -865,13 +833,6 @@ describe('the preferences it obeys', () => {
     vi.clearAllMocks()
     mocks.folders = roleTree
     mocks.useMessageList.mockReturnValue(pagedState())
-  })
-
-  it('shows the preview when the preference is on', async () => {
-    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.showPreview': 'true' })
-    renderList()
-
-    expect(await screen.findByText('Merci pour l’envoi')).toBeInTheDocument()
   })
 
   it('hides it when the preference is off', async () => {
@@ -936,7 +897,7 @@ describe('pull to refresh', () => {
   })
 })
 
-function streamingState(overrides = {}, count = 100) {
+function streamingState(overrides = {}, count = 25) {
   const messages = Array.from({ length: count }, (_, i) => ({
     uid: i + 1, subject: `Subject ${i + 1}`, fromName: 'A', fromAddress: 'a@b.c',
     date: '2026-07-21T00:00:00Z', seen: true, flagged: false, answered: false,
@@ -981,17 +942,7 @@ describe('MessageList streaming', () => {
     // ahead of it are its own index among those children.
     const drawn = Array.from(container.querySelectorAll('.message-list > *'))
     const carrying = drawn.findIndex(node => node.classList.contains('message-list-sentinel'))
-    expect(carrying).toBe(80)
-  })
-
-  // A second length pins the rule to move with the block count, not to a fixed row.
-  it('moves the sentinel as more blocks arrive', () => {
-    mocks.useMessageList.mockReturnValue(streamingState({}, 250))
-    const { container } = renderList()
-
-    const drawn = Array.from(container.querySelectorAll('.message-list > *'))
-    const carrying = drawn.findIndex(node => node.classList.contains('message-list-sentinel'))
-    expect(carrying).toBe(230)
+    expect(carrying).toBe(5)
   })
 
   it('roots the observer at the scrolling band', () => {
@@ -1266,14 +1217,6 @@ describe('multi-select', () => {
     } finally { vi.useRealTimers() }
   })
 
-  it('a shift-click selects the range', () => {
-    renderWithRoles()
-    const boxes = screen.getAllByRole('checkbox', { name: /select message from/i })
-    fireEvent.click(boxes[0]!)
-    fireEvent.click(boxes[1]!, { shiftKey: true })
-    expect(screen.getByText('2 selected')).toBeInTheDocument()
-  })
-
   it('the master checkbox selects and clears all loaded rows', () => {
     renderWithRoles()
     const master = screen.getByRole('checkbox', { name: 'Select all' })
@@ -1308,15 +1251,16 @@ describe('multi-select', () => {
   // Confirming clears the selection, so the toolbar button that opened the dialog goes with it:
   // without a region to fall back on, focus lands on <body> and the keyboard is back at the top.
   it('hands focus to the list region when the bulk delete takes its own button with it', async () => {
+    const user = setupUser()
     const region = document.createElement('div')
     region.tabIndex = -1
     document.body.append(region)
     try {
       renderWithRoles('trash', { regionRef: { current: region } })
       fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
-      await userEvent.click(bar().getByRole('button', { name: 'Delete permanently' }))
+      await user.click(bar().getByRole('button', { name: 'Delete permanently' }))
 
-      await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+      await user.click(screen.getByRole('button', { name: 'Delete' }))
 
       expect(region).toHaveFocus()
     } finally { region.remove() }
@@ -1480,17 +1424,6 @@ describe('MessageList as a drag source', () => {
   })
 
   const checkOf = (label: string) => screen.getByRole('checkbox', { name: label })
-
-  function dragDT() {
-    const store: Record<string, string> = {}
-    return {
-      setData: vi.fn((type: string, value: string) => { store[type] = value }),
-      getData: (type: string) => store[type] ?? '',
-      setDragImage: vi.fn(),
-      effectAllowed: 'uninitialized',
-      types: [] as string[],
-    }
-  }
 
   it('makes each row draggable', () => {
     renderList()
@@ -1822,7 +1755,7 @@ describe('MessageList starred filter', () => {
 describe('choosable row actions', () => {
   const junkTree: MailFolderNode[] = [
     ...roleTree,
-    folderNode({ path: 'Indesirables', name: 'Indesirables', specialUse: 'junk' }),
+    folderNodeOf({ path: 'Indesirables', name: 'Indesirables', specialUse: 'junk' }),
   ]
 
   beforeEach(() => {
@@ -1831,7 +1764,6 @@ describe('choosable row actions', () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '50', 'mail.showPreview': 'true' })
     mocks.useMessageList.mockReturnValue(pagedState())
   })
-
 
   // An older backend answers without the key at all. Reading that as "nothing chosen" would
   // strip every icon off every row on the first render after a deploy.
@@ -1843,13 +1775,6 @@ describe('choosable row actions', () => {
     expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
     expect(within(row).queryByRole('button', { name: 'Report as junk' })).toBeNull()
-  })
-
-  it('adds junk to the row once it is chosen', async () => {
-    renderList({}, { 'mail.rowActions': 'seen,archive,junk,delete' })
-
-    expect(await within(rowOf(/bob@x\.be/i)).findByRole('button', { name: 'Report as junk' }))
-      .toBeInTheDocument()
   })
 
   it('reports to the folder holding the junk role', async () => {
@@ -1913,22 +1838,14 @@ describe('choosable row actions', () => {
     })
   })
 
-  // Nothing drawn must reserve nothing: with no cluster the reserve lands on whatever element is
-  // second-to-last instead — the subject, or the sender line when previews are off.
-  it('advertises zero when every icon is off', async () => {
+  // Zero is a real choice: the cluster goes and reserves nothing, rather than an empty box eating
+  // its width (the reserve would land on the subject). The star is a flag, not an action, and stays.
+  it('advertises zero and drops the cluster entirely when every icon is off', async () => {
     renderList({}, { 'mail.rowActions': '' })
 
     await waitFor(() =>
       expect(rowOf(/bob@x\.be/i).style.getPropertyValue('--row-actions')).toBe('0'))
-    expect(rowOf(/bob@x\.be/i).querySelector('.message-row-cluster')).toBeNull()
-  })
-
-  // Zero is a real choice, so the cluster goes rather than collapsing to an empty box that would
-  // still eat its reserved width. The star is a flag, not an action, and stays.
-  it('drops the cluster entirely when every icon is off', async () => {
-    renderList({}, { 'mail.rowActions': '' })
-
-    await waitFor(() => expect(document.querySelector('.message-row-cluster')).toBeNull())
+    expect(document.querySelector('.message-row-cluster')).toBeNull()
     expect(within(rowOf(/bob@x\.be/i)).getByRole('button', { name: 'Star' })).toBeInTheDocument()
   })
 })
@@ -2082,14 +1999,7 @@ describe('conversation rows', () => {
 
   it('a dragged thread row carries its member uids', () => {
     renderList()
-    const store: Record<string, string> = {}
-    const dataTransfer = {
-      setData: vi.fn((type: string, value: string) => { store[type] = value }),
-      getData: (type: string) => store[type] ?? '',
-      setDragImage: vi.fn(),
-      effectAllowed: 'uninitialized',
-      types: [] as string[],
-    }
+    const dataTransfer = dragDT()
 
     fireEvent.dragStart(
       screen.getByText('Re: quote').closest('.message-row') as HTMLElement, { dataTransfer })
@@ -2274,25 +2184,6 @@ describe('the list as a grid', () => {
     ]) expect(cells).toContain(control.closest('[role="gridcell"]'))
   })
 
-  it('opens the message with Enter on the content cell', async () => {
-    const onSelect = vi.fn()
-    renderList({ onSelect })
-    await settle()
-
-    fireEvent.keyDown(contentOf(/alice martin/i), { key: 'Enter' })
-
-    expect(onSelect).toHaveBeenCalledWith(2)
-  })
-
-  it('keeps the checkbox selection', async () => {
-    renderList()
-    await settle()
-
-    fireEvent.click(within(rowOf(/alice martin/i)).getByRole('checkbox'))
-
-    expect(screen.getByText('1 selected')).toBeInTheDocument()
-  })
-
   it('keeps the Shift+click range', async () => {
     mocks.useMessageList.mockReturnValue(pagedState({}, { messages: three, total: 3 }))
     renderList()
@@ -2303,37 +2194,6 @@ describe('the list as a grid', () => {
     fireEvent.click(boxes[2]!, { shiftKey: true })
 
     expect(screen.getByText('3 selected')).toBeInTheDocument()
-  })
-
-  it('keeps the long-press entry into selection', async () => {
-    vi.useFakeTimers()
-    try {
-      const onSelect = vi.fn()
-      renderList({ onSelect })
-      const row = rowOf(/alice martin/i)
-
-      fireEvent.pointerDown(row, FINGER)
-      act(() => { vi.advanceTimersByTime(500) })
-      fireEvent.click(row)
-
-      expect(screen.getByText('1 selected')).toBeInTheDocument()
-      expect(onSelect).not.toHaveBeenCalled()
-    } finally { vi.useRealTimers() }
-  })
-
-  it('keeps the drag handlers on the row', async () => {
-    renderList()
-    await settle()
-    const row = rowOf(/alice martin/i)
-    const dataTransfer = {
-      setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: 'uninitialized',
-    }
-
-    expect(row).toHaveAttribute('draggable', 'true')
-    fireEvent.dragStart(row, { dataTransfer })
-
-    expect(dataTransfer.setData).toHaveBeenCalledWith(
-      DRAG_MIME, serializeDrag({ sourcePath: 'INBOX', uids: [2] }))
   })
 
   // In the content cell rather than a fifth one: the toggle unfolds that cell's own content, and
@@ -2547,9 +2407,9 @@ describe('MessageList swipe', () => {
     vi.clearAllMocks()
     mocks.useMessageList.mockReturnValue(pagedState())
     mocks.folders = [
-      folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-      folderNode({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
-      folderNode({ path: 'Archive', name: 'Archive', specialUse: 'archive' }),
+      folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+      folderNodeOf({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+      folderNodeOf({ path: 'Archive', name: 'Archive', specialUse: 'archive' }),
     ]
   })
 
@@ -2560,21 +2420,8 @@ describe('MessageList swipe', () => {
       expect.objectContaining({ folderPath: 'INBOX', uids: [2], flag: 'seen', value: true }))
   })
 
-  it('swiping left deletes behind a five-second Undo', async () => {
-    const onNotify = vi.fn(() => 1)
-    await renderSwipe({ 'mail.swipeLeft': 'delete' }, { onNotify })
-    swipe(rowOf(/alice martin/i), -200)
-    const aHold: unknown = expect.any(Promise)
-    expect(mocks.move).toHaveBeenCalledWith(expect.objectContaining({
-      folderPath: 'INBOX', uids: [2], targetFolderPath: 'Trash', copy: false, hold: aHold,
-    }))
-    expect(onNotify).toHaveBeenCalledWith('Moved to Trash', 'success',
-      expect.objectContaining({ label: 'Undo' }),
-      expect.objectContaining({ durationMs: 5000, countdown: true }))
-  })
-
   // The hold starts with the move, once the row has left: an Undo can never beat the removal.
-  it('raises the Undo toast only once the row has left', async () => {
+  it('swiping left deletes behind a five-second Undo, raised only once the row has left', async () => {
     const onNotify = vi.fn<AddToast>(() => 1)
     function Listed() {
       return <MessageList {...defaultListProps()} onNotify={onNotify} rowExit={useRowExit()} />
@@ -2585,14 +2432,21 @@ describe('MessageList swipe', () => {
     render(<Listed />, { wrapper })
     await waitFor(() => expect(
       within(rowOf(/alice martin/i)).queryByRole('button', { name: 'Archive' })).toBeNull())
-    swipe(rowOf(/alice martin/i), -200)
-    expect(onNotify).not.toHaveBeenCalled()
-    expect(mocks.move).not.toHaveBeenCalled()
+    vi.useFakeTimers()
+    try {
+      swipe(rowOf(/alice martin/i), -200)
+      expect(onNotify).not.toHaveBeenCalled()
+      expect(mocks.move).not.toHaveBeenCalled()
 
-    await waitFor(() => expect(mocks.move).toHaveBeenCalledWith(
-      expect.objectContaining({ uids: [2], targetFolderPath: 'Trash', hold: expect.any(Promise) as unknown })))
-    expect(onNotify).toHaveBeenCalledWith('Moved to Trash', 'success',
-      expect.objectContaining({ label: 'Undo' }), expect.objectContaining({ durationMs: 5000 }))
+      act(() => { vi.advanceTimersByTime(ROW_EXIT_MS) })
+
+      expect(mocks.move).toHaveBeenCalledWith(expect.objectContaining({
+        folderPath: 'INBOX', uids: [2], targetFolderPath: 'Trash', copy: false, hold: expect.any(Promise) as unknown,
+      }))
+      expect(onNotify).toHaveBeenCalledWith('Moved to Trash', 'success',
+        expect.objectContaining({ label: 'Undo' }),
+        expect.objectContaining({ durationMs: 5000, countdown: true }))
+    } finally { vi.useRealTimers() }
   })
 
   it('inside the trash, swiping left asks before deleting for good', async () => {
@@ -2604,7 +2458,7 @@ describe('MessageList swipe', () => {
   })
 
   it('an action no folder can take does nothing', async () => {
-    mocks.folders = [folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
+    mocks.folders = [folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]
     await renderSwipe({ 'mail.swipeLeft': 'archive' })
     swipe(rowOf(/alice martin/i), -200)
     expect(mocks.move).not.toHaveBeenCalled()

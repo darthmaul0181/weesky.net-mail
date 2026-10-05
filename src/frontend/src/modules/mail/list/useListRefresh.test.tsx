@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { QueryClient, InfiniteData } from '@tanstack/react-query'
 import type { MailFolderNode, MailFolderPage, MailMessageSummary } from '../api/mailTypes'
+import { folderNodeOf } from '../mailTestHarness'
 import { mailKeys, useMoveMessages, useSetFlags } from '../queries'
 import { dedupeByUid } from './messageStream'
 import { createTestQueryClient, settle, withQueryClient } from '../../../test-utils'
@@ -12,19 +13,15 @@ const mocks = vi.hoisted(() => ({
   setMessageFlags: vi.fn(), moveMessages: vi.fn(),
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 
 let client: QueryClient
 let wrapper: ReturnType<typeof withQueryClient>
 
 function inbox(overrides: Partial<MailFolderNode> = {}): MailFolderNode {
-  return {
-    path: 'INBOX', name: 'INBOX', selectable: true, subscribed: true,
-    total: 5, unread: 2, uidValidity: 100, uidNext: 10, highestModSeq: 40, children: [],
-    ...overrides,
-  }
+  return folderNodeOf({
+    path: 'INBOX', total: 5, unread: 2, uidValidity: 100, uidNext: 10, highestModSeq: 40, ...overrides,
+  })
 }
 
 function summariesOf(uids: number[]): MailMessageSummary[] {
