@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import type { QueryClient } from '@tanstack/react-query'
 import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderNode } from '../api/mailTypes'
 import { mailKeys } from '../queries'
 import { useMailNotifications } from './useMailNotifications'
-import { createTestQueryClient, settle, withQueryClient } from '../../../test-utils'
+import { createTestQueryClient, settle, waitFor, withQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(), getMailMessages: vi.fn(), getPreferences: vi.fn(),

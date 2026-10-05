@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import type { ReactNode } from 'react'
 import MailLayout from './MailLayout'
 import { ApiError } from '../../api.js'
 import type { MailFolderNode } from './api/mailTypes'
-import { createTestQueryClient, mockViewport, pickOption, resetViewport, settle } from '../../test-utils'
+import { createTestQueryClient, mockViewport, pickOption, resetViewport, settle, setupUser } from '../../test-utils'
 import { DRAG_MIME, serializeDrag } from './list/dragMessages'
+import { folderNodeOf } from './mailTestHarness'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -66,18 +66,18 @@ beforeEach(() => {
    control of the row — the star, an action — is found on the row rather than inside that cell. */
 const rowOf = (cell: HTMLElement) => cell.closest('.message-row') as HTMLElement
 
-function node(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
+/** The tree on screen, then a settle: what a redirect decided on the folders has been decided. */
+async function treeLoaded() {
+  const tree = await screen.findByRole('navigation', { name: 'Folders' })
+  await within(tree).findByRole('button', { name: 'Projects' })
+  await settle()
 }
 
 const folders = [
-  node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-  node({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
-  node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
-  node({ path: 'Projects', name: 'Projects' }),
+  folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  folderNodeOf({ path: 'Archives', name: 'Archives', specialUse: 'archive' }),
+  folderNodeOf({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+  folderNodeOf({ path: 'Projects', name: 'Projects' }),
 ]
 
 function Where() {
@@ -101,11 +101,12 @@ function Where() {
 }
 
 function renderAt(
-  // An Error stands for a tree the server refused to answer with.
-  initial: string, tree: MailFolderNode[] | Error = folders, pane = 'right', messages: object[] = [],
+  // An Error stands for a tree the server refused to answer with. Several entries open on the last.
+  initial: string | string[], tree: MailFolderNode[] | Error = folders, pane = 'right', messages: object[] = [],
   // A promise a test resolves itself is what lets it act while the identities are still in flight.
   identities: object | Promise<object> = { identities: [] },
 ) {
+  const entries = typeof initial === 'string' ? [initial] : initial
   if (tree instanceof Error) mocks.getMailFolders.mockRejectedValue(tree)
   else mocks.getMailFolders.mockResolvedValue(tree)
   mocks.getMailMessages.mockResolvedValue({
@@ -117,7 +118,7 @@ function renderAt(
   const client = createTestQueryClient()
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[initial]}>{children}<Where /></MemoryRouter>
+      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>{children}<Where /></MemoryRouter>
     </QueryClientProvider>
   )
   return render(<MailLayout />, { wrapper })
@@ -130,18 +131,9 @@ afterEach(resetViewport)
 describe('MailLayout', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  // Landing on an empty three-column view asks the user to pick the one folder everybody
-  // starts in. The inbox is chosen from the resolution chain's own role, not by matching the
-  // name "INBOX", so a server that names it otherwise still lands right.
-  it('opens the inbox when the URL names no folder', async () => {
-    renderAt('/mail')
-
-    await waitFor(() =>
-      expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
-  })
-
-  // Which message to read is the user's call — the reader stays empty until they make it.
-  it('opens no message', async () => {
+  // Lands on the inbox, found by its role rather than the name "INBOX", so a server naming it
+  // otherwise still lands right — but which message to read stays the user's call.
+  it('opens the inbox and no message when the URL names no folder', async () => {
     renderAt('/mail')
 
     await waitFor(() =>
@@ -154,7 +146,7 @@ describe('MailLayout', () => {
   it('leaves a folder the URL already names alone', async () => {
     renderAt('/mail?folder=Projects')
 
-    await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
+    await treeLoaded()
     expect(screen.getByTestId('search')).toHaveTextContent('folder=Projects')
   })
 
@@ -179,13 +171,12 @@ describe('MailLayout', () => {
   it('refetches the folder tree from the refresh button', async () => {
     renderAt('/mail')
 
+    await treeLoaded()
+    // The initial load spins the button and a click during the tail rotation is a no-op by
+    // design: end that turn the way the browser does (RefreshButton.test covers the rotation).
+    fireEvent.animationIteration(screen.getByLabelText('Refresh').firstElementChild!)
     await waitFor(() =>
-      expect(screen.getByTestId('search')).toHaveTextContent('folder=INBOX'))
-    // The initial load spins the button; a click during the tail rotation is a no-op by
-    // design, so wait out the release before clicking.
-    await waitFor(() =>
-      expect(screen.getByLabelText('Refresh').firstElementChild).not.toHaveClass('is-spinning'),
-      { timeout: 2000 })
+      expect(screen.getByLabelText('Refresh').firstElementChild).not.toHaveClass('is-spinning'))
     const before = mocks.getMailFolders.mock.calls.length
     fireEvent.click(screen.getByLabelText('Refresh'))
     await waitFor(() =>
@@ -194,9 +185,9 @@ describe('MailLayout', () => {
 
   // A mailbox whose inbox the chain did not resolve must not be redirected into nowhere.
   it('picks nothing when no folder holds the inbox role', async () => {
-    renderAt('/mail', [node({ path: 'Projects', name: 'Projects' })])
+    renderAt('/mail', [folderNodeOf({ path: 'Projects', name: 'Projects' })])
 
-    await waitFor(() => expect(mocks.getMailFolders).toHaveBeenCalled())
+    await treeLoaded()
     expect(screen.getByTestId('search')).toHaveTextContent('')
     expect(screen.getByText(/select a folder/i)).toBeInTheDocument()
   })
@@ -478,23 +469,7 @@ describe('a message departing the folder', () => {
       to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '', textBody: 'x',
       blockedImageCount: 0, attachments: [],
     })
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getMailMessages.mockResolvedValue({
-      folderPath: 'INBOX', uidValidity: 1, total: summaries.length, page: 0, pageSize: 30, messages: summaries,
-    })
-    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': 'right' })
-    mocks.getIdentities.mockReturnValue(Promise.resolve({ identities: [] }))
-
-    const client = createTestQueryClient()
-    render(<MailLayout />, {
-      wrapper: ({ children }) => (
-        <QueryClientProvider client={client}>
-          <MemoryRouter initialEntries={['/mail?folder=Projects', '/mail?folder=INBOX&uid=8']} initialIndex={1}>
-            {children}<Where />
-          </MemoryRouter>
-        </QueryClientProvider>
-      ),
-    })
+    renderAt(['/mail?folder=Projects', '/mail?folder=INBOX&uid=8'], folders, 'right', summaries)
 
     const row = rowOf(await screen.findByRole('gridcell', { name: /first/i }))
     fireEvent.click(within(row).getByRole('button', { name: 'Archive' }))
@@ -627,30 +602,18 @@ describe('reading pane arrangements', () => {
   beforeEach(() => vi.clearAllMocks())
 
   // The folder tree draws its own <hr> (role separator) between blocks, so the pane splitter is
-  // reached by its accessible name rather than by role alone.
-  it('renders the side-by-side split with a vertical splitter', async () => {
-    const { container } = renderAt('/mail?folder=INBOX')
+  // reached by its accessible name rather than by role alone. The splitter's drag ceiling is
+  // measured against its own parent, which must exclude the 240px folders column — otherwise the
+  // right mode's ceiling overshoots by that width: hence the splitter inside `.mail-row`.
+  it.each([
+    ['right', 'vertical', '.mail-layout.is-right .mail-row [role="separator"]'],
+    ['bottom', 'horizontal', '.mail-stack [role="separator"]'],
+  ])('renders the %s split with a %s splitter in its own wrapper', async (pane, orientation, wrapped) => {
+    const { container } = renderAt('/mail?folder=INBOX', folders, pane)
 
     const splitter = await screen.findByRole('separator', { name: 'Resize the panes' })
-    expect(splitter).toHaveAttribute('aria-orientation', 'vertical')
-    expect(container.querySelector('.mail-layout.is-right')).not.toBeNull()
-  })
-
-  // The splitter's drag ceiling is measured against its own parent, which must exclude the
-  // 240px folders column — otherwise the right mode's drag ceiling overshoots by that width.
-  it('wraps the right arrangement in its own row, excluding the folders column', async () => {
-    const { container } = renderAt('/mail?folder=INBOX')
-
-    await screen.findByRole('separator', { name: 'Resize the panes' })
-    expect(container.querySelector('.mail-row [role="separator"]')).not.toBeNull()
-  })
-
-  it('renders the stacked split with a horizontal splitter', async () => {
-    const { container } = renderAt('/mail?folder=INBOX', folders, 'bottom')
-
-    const splitter = await screen.findByRole('separator', { name: 'Resize the panes' })
-    expect(splitter).toHaveAttribute('aria-orientation', 'horizontal')
-    expect(container.querySelector('.mail-stack')).not.toBeNull()
+    expect(splitter).toHaveAttribute('aria-orientation', orientation)
+    expect(container.querySelector(wrapped)).toBe(splitter)
   })
 
   // No message open: the list has the space and there is nothing to split.
@@ -718,10 +681,11 @@ describe('focus after the reader expunges a message', () => {
   /** The reader's own Delete, not a row's — every row in the trash carries that name too. Clicked
       rather than fired, so the buttons really hold the focus a browser gives them. */
   async function expunge(container: HTMLElement) {
+    const user = setupUser()
     const reader = within(container.querySelector('.mail-reader') as HTMLElement)
-    await userEvent.click(reader.getByRole('button', { name: 'Delete permanently' }))
+    await user.click(reader.getByRole('button', { name: 'Delete permanently' }))
     const confirm = within(document.querySelector('.modal') as HTMLElement)
-    await userEvent.click(confirm.getByRole('button', { name: 'Delete' }))
+    await user.click(confirm.getByRole('button', { name: 'Delete' }))
   }
 
   it('hands it to the reader column when the expunge has a successor to open', async () => {
@@ -834,10 +798,11 @@ describe('focus after the list expunges', () => {
     const { container } = serveTrash([row(7, 'first'), row(8, 'second')])
     const first = await screen.findByText('first')
     const cluster = within(first.closest('.message-row') as HTMLElement)
+    const user = setupUser()
 
-    await userEvent.click(cluster.getByRole('button', { name: 'Delete permanently' }))
+    await user.click(cluster.getByRole('button', { name: 'Delete permanently' }))
     const confirm = within(document.querySelector('.modal') as HTMLElement)
-    await userEvent.click(confirm.getByRole('button', { name: 'Delete' }))
+    await user.click(confirm.getByRole('button', { name: 'Delete' }))
 
     // The row is drawn for the length of its exit, so the opener is still on screen — disabled,
     // which is what sends the hand-back to the column instead.
@@ -848,10 +813,11 @@ describe('focus after the list expunges', () => {
   it('hands focus to the list column when emptying the folder takes the banner', async () => {
     const { container } = serveTrash([row(7, 'first')])
     await screen.findByText('first')
+    const user = setupUser()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Empty trash now' }))
+    await user.click(screen.getByRole('button', { name: 'Empty trash now' }))
     const confirm = within(document.querySelector('.modal') as HTMLElement)
-    await userEvent.click(confirm.getByRole('button', { name: 'Delete' }))
+    await user.click(confirm.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Empty trash now' })).toBeNull())
@@ -865,8 +831,8 @@ describe('opening a draft from the drafts folder', () => {
   beforeEach(() => vi.clearAllMocks())
 
   const draftFolders = [
-    node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-    node({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts' }),
+    folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+    folderNodeOf({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts' }),
   ]
 
   const draftRow = {
@@ -1105,7 +1071,10 @@ describe('MailLayout on a phone', () => {
   it('renders no splitter', async () => {
     mockViewport('phone')
     const { container } = renderAt('/mail?folder=INBOX')
+    // The splitter is preference-derived: settle() alone can race the preferences (CLAUDE.md).
+    await screen.findByText(/select a message|no messages/i)
     await settle()
+    expect(container.querySelector('.context-drawer .mail-folders')).toBeTruthy()
     expect(container.querySelector('.pane-splitter')).toBeNull()
   })
 

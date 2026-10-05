@@ -1,4 +1,4 @@
-import { act, fireEvent, within } from '@testing-library/react'
+import { act, fireEvent, waitFor as rtlWaitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider, type DefaultOptions } from '@tanstack/react-query'
 import { createElement, type ReactNode } from 'react'
@@ -148,6 +148,12 @@ export function holdNextCall(mock: Mock) {
     resolve: (value: unknown) => settle.resolve(value),
     fail: () => settle.reject(new Error('Server error')),
   }
+}
+
+/** RTL's waitFor polling every 2 ms rather than 50: a renderHook test, or a wait on a mock, has no
+    DOM mutation to wake it early, so each wait would otherwise idle a whole interval. */
+export function waitFor<T>(check: () => T | Promise<T>) {
+  return rtlWaitFor(check, { interval: 2 })
 }
 
 /** userEvent without its per-action `setTimeout`, which costs a macrotask per keystroke. Call it once

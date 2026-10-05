@@ -1,31 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type {
   MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
 } from './api/mailTypes'
 import { mailKeys, useSearchMessages, useSetFlags } from './queries'
-import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
+import { createTestQueryClient, settle, waitFor, withQueryClient } from '../../test-utils'
+import { folderNodeOf, pageOf, summaryOf } from './mailTestHarness'
 
 const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn(), searchMessages: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
-vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../contexts/AuthContext', () => import('../../test-auth'))
 
 let client: QueryClient
 let wrapper: ReturnType<typeof withQueryClient>
-
-const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
-  uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-07-22T10:00:00Z',
-  seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
-  priority: 'normal',
-  ...over,
-})
-
-const pageOf = (messages: MailMessageSummary[]): MailFolderPage => ({
-  folderPath: 'INBOX', uidValidity: 1, total: 20, page: 0, pageSize: 50, messages,
-})
 
 /** A grouped page as the backend sends one: the rows live in `threads`, `messages` stays empty. */
 const groupedPageOf = (groups: MailMessageSummary[][]): MailFolderPage => ({
@@ -33,16 +21,14 @@ const groupedPageOf = (groups: MailMessageSummary[][]): MailFolderPage => ({
   threads: groups.map(messages => ({ messages })), totalThreads: groups.length,
 })
 
-const node = (path: string, unread: number | undefined, children: MailFolderNode[] = []): MailFolderNode => ({
-  path, name: path, selectable: true, subscribed: true,
-  total: 10, unread, uidValidity: 1, uidNext: 100, children,
-})
+const node = (path: string, unread: number): MailFolderNode =>
+  folderNodeOf({ path, total: 10, unread, uidNext: 100 })
 
 const searchCriteria = { folderPath: '', allFolders: true, quick: 'x' }
 const searchKey = mailKeys.search('primary', searchCriteria, 0, 50)
 
 const searchRow = (uid: number, folderPath: string, over: Partial<MailSearchResult> = {}): MailSearchResult =>
-  ({ ...summary(uid, over), folderPath, uidValidity: 1 })
+  ({ ...summaryOf(uid, over), folderPath, uidValidity: 1 })
 
 const searchPageOf = (results: MailSearchResult[]): MailSearchPage =>
   ({ total: results.length, page: 0, pageSize: 50, results })
@@ -59,7 +45,7 @@ const treeIn = () => client.getQueryData<MailFolderNode[]>(foldersKey)
 function seed(pageMessages: MailMessageSummary[], ...streamBlocks: MailMessageSummary[][]) {
   const page = pageOf(pageMessages)
   const stream: InfiniteData<MailFolderPage> = {
-    pages: streamBlocks.map(pageOf), pageParams: streamBlocks.map((_, index) => index),
+    pages: streamBlocks.map(block => pageOf(block)), pageParams: streamBlocks.map((_, index) => index),
   }
   const tree = [node('INBOX', 5)]
   client.setQueryData(pagesKey, page)
@@ -83,7 +69,7 @@ describe('useSetFlags', () => {
   })
 
   it('patches pages, stream blocks and the folder unread count optimistically', async () => {
-    const seeded = seed([summary(1), summary(2, { seen: true })], [summary(1), summary(3)])
+    const seeded = seed([summaryOf(1), summaryOf(2, { seen: true })], [summaryOf(1), summaryOf(3)])
     const pending = deferred<void>()
     mocks.setMessageFlags.mockReturnValue(pending.promise)
 
@@ -107,7 +93,7 @@ describe('useSetFlags', () => {
   })
 
   it('rolls all three caches back when the request fails', async () => {
-    const seeded = seed([summary(1)], [summary(1)])
+    const seeded = seed([summaryOf(1)], [summaryOf(1)])
     const pending = deferred<void>()
     mocks.setMessageFlags.mockReturnValue(pending.promise)
     const onError = vi.fn()
@@ -133,7 +119,7 @@ describe('useSetFlags', () => {
   })
 
   it('leaves the folder count alone on a flagged mutation', async () => {
-    seed([summary(1)], [summary(1)])
+    seed([summaryOf(1)], [summaryOf(1)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useSetFlags(), { wrapper })
@@ -148,7 +134,7 @@ describe('useSetFlags', () => {
   })
 
   it('leaves the folder count alone when no cache holds the uid', async () => {
-    seed([summary(1)], [summary(1)])
+    seed([summaryOf(1)], [summaryOf(1)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
     // A written-then-structurally-shared object is handed back identical, so identity proves
     // nothing here: only the write itself can be asserted.
@@ -167,7 +153,7 @@ describe('useSetFlags', () => {
   it('counts a uid duplicated across two stream blocks only once', async () => {
     // dedupeByUid's reason to exist: an arrival between two fetches pushes a row into the next
     // block, so the same uid legitimately sits in both.
-    seed([summary(1, { seen: true })], [summary(5), summary(6)], [summary(5), summary(7)])
+    seed([summaryOf(1, { seen: true })], [summaryOf(5), summaryOf(6)], [summaryOf(5), summaryOf(7)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useSetFlags(), { wrapper })
@@ -185,8 +171,8 @@ describe('useSetFlags', () => {
   it('counts every uid of a batch, even split across two page caches', async () => {
     // What the multi-select sends: uid 1 sits in the cached page 0, uid 2 only in page 1.
     // Counting one cache's delta would move the badge by one instead of two.
-    client.setQueryData(mailKeys.messages('primary', 'INBOX', 0, 50), pageOf([summary(1)]))
-    client.setQueryData(mailKeys.messages('primary', 'INBOX', 1, 50), pageOf([summary(2)]))
+    client.setQueryData(mailKeys.messages('primary', 'INBOX', 0, 50), pageOf([summaryOf(1)]))
+    client.setQueryData(mailKeys.messages('primary', 'INBOX', 1, 50), pageOf([summaryOf(2)]))
     client.setQueryData(foldersKey, [node('INBOX', 5)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
 
@@ -201,7 +187,7 @@ describe('useSetFlags', () => {
 
   it('takes the delta from the cache that actually holds the message', async () => {
     // The page cache knows nothing about uid 7; its silence must not become a zero delta.
-    seed([summary(1, { seen: true })], [summary(7)])
+    seed([summaryOf(1, { seen: true })], [summaryOf(7)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useSetFlags(), { wrapper })
@@ -215,7 +201,7 @@ describe('useSetFlags', () => {
   })
 
   it('patches the cached search results of the mutated folder', async () => {
-    seed([summary(1)], [summary(1)])
+    seed([summaryOf(1)], [summaryOf(1)])
     // Same uid, two folders: only the INBOX row must move, the Archive row is another message.
     client.setQueryData(searchKey,
       searchPageOf([searchRow(1, 'INBOX'), searchRow(1, 'Archive')]))
@@ -232,7 +218,7 @@ describe('useSetFlags', () => {
   })
 
   it('rolls the search cache back when the request fails', async () => {
-    seed([summary(1)], [summary(1)])
+    seed([summaryOf(1)], [summaryOf(1)])
     const seededSearch = searchPageOf([searchRow(1, 'INBOX')])
     client.setQueryData(searchKey, seededSearch)
     const pending = deferred<void>()
@@ -253,7 +239,7 @@ describe('useSetFlags', () => {
   })
 
   it('does not reconcile the search on a flag toggle', async () => {
-    seed([summary(1)], [summary(1)])
+    seed([summaryOf(1)], [summaryOf(1)])
     client.setQueryData(searchKey, searchPageOf([searchRow(1, 'INBOX')]))
     mocks.searchMessages.mockResolvedValue(searchPageOf([searchRow(1, 'INBOX')]))
     mocks.setMessageFlags.mockResolvedValue(undefined)
@@ -278,9 +264,9 @@ describe('useSetFlags', () => {
     // only rewrote the flat list would leave the star and the unread mark on screen till the poll.
     const groupedPagesKey = mailKeys.messages('primary', 'INBOX', 0, 50, true)
     const groupedStreamKey = mailKeys.messageStream('primary', 'INBOX', 100, true)
-    client.setQueryData(groupedPagesKey, groupedPageOf([[summary(1), summary(2)], [summary(3)]]))
+    client.setQueryData(groupedPagesKey, groupedPageOf([[summaryOf(1), summaryOf(2)], [summaryOf(3)]]))
     client.setQueryData<InfiniteData<MailFolderPage>>(groupedStreamKey, {
-      pages: [groupedPageOf([[summary(1), summary(2)]])], pageParams: [0],
+      pages: [groupedPageOf([[summaryOf(1), summaryOf(2)]])], pageParams: [0],
     })
     client.setQueryData(foldersKey, [node('INBOX', 5)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
@@ -300,7 +286,7 @@ describe('useSetFlags', () => {
   })
 
   it('never invalidates the stream key', async () => {
-    seed([summary(1)], [summary(1)])
+    seed([summaryOf(1)], [summaryOf(1)])
     mocks.setMessageFlags.mockResolvedValue(undefined)
     const spy = vi.spyOn(client, 'invalidateQueries')
 

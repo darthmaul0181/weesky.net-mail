@@ -99,23 +99,14 @@ describe('MessageSourceView', () => {
     expect(document.title).toBe('Mount ZFS on rescue system — source')
   })
 
-  it('offers a retry when the read fails', () => {
-    useMessageSource.mockReturnValue({
-      data: undefined, isLoading: false, error: new Error('nope'), refetch: vi.fn(),
-    })
-    renderAt('?folder=INBOX&uid=42')
-
-    expect(screen.getByText('Could not load the message source')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
-  })
-
-  it('reads the message again when the retry is pressed', () => {
+  it('offers a retry when the read fails, which reads the message again', () => {
     const refetch = vi.fn()
     useMessageSource.mockReturnValue({
       data: undefined, isLoading: false, error: new Error('nope'), refetch,
     })
     renderAt('?folder=INBOX&uid=42')
 
+    expect(screen.getByText('Could not load the message source')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     expect(refetch).toHaveBeenCalledTimes(1)
@@ -132,14 +123,8 @@ describe('MessageSourceView', () => {
     expect(screen.getByRole('button', { name: 'Retrying…' })).toBeDisabled()
   })
 
-  it('refuses a URL naming no message, without requesting anything', () => {
-    renderAt('?folder=INBOX')
-
-    expect(screen.getByText('Could not load the message source')).toBeInTheDocument()
-    expect(useMessageSource).toHaveBeenCalledWith(null, null)
-  })
-
   it.each([
+    ['a URL naming no message', '?folder=INBOX'],
     ['a uid that is not a number', '?folder=INBOX&uid=abc'],
     ['uid 0, which no IMAP message can carry', '?folder=INBOX&uid=0'],
   ])('requests nothing for %s', (_label, search) => {

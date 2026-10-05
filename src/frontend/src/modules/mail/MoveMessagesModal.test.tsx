@@ -4,28 +4,22 @@ import MoveMessagesModal from './MoveMessagesModal'
 import { settle } from '../../test-utils'
 import { indent } from './folders/folderNodes'
 import type { MailFolderNode } from './api/mailTypes'
-
-function node(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
-}
+import { folderNodeOf } from './mailTestHarness'
 
 // Seven folders: an inbox, a parent with two children, a junk folder
 // carrying an accent, and a container nobody can file into.
 const tree: MailFolderNode[] = [
-  node({ path: 'INBOX', name: 'Inbox', specialUse: 'inbox' }),
-  node({ path: 'Archive', name: 'Archive' }),
-  node({
+  folderNodeOf({ path: 'INBOX', name: 'Inbox', specialUse: 'inbox' }),
+  folderNodeOf({ path: 'Archive', name: 'Archive' }),
+  folderNodeOf({
     path: 'Banque', name: 'Banque',
     children: [
-      node({ path: 'Banque/Belfius', name: 'Belfius' }),
-      node({ path: 'Banque/ING', name: 'ING' }),
+      folderNodeOf({ path: 'Banque/Belfius', name: 'Belfius' }),
+      folderNodeOf({ path: 'Banque/ING', name: 'ING' }),
     ],
   }),
-  node({ path: 'Junk', name: 'Courrier indésirable', specialUse: 'junk' }),
-  node({ path: 'Projets', name: 'Projets', selectable: false }),
+  folderNodeOf({ path: 'Junk', name: 'Courrier indésirable', specialUse: 'junk' }),
+  folderNodeOf({ path: 'Projets', name: 'Projets', selectable: false }),
 ]
 
 function renderModal(props: Partial<React.ComponentProps<typeof MoveMessagesModal>> = {}) {

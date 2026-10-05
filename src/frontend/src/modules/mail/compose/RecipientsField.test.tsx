@@ -1,12 +1,15 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { setupUser } from '../../../test-utils'
 import RecipientsField from './RecipientsField'
 import type { GroupOption } from '../../contacts/contactSearch'
 import { contactOf } from '../../contacts/contactTestHarness'
 import type { Contact } from '../../contacts/contactTypes'
 
 const contact = contactOf
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 function setup(tokens: string[] = []) {
   const onChange = vi.fn()
@@ -68,7 +71,7 @@ describe('RecipientsField — contact suggestions', () => {
   it('opens the dropdown as the user types and lists one row per address', async () => {
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={vi.fn()} contacts={[bruno]} />)
 
-    await userEvent.type(screen.getByLabelText('To'), 'bru')
+    await user.type(screen.getByLabelText('To'), 'bru')
 
     expect(screen.getAllByRole('option')).toHaveLength(2)
     expect(screen.getByRole('option', { name: /bruno@x\.be/ })).toHaveTextContent('Bruno Mertens')
@@ -80,7 +83,7 @@ describe('RecipientsField — contact suggestions', () => {
     const shadow = contact({ id: 's', nickname: 'ghost@x.be', addresses: ['ghost@x.be'] })
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={vi.fn()} contacts={[shadow]} />)
 
-    await userEvent.type(screen.getByLabelText('To'), 'ghost')
+    await user.type(screen.getByLabelText('To'), 'ghost')
 
     const row = screen.getByRole('option')
     expect(row.querySelector('.suggestion-names')).toBeNull()
@@ -97,7 +100,7 @@ describe('RecipientsField — contact suggestions', () => {
     ]
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={vi.fn()} contacts={contacts} />)
 
-    await userEvent.type(screen.getByLabelText('To'), 'info')
+    await user.type(screen.getByLabelText('To'), 'info')
 
     const rows = screen.getAllByRole('option')
     expect(rows).toHaveLength(1)
@@ -108,9 +111,9 @@ describe('RecipientsField — contact suggestions', () => {
   it('commits the picked address as a token', async () => {
     const onChange = vi.fn()
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={[bruno]} />)
-    await userEvent.type(screen.getByLabelText('To'), 'bru')
+    await user.type(screen.getByLabelText('To'), 'bru')
 
-    await userEvent.click(screen.getByRole('option', { name: /bruno@x\.be/ }))
+    await user.click(screen.getByRole('option', { name: /bruno@x\.be/ }))
 
     expect(onChange).toHaveBeenCalledWith(['bruno@x.be'])
   })
@@ -119,7 +122,7 @@ describe('RecipientsField — contact suggestions', () => {
     render(<RecipientsField id="to" label="To" tokens={['bruno@x.be']} onChange={vi.fn()}
       contacts={[bruno]} />)
 
-    await userEvent.type(screen.getByLabelText('To'), 'b')
+    await user.type(screen.getByLabelText('To'), 'b')
 
     expect(screen.queryByRole('option', { name: /bruno@x\.be/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: /b@wk\.be/ })).toBeInTheDocument()
@@ -129,9 +132,9 @@ describe('RecipientsField — contact suggestions', () => {
     const onChange = vi.fn()
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={[bruno]} />)
     const input = screen.getByLabelText('To')
-    await userEvent.type(input, 'bru')
+    await user.type(input, 'bru')
 
-    await userEvent.keyboard('{ArrowDown}')
+    await user.keyboard('{ArrowDown}')
 
     // Focus never leaves the input, so the highlight exists only as these three: the class paints
     // it, aria-selected states it, aria-activedescendant is what a screen reader announces.
@@ -141,7 +144,7 @@ describe('RecipientsField — contact suggestions', () => {
     expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id)
     expect(input).toHaveAttribute('aria-activedescendant', first.id)
 
-    await userEvent.keyboard('{ArrowDown}{Enter}')
+    await user.keyboard('{ArrowDown}{Enter}')
 
     expect(onChange).toHaveBeenCalledWith(['b@wk.be'])
   })
@@ -152,7 +155,7 @@ describe('RecipientsField — contact suggestions', () => {
   it('cancels a mousedown on the list itself, so the draft survives', async () => {
     const onChange = vi.fn()
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={[bruno]} />)
-    await userEvent.type(screen.getByLabelText('To'), 'bru')
+    await user.type(screen.getByLabelText('To'), 'bru')
 
     const dispatched = fireEvent.mouseDown(screen.getByRole('listbox'))
 
@@ -163,11 +166,11 @@ describe('RecipientsField — contact suggestions', () => {
 
   it('reopens the list on an arrow key after Escape', async () => {
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={vi.fn()} contacts={[bruno]} />)
-    await userEvent.type(screen.getByLabelText('To'), 'bru')
-    await userEvent.keyboard('{Escape}')
+    await user.type(screen.getByLabelText('To'), 'bru')
+    await user.keyboard('{Escape}')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 
-    await userEvent.keyboard('{ArrowDown}')
+    await user.keyboard('{ArrowDown}')
 
     expect(screen.getByRole('listbox')).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /bruno@x\.be/ })).toHaveClass('is-active')
@@ -181,19 +184,19 @@ describe('RecipientsField — contact suggestions', () => {
   it('commits the typed text on Enter when no row is highlighted', async () => {
     const onChange = vi.fn()
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={[bruno]} />)
-    await userEvent.type(screen.getByLabelText('To'), 'bru')
+    await user.type(screen.getByLabelText('To'), 'bru')
     expect(screen.getByRole('listbox')).toBeInTheDocument()
 
-    await userEvent.keyboard('{Enter}')
+    await user.keyboard('{Enter}')
 
     expect(onChange).toHaveBeenCalledWith(['bru'])
   })
 
   it('closes on Escape without clearing what was typed', async () => {
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={vi.fn()} contacts={[bruno]} />)
-    await userEvent.type(screen.getByLabelText('To'), 'bru')
+    await user.type(screen.getByLabelText('To'), 'bru')
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
 
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(screen.getByLabelText('To')).toHaveValue('bru')
@@ -203,7 +206,7 @@ describe('RecipientsField — contact suggestions', () => {
     const onChange = vi.fn()
     render(<RecipientsField id="to" label="To" tokens={[]} onChange={onChange} />)
 
-    await userEvent.type(screen.getByLabelText('To'), 'a@x.be{Enter}')
+    await user.type(screen.getByLabelText('To'), 'a@x.be{Enter}')
 
     expect(onChange).toHaveBeenCalledWith(['a@x.be'])
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -219,10 +222,10 @@ describe('RecipientsField — contact suggestions', () => {
     const { rerender } = render(
       <RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={many} />)
     const input = screen.getByLabelText('To')
-    await userEvent.type(input, 'example')
+    await user.type(input, 'example')
     expect(screen.getAllByRole('option')).toHaveLength(4)
 
-    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}')
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}')
     expect(screen.getAllByRole('option')[3]).toHaveClass('is-active')
 
     rerender(
@@ -246,8 +249,8 @@ describe('RecipientsField — contact suggestions', () => {
     const { rerender } = render(
       <RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={many} />)
     const input = screen.getByLabelText('To')
-    await userEvent.type(input, 'example')
-    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}')
+    await user.type(input, 'example')
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}')
 
     rerender(
       <RecipientsField id="to" label="To" tokens={[]} onChange={onChange} contacts={many.slice(0, 3)} />)
@@ -374,7 +377,7 @@ describe('RecipientsField — group rows', () => {
   it('lists the group ahead of the addresses, saying how many members it holds', async () => {
     const { input } = show([], [team])
 
-    await userEvent.type(input, 'te')
+    await user.type(input, 'te')
 
     const rows = screen.getAllByRole('option')
     expect(rows).toHaveLength(3)
@@ -386,7 +389,7 @@ describe('RecipientsField — group rows', () => {
   it('says « member » in the singular', async () => {
     const { input } = show([], [{ ...team, memberCount: 1, addresses: ['alice@x.be'] }])
 
-    await userEvent.type(input, 'te')
+    await user.type(input, 'te')
 
     expect(screen.getAllByRole('option')[0]).toHaveTextContent('1 member')
   })
@@ -396,15 +399,15 @@ describe('RecipientsField — group rows', () => {
   it('reaches the group row with an arrow key and expands it on Enter', async () => {
     const onChange = vi.fn()
     const { input } = show([], [team], { onChange })
-    await userEvent.type(input, 'te')
+    await user.type(input, 'te')
 
-    await userEvent.keyboard('{ArrowDown}')
+    await user.keyboard('{ArrowDown}')
 
     const row = screen.getAllByRole('option')[0]!
     expect(row).toHaveClass('is-active')
     expect(input).toHaveAttribute('aria-activedescendant', row.id)
 
-    await userEvent.keyboard('{Enter}')
+    await user.keyboard('{Enter}')
 
     expect(onChange).toHaveBeenCalledWith(['alice@x.be', 'bruno@x.be'])
     expect(input).toHaveValue('')
@@ -415,9 +418,9 @@ describe('RecipientsField — group rows', () => {
   it('adds only the members not already tokenised, whatever their spelling', async () => {
     const onChange = vi.fn()
     const { input } = show([' ALICE@X.BE '], [team], { onChange })
-    await userEvent.type(input, 'te')
+    await user.type(input, 'te')
 
-    await userEvent.click(screen.getAllByRole('option')[0]!)
+    await user.click(screen.getAllByRole('option')[0]!)
 
     expect(onChange).toHaveBeenCalledWith([' ALICE@X.BE ', 'bruno@x.be'])
   })
@@ -429,9 +432,9 @@ describe('RecipientsField — group rows', () => {
     const onChange = vi.fn()
     const accented: GroupOption = { id: 'g3', name: 'Jose Accents', memberCount: 1, addresses: ['josé@x.com'] }
     const { input } = show(['jose@x.com'], [accented], { onChange })
-    await userEvent.type(input, 'jose')
+    await user.type(input, 'jose')
 
-    await userEvent.click(screen.getByRole('option'))
+    await user.click(screen.getByRole('option'))
 
     expect(onChange).toHaveBeenCalledWith(['jose@x.com', 'josé@x.com'])
   })
@@ -443,9 +446,9 @@ describe('RecipientsField — group rows', () => {
     const onEmptyGroup = vi.fn()
     const empty: GroupOption = { id: 'g2', name: 'Nobody', memberCount: 0, addresses: [] }
     const { input } = show([], [empty], { onChange, onEmptyGroup })
-    await userEvent.type(input, 'nob')
+    await user.type(input, 'nob')
 
-    await userEvent.click(screen.getByRole('option'))
+    await user.click(screen.getByRole('option'))
 
     expect(onEmptyGroup).toHaveBeenCalledWith('Nobody')
     expect(onChange).not.toHaveBeenCalled()
