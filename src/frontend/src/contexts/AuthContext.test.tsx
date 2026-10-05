@@ -136,10 +136,11 @@ describe('AuthContext', () => {
     expect(mocks.getAccount).not.toHaveBeenCalled()
   })
 
-  it('registers an unauthorized handler that logs out the UI', async () => {
+  it('registers an unauthorized handler that logs out the UI and empties the query cache', async () => {
     mocks.hasSession.mockReturnValue(true)
     renderProbe()
     await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
+    client.setQueryData(['mail', 'primary', 'folders'], [{ path: 'INBOX' }])
     const handler = mocks.setUnauthorizedHandler.mock.calls[0]![0]
     expect(typeof handler).toBe('function')
 
@@ -147,6 +148,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(screen.getByTestId('logged')).toHaveTextContent('false'))
     expect(screen.getByTestId('loaded')).toHaveTextContent('false')
+    expect(client.getQueryData(['mail', 'primary', 'folders'])).toBeUndefined()
   })
 
   it('logout calls the API, clears the session, resets state', async () => {
@@ -253,18 +255,6 @@ describe('AuthContext', () => {
     })
 
     await waitFor(() => expect(manifestLink()).toBeNull())
-  })
-
-  it('empties the query cache when a 401 ends the session', async () => {
-    mocks.hasSession.mockReturnValue(true)
-    renderProbe()
-    await waitFor(() => expect(screen.getByTestId('loaded')).toHaveTextContent('true'))
-    client.setQueryData(['mail', 'primary', 'folders'], [{ path: 'INBOX' }])
-    const handler = mocks.setUnauthorizedHandler.mock.calls[0]![0]
-
-    act(() => { handler?.() })
-
-    await waitFor(() => expect(client.getQueryData(['mail', 'primary', 'folders'])).toBeUndefined())
   })
 
   describe('linked accounts', () => {
@@ -394,12 +384,16 @@ describe('AuthContext', () => {
         expect(screen.getByTestId('accounts-loading')).toHaveTextContent('false'))
     })
 
-    it('falls back to the primary once a loaded list no longer holds the stored id', async () => {
-      localStorage.setItem('mail.activeAccount', 'gone')
+    // 'gone': the row left the list. 'acct-2': the row is still there but its credentials went
+    // invalid — the click path is guarded by switchAccount, the reload path must check too, or
+    // every folder and message request would come back failing.
+    it.each(['gone', 'acct-2'])('falls back to the primary when the stored id is %s', async id => {
+      localStorage.setItem('mail.activeAccount', id)
 
       await renderLoaded()
 
       await waitFor(() => expect(localStorage.getItem('mail.activeAccount')).toBeNull())
+      expect(screen.getByTestId('scope')).toHaveTextContent('primary')
       expect(screen.getByTestId('active')).toHaveTextContent('primary')
     })
 
@@ -412,19 +406,6 @@ describe('AuthContext', () => {
 
       await waitFor(() => expect(localStorage.getItem('mail.activeAccount')).toBeNull())
       expect(screen.getByTestId('scope')).toHaveTextContent('primary')
-    })
-
-    // The click path is guarded by switchAccount; the reload path reaches the same broken mailbox
-    // unless the fallback checks the credentials too — the row is still there, it just no longer
-    // works, and every folder and message request would come back failing.
-    it('falls back when the stored account\'s credentials went invalid', async () => {
-      localStorage.setItem('mail.activeAccount', 'acct-2')
-
-      await renderLoaded()
-
-      await waitFor(() => expect(localStorage.getItem('mail.activeAccount')).toBeNull())
-      expect(screen.getByTestId('scope')).toHaveTextContent('primary')
-      expect(screen.getByTestId('active')).toHaveTextContent('primary')
     })
 
     it('clears the persisted account when the session ends', async () => {

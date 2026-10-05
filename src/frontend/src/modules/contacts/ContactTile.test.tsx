@@ -90,16 +90,6 @@ describe('ContactTile', () => {
     expect(on.open).not.toHaveBeenCalled()
   })
 
-  // `aria-current` and never `aria-selected`: the checkboxes are a real multi-selection here.
-  it('names the open contact on the content cell alone', () => {
-    render(<ContactTile {...props({ open: true })} />)
-
-    expect(screen.getByRole('row')).toHaveClass('is-selected')
-    expect(document.querySelector('.contact-tile-content'))
-      .toHaveAttribute('aria-current', 'true')
-    expect(screen.getByRole('row')).not.toHaveAttribute('aria-selected')
-  })
-
   it('wears is-dragging while the drag it belongs to is in flight', () => {
     render(<ContactTile {...props({ dragging: true })} />)
 

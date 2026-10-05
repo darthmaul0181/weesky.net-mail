@@ -27,6 +27,18 @@ describe('useToasts', () => {
     expect(screen.queryByText('saved')).not.toBeInTheDocument()
   })
 
+  // Long enough to read what happened and decide to undo it; 3 seconds is not.
+  it('keeps a toast carrying an action for 8 seconds', () => {
+    const { result } = renderHook(() => useToasts())
+
+    act(() => { result.current.addToast('2 contacts added', 'success', { label: 'Undo', onClick: () => {} }) })
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(result.current.toasts).toHaveLength(1)
+
+    act(() => { vi.advanceTimersByTime(5000) })
+    expect(result.current.toasts).toHaveLength(0)
+  })
+
   // The timer outlives the component that armed it: in a test it fires into a torn-down jsdom and
   // React reaches for a window that is gone, which is how it reddened a settings suite on CI.
   it('leaves no timer behind when the page unmounts', () => {

@@ -32,12 +32,12 @@ describe('matches', () => {
       displayName: 'Dr. Le Châtelier Jr.' }), 'jr')).toBe(true)
   })
 
-  it('matches on the first name', () => {
-    expect(matches(bruno, 'bru')).toBe(true)
-  })
-
-  it('matches on the last name', () => {
-    expect(matches(bruno, 'mert')).toBe(true)
+  // Each fixture carries the needle in that one field only (no nickname, no address).
+  it.each([
+    ['first name', { firstName: 'Bruno' }, 'brun'],
+    ['last name', { lastName: 'Mertens' }, 'mert'],
+  ] as const)('matches on the %s', (_field, fields, needle) => {
+    expect(matches(contact({ id: 'f', ...fields }), needle)).toBe(true)
   })
 
   // A needle no other field carries: 'bru' prefixes the first name too, so it would match with
