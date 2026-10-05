@@ -118,25 +118,29 @@ internal static class SecurityConfiguration
     /// The proxies are named in the environment rather than trusted by default, because the
     /// header is caller-supplied: a middleware that honours it from any peer hands anybody the
     /// ability to write their own partition key. The default known-proxy entries are cleared for
-    /// the same reason — trust here is only ever what the deployment spelled out.
+    /// the same reason — trust here is only ever what the deployment spelled out. A range
+    /// (KnownNetworks) serves a proxy whose address changes, a container's; one of length zero
+    /// would trust everyone and is refused.
     /// </summary>
     public static IServiceCollection AddProxyForwardedHeaders(
         this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment environment)
     {
-        var knownProxies = configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+        var knownProxies = (configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+            .Select(ParseProxy).ToList();
+        var knownNetworks = (configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+            .Select(ParseNetwork).ToList();
 
         // A proxy the configuration does not name makes the middleware drop the header silently:
         // the address stays the proxy's, the limiter goes back to one global bucket, and nothing
-        // says so. Refusing to start names the cause instead — as AddFrontendCors and
-        // StateDirectory.Resolve already do for their own silent failures.
-        if (knownProxies.Length == 0 && !environment.IsDevelopment())
+        // says so. Refusing to start names the cause instead.
+        if (knownProxies.Count == 0 && knownNetworks.Count == 0 && !environment.IsDevelopment())
         {
             throw new InvalidOperationException(
                 "No reverse proxy is configured. Set ForwardedHeaders__KnownProxies__0 in the service's " +
                 "EnvironmentFile to the address the proxy connects from — 127.0.0.1 when it runs on this " +
-                "host, plus ::1 if Kestrel listens on the IPv6 loopback. See " +
-                "install/README.md. Refusing to start rather than " +
-                "rate-limiting every account against one shared bucket.");
+                "host, plus ::1 if Kestrel listens on the IPv6 loopback — or ForwardedHeaders__KnownNetworks__0 " +
+                "to the range it connects from when that address changes. See install/README.md. Refusing to " +
+                "start rather than rate-limiting every account against one shared bucket.");
         }
 
         return services.Configure<ForwardedHeadersOptions>(options =>
@@ -149,14 +153,41 @@ internal static class SecurityConfiguration
 
             options.KnownProxies.Clear();
             options.KnownIPNetworks.Clear();
-            foreach (var proxy in knownProxies)
-            {
-                if (IPAddress.TryParse(proxy, out var address)) options.KnownProxies.Add(address);
-                else throw new InvalidOperationException(
-                    $"ForwardedHeaders:KnownProxies holds '{proxy}', which is not an IP address.");
-            }
+            foreach (var proxy in knownProxies) options.KnownProxies.Add(proxy);
+            foreach (var network in knownNetworks) options.KnownIPNetworks.Add(network);
         });
     }
+
+    private static IPAddress ParseProxy(string value) =>
+        IPAddress.TryParse(value, out var address)
+            ? address
+            : throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownProxies holds '{value}', which is not an IP address.");
+
+    private static System.Net.IPNetwork ParseNetwork(string value)
+    {
+        if (!System.Net.IPNetwork.TryParse(value, out var network) || !StartsItsRange(value, network))
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks holds '{value}', which is not a range. Write the range's " +
+                "first address and its length, such as 172.16.0.0/12 or fd00::/8.");
+        }
+
+        if (network.PrefixLength == 0)
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks holds '{value}', which trusts every address: any caller " +
+                "could then choose the address the login limiter counts. Name the proxy's own range.");
+        }
+
+        return network;
+    }
+
+    // .NET reads 10.1.2.3/8 as 10.0.0.0/8: refused, since it is a typo for either one.
+    private static bool StartsItsRange(string value, System.Net.IPNetwork network) =>
+        value.Split('/') is [var address, _]
+        && IPAddress.TryParse(address, out var written)
+        && written.Equals(network.BaseAddress);
 
     /// <summary>
     /// Two policies. <c>login</c> bounds password guessing on the three endpoints that verify one

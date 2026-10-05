@@ -37,6 +37,15 @@ public sealed class ForwardedHeadersConfigurationTests
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
     }
 
+    private static IConfiguration Networks(params string[] knownNetworks)
+    {
+        var values = new Dictionary<string, string?>();
+        for (var i = 0; i < knownNetworks.Length; i++)
+            values[$"ForwardedHeaders:KnownNetworks:{i}"] = knownNetworks[i];
+
+        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+    }
+
     private static ForwardedHeadersOptions Build(IConfiguration configuration, string environmentName)
     {
         var services = new ServiceCollection()
@@ -90,6 +99,7 @@ public sealed class ForwardedHeadersConfigurationTests
             () => Build(Configuration(), Environments.Production));
 
         Assert.Contains("ForwardedHeaders__KnownProxies__0", error.Message);
+        Assert.Contains("ForwardedHeaders__KnownNetworks__0", error.Message);
     }
 
     [Fact]
@@ -100,5 +110,58 @@ public sealed class ForwardedHeadersConfigurationTests
         // Nothing sits in front of the dev server, so the connection address is already the client's.
         Assert.Empty(options.KnownProxies);
         Assert.Empty(options.KnownIPNetworks);
+    }
+
+    /// <summary>
+    /// A container's proxy gets a new address on every restart, inside its network's range: naming the
+    /// range is the only way to trust it without editing the settings each time.
+    /// </summary>
+    [Fact]
+    public void AddProxyForwardedHeaders_TrustsTheConfiguredRanges()
+    {
+        var options = Build(Networks("172.16.0.0/12", "fd00::/8"), Environments.Production);
+
+        Assert.Contains(System.Net.IPNetwork.Parse("172.16.0.0/12"), options.KnownIPNetworks);
+        Assert.Contains(System.Net.IPNetwork.Parse("fd00::/8"), options.KnownIPNetworks);
+        Assert.Empty(options.KnownProxies);
+        Assert.Equal(1, options.ForwardLimit);
+    }
+
+    [Theory]
+    [InlineData("172.16.0.0")]
+    [InlineData("172.16.0.0/33")]
+    [InlineData("not-a-range")]
+    [InlineData("10.1.2.3/8")]
+    public void AddProxyForwardedHeaders_RefusesToStartOnAMalformedRange(string range)
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Networks(range), Environments.Production));
+
+        Assert.Contains($"'{range}'", error.Message);
+    }
+
+    /// <summary>
+    /// A zero-length range trusts every address: any caller could then pick the address the login
+    /// limiter counts, which is the limiter switched off.
+    /// </summary>
+    [Theory]
+    [InlineData("0.0.0.0/0")]
+    [InlineData("::/0")]
+    public void AddProxyForwardedHeaders_RefusesARangeThatTrustsEveryone(string range)
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Networks(range), Environments.Production));
+
+        Assert.Contains($"'{range}'", error.Message);
+        Assert.Contains("every address", error.Message);
+    }
+
+    [Fact]
+    public void AddProxyForwardedHeaders_RefusesToStartOnAMalformedProxy()
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Configuration("proxy.local"), Environments.Production));
+
+        Assert.Contains("'proxy.local'", error.Message);
     }
 }
