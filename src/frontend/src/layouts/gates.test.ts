@@ -9,6 +9,7 @@ function auth(overrides: Partial<AuthContextValue>): AuthContextValue {
     account: null,
     accountLoaded: true,
     capabilities: null,
+    capabilitiesLoaded: true,
     identity: null,
     activeAccount: null,
     activeAccountId: 'primary',
@@ -41,6 +42,14 @@ describe('allowAdmin', () => {
 
   it('refuses a non-admin', () => {
     expect(allowAdmin(auth({ accountLoaded: true, isAdmin: false }))).toBe(false)
+  })
+
+  it('waits for the capabilities before letting an admin through', () => {
+    expect(allowAdmin(auth({ isAdmin: true, capabilitiesLoaded: false }))).toBe('wait')
+  })
+
+  it('refuses a non-admin without waiting for the capabilities', () => {
+    expect(allowAdmin(auth({ isAdmin: false, capabilitiesLoaded: false }))).toBe(false)
   })
 
   it('refuses an admin the platform explicitly turned off', () => {

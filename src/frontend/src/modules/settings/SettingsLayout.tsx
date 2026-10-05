@@ -65,7 +65,8 @@ export default function SettingsLayout() {
     ...(isPrimary && aliasesAvailable ? [{ to: '/settings/aliases', label: t('nav.aliases'), icon: <AtSignIcon size={16} />, group: 'mail' as const }] : []),
     ...(rulesAvailable ? [{ to: '/settings/rules', label: t('nav.rules'), icon: <FunnelIcon size={16} />, group: 'mail' as const }] : []),
     { to: '/settings/calendar', label: t('nav.general'), icon: <SlidersIcon size={16} />, group: 'calendar' },
-    ...(isAdmin && isPrimary && adminAvailable ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} />, group: 'application' as const }] : []),
+    // Not gated isPrimary: administration is the deployment's, whichever mailbox is being read.
+    ...(isAdmin && adminAvailable ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} />, group: 'application' as const }] : []),
     // Last, and gated on nothing: every account reads the same product, on its own mailbox or an
     // attached one. It keeps its group open, so no group heading ever stands over nothing.
     { to: '/settings/about', label: t('nav.about'), icon: <InfoIcon size={16} />, group: 'application' },

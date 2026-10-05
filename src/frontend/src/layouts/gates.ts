@@ -1,10 +1,15 @@
 import type { AuthContextValue } from '../contexts/AuthContext'
 
-// capabilities reads `!== false` like every other gate: null while it is still loading (or on a
-// backend that predates the endpoint) must read as "available", never as a flash-redirect.
-export function allowAdmin({ isAdmin, accountLoaded, capabilities }: AuthContextValue): boolean | 'wait' {
+// Waits on the capabilities too: the page's tabs follow the platform, and a generic deployment
+// must never mount a weesky-only tab whose route it does not serve. `!== false`: a backend that
+// predates the endpoint answers null, which must read as "available".
+export function allowAdmin(
+  { isAdmin, accountLoaded, capabilities, capabilitiesLoaded }: AuthContextValue,
+): boolean | 'wait' {
   if (!accountLoaded) return 'wait' // account still loading — decide once known
-  return isAdmin && capabilities?.admin !== false
+  if (!isAdmin) return false
+  if (!capabilitiesLoaded) return 'wait'
+  return capabilities?.admin !== false
 }
 
 // Nested inside allowPrimary's gate in routes.tsx, so a connected account never reaches here —
