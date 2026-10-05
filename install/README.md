@@ -138,8 +138,8 @@ dotnet publish src/scotty.microservice.host -c Release -r linux-x64 --self-conta
   -p:ReleaseBuild=true -o out/api
 ```
 
-**1.2 Build the web interface.** It has to know where the API is, and it writes that address into
-the pages while building them — so set it first:
+**1.2 Build the web interface.** It has to know where the API is, and writes that address into
+`dist/config.js` while building — so set it first:
 
 ```bash
 cd src/frontend
@@ -149,10 +149,13 @@ RELEASE_BUILD=true npm run build
 cd ../..
 ```
 
-If the API's address ever changes, build the web interface again. Without this file the build
-stops with an error naming `VITE_API_BASE` rather than shipping a page pointed nowhere.
+If the API's address ever changes, correct it in `config.js` on the server
+(`/var/www/scotty/config.js`, step 4.1): no need to build again. Without the `.env.production`
+file the build stops with an error naming `VITE_API_BASE` rather than shipping a page pointed
+nowhere.
 
-✅ **Check:** both `out/api/scotty.microservice` and `src/frontend/dist/index.html` exist.
+✅ **Check:** `out/api/scotty.microservice`, `src/frontend/dist/index.html` and
+`src/frontend/dist/config.js` exist.
 
 ---
 
@@ -213,12 +216,15 @@ Change these lines, and leave the others as they are:
 | Line | What to put |
 |---|---|
 | `ConnectionStrings__WebmailPreferencesDatabase` | Replace `CHANGE_ME` with the password from step 2. If the database is on another machine, replace `127.0.0.1` with its address too. |
-| `TokenConstants__Key` | A long random value. Generate one with `openssl rand -base64 48` |
 | `Cors__AllowedOrigins__0` | The web interface's address, `https://mail.example.net` |
 | `Mail__ImapHost` | Your IMAP server's name |
 | `Mail__SmtpHost` | Your SMTP server's name |
 | `Sieve__Host` | Your ManageSieve server's name — usually the same as IMAP. No ManageSieve? Put the IMAP name anyway. |
 | `Generic__Administrators` | Your own mail address, the one you sign in with. Several? Separate them with commas. |
+
+The key that signs users' sessions needs nothing from you: on first start, the service generates
+one and keeps it in `/var/lib/scotty.microservice`. To choose your own instead, add
+`TokenConstants__Key=` followed by a long random value (`openssl rand -base64 48`).
 
 Scotty reaches IMAP on port **143** and SMTP on port **587**, both with STARTTLS.
 If yours uses **993** and **465** instead, add these four lines:
@@ -313,6 +319,9 @@ Create `/etc/apache2/sites-available/scotty.conf` (Red Hat family: `/etc/httpd/c
     <Directory /var/www/scotty/assets>
         FallbackResource disabled
     </Directory>
+    <Files "config.js">
+        Header set Cache-Control "no-cache"
+    </Files>
 </VirtualHost>
 
 # The API
@@ -331,7 +340,8 @@ Create `/etc/apache2/sites-available/scotty.conf` (Red Hat family: `/etc/httpd/c
 </VirtualHost>
 ```
 
-Apache adds `X-Forwarded-For` by itself, and accepts large uploads by default. Then:
+Apache adds `X-Forwarded-For` by itself, and accepts large uploads by default. `config.js` holds
+the API's address: `no-cache` makes browsers pick up a corrected one on the next visit. Then:
 
 ```bash
 a2ensite scotty          # Debian and Ubuntu only
@@ -361,6 +371,9 @@ server {
     location /assets/ {
         try_files $uri =404;
     }
+    location = /config.js {
+        add_header Cache-Control "no-cache";
+    }
 }
 
 # The API
@@ -384,7 +397,8 @@ server {
 }
 ```
 
-Then:
+`config.js` holds the API's address: `no-cache` makes browsers pick up a corrected one on the next
+visit. Then:
 
 ```bash
 nginx -t && systemctl reload nginx
@@ -394,6 +408,8 @@ nginx -t && systemctl reload nginx
 > make the service listen on that address (`ASPNETCORE_URLS` in the settings file), and put the web
 > server's own address in `ForwardedHeaders__KnownProxies__0`. The service only believes the
 > forwarded headers of the machines listed there.
+> If that address changes (a container, a cluster), name its range instead:
+> `ForwardedHeaders__KnownNetworks__0=10.0.0.0/24`.
 
 ✅ **Check:** `curl https://api.example.net/health` answers `Healthy`, and
 **https://mail.example.net** shows the sign-in page.
@@ -468,12 +484,16 @@ journalctl -u scotty.microservice -n 30
 | If the log says | Do this |
 |---|---|
 | `Connection string 'WebmailPreferencesDatabase' is missing` | The settings file is not being read. Check the `EnvironmentFile=` line of `/etc/systemd/system/scotty.microservice.service` |
-| `TokenConstants:Key must be at least 32 bytes` | `TokenConstants__Key` is empty or too short. Generate one with `openssl rand -base64 48` |
+| `TokenConstants:Key must be at least 32 bytes` | `TokenConstants__Key` is too short. Remove the line to let the service generate a key, or generate one with `openssl rand -base64 48` |
 | `No CORS origin is configured` | Fill in `Cors__AllowedOrigins__0` |
 | `No reverse proxy is configured` | Put back `ForwardedHeaders__KnownProxies__0=127.0.0.1` |
 | `'Platform' is missing`, or `Connection string 'Weesky:ConnectionStrings:MailUserAccountsDatabase' is missing` | Put back `Platform=generic` |
 | `'Generic:Administrators' holds '…', which is not an email address` | Fix that entry in `Generic__Administrators` |
 | `STATE_DIRECTORY is not set` | Start the service with `systemctl`, not by hand, and keep the `StateDirectory=` line of the service file |
+| `The session signing key … cannot be read` | Give the service access to it: `chown scotty:scotty /var/lib/scotty.microservice/session-signing.key` |
+| `The session signing key … is empty or shorter than 32 bytes` | Restore the file from a backup, or delete it: a new key is generated, and everyone signs in again |
+| `ForwardedHeaders:KnownNetworks holds '…'` | Write the range as its first address and a length, such as `172.16.0.0/12`. `/0` is refused: it would trust every address |
+| `Logs:Output is "…"` | Remove the line, or set it to `file` or `console` |
 
 After any change to the settings: `systemctl restart scotty.microservice`.
 
@@ -490,5 +510,5 @@ it on a database that is already in use.
 before users reconnect — otherwise their phones quietly keep an out-of-date copy of their contacts
 and calendars.
 
-**The encryption keys** in `/var/lib/scotty.microservice` need no backup. If they are lost, users
+**The encryption keys and the session key** in `/var/lib/scotty.microservice` need no backup. If they are lost, users
 just sign in again.
