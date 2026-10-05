@@ -81,7 +81,7 @@ public sealed class ForwardedHeadersConfigurationTests
     /// <summary>
     /// The failure this refuses is silent: an unnamed proxy makes the middleware drop the header,
     /// the address stays the proxy's, and the limiter goes on answering 429 for everyone with
-    /// nothing in the log saying why. Same choice AddFrontendCors and AddCredentialKeyRing make.
+    /// nothing in the log saying why. Same choice AddFrontendCors and StateDirectory.Resolve make.
     /// </summary>
     [Fact]
     public void AddProxyForwardedHeaders_RefusesToStartOutsideDevelopmentWithNoProxyNamed()

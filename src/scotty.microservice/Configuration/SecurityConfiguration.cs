@@ -78,7 +78,7 @@ internal static class SecurityConfiguration
         // frontend. Left empty, WithOrigins() refuses every cross-origin request and the webmail
         // dies with a CORS error in the console that reads like a network fault rather than a
         // missing variable. Refusing to start names the cause instead — same reason
-        // AddCredentialKeyRing refuses without STATE_DIRECTORY.
+        // StateDirectory.Resolve refuses without STATE_DIRECTORY.
         if (allowedOrigins.Length == 0)
         {
             throw new InvalidOperationException(
@@ -128,7 +128,7 @@ internal static class SecurityConfiguration
         // A proxy the configuration does not name makes the middleware drop the header silently:
         // the address stays the proxy's, the limiter goes back to one global bucket, and nothing
         // says so. Refusing to start names the cause instead — as AddFrontendCors and
-        // AddCredentialKeyRing already do for their own silent failures.
+        // StateDirectory.Resolve already do for their own silent failures.
         if (knownProxies.Length == 0 && !environment.IsDevelopment())
         {
             throw new InvalidOperationException(
@@ -211,24 +211,13 @@ internal static class SecurityConfiguration
     /// <summary>
     /// The Data Protection key ring encrypts the IMAP credentials cookie, so it must survive
     /// restarts: losing it makes every live credentials cookie undecryptable and signs every user
-    /// out. systemd's StateDirectory= provides a directory outside the deployment path — which the
-    /// release chmod/chown walk recursively — and owned by the service user.
+    /// out. It lives in the state directory (<see cref="StateDirectory"/>).
     /// </summary>
     /// <returns>The key ring path, for the startup log line.</returns>
-    public static string AddCredentialKeyRing(this IServiceCollection services, IWebHostEnvironment environment)
+    public static string AddCredentialKeyRing(
+        this IServiceCollection services, IWebHostEnvironment environment, string stateDirectory)
     {
-        var stateDirectory = Environment.GetEnvironmentVariable("STATE_DIRECTORY")?.Split(':')[0];
-
-        if (string.IsNullOrEmpty(stateDirectory) && !environment.IsDevelopment())
-        {
-            throw new InvalidOperationException(
-                "STATE_DIRECTORY is not set. Add 'StateDirectory=scotty.microservice' to the systemd unit. " +
-                "Refusing to start rather than falling back to a key ring under the deployment directory.");
-        }
-
-        var keyRingPath = string.IsNullOrEmpty(stateDirectory)
-            ? Path.Combine(environment.ContentRootPath, "keys")   // development only
-            : Path.Combine(stateDirectory, "keys");
+        var keyRingPath = Path.Combine(stateDirectory, "keys");
 
         Directory.CreateDirectory(keyRingPath);
 
