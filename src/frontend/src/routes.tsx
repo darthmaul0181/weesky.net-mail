@@ -75,7 +75,6 @@ export const routes: RouteObject[] = [
                     element: <Gate allow={allowPrimary} redirect="/settings/mail" />,
                     children: [
                       { path: 'account', element: loaded('account', AccountPage) },
-                      { path: 'sync', element: loaded('sync', SyncPage) },
                       {
                         element: <Gate allow={allowAliases} redirect="/settings/mail" />,
                         children: [
@@ -95,6 +94,7 @@ export const routes: RouteObject[] = [
                   { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
                   { path: 'identities', element: loaded('identities', IdentitiesPage) },
                   { path: 'about', element: loaded('about', AboutPage) },
+                  { path: 'sync', element: loaded('sync', SyncPage) },
                   {
                     element: <Gate allow={allowSieve} redirect="/settings/mail" />,
                     children: [{ path: 'rules', element: loaded('rules', RulesPage) }],

@@ -29,6 +29,12 @@ vi.mock('./LogoSection', () => ({ default: () => null }))
 vi.mock('./SchedulingAccountSection', () => ({ default: () => null }))
 vi.mock('./DeliveryRepliesSection', () => ({ default: () => null }))
 
+const auth = vi.hoisted(() => ({
+  account: null as { platform?: 'weesky' | 'generic' } | null,
+  capabilities: null as { platform?: 'weesky' | 'generic' } | null,
+}))
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => auth }))
+
 const GMAIL = {
   id: '1', name: 'Gmail', imapHost: 'imap.gmail.com', imapPort: 993, imapSecurity: 'SslOnConnect',
   smtpHost: 'smtp.gmail.com', smtpPort: 587, smtpSecurity: 'StartTls',
@@ -37,6 +43,8 @@ const GMAIL = {
 let user: ReturnType<typeof setupUser>
 beforeEach(() => {
   vi.clearAllMocks()
+  auth.account = null
+  auth.capabilities = null
   mocks.adminGetUsers.mockResolvedValue(MOCK_USERS)
   mocks.adminGetVirtualDomains.mockResolvedValue(MOCK_VIRTUAL_DOMAINS)
   mocks.adminGetDomains.mockResolvedValue(MOCK_DOMAINS)
@@ -180,5 +188,44 @@ describe('Admin tabs — load failures', () => {
     const alerts = await screen.findAllByRole('alert')
     expect(alerts).toHaveLength(1)
     expect(alerts[0]).toHaveTextContent(toast)
+  })
+})
+
+describe('AdminPage tabs by platform', () => {
+  const tabNames = (container: HTMLElement) =>
+    [...container.querySelectorAll('.admin-tab-bar button')].map(button => button.textContent)
+
+  it.each([null, {}, { platform: 'weesky' as const }])('shows the five tabs on weesky (account %o), Accounts open', async account => {
+    auth.account = account
+    const { container } = renderAdminPage()
+    expect(tabNames(container)).toEqual(['Accounts', 'Domains', 'Virtual domains', 'External domains', 'Application'])
+    expect(screen.getByRole('button', { name: 'Accounts' })).toHaveClass('is-active')
+    await waitFor(() => expect(mocks.adminGetUsers).toHaveBeenCalled())
+  })
+
+  it('shows only External domains and Application on generic, External domains open', async () => {
+    auth.account = { platform: 'generic' }
+    const { container } = renderAdminPage()
+    expect(tabNames(container)).toEqual(['External domains', 'Application'])
+    expect(screen.getByRole('button', { name: 'External domains' })).toHaveClass('is-active')
+    await waitFor(() => expect(mocks.adminGetExternalDomains).toHaveBeenCalled())
+    expect(mocks.adminGetUsers).not.toHaveBeenCalled()
+  })
+
+  it('reads the platform off the account, so capabilities that failed to load still show the generic page', () => {
+    auth.account = { platform: 'generic' }
+    auth.capabilities = null
+    const { container } = renderAdminPage()
+    expect(tabNames(container)).toEqual(['External domains', 'Application'])
+    expect(mocks.adminGetUsers).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the first visible tab when the open one disappears', async () => {
+    const { container, rerender } = renderAdminPage()
+    await user.click(screen.getByRole('button', { name: 'Domains' }))
+    auth.account = { platform: 'generic' }
+    rerender(<AdminPage />)
+    expect(tabNames(container)).toEqual(['External domains', 'Application'])
+    expect(screen.getByRole('button', { name: 'External domains' })).toHaveClass('is-active')
   })
 })

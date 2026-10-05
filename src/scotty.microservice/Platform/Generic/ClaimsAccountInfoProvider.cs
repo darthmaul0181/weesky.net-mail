@@ -5,14 +5,15 @@ namespace weesky.Scotty.Microservice.Platform.Generic;
 
 /// <summary>
 /// The account as the token describes it, and nothing more: there is no directory to read a numeric
-/// id, a display name, owned domains or an admin flag from. <see cref="AccountInfo.Mailbox"/> is the
-/// domain *id* on the weesky platform; with no domain table here it carries the domain name split
+/// id, a display name or owned domains from; the admin flag comes from
+/// <see cref="GenericAdministrators"/>. <see cref="AccountInfo.Mailbox"/> is the domain *id* on the
+/// weesky platform; with no domain table here it carries the domain name split
 /// off the address, which is the only identifier this deployment has for it — and
 /// <see cref="AccountInfo.Domains"/> carries that same value as a single synthetic row, since the
 /// documented invariant is that Mailbox matches one of the Domains ids and the frontend derives the
 /// user's email address from the row it finds there (<c>lib/accountIdentity.ts</c>).
 /// </summary>
-internal sealed class ClaimsAccountInfoProvider : IAccountInfoProvider
+internal sealed class ClaimsAccountInfoProvider(GenericAdministrators administrators) : IAccountInfoProvider
 {
     public Task<Result<AccountInfo>> GetAccountInfoAsync(User user, CancellationToken cancellationToken)
     {
@@ -25,7 +26,7 @@ internal sealed class ClaimsAccountInfoProvider : IAccountInfoProvider
             FullName = null,
             Mailbox = user.Domain,
             Domains = [new Domain { Id = user.Domain, Name = user.Domain }],
-            IsAdmin = false,
+            IsAdmin = administrators.Contains(user.Email),
         }));
     }
 

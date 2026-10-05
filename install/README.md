@@ -81,7 +81,9 @@ Scotty runs in one of two modes, chosen by a single line of its settings.
 
 **`generic` — any mail service.** Scotty is a webmail and nothing more: it reads and sends through
 whatever IMAP and SMTP service you point it at, and knows nothing about how the mailboxes behind
-them are managed. You keep managing them where you already do.
+them are managed. You keep managing them where you already do. An administrator named in its
+settings still sets the product name and logo, the calendar service account for invitations sent
+from phones, and the external mail services, such as Outlook, users can connect.
 
 **`weesky` — everything in one place.** Scotty is also the control panel of the mail server itself.
 The same interface users read their mail in lets an administrator create mailboxes, domains and
@@ -97,7 +99,6 @@ what a plain webmail cannot:
 | Users manage their own aliases | — | ✓ |
 | Sending only from addresses the user really owns | left to your SMTP server | checked by Scotty |
 | A mailbox disabled by the administrator is signed out on its next action | — | ✓ |
-| Administrator settings: product name, calendar service account for invitations sent from phones, connecting Outlook mailboxes | — | ✓ |
 
 The price of `weesky` is that it only works with the mail server it was built for: Dovecot and
 Postfix, reading their mailboxes from a MySQL or MariaDB database that Scotty administers. It cannot be
@@ -217,6 +218,7 @@ Change these lines, and leave the others as they are:
 | `Mail__ImapHost` | Your IMAP server's name |
 | `Mail__SmtpHost` | Your SMTP server's name |
 | `Sieve__Host` | Your ManageSieve server's name — usually the same as IMAP. No ManageSieve? Put the IMAP name anyway. |
+| `Generic__Administrators` | Your own mail address, the one you sign in with. Several? Separate them with commas. |
 
 Scotty reaches IMAP on port **143** and SMTP on port **587**, both with STARTTLS.
 If yours uses **993** and **465** instead, add these four lines:
@@ -443,10 +445,10 @@ The configurations of step 4 already let phones through. If a CDN or a firewall 
 `DELETE` — and anything under `/.well-known/`: when it blocks them, the phone simply shows an empty
 address book, with no error.
 
-### Features of the weesky platform
+### Features configured by an administrator
 
-These two are configured from the administration screens, so they need the `weesky` platform (see
-[Two platforms](#two-platforms-generic-or-weesky)):
+These two are configured from Settings › Administration, so you must sign in with an address listed
+in `Generic__Administrators`:
 
 - [Connecting Outlook and Office 365 mailboxes](optional/oauth-providers.md)
 - [Updating calendars as guests' replies arrive](optional/delivery-replies.md) — also needs your mail
@@ -470,6 +472,7 @@ journalctl -u scotty.microservice -n 30
 | `No CORS origin is configured` | Fill in `Cors__AllowedOrigins__0` |
 | `No reverse proxy is configured` | Put back `ForwardedHeaders__KnownProxies__0=127.0.0.1` |
 | `'Platform' is missing`, or `Connection string 'Weesky:ConnectionStrings:MailUserAccountsDatabase' is missing` | Put back `Platform=generic` |
+| `'Generic:Administrators' holds '…', which is not an email address` | Fix that entry in `Generic__Administrators` |
 | `STATE_DIRECTORY is not set` | Start the service with `systemctl`, not by hand, and keep the `StateDirectory=` line of the service file |
 
 After any change to the settings: `systemctl restart scotty.microservice`.

@@ -5,6 +5,7 @@ import { useToasts } from '../../../hooks/useToasts'
 import Toasts from '../../../components/Toasts'
 import HelpTooltip from '../../../components/HelpTooltip'
 import ShieldIcon from '../../../icons/ShieldIcon'
+import { useAuth } from '../../../contexts/AuthContext'
 import AccountsTab from './AccountsTab'
 import DomainsTab from './DomainsTab'
 import VirtualDomainsTab from './VirtualDomainsTab'
@@ -13,6 +14,8 @@ import ApplicationTab from './ApplicationTab'
 
 const TABS = ['accounts', 'domains', 'virtualdomains', 'externaldomains', 'application'] as const
 type Tab = typeof TABS[number]
+/** Backed by the weesky directory: a generic deployment serves none of their routes. */
+const DIRECTORY_TABS: readonly Tab[] = ['accounts', 'domains', 'virtualdomains']
 
 /** Each tab is its own literal `t()` call: a key held in a table and read by variable is
     invisible to `src/locales/keys.test.ts`. */
@@ -41,7 +44,11 @@ function helpTextOf(tab: Tab, t: TFunction<'admin'>) {
 export default function AdminPage() {
   const { t } = useTranslation('admin')
   const { toasts, addToast, removeToast, pauseToast, resumeToast } = useToasts()
-  const [activeTab, setActiveTab] = useState<Tab>('accounts')
+  // Off the account, not the capabilities: those open an IMAP session, and may fail or lag.
+  const { account } = useAuth()
+  const tabs = account?.platform === 'generic' ? TABS.filter(tab => !DIRECTORY_TABS.includes(tab)) : TABS
+  const [chosenTab, setChosenTab] = useState<Tab>(tabs[0])
+  const activeTab = tabs.includes(chosenTab) ? chosenTab : tabs[0]
   const helpText = helpTextOf(activeTab, t)
   // Where a confirmed delete hands focus when it takes its own row with it: the row's button
   // leaves with the refetched list, so nothing inside the tab is sure to survive.
@@ -55,9 +62,9 @@ export default function AdminPage() {
         </div>
         <div className="admin-modal-body">
           <nav className="admin-tab-bar">
-            {TABS.map(tab => (
+            {tabs.map(tab => (
               <button key={tab} className={`admin-tab${activeTab === tab ? ' is-active' : ''}`}
-                onClick={() => setActiveTab(tab)}>{tabLabelOf(tab, t)}</button>
+                onClick={() => setChosenTab(tab)}>{tabLabelOf(tab, t)}</button>
             ))}
           </nav>
           <div className="admin-tab-content" ref={tabRegion} tabIndex={-1}>

@@ -66,6 +66,11 @@ Scotty is a webmail and nothing more. It reads and sends through whatever IMAP a
 point it at — your own server or a provider — and needs nothing changed on the mail side. Mailboxes,
 aliases and passwords stay managed wherever they are managed today.
 
+An administrator, named in its settings, still has the screens that need one: the product name and
+logo, the external mail providers users connect, the account that sends calendar invitations for
+events edited on a phone, and guests' replies applied to the calendar as the mail is delivered
+(this one also needs a Dovecot mail server).
+
 This is the flavour [`install/README.md`](install/README.md) installs.
 
 ### `weesky` — the mail server and its webmail as one
@@ -81,9 +86,6 @@ onto someone else's server cannot offer:
   addresses they own, and refuses the others itself instead of leaving it to the mail server.
 - **Control that takes effect at once.** Disable a mailbox in the administration screens and its
   session ends on its very next action.
-- **The features that need an administrator.** The product name, the account that sends calendar
-  invitations for events edited on a phone, external mailboxes such as Outlook over OAuth, and
-  guests' replies applied to the calendar as the mail is delivered.
 
 The price is that it is built for one mail stack: Dovecot and Postfix, reading their mailboxes from a
 MySQL or MariaDB database that Scotty administers.

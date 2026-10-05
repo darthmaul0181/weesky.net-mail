@@ -34,4 +34,10 @@ public sealed class AccountInfo
     /// Whether this user has administrator privileges.
     /// </summary>
     public bool IsAdmin { get; set; }
+
+    /// <summary>
+    /// The platform hosting this deployment, stamped by the API rather than the provider: the admin
+    /// page picks its tabs from it without waiting on an IMAP session.
+    /// </summary>
+    public string? Platform { get; set; }
 }

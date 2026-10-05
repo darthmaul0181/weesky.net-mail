@@ -6,10 +6,21 @@ namespace weesky.Scotty.Microservice.Tests.Platform;
 
 public sealed class ClaimsAccountInfoProviderTests
 {
+    private static ClaimsAccountInfoProvider Provider(params string[] admins) => new(new GenericAdministrators(admins));
+
+    [Fact]
+    public async Task GetAccountInfoAsync_IsAdminFollowsTheConfiguredList()
+    {
+        var provider = Provider("mick@weesky.be");
+
+        Assert.True((await provider.GetAccountInfoAsync(new User("Mick@weesky.be"), CancellationToken.None)).Value.IsAdmin);
+        Assert.False((await provider.GetAccountInfoAsync(new User("anne@weesky.be"), CancellationToken.None)).Value.IsAdmin);
+    }
+
     [Fact]
     public async Task GetAccountInfoAsync_SplitsTheEmailIntoUserNameAndMailbox()
     {
-        var result = await new ClaimsAccountInfoProvider().GetAccountInfoAsync(
+        var result = await Provider().GetAccountInfoAsync(
             new User("mick@weesky.be"), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
@@ -17,11 +28,11 @@ public sealed class ClaimsAccountInfoProviderTests
         Assert.Equal("weesky.be", result.Value.Mailbox);
     }
 
-    /// <summary>Nothing behind the token: no directory row, no numeric id, no admin.</summary>
+    /// <summary>Nothing behind the token: no directory row, no numeric id; admin only by the configured list.</summary>
     [Fact]
     public async Task GetAccountInfoAsync_CarriesNoDirectoryFacts()
     {
-        var result = await new ClaimsAccountInfoProvider().GetAccountInfoAsync(
+        var result = await Provider().GetAccountInfoAsync(
             new User("mick@weesky.be") { FullName = "Mick" }, CancellationToken.None);
 
         Assert.Equal(0, result.Value.UserId);
@@ -36,7 +47,7 @@ public sealed class ClaimsAccountInfoProviderTests
     [Fact]
     public async Task GetAccountInfoAsync_CarriesTheMailboxAsASyntheticDomainRow()
     {
-        var result = await new ClaimsAccountInfoProvider().GetAccountInfoAsync(
+        var result = await Provider().GetAccountInfoAsync(
             new User("mick@weesky.be"), CancellationToken.None);
 
         var domain = Assert.Single(result.Value.Domains);

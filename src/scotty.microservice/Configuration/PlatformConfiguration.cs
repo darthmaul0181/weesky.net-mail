@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Microservice.Platform;
 using weesky.Scotty.Microservice.Platform.Generic;
@@ -29,11 +30,14 @@ internal static class PlatformConfiguration
         };
 
     /// <summary>
-    /// No platform behind the mailbox: the three ports answer from the token and from nothing else.
+    /// No platform behind the mailbox: the three ports answer from the token and from nothing else,
+    /// admin rights from the configured list.
     /// Singletons, unlike the weesky adapters — these hold no per-request state and no DbContext.
     /// </summary>
-    public static IServiceCollection AddGenericPlatform(this IServiceCollection services)
+    public static IServiceCollection AddGenericPlatform(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton(GenericAdministrators.From(configuration));
+        services.AddSingleton<IAuthorizationHandler, GenericAdminRequirementHandler>();
         services.AddSingleton<IAliasDirectory, FreeIdentityDirectory>();
         services.AddSingleton<IProfileReader, NullProfileReader>();
         services.AddSingleton<IAccountInfoProvider, ClaimsAccountInfoProvider>();

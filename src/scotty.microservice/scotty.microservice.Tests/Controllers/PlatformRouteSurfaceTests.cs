@@ -22,6 +22,9 @@ public sealed class PlatformRouteSurfaceTests
 {
     private static readonly Assembly Host = typeof(Program).Assembly;
 
+    /// <summary>The one api/Admin prefix the core serves: its rows live in the webmail's database.</summary>
+    private const string ExternalDomainsRoute = "api/Admin/domains/external";
+
     /// <summary>The routes that belong to the platform, not to the webmail. Spelled as the
     /// [controller] token expands them — routing itself is case-insensitive.</summary>
     private static readonly string[] PlatformRoutes =
@@ -73,7 +76,8 @@ public sealed class PlatformRouteSurfaceTests
         var surface = Surface(weesky: false);
 
         Assert.All(PlatformRoutes, route => Assert.DoesNotContain(route, surface));
-        Assert.DoesNotContain(surface, route => route.Contains("api/Admin", StringComparison.Ordinal));
+        Assert.DoesNotContain(surface, route => route.Contains("api/Admin", StringComparison.Ordinal)
+            && !route.Contains(ExternalDomainsRoute, StringComparison.Ordinal));
         Assert.DoesNotContain(surface, route => route.Contains("api/aliases", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -100,5 +104,6 @@ public sealed class PlatformRouteSurfaceTests
         Assert.Contains("GET api/Capabilities", generic);
         Assert.Contains("GET api/SchedulingAccount", generic);
         Assert.Contains("POST api/SchedulingAccount/Test", generic);
+        Assert.Contains($"GET {ExternalDomainsRoute}", generic);
     }
 }

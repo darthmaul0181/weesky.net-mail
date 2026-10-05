@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Moq;
 using weesky.Scotty.Microservice.Controllers;
 using weesky.Scotty.Microservice.Models;
@@ -31,9 +32,10 @@ public sealed class AccountControllerTests
         _imapSession.SetupGet(s => s.SupportsQuota).Returns(true);
     }
 
-    private AccountController CreateController()
+    private AccountController CreateController(string platform = PlatformOptions.Weesky)
     {
-        var controller = new AccountController(_accountInfo.Object, _connections.Object, _imapSessions.Object);
+        var controller = new AccountController(
+            Options.Create(new PlatformOptions { Platform = platform }), _accountInfo.Object, _connections.Object, _imapSessions.Object);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("john", "example.com", UserId);
         return controller;
     }
@@ -49,6 +51,21 @@ public sealed class AccountControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(accountInfo, ok.Value);
+    }
+
+    /// <summary>The admin page picks its tabs from this: it must not wait on, nor fail with, the IMAP
+    /// session that capabilities open.</summary>
+    [Theory]
+    [InlineData(PlatformOptions.Weesky)]
+    [InlineData(PlatformOptions.Generic)]
+    public async Task GetAccountInfo_CarriesThePlatform(string platform)
+    {
+        _accountInfo.Setup(r => r.GetAccountInfoAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AccountInfo { UserId = 1, UserName = "john" }));
+
+        var result = await CreateController(platform).GetAccountInfo(CancellationToken.None);
+
+        Assert.Equal(platform, Assert.IsType<AccountInfo>(Assert.IsType<OkObjectResult>(result.Result).Value).Platform);
     }
 
     [Fact]

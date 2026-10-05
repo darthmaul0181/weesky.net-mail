@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using weesky.Scotty.Microservice.Configuration;
@@ -55,10 +56,24 @@ public sealed class PlatformConfigurationTests
     [InlineData(typeof(IAccountInfoProvider), typeof(ClaimsAccountInfoProvider))]
     public void AddGenericPlatform_RegistersTheClaimsOnlyAdapter(Type port, Type implementation)
     {
-        var services = new ServiceCollection().AddGenericPlatform();
+        var services = new ServiceCollection().AddGenericPlatform(Configuration());
 
         var descriptor = Assert.Single(services, d => d.ServiceType == port);
         Assert.Equal(implementation, descriptor.ImplementationType);
         Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
     }
+
+    [Fact]
+    public void AddGenericPlatform_RegistersTheAdminHandler()
+    {
+        var services = new ServiceCollection().AddGenericPlatform(Configuration());
+
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(IAuthorizationHandler));
+        Assert.Equal(typeof(GenericAdminRequirementHandler), descriptor.ImplementationType);
+    }
+
+    [Fact]
+    public void AddGenericPlatform_WithAnInvalidAdministrator_RefusesToStart() =>
+        Assert.Throws<InvalidOperationException>(() => new ServiceCollection()
+            .AddGenericPlatform(Configuration((GenericAdministrators.ConfigurationKey, "michael"))));
 }
