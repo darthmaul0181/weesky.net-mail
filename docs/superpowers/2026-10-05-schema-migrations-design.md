@@ -82,8 +82,10 @@ La vérification « à jour » lit `schema_migrations` avec le compte du service
 sans `schema_migrations` est une base où rien n'a été appliqué : toutes les migrations manquent.
 
 **`scotty.microservice migrate`** applique les migrations manquantes et s'arrête, sans démarrer le
-service. Il ne lit que `ConnectionStrings__WebmailSchema` (variable d'environnement) : ni
-`Platform`, ni CORS, ni clé, ni le reste des réglages. Code de sortie 0 si la base est à jour à la
+service. Il ne lit que la chaîne de schéma : la variable `ConnectionStrings__WebmailSchema`, ou,
+quand elle est absente, la première ligne de son entrée standard — `sudo` vide l'environnement, et
+une chaîne sur la ligne de commande se lirait dans `ps`. Ni `Platform`, ni CORS, ni clé, ni le reste
+des réglages. Code de sortie 0 si la base est à jour à la
 fin, 1 sinon, l'erreur sur la sortie d'erreur.
 
 Les deux chemins appellent le même code ; seuls l'entrée et ce qui suit diffèrent.
@@ -111,9 +113,11 @@ Les deux chemins appellent le même code ; seuls l'entrée et ce qui suit diffè
 ### 5. Le serveur du propriétaire
 
 - `deploy.yml`, job `deploy` : entre le dépôt des fichiers de l'API et `systemctl restart`, un second
-  appel SSH lance `<chemin>/scotty.microservice migrate`. La chaîne vient du secret d'environnement
+  appel SSH lance `sudo <chemin>/scotty.microservice migrate` (le binaire est `760 root:<deploy>`,
+  comme le reste du job, qui passe déjà par `sudo`). La chaîne vient du secret d'environnement
   `WEBMAIL_SCHEMA_CONNECTION` (`prod` et `dev`) et passe par l'entrée standard, jamais par la ligne
-  de commande, pour qu'aucun `ps` ne la voie. Un échec arrête le job avant le redémarrage : l'ancienne
+  de commande, pour qu'aucun `ps` ne la voie. Si les droits `sudo` du compte de déploiement sont
+  restreints à une liste de commandes, cette commande y est ajoutée (mise en route). Un échec arrête le job avant le redémarrage : l'ancienne
   version continue de tourner.
 - Le fichier de réglages du serveur ne reçoit pas `ConnectionStrings__WebmailSchema` : sur ce
   serveur, seul `deploy.yml` migre, et l'API ne fait que vérifier.
