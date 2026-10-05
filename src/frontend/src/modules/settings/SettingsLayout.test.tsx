@@ -208,13 +208,17 @@ describe('settings section', () => {
     expect(nav.queryByText('Rules')).not.toBeInTheDocument()
   })
 
-  it('hides Sync on a non-primary account', async () => {
+  // The DAV credentials belong to the Scotty user, never to the mailbox being read.
+  it('keeps Sync on a connected account, and its page answers there', async () => {
     localStorage.setItem('mail.activeAccount', 'g1')
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     mocks.getConnectedAccounts.mockResolvedValue([connectedRow()])
-    renderAt('/settings/mail')
+    const router = renderAt('/settings/sync')
     const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
-    await waitFor(() => expect(nav.queryByText('Sync')).not.toBeInTheDocument())
+    await waitFor(() => expect(nav.queryByText('Account')).not.toBeInTheDocument())
+    expect(nav.getByText('Sync')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/settings/sync')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sync' })).toBeInTheDocument()
   })
 
   // The loading pin: activeAccount is null until the connected-accounts query resolves, and the

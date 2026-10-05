@@ -54,10 +54,9 @@ export default function SettingsLayout() {
   const items: NavItem[] = [
     ...(isPrimary ? [{ to: '/settings/account', label: t('nav.account'), icon: <UserIcon size={16} />, end: true }] : []),
     { to: '/settings/appearance', label: t('nav.appearance'), icon: <DropletIcon size={16} /> },
-    // Gated isPrimary like Account and Aliases: the secret authenticates the weesky user, and a
-    // connected external account has neither an address book nor a principal here. Ungrouped: it
-    // syncs the calendars and the address book alike.
-    ...(isPrimary && davAvailable ? [{ to: '/settings/sync', label: t('nav.sync'), icon: <RefreshIcon size={16} /> }] : []),
+    // Not gated isPrimary: the secret, the address book and the calendars are the Scotty user's,
+    // whichever mailbox is being read. Ungrouped: it syncs the calendars and the address book alike.
+    ...(davAvailable ? [{ to: '/settings/sync', label: t('nav.sync'), icon: <RefreshIcon size={16} /> }] : []),
     { to: '/settings/mail', label: t('nav.general'), icon: <SlidersIcon size={16} />, group: 'mail' },
     { to: '/settings/accounts', label: t('nav.accounts'), icon: <PersonPlusIcon size={16} />, group: 'mail' },
     { to: '/settings/folders', label: t('nav.folders'), icon: <FolderIcon size={16} />, group: 'mail' },
