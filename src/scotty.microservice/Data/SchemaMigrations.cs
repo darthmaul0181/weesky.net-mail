@@ -1,6 +1,8 @@
 using System.Reflection;
 using DbUp;
 using DbUp.Engine;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MySqlConnector;
 
 namespace weesky.Scotty.Microservice.Data;
@@ -42,6 +44,46 @@ internal static class SchemaMigrations
         finally
         {
             Scalar(lockConnection, $"SELECT RELEASE_LOCK('{LockName}')");
+        }
+    }
+
+    public static void EnsureCurrent(IConfiguration configuration, ILogger logger)
+    {
+        var schema = configuration.GetConnectionString("WebmailSchema");
+        if (!string.IsNullOrWhiteSpace(schema))
+        {
+            foreach (var name in Apply(schema)) logger.LogInformation("Schema migration {Script} applied", name);
+            return;
+        }
+
+        var pending = Pending(configuration.GetConnectionString("WebmailPreferencesDatabase")!);
+        if (pending.Count > 0)
+            throw new InvalidOperationException(
+                $"Schema is behind: {string.Join(", ", pending)} not applied. " +
+                "Run `scotty.microservice migrate`, or set ConnectionStrings__WebmailSchema.");
+    }
+
+    // `sudo` empties the environment and a command line shows in `ps`: standard input carries it then.
+    public static int RunCommand(string? fromEnvironment, TextReader input, TextWriter output, TextWriter error)
+    {
+        var connection = string.IsNullOrWhiteSpace(fromEnvironment) ? input.ReadLine()?.Trim() : fromEnvironment;
+        if (string.IsNullOrEmpty(connection))
+        {
+            error.WriteLine("No schema connection: set ConnectionStrings__WebmailSchema, or pass it on standard input.");
+            return 1;
+        }
+
+        try
+        {
+            var applied = Apply(connection);
+            foreach (var name in applied) output.WriteLine($"Schema migration {name} applied");
+            if (applied.Count == 0) output.WriteLine("Schema is current.");
+            return 0;
+        }
+        catch (Exception e) when (e is InvalidOperationException or MySqlException)
+        {
+            error.WriteLine(e.Message);
+            return 1;
         }
     }
 

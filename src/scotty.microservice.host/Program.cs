@@ -2,7 +2,16 @@ using weesky.Scotty.Microservice.Authentication.Middleware;
 using weesky.Scotty.Microservice.Authentication.Models;
 using weesky.Scotty.Microservice.Configuration;
 using weesky.Scotty.Microservice.Controllers;
+using weesky.Scotty.Microservice.Data;
 using weesky.Scotty.Providers.Weesky;
+
+if (args is ["migrate"])
+{
+    Environment.ExitCode = SchemaMigrations.RunCommand(
+        Environment.GetEnvironmentVariable("ConnectionStrings__WebmailSchema"),
+        Console.IsInputRedirected ? Console.In : TextReader.Null, Console.Out, Console.Error);
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +58,8 @@ mvc.AddApplicationPart(typeof(ApiBaseController).Assembly);
 if (isWeesky) mvc.AddApplicationPart(typeof(WeeskyPlatform).Assembly);
 
 var app = builder.Build();
+
+SchemaMigrations.EnsureCurrent(app.Configuration, app.Logger);
 
 app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
 if (sessionKey.GeneratedIn is not null)
