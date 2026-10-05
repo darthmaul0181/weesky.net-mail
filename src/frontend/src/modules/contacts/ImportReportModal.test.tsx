@@ -1,9 +1,8 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import ImportReportModal from './ImportReportModal'
 import type { ContactImportReport } from './contactTypes'
-import { fireEscape, pressBackdrop } from '../../test-utils'
+import { fireEscape, pressBackdrop, setupUser } from '../../test-utils'
 
 const report = (fields: Partial<ContactImportReport> = {}): ContactImportReport => ({
   created: 0, merged: 0, skipped: 0, failed: 0, totalErrors: 0, errors: [], ...fields,
@@ -11,14 +10,14 @@ const report = (fields: Partial<ContactImportReport> = {}): ContactImportReport 
 
 describe('ImportReportModal', () => {
   it('prints the four counters', () => {
-    render(<ImportReportModal report={report({ created: 12, merged: 3, skipped: 1, failed: 2 })}
-      onClose={vi.fn()} />)
+    render(<ImportReportModal
+      report={report({ created: 12, merged: 3, skipped: 1, failed: 2 })} onClose={vi.fn()} />)
 
-    expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.getByText(/added/i)).toBeInTheDocument()
-    expect(screen.getByText(/updated/i)).toBeInTheDocument()
-    expect(screen.getByText(/skipped/i)).toBeInTheDocument()
-    expect(screen.getByText(/refused/i)).toBeInTheDocument()
+    const tiles = [...document.querySelectorAll('.import-counter')].map(t => t.textContent)
+    expect(tiles).toEqual([
+      expect.stringMatching(/^12.*added/i), expect.stringMatching(/^3.*updated/i),
+      expect.stringMatching(/^1.*skipped/i), expect.stringMatching(/^2.*refused/i),
+    ])
   })
 
   it('lists a refused line with its number and reason', () => {
@@ -39,7 +38,7 @@ describe('ImportReportModal', () => {
     expect(screen.getByText(/311 more/i)).toBeInTheDocument()
   })
 
-  it('says so when nothing went wrong', () => {
+  it('lists no refused line when nothing was refused', () => {
     render(<ImportReportModal report={report({ created: 4 })} onClose={vi.fn()} />)
 
     expect(screen.queryByText(/line /i)).not.toBeInTheDocument()
@@ -54,10 +53,11 @@ describe('ImportReportModal', () => {
 
   // The three ways out of every dialog on the site.
   it('closes on the ✕, on Escape and on a press on the backdrop', async () => {
+    const user = setupUser()
     const onClose = vi.fn()
     render(<ImportReportModal report={report()} onClose={onClose} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledTimes(1)
 
     fireEscape()

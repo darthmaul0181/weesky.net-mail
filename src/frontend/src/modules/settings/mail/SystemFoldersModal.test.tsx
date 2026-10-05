@@ -14,9 +14,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = createTestQueryClient()
@@ -52,17 +50,21 @@ const roles = [
 const onNotify = vi.fn()
 const onClose = vi.fn()
 
-function renderModal() {
+/** The modal over the stock roles, with one role's entry replaced. */
+function renderWithRole(replaced?: FolderRoleEntry) {
   mocks.getMailFolders.mockResolvedValue(folders)
-  mocks.getFolderRoles.mockResolvedValue(roles)
+  mocks.getFolderRoles.mockResolvedValue(
+    replaced ? [...roles.filter(r => r.role !== replaced.role), replaced] : roles)
   return render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
 }
+
+const TRASH_OVERRIDE = entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' })
 
 describe('SystemFoldersModal', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('offers one labelled select per assignable role', async () => {
-    renderModal()
+    renderWithRole()
 
     expect(await screen.findByLabelText('Sent')).toBeInTheDocument()
     expect(screen.getByLabelText('Drafts')).toBeInTheDocument()
@@ -74,26 +76,21 @@ describe('SystemFoldersModal', () => {
   })
 
   it('says what automatic currently resolves to', async () => {
-    renderModal()
+    renderWithRole()
 
     const trash = await screen.findByLabelText('Trash')
     expect(trash).toHaveTextContent(/Automatic — Deleted Items/)
   })
 
   it('shows an override as the selected folder', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+    renderWithRole(TRASH_OVERRIDE)
 
     expect(await screen.findByLabelText('Trash')).toHaveTextContent('Corbeille')
   })
 
   it('assigns a role through the API', async () => {
     mocks.setFolderRole.mockResolvedValue(undefined)
-    renderModal()
+    renderWithRole()
 
     await pickOption(await screen.findByLabelText('Trash'), 'Corbeille')
 
@@ -102,12 +99,7 @@ describe('SystemFoldersModal', () => {
 
   it('clears a role when Automatic is chosen', async () => {
     mocks.clearFolderRole.mockResolvedValue(undefined)
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+    renderWithRole(TRASH_OVERRIDE)
 
     await pickOption(await screen.findByLabelText('Trash'), 'Automatic')
 
@@ -115,25 +107,14 @@ describe('SystemFoldersModal', () => {
   })
 
   // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
-  it('surfaces the local fallback when the assignment fails', async () => {
-    mocks.setFolderRole.mockRejectedValue(new Error('This folder already holds another role'))
-    renderModal()
+  it.each([
+    ['the assignment', undefined, 'Corbeille', () => mocks.setFolderRole.mockRejectedValue(new Error('This folder already holds another role'))],
+    ['clearing a role', TRASH_OVERRIDE, 'Automatic', () => mocks.clearFolderRole.mockRejectedValue(new Error('Server refused'))],
+  ])('surfaces the local fallback when %s fails', async (_what, replaced, pick, refuse) => {
+    refuse()
+    renderWithRole(replaced)
 
-    await pickOption(await screen.findByLabelText('Trash'), 'Corbeille')
-
-    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not save the folder role', 'error'))
-  })
-
-  it('surfaces the local fallback when clearing a role fails', async () => {
-    mocks.clearFolderRole.mockRejectedValue(new Error('Server refused'))
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'override' }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
-
-    await pickOption(await screen.findByLabelText('Trash'), 'Automatic')
+    await pickOption(await screen.findByLabelText('Trash'), pick)
 
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not save the folder role', 'error'))
   })
@@ -141,15 +122,10 @@ describe('SystemFoldersModal', () => {
   // A stale override is kept and signalled (§ 5.3) — the notice and the discovery-resolved
   // value coexist on screen.
   it('signals an invalidated choice next to what resolution now yields', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({
-        role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
-        staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
-      }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+    renderWithRole(entry({
+      role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
+      staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
+    }))
 
     expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
     expect(screen.getByLabelText('Trash')).toHaveTextContent(/Automatic — Deleted Items/)
@@ -159,35 +135,28 @@ describe('SystemFoldersModal', () => {
   // role can be stale with *nothing* currently resolved. The notice must still show, and must
   // not be mistaken for (or hide) a resolved value that doesn't exist.
   it('signals an invalidated choice even when automatic resolves to nothing', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({
-        role: 'trash',
-        staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
-      }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+    renderWithRole(entry({
+      role: 'trash',
+      staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
+    }))
 
     expect(await screen.findByText(/“Old Trash” was renamed or deleted/)).toBeInTheDocument()
     expect(screen.getByLabelText('Trash')).toHaveTextContent('Automatic — not set')
   })
 
   // Fix for the accessibility gap: DOM adjacency alone doesn't announce the notice to a
-  // screen-reader user tabbing through the fields — it must be wired via aria-describedby.
-  it('associates the stale notice with its select via aria-describedby', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({
-        role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
-        staleOverride: { folderPath: 'Old Trash', reason: 'missing' },
-      }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+  // screen-reader user tabbing through the fields — it must be wired via aria-describedby. Every
+  // cause keeps the wiring, not just the one the first version handled.
+  it.each([
+    ['missing', 'Old Trash', /“Old Trash” was renamed or deleted/],
+    ['notSelectable', 'Container', /“Container” can no longer hold messages/],
+  ] as const)('associates the %s stale notice with its select via aria-describedby', async (reason, folderPath, text) => {
+    renderWithRole(entry({
+      role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse', staleOverride: { folderPath, reason },
+    }))
 
     const select = await screen.findByLabelText('Trash')
-    const notice = await screen.findByText(/“Old Trash” was renamed or deleted/)
+    const notice = await screen.findByText(text)
 
     expect(select).toHaveAttribute('aria-describedby', notice.id)
     expect(notice.id).toBeTruthy()
@@ -195,78 +164,41 @@ describe('SystemFoldersModal', () => {
 
   // One flag for three causes had the page assert the folder was renamed or deleted in all
   // three. For the other two that statement is simply false about the user's mailbox.
-  it('says the folder can no longer hold messages when that is the cause', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({
-        role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
-        staleOverride: { folderPath: 'Container', reason: 'notSelectable' },
-      }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+  it.each([
+    ['can no longer hold messages', entry({
+      role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
+      staleOverride: { folderPath: 'Container', reason: 'notSelectable' },
+    }), /“Container” can no longer hold messages/],
+    ['is taken by another role', entry({
+      role: 'junk', staleOverride: { folderPath: 'Corbeille', reason: 'folderTaken' },
+    }), /“Corbeille” is already used for another role/],
+  ])('says the folder %s when that is the cause', async (_cause, stale, text) => {
+    renderWithRole(stale)
 
-    expect(await screen.findByText(/“Container” can no longer hold messages/)).toBeInTheDocument()
+    expect(await screen.findByText(text)).toBeInTheDocument()
     expect(screen.queryByText(/renamed or deleted/)).not.toBeInTheDocument()
-  })
-
-  it('says the folder is taken by another role when that is the cause', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'junk'),
-      entry({
-        role: 'junk',
-        staleOverride: { folderPath: 'Corbeille', reason: 'folderTaken' },
-      }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
-
-    expect(await screen.findByText(/“Corbeille” is already used for another role/)).toBeInTheDocument()
-    expect(screen.queryByText(/renamed or deleted/)).not.toBeInTheDocument()
-  })
-
-  // Every cause keeps the accessibility wiring, not just the one the first version handled.
-  it('associates a non-missing stale notice with its select too', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({
-        role: 'trash', folderPath: 'Deleted Items', provenance: 'specialUse',
-        staleOverride: { folderPath: 'Container', reason: 'notSelectable' },
-      }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
-
-    const select = await screen.findByLabelText('Trash')
-    const notice = await screen.findByText(/“Container” can no longer hold messages/)
-
-    expect(select).toHaveAttribute('aria-describedby', notice.id)
-    expect(notice.id).toBeTruthy()
   })
 
   // "The server declared this" and "we guessed from the name" are the distinction this page
   // exists to draw; rendering both as a bare "Automatic — X" threw it away at the last step.
   it('marks a name-matched role as a guess', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'trash'),
-      entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'name' }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+    renderWithRole(entry({ role: 'trash', folderPath: 'Corbeille', provenance: 'name' }))
 
     expect(await screen.findByLabelText('Trash'))
       .toHaveTextContent('Automatic — Corbeille (detected from the name)')
   })
 
   it('leaves a server-declared role unqualified', async () => {
-    renderModal()
+    renderWithRole()
 
     // 'Deleted Items' arrives with provenance 'specialUse'.
-    expect(await screen.findByLabelText('Trash')).toHaveTextContent('Automatic — Deleted Items')
+    const trash = await screen.findByLabelText('Trash')
+    expect(trash).toHaveTextContent('Automatic — Deleted Items')
+    expect(trash).not.toHaveTextContent(/detected from the name/)
   })
 
   it('never offers the inbox or a non-selectable folder', async () => {
-    renderModal()
+    renderWithRole()
 
     const options = await optionsOf(await screen.findByLabelText('Trash'))
 
@@ -276,12 +208,7 @@ describe('SystemFoldersModal', () => {
   })
 
   it('excludes a folder already overridden for another role, but keeps its own', async () => {
-    mocks.getMailFolders.mockResolvedValue(folders)
-    mocks.getFolderRoles.mockResolvedValue([
-      ...roles.filter(r => r.role !== 'junk'),
-      entry({ role: 'junk', folderPath: 'Corbeille', provenance: 'override' }),
-    ])
-    render(<SystemFoldersModal onClose={onClose} onNotify={onNotify} />, { wrapper })
+    renderWithRole(entry({ role: 'junk', folderPath: 'Corbeille', provenance: 'override' }))
 
     const trashOptions = await optionsOf(await screen.findByLabelText('Trash'))
     const junkOptions = await optionsOf(screen.getByLabelText('Junk'))

@@ -31,7 +31,8 @@ describe('useStagedAttachments', () => {
 
   // A file is released from the mailbox that holds it, not from whatever the hook is rendered
   // under later: releasing A's ids against B leaves A's files to the TTL sweeper, in silence.
-  it('releases a staged file under the account it was staged with, not the current one', async () => {
+  // The inline parts live in the body rather than the tray, so nothing else would release them.
+  it('discardAll releases every staged and inline id under the account it was staged with', async () => {
     vi.mocked(uploadAttachment).mockResolvedValue({ id: 'id-1', fileName: 'a.txt', size: 4, contentType: 'text/plain' })
     const { result, rerender } = renderHook(
       ({ account }) => useStagedAttachments(account, [], ['inline-1']),
@@ -103,25 +104,6 @@ describe('useStagedAttachments', () => {
 
     expect(api.deleteAttachment).toHaveBeenCalledWith('id-1', { accountId: 'primary' })
     expect(result.current.items).toHaveLength(0)
-  })
-
-  it('discardAll deletes every staged id', async () => {
-    vi.mocked(uploadAttachment).mockResolvedValue({ id: 'id-1', fileName: 'a.txt', size: 4, contentType: 'text/plain' })
-    const { result } = renderHook(() => useStagedAttachments('primary'))
-    await act(async () => { result.current.addFiles([file]) })
-
-    act(() => { result.current.discardAll() })
-
-    expect(api.deleteAttachment).toHaveBeenCalledWith('id-1', { accountId: 'primary' })
-  })
-
-  // The inline parts live in the body rather than the tray, so nothing else would release them.
-  it('discardAll deletes the inline ids too', () => {
-    const { result } = renderHook(() => useStagedAttachments('primary', [], ['i1']))
-
-    act(() => { result.current.discardAll() })
-
-    expect(api.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' })
   })
 
   it('remove while the upload is still in flight skips the DELETE', async () => {

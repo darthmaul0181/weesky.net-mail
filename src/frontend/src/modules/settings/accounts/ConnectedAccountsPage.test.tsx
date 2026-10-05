@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation } from 'react-router'
 import ConnectedAccountsPage from './ConnectedAccountsPage'
 import { leaveTo } from './useConnectedAccounts'
-import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
+import { createTestQueryClient, optionsOf, pickOption, setupUser } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getConnectedAccounts: vi.fn(),
@@ -85,8 +84,11 @@ function QueryStringProbe() {
 }
 
 async function openForm() {
-  await userEvent.click(await screen.findByRole('button', { name: 'Connect an account' }))
+  await user.click(await screen.findByRole('button', { name: 'Connect an account' }))
 }
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 describe('ConnectedAccountsPage', () => {
   beforeEach(() => {
@@ -135,9 +137,9 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await openForm()
 
-    await userEvent.type(screen.getByLabelText('Email'), 'other@weesky.net')
-    await userEvent.type(screen.getByLabelText('Password'), 'secret')
-    await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await user.type(screen.getByLabelText('Email'), 'other@weesky.net')
+    await user.type(screen.getByLabelText('Password'), 'secret')
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
 
     await waitFor(() => expect(mocks.connectAccount)
       .toHaveBeenCalledWith(null, 'other@weesky.net', 'secret'))
@@ -149,9 +151,9 @@ describe('ConnectedAccountsPage', () => {
     await openForm()
 
     await pickOption(await screen.findByLabelText('Server'), 'Acme')
-    await userEvent.type(screen.getByLabelText('Email'), 'me@acme.com')
-    await userEvent.type(screen.getByLabelText('Password'), 'secret')
-    await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await user.type(screen.getByLabelText('Email'), 'me@acme.com')
+    await user.type(screen.getByLabelText('Password'), 'secret')
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
 
     await waitFor(() => expect(mocks.connectAccount)
       .toHaveBeenCalledWith('d1', 'me@acme.com', 'secret'))
@@ -163,9 +165,9 @@ describe('ConnectedAccountsPage', () => {
       new Error('Could not sign in to this mailbox. Check the address and the password.'))
     await openForm()
 
-    await userEvent.type(screen.getByLabelText('Email'), 'other@weesky.net')
-    await userEvent.type(screen.getByLabelText('Password'), 'wrong')
-    await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await user.type(screen.getByLabelText('Email'), 'other@weesky.net')
+    await user.type(screen.getByLabelText('Password'), 'wrong')
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
 
     expect(await screen.findByRole('alert'))
       .toHaveTextContent('Could not sign in to this mailbox. Check the address and the password.')
@@ -176,9 +178,9 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await screen.findByText('Work')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
+    await user.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(mocks.deleteConnectedAccount).toHaveBeenCalledWith('a1'))
   })
@@ -195,9 +197,9 @@ describe('ConnectedAccountsPage', () => {
     })
     renderAt('/settings/accounts')
     await screen.findByText('Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
+    await user.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByText('Work')).toBeNull())
     expect(screen.getByRole('heading', { name: 'Connected accounts' })).toHaveFocus()
@@ -216,9 +218,9 @@ describe('ConnectedAccountsPage', () => {
     })
     renderAt('/settings/accounts')
     await screen.findByText('Work')
-    await userEvent.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
+    await user.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByText('Confirm deletion')).toBeNull())
     await waitFor(() => expect(screen.queryByText('Work')).toBeNull())
@@ -229,7 +231,7 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await screen.findByText('Work')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
+    await user.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
 
     expect(mocks.deleteConnectedAccount).not.toHaveBeenCalled()
   })
@@ -238,10 +240,10 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await screen.findByText('Work')
 
-    await userEvent.click(
+    await user.click(
       screen.getByRole('button', { name: 'Re-enter the password for shared@weesky.net' }))
-    await userEvent.type(screen.getByLabelText('Password'), 'brand-new')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.type(screen.getByLabelText('Password'), 'brand-new')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mocks.updateConnectedAccountPassword)
       .toHaveBeenCalledWith('b2', 'brand-new'))
@@ -255,12 +257,12 @@ describe('ConnectedAccountsPage', () => {
     let resolveSave: (value: unknown) => void = () => {}
     mocks.updateConnectedAccountPassword.mockReturnValue(new Promise(resolve => { resolveSave = resolve }))
 
-    await userEvent.click(
+    await user.click(
       screen.getByRole('button', { name: 'Re-enter the password for shared@weesky.net' }))
-    await userEvent.type(screen.getByLabelText('Password'), 'brand-new')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.type(screen.getByLabelText('Password'), 'brand-new')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
 
     resolveSave({})
@@ -273,10 +275,10 @@ describe('ConnectedAccountsPage', () => {
     mocks.updateConnectedAccountPassword.mockRejectedValue(new Error('The mail server refused'))
     await screen.findByText('Work')
 
-    await userEvent.click(
+    await user.click(
       screen.getByRole('button', { name: 'Re-enter the password for shared@weesky.net' }))
-    await userEvent.type(screen.getByLabelText('Password'), 'still-wrong')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.type(screen.getByLabelText('Password'), 'still-wrong')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByRole('alert'))
       .toHaveTextContent('Could not sign in to this mailbox. Check the address and the password.')
@@ -290,9 +292,9 @@ describe('ConnectedAccountsPage', () => {
     mocks.connectAccount.mockRejectedValue(apiError('Too Many Requests', 429))
     await openForm()
 
-    await userEvent.type(screen.getByLabelText('Email'), 'other@weesky.net')
-    await userEvent.type(screen.getByLabelText('Password'), 'right-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await user.type(screen.getByLabelText('Email'), 'other@weesky.net')
+    await user.type(screen.getByLabelText('Password'), 'right-password')
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts')
     expect(screen.queryByText(/Check the address and the password/)).not.toBeInTheDocument()
@@ -304,10 +306,10 @@ describe('ConnectedAccountsPage', () => {
     mocks.updateConnectedAccountPassword.mockRejectedValue(apiError('account_not_found', 404))
     await screen.findByText('Work')
 
-    await userEvent.click(
+    await user.click(
       screen.getByRole('button', { name: 'Re-enter the password for shared@weesky.net' }))
-    await userEvent.type(screen.getByLabelText('Password'), 'anything')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.type(screen.getByLabelText('Password'), 'anything')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('This account is no longer connected.')
     expect(screen.queryByText('account_not_found')).not.toBeInTheDocument()
@@ -318,7 +320,7 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await screen.findByText('Work')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
+    await user.click(screen.getByRole('button', { name: 'Disconnect work@acme.com' }))
 
     expect(screen.getByText(/You are reading this mailbox right now/)).toBeInTheDocument()
   })
@@ -328,7 +330,7 @@ describe('ConnectedAccountsPage', () => {
     renderPage()
     await screen.findByText('Work')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Disconnect shared@weesky.net' }))
+    await user.click(screen.getByRole('button', { name: 'Disconnect shared@weesky.net' }))
 
     expect(screen.queryByText(/You are reading this mailbox right now/)).not.toBeInTheDocument()
   })
@@ -364,7 +366,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
 
     await pickOption(await screen.findByLabelText('Server'), 'Outlook')
     const button = screen.getByRole('button', { name: 'Sign in with Outlook' })
-    await userEvent.click(button)
+    await user.click(button)
 
     await waitFor(() => expect(mocks.startOAuthConnect).toHaveBeenCalledWith({ domainId: 'd2' }))
     expect(vi.mocked(leaveTo)).toHaveBeenCalledWith('https://provider/authorize?x=1')
@@ -381,7 +383,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     await openForm()
 
     await pickOption(await screen.findByLabelText('Server'), 'Outlook')
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in with Outlook' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in with Outlook' }))
 
     expect(await screen.findByRole('alert'))
       .toHaveTextContent('Could not reach the sign-in provider. Try again in a moment.')
@@ -393,9 +395,9 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     mocks.connectAccount.mockRejectedValue(new Error('Could not sign in to this mailbox.'))
     await openForm()
 
-    await userEvent.type(screen.getByLabelText('Email'), 'me@acme.com')
-    await userEvent.type(screen.getByLabelText('Password'), 'wrong')
-    await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await user.type(screen.getByLabelText('Email'), 'me@acme.com')
+    await user.type(screen.getByLabelText('Password'), 'wrong')
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
     expect(await screen.findByRole('alert')).toBeInTheDocument()
 
     await pickOption(screen.getByLabelText('Server'), 'Outlook')
@@ -431,7 +433,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     await openForm()
 
     await pickOption(await screen.findByLabelText('Server'), 'Outlook')
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in with Outlook' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in with Outlook' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts')
     expect(vi.mocked(leaveTo)).not.toHaveBeenCalled()
@@ -457,7 +459,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     renderPage([LIVE_OAUTH_ACCOUNT])
     await screen.findByText('Outlook')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Reconnect live@outlook.com' }))
+    await user.click(screen.getByRole('button', { name: 'Reconnect live@outlook.com' }))
 
     await waitFor(() => expect(mocks.startOAuthConnect).toHaveBeenCalledWith({ accountId: 'c4' }))
     // No warning: nothing is known to be wrong, the door is simply there.
@@ -469,7 +471,7 @@ describe('ConnectedAccountsPage — signing in with a provider', () => {
     await screen.findByText('Outlook')
 
     const button = screen.getByRole('button', { name: 'Reconnect me@outlook.com' })
-    await userEvent.click(button)
+    await user.click(button)
 
     await waitFor(() => expect(mocks.startOAuthConnect).toHaveBeenCalledWith({ accountId: 'c3' }))
     expect(vi.mocked(leaveTo)).toHaveBeenCalledWith('https://provider/authorize?x=1')

@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import { useState } from 'react'
 import MenuSelect, { type SelectOption } from './MenuSelect'
 import Modal from './Modal'
+import { setupUser } from '../test-utils'
 
 const OPTIONS: SelectOption[] = [
   { value: 'none', label: 'None' },
@@ -37,10 +37,10 @@ describe('MenuSelect', () => {
   it('opens on the chosen option, marked selected, and a click chooses another', async () => {
     const onChange = vi.fn()
     render(<Harness onChange={onChange} />)
-    await userEvent.click(box())
+    await setupUser().click(box())
     expect(screen.getByRole('option', { name: 'STARTTLS' })).toHaveAttribute('aria-selected', 'true')
     expect(box()).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: 'STARTTLS' }).id)
-    await userEvent.click(screen.getByRole('option', { name: 'SSL/TLS' }))
+    await setupUser().click(screen.getByRole('option', { name: 'SSL/TLS' }))
     expect(onChange).toHaveBeenCalledWith('ssl')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(box()).toHaveFocus()
@@ -50,7 +50,7 @@ describe('MenuSelect', () => {
     const onChange = vi.fn()
     render(<Harness onChange={onChange} />)
     box().focus()
-    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}')
+    await setupUser().keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}')
     expect(onChange).toHaveBeenCalledWith('sieve')
     expect(box()).toHaveTextContent('Sieve')
   })
@@ -59,9 +59,9 @@ describe('MenuSelect', () => {
     const onChange = vi.fn()
     render(<Harness onChange={onChange} />)
     box().focus()
-    await userEvent.keyboard('s')
+    await setupUser().keyboard('s')
     expect(box()).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: 'SSL/TLS' }).id)
-    await userEvent.keyboard('s{Enter}')
+    await setupUser().keyboard('s{Enter}')
     expect(onChange).toHaveBeenCalledWith('sieve')
   })
 
@@ -69,17 +69,17 @@ describe('MenuSelect', () => {
     const onChange = vi.fn()
     render(<Harness onChange={onChange} />)
     box().focus()
-    await userEvent.keyboard('{ArrowDown}{Home}{Escape}')
+    await setupUser().keyboard('{ArrowDown}{Home}{Escape}')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(onChange).not.toHaveBeenCalled()
-    await userEvent.keyboard('{ArrowDown}{End}{Tab}')
+    await setupUser().keyboard('{ArrowDown}{End}{Tab}')
     expect(onChange).toHaveBeenCalledWith('sieve')
     expect(screen.getByRole('button', { name: 'After' })).toHaveFocus()
   })
 
   it('does not open when disabled', async () => {
     render(<MenuSelect ariaLabel="Unit" value="a" options={[{ value: 'a', label: 'A' }]} onChange={vi.fn()} disabled />)
-    await userEvent.click(screen.getByRole('combobox', { name: 'Unit' }))
+    await setupUser().click(screen.getByRole('combobox', { name: 'Unit' }))
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
@@ -87,8 +87,8 @@ describe('MenuSelect', () => {
   it('closes its list on Escape and leaves the dialog around it open', async () => {
     const onClose = vi.fn()
     render(<Modal title="Settings" onClose={onClose}><Harness /></Modal>)
-    await userEvent.click(box())
-    await userEvent.keyboard('{Escape}')
+    await setupUser().click(box())
+    await setupUser().keyboard('{Escape}')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
     expect(box()).toHaveFocus()

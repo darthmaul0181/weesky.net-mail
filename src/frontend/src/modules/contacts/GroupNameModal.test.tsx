@@ -1,8 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import GroupNameModal from './GroupNameModal'
-import { fireEscape, pressBackdrop } from '../../test-utils'
+import { fireEscape, pressBackdrop, setupUser } from '../../test-utils'
 
 function renderModal(props: Partial<Parameters<typeof GroupNameModal>[0]> = {}) {
   const onSubmit = vi.fn()
@@ -16,28 +15,23 @@ const field = () => screen.getByLabelText('Name')
 const submit = () => screen.getByRole('button', { name: 'Save' })
 
 describe('GroupNameModal', () => {
-  // One dialog for the two gestures: it is the title that tells them apart.
-  it('wears the title it is given', () => {
-    renderModal({ title: 'Rename group' })
-
-    expect(screen.getByText('Rename group')).toBeInTheDocument()
-  })
-
   it('submits the typed name, trimmed', async () => {
+    const user = setupUser()
     const { onSubmit } = renderModal()
 
-    await userEvent.type(field(), '  Friends  ')
-    await userEvent.click(submit())
+    await user.type(field(), '  Friends  ')
+    await user.click(submit())
 
     expect(onSubmit).toHaveBeenCalledWith('Friends')
   })
 
   // An empty name is no name, and neither is a space.
   it('refuses an empty name', async () => {
+    const user = setupUser()
     renderModal()
 
     expect(submit()).toBeDisabled()
-    await userEvent.type(field(), '   ')
+    await user.type(field(), '   ')
 
     expect(submit()).toBeDisabled()
   })
@@ -53,15 +47,16 @@ describe('GroupNameModal', () => {
   })
 
   it('seeds a rename from the current name and refuses it unchanged', async () => {
+    const user = setupUser()
     const { onSubmit } = renderModal({ initialName: 'Friends' })
 
     expect(field()).toHaveValue('Friends')
     expect(submit()).toBeDisabled()
 
-    await userEvent.type(field(), ' & family')
-    await userEvent.click(submit())
+    await user.type(field(), '!')
+    await user.click(submit())
 
-    expect(onSubmit).toHaveBeenCalledWith('Friends & family')
+    expect(onSubmit).toHaveBeenCalledWith('Friends!')
   })
 
   // The server column stops at 255: refusing it at the keyboard is better than refusing it after
@@ -72,10 +67,11 @@ describe('GroupNameModal', () => {
     expect(field()).toHaveAttribute('maxLength', '255')
   })
 
-  it('is a dialog named by its own title', () => {
-    renderModal()
+  // One dialog for the two gestures: it is the title that tells them apart.
+  it('is a dialog named by the title it is given', () => {
+    renderModal({ title: 'Rename group' })
 
-    expect(screen.getByRole('dialog', { name: 'New group' }))
+    expect(screen.getByRole('dialog', { name: 'Rename group' }))
       .toHaveAttribute('aria-modal', 'true')
   })
 
@@ -88,9 +84,10 @@ describe('GroupNameModal', () => {
   })
 
   it('closes on the ✕, on Escape and on a press on the backdrop, and never submits', async () => {
+    const user = setupUser()
     const { onClose, onSubmit } = renderModal({ initialName: 'Friends' })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledTimes(1)
 
     fireEscape()

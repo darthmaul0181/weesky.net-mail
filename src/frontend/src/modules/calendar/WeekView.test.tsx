@@ -57,6 +57,7 @@ describe('WeekView', () => {
     expect(headers[0]).toHaveAccessibleName('Week 38')
     expect(headers[1]).toHaveAccessibleName(/Monday.*14 September/)
     expect(headers[3]).toHaveAccessibleName(/Wednesday.*16 September/)
+    expect(document.querySelectorAll('.day-column')).toHaveLength(7)
   })
 
   // The two pieces carry one occurrence key, so the bubble's highlight reaches both columns
@@ -72,12 +73,6 @@ describe('WeekView', () => {
     fireEvent.pointerOver(screen.getAllByRole('button', { name: /Party/ })[0]!)
 
     expect(document.querySelectorAll('.event-chip.is-hovered')).toHaveLength(2)
-  })
-
-  it('opens on the week its days name', () => {
-    week([])
-    expect(screen.getByText('W38')).toBeInTheDocument()
-    expect(document.querySelectorAll('.day-column')).toHaveLength(7)
   })
 
   it('places an hour-long block on its own minute', () => {
@@ -100,11 +95,9 @@ describe('WeekView', () => {
     expect(screen.getByText('Leave').closest('.allday-band')).toBeInTheDocument()
   })
 
-  it('cuts an evening running past midnight into one chip per day, under one key', () => {
+  it('cuts an evening running past midnight into one chip per day', () => {
     week([PARTY])
-    const chips = screen.getAllByText('Party').map(node => node.closest('button'))
-    expect(chips).toHaveLength(2)
-    for (const chip of chips) expect(chip).toHaveAttribute('data-key', 'd1#')
+    expect(screen.getAllByText('Party').map(node => node.closest('button'))).toHaveLength(2)
   })
 
   it('bands a dated event lasting more than a day, keeping the hour it starts at', () => {

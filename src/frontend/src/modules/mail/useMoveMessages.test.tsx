@@ -1,57 +1,43 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type {
   MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchPage, MailSearchResult,
 } from './api/mailTypes'
 import { mailKeys, useDeleteMessages, useFolders, useMoveMessages, useSearchMessages } from './queries'
 import { createHold } from './hold'
-import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
+import { createTestQueryClient, settle, waitFor, withQueryClient } from '../../test-utils'
+import { folderNodeOf, pageOf, summaryOf } from './mailTestHarness'
 
 const mocks = vi.hoisted(() => ({
   moveMessages: vi.fn(), copyMessages: vi.fn(), deleteMessages: vi.fn(), searchMessages: vi.fn(),
   getMailFolders: vi.fn(), getMailMessages: vi.fn(), getPreferences: vi.fn(() => Promise.resolve({})),
 }))
 vi.mock('../../api.js', () => ({ api: mocks }))
-vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../contexts/AuthContext', () => import('../../test-auth'))
 
 let client: QueryClient
 let wrapper: ReturnType<typeof withQueryClient>
 
-const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
-  uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-07-22T10:00:00Z',
-  seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
-  priority: 'normal',
-  ...over,
-})
-
-const pageOf = (folderPath: string, messages: MailMessageSummary[]): MailFolderPage => ({
-  folderPath, uidValidity: 1, total: 20, page: 0, pageSize: 50, messages,
-})
-
 const streamOf = (folderPath: string, blocks: MailMessageSummary[][]): InfiniteData<MailFolderPage> => ({
-  pages: blocks.map(block => pageOf(folderPath, block)),
+  pages: blocks.map(block => pageOf(block, { folderPath })),
   pageParams: blocks.map((_, index) => index),
 })
 
 /** A grouped page as the backend sends one: the rows live in `threads`, `messages` stays empty. */
 const groupedPageOf = (folderPath: string, groups: MailMessageSummary[][]): MailFolderPage => ({
-  ...pageOf(folderPath, []),
+  ...pageOf([], { folderPath }),
   threads: groups.map(messages => ({ messages })), totalThreads: groups.length,
 })
 
-const node = (path: string, total: number, unread: number): MailFolderNode => ({
-  path, name: path, selectable: true, subscribed: true,
-  total, unread, uidValidity: 1, uidNext: 100, children: [],
-})
+const node = (path: string, total: number, unread: number): MailFolderNode =>
+  folderNodeOf({ path, total, unread, uidNext: 100 })
 
 const searchCriteria = { folderPath: '', allFolders: true, quick: 'x' }
 const searchKey = mailKeys.search('primary', searchCriteria, 0, 50)
 
 const searchRow = (uid: number, folderPath: string, over: Partial<MailSearchResult> = {}): MailSearchResult =>
-  ({ ...summary(uid, over), folderPath, uidValidity: 1 })
+  ({ ...summaryOf(uid, over), folderPath, uidValidity: 1 })
 
 const searchPageOf = (results: MailSearchResult[], total: number): MailSearchPage =>
   ({ total, page: 0, pageSize: 50, results })
@@ -73,10 +59,10 @@ const folder = (path: string) =>
 
 /** uid 1 sits in the source page AND in source stream block 0 — the dedup case. */
 function seed() {
-  const page = pageOf('INBOX', [summary(1), summary(2, { seen: true }), summary(3)])
-  const stream = streamOf('INBOX', [[summary(1), summary(4)], [summary(5)]])
-  const target = pageOf('Archive', [summary(9)])
-  const targetBlocks = streamOf('Archive', [[summary(9)]])
+  const page = pageOf([summaryOf(1), summaryOf(2, { seen: true }), summaryOf(3)])
+  const stream = streamOf('INBOX', [[summaryOf(1), summaryOf(4)], [summaryOf(5)]])
+  const target = pageOf([summaryOf(9)], { folderPath: 'Archive' })
+  const targetBlocks = streamOf('Archive', [[summaryOf(9)]])
   const tree = [node('INBOX', 20, 5), node('Archive', 3, 1)]
 
   client.setQueryData(sourcePagesKey, page)
@@ -195,7 +181,7 @@ describe('useMoveMessages', () => {
   it('an Undo brings back a conversation the move had emptied, in its place', async () => {
     const groupedKey = mailKeys.messages('primary', 'INBOX', 0, 50, true)
     client.setQueryData(groupedKey, groupedPageOf('INBOX',
-      [[summary(1), summary(2)], [summary(3)], [summary(4)]]))
+      [[summaryOf(1), summaryOf(2)], [summaryOf(3)], [summaryOf(4)]]))
     client.setQueryData(foldersKey, [node('INBOX', 20, 5), node('Archive', 3, 1)])
     const { result } = renderHook(() => useMoveMessages(), { wrapper })
     let hold!: ReturnType<typeof createHold>
@@ -214,7 +200,7 @@ describe('useMoveMessages', () => {
     const seeded = seed()
     client.setQueryData(['preferences'], preferences)
     mocks.moveMessages.mockRejectedValue(new Error('boom'))
-    mocks.getMailMessages.mockResolvedValue(pageOf('INBOX', [summary(1)]))
+    mocks.getMailMessages.mockResolvedValue(pageOf([summaryOf(1)]))
     const invalidate = vi.spyOn(client, 'invalidateQueries')
     const onError = vi.fn()
     const { result } = renderHook(() => useMoveMessages(onError), { wrapper })
@@ -311,7 +297,7 @@ describe('useMoveMessages', () => {
   it('takes the rows out of a grouped page, dropping a thread it emptied', async () => {
     const groupedKey = mailKeys.messages('primary', 'INBOX', 0, 50, true)
     client.setQueryData(groupedKey,
-      groupedPageOf('INBOX', [[summary(1), summary(2, { seen: true })], [summary(3)]]))
+      groupedPageOf('INBOX', [[summaryOf(1), summaryOf(2, { seen: true })], [summaryOf(3)]]))
     client.setQueryData(foldersKey, [node('INBOX', 20, 5), node('Archive', 3, 1)])
     mocks.moveMessages.mockResolvedValue(undefined)
 
@@ -357,8 +343,8 @@ describe('useMoveMessages', () => {
   it('counts uids split across a cached page and a stream block as two, not one', async () => {
     // uid 1 lives only in the page, uid 2 only in stream block 1 — two different caches,
     // neither uid overlapping the other's cache, unlike the dedup case above.
-    const page = pageOf('INBOX', [summary(1), summary(3)])
-    const stream = streamOf('INBOX', [[summary(4)], [summary(2, { seen: true })]])
+    const page = pageOf([summaryOf(1), summaryOf(3)])
+    const stream = streamOf('INBOX', [[summaryOf(4)], [summaryOf(2, { seen: true })]])
     const tree = [node('INBOX', 20, 5), node('Archive', 3, 1)]
     client.setQueryData(sourcePagesKey, page)
     client.setQueryData(sourceStreamKey, stream)

@@ -6,9 +6,7 @@ import { createTestQueryClient, withQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({ getMailMessages: vi.fn(), getPreferences: vi.fn() }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 
 let client: QueryClient
 let wrapper: ReturnType<typeof withQueryClient>

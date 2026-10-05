@@ -114,15 +114,6 @@ describe('IdentityMenu', () => {
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
   })
 
-  it('closes on Escape', async () => {
-    renderMenu()
-    await openMenu()
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-
-    expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
-  })
-
   it('hands focus back to the toggle when Escape closes it from a row', async () => {
     renderMenu()
     await openMenu()
@@ -199,17 +190,11 @@ describe('IdentityMenu', () => {
       expect(screen.getByRole('menu', { name: /account menu/i })).toBeInTheDocument()
     })
 
-    it('puts the focus on the first row as it opens', async () => {
-      renderMenu()
-      await openMenu()
-
-      expect(rows()[0]).toHaveFocus()
-    })
-
-    it('walks the rows on the vertical arrows, wrapping, and jumps to the ends', async () => {
+    it('focuses the first row on open, walks the rows on the vertical arrows, wrapping, and jumps to the ends', async () => {
       renderMenu()
       await openMenu()
       const [first, , signOut] = rows() as [HTMLElement, HTMLElement, HTMLElement]
+      expect(first).toHaveFocus()
 
       fireEvent.keyDown(first, { key: 'ArrowUp' })
       expect(signOut).toHaveFocus()
@@ -253,7 +238,9 @@ describe('IdentityMenu', () => {
   })
 
   // The rows are buttons, not decorated divs: a switch has to be reachable from the keyboard.
-  it('lists every account as a menu item button, the active one marked', async () => {
+  // The active row wears the mail list's own unread marker, in the place it sits there; the
+  // inactive rows keep the gutter so the labels stay in one column.
+  it('lists every account as a menu item button, the active one marked with a dot', async () => {
     mocks.getConnectedAccounts.mockResolvedValue([connected()])
     renderMenu()
     await openMenu()
@@ -262,26 +249,17 @@ describe('IdentityMenu', () => {
     expect(rows).toHaveLength(2)
     rows.forEach(row => expect(row.tagName).toBe('BUTTON'))
     expect(rows[0]!.className).toContain('is-active')
-    expect(rows[1]!.className).not.toContain('is-active')
-  })
-
-  // The mail list's own unread marker, in the place it sits there. The inactive rows keep the
-  // gutter so the labels stay in one column instead of stepping in under the active one.
-  it('marks the active account with a dot and keeps the other rows aligned', async () => {
-    mocks.getConnectedAccounts.mockResolvedValue([connected()])
-    renderMenu()
-    await openMenu()
-
-    const rows = await screen.findAllByRole('menuitem', { name: /@/ })
     expect(rows[0]!.querySelector('.identity-active-dot')).toBeInTheDocument()
     expect(rows[0]).toHaveAttribute('aria-current', 'true')
+    expect(rows[1]!.className).not.toContain('is-active')
     expect(rows[1]!.querySelector('.identity-active-dot')).toBeNull()
     expect(rows[1]!.querySelector('.identity-dot-slot')).toBeInTheDocument()
     expect(rows[1]).not.toHaveAttribute('aria-current')
   })
 
-  it('switches to the account clicked and closes the menu', async () => {
+  it('switches to the account clicked, once the leave guard allows it, and closes the menu', async () => {
     mocks.getConnectedAccounts.mockResolvedValue([connected()])
+    registerLeaveGuard(() => Promise.resolve(true))
     renderMenu()
     await openMenu()
 
@@ -310,17 +288,6 @@ describe('IdentityMenu', () => {
     await waitFor(() => expect(screen.queryByText('Sign out')).not.toBeInTheDocument())
     expect(screen.queryByText('support@acme.com · acme.com')).not.toBeInTheDocument()
     expect(localStorage.getItem('mail.activeAccount')).toBeNull()
-  })
-
-  it('switches once the leave guard allows it', async () => {
-    mocks.getConnectedAccounts.mockResolvedValue([connected()])
-    registerLeaveGuard(() => Promise.resolve(true))
-    renderMenu()
-    await openMenu()
-
-    fireEvent.click(await screen.findByRole('menuitem', { name: /support@acme\.com/ }))
-
-    await waitFor(() => expect(localStorage.getItem('mail.activeAccount')).toBe('g1'))
   })
 
   // A shared mailbox carries no external domain: the address alone, no made-up product name.

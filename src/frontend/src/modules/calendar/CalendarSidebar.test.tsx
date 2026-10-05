@@ -1,18 +1,14 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CalendarSidebar from './CalendarSidebar'
-import { calendarOf } from './calendarTestHarness'
-import type { Calendar } from './calendarTypes'
+import { calendarOf, CALENDAR_PAIR as CALENDARS } from './calendarTestHarness'
 import type { WeekRules } from './calendarLocale'
+import { setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 const RULES: WeekRules = { firstDay: 1, minimalDays: 4 }
-
-function calendar(id: string, displayName: string, isDefault = false): Calendar {
-  return calendarOf(id, undefined, displayName, { isDefault })
-}
-
-const CALENDARS = [calendar('a', 'Personal', true), calendar('b', 'Work')]
 
 function draw(props: Partial<Parameters<typeof CalendarSidebar>[0]> = {}) {
   const handlers = {
@@ -30,13 +26,13 @@ function draw(props: Partial<Parameters<typeof CalendarSidebar>[0]> = {}) {
 /** Opens one calendar's kebab. The name is in its label but not alone: the box beside it is
     already called after the calendar. */
 async function openMenu(name: string) {
-  await userEvent.click(screen.getByRole('button', { name: `Actions for ${name}` }))
+  await user.click(screen.getByRole('button', { name: `Actions for ${name}` }))
 }
 
 describe('CalendarSidebar', () => {
   it('hands a cleared box back as a hidden calendar', async () => {
     const { onToggleVisible } = draw()
-    await userEvent.click(screen.getByLabelText('Work'))
+    await user.click(screen.getByLabelText('Work'))
     expect(onToggleVisible).toHaveBeenCalledWith(CALENDARS[1], false)
   })
 
@@ -60,7 +56,7 @@ describe('CalendarSidebar', () => {
       ['Import…', onImport], ['Export', onExport],
     ] as const) {
       await openMenu('Work')
-      await userEvent.click(screen.getByRole('menuitem', { name: label }))
+      await user.click(screen.getByRole('menuitem', { name: label }))
       expect(spy).toHaveBeenCalledWith(CALENDARS[1])
     }
   })
@@ -73,13 +69,13 @@ describe('CalendarSidebar', () => {
     await openMenu('Birthdays')
     expect(screen.getAllByRole('menuitem').map(item => item.textContent))
       .toEqual(['Settings…', 'Export', 'Disable…'])
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
 
     for (const [label, spy] of [
       ['Settings…', onSettings], ['Export', onExport], ['Disable…', onDisable],
     ] as const) {
       await openMenu('Birthdays')
-      await userEvent.click(screen.getByRole('menuitem', { name: label }))
+      await user.click(screen.getByRole('menuitem', { name: label }))
       expect(spy).toHaveBeenCalledWith(birthdays)
     }
   })
@@ -93,15 +89,15 @@ describe('CalendarSidebar', () => {
 
   it('opens a create from the heading and from the primary action', async () => {
     const { onNewCalendar, onNewEvent } = draw()
-    await userEvent.click(screen.getByRole('button', { name: 'New calendar' }))
+    await user.click(screen.getByRole('button', { name: 'New calendar' }))
     expect(onNewCalendar).toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'New event' }))
+    await user.click(screen.getByRole('button', { name: 'New event' }))
     expect(onNewEvent).toHaveBeenCalled()
   })
 
   it('passes a picked day up from the mini-month', async () => {
     const { onPickDay } = draw()
-    await userEvent.click(screen.getByRole('button', { name: '17 September 2026' }))
+    await user.click(screen.getByRole('button', { name: '17 September 2026' }))
     expect(onPickDay).toHaveBeenCalledWith('2026-09-17')
   })
 

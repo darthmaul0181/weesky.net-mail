@@ -1,4 +1,4 @@
-import { act, fireEvent, within } from '@testing-library/react'
+import { act, fireEvent, waitFor as rtlWaitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider, type DefaultOptions } from '@tanstack/react-query'
 import { createElement, type ReactNode } from 'react'
@@ -150,18 +150,40 @@ export function holdNextCall(mock: Mock) {
   }
 }
 
+/** RTL's waitFor polling every 2 ms rather than 50: a renderHook test, or a wait on a mock, has no
+    DOM mutation to wake it early, so each wait would otherwise idle a whole interval. */
+export function waitFor<T>(check: () => T | Promise<T>) {
+  return rtlWaitFor(check, { interval: 2 })
+}
+
+/** userEvent without its per-action `setTimeout`, which costs a macrotask per keystroke. Call it once
+    per test, before stubbing `navigator.clipboard` (with `Object.defineProperty`): each `setup()`
+    installs its own clipboard over whatever is there. */
+export function setupUser() {
+  return userEvent.setup({ delay: null })
+}
+
+/** Puts a fixture value in a field in one input event, where the keystrokes are not what is tested. */
+export async function pasteInto(user: ReturnType<typeof setupUser>, field: HTMLElement, value: string) {
+  await user.click(field)
+  await user.paste(value)
+}
+
+/** The direct API leaves `navigator.clipboard` alone, so these helpers can run beside a test's stub. */
+const NO_DELAY = { delay: null }
+
 /** Chooses in a `MenuSelect` the way a user does: open the box, click the row. What
     `userEvent.selectOptions` did for a native `<select>`. */
 export async function pickOption(box: HTMLElement, name: string | RegExp) {
-  await userEvent.click(box)
-  await userEvent.click(within(document.getElementById(box.getAttribute('aria-controls')!)!).getByRole('option', { name }))
+  await userEvent.click(box, NO_DELAY)
+  await userEvent.click(within(document.getElementById(box.getAttribute('aria-controls')!)!).getByRole('option', { name }), NO_DELAY)
 }
 
 /** The rows a `MenuSelect` offers, read by opening it and closed again. */
 export async function optionsOf(box: HTMLElement): Promise<string[]> {
-  await userEvent.click(box)
+  await userEvent.click(box, NO_DELAY)
   const rows = within(document.getElementById(box.getAttribute('aria-controls')!)!).getAllByRole('option')
     .map(row => row.textContent ?? '')
-  await userEvent.click(box)
+  await userEvent.click(box, NO_DELAY)
   return rows
 }

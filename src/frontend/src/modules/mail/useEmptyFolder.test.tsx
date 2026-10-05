@@ -6,9 +6,7 @@ import { createTestQueryClient, settle, withQueryClient } from '../../test-utils
 
 const mocks = vi.hoisted(() => ({ emptyFolder: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
-vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../contexts/AuthContext', () => import('../../test-auth'))
 vi.mock('../../hooks/usePreferences', () => ({
   usePreferences: () => ({ data: {} }), notifiesOf: () => false,
 }))

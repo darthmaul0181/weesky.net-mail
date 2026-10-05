@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  BUTTONS, contrast, customPaletteCss, formatCustomPalette, generateCustomPalette, INTENSITIES,
+  contrast, customPaletteCss, formatCustomPalette, generateCustomPalette, INTENSITIES,
   isNearDanger, parseCustomPalette, PALETTE_SEEDS, type CustomPaletteDef, type TokenSet,
 } from './customPalette'
 import nightCss from '../styles/theme-night.css?raw'
@@ -79,11 +79,13 @@ describe('generateCustomPalette', () => {
     expect(generateCustomPalette({ structure: 265, intensity: 'muted', accent: 35, buttons: 'structure' })).toEqual(sample)
   })
 
-  // Every combination the sliders can reach, at 5° steps: the guarantee is the product.
+  // Every combination the sliders can reach, at 5° steps: the guarantee is the product. The
+  // buttons choice only moves two light tokens, checked below; its white-on-accent pair is the
+  // badge pair already held here.
   it('keeps every pair legible for every combination', () => {
     const failures: string[] = []
     const need = (ok: boolean, label: string) => { if (!ok) failures.push(label) }
-    for (const buttons of BUTTONS)
+    const buttons = 'structure'
     for (const intensity of INTENSITIES)
       for (let structure = 0; structure < 360; structure += 5)
         for (let accent = 0; accent < 360; accent += 5) {
@@ -105,6 +107,7 @@ describe('generateCustomPalette', () => {
             at('--pane-item-active-fg', '--pane-item-active-bg', 4.5)
             at('--accent-unread', '--surface', 3)
             at('--action-primary-fg', '--action-primary', mode === 'light' ? 4.5 : 2.8)
+            if (mode === 'light') at('--action-primary-fg', '--accent-unread', 4.5)
             if (mode === 'dark')
               for (const fill of ['--danger', '--danger-hover', '--success'] as const) at('--status-fg', fill, 4.5)
             for (const tone of ['--danger', '--success', '--warning'] as const) {
@@ -124,6 +127,19 @@ describe('generateCustomPalette', () => {
     expect(accent.light['--action-primary']).toBe(accent.light['--accent-unread'])
     expect(accent.light['--action-primary-hover']).not.toBe(sample.light['--action-primary-hover'])
     expect(accent.dark).toEqual(sample.dark)
+  })
+
+  it('moves nothing but the light action colour and its hover with the buttons choice', () => {
+    for (const intensity of INTENSITIES)
+      for (let structure = 0; structure < 360; structure += 60)
+        for (let accent = 0; accent < 360; accent += 60) {
+          const own = generateCustomPalette({ structure, intensity, accent, buttons: 'structure' })
+          const alt = generateCustomPalette({ structure, intensity, accent, buttons: 'accent' })
+          const moved = Object.keys(own.light).filter(role => own.light[role as keyof TokenSet] !== alt.light[role as keyof TokenSet])
+          expect(moved, `${structure},${intensity},${accent}`).toEqual(['--action-primary', '--action-primary-hover'])
+          expect(alt.light['--action-primary']).toBe(alt.light['--accent-unread'])
+          expect(alt.dark).toEqual(own.dark)
+        }
   })
 
   it('keeps white on the primary action in both modes', () => {

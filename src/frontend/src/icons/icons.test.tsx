@@ -140,20 +140,6 @@ describe('icons', () => {
     expect(svg).toHaveAttribute('height', defaultSize)
   })
 
-  it.each(icons)('$name accepts a size override', ({ Icon }) => {
-    const { container } = render(<Icon size={11} />)
-    const svg = container.querySelector('svg')
-
-    expect(svg).toHaveAttribute('width', '11')
-    expect(svg).toHaveAttribute('height', '11')
-  })
-
-  it.each(icons)('$name inherits colour from the surrounding text', ({ Icon }) => {
-    const { container } = render(<Icon />)
-
-    expect(container.querySelector('svg')).toHaveAttribute('stroke', 'currentColor')
-  })
-
   it('StarIcon is unfilled by default', () => {
     const { container } = render(<StarIcon />)
 
@@ -167,21 +153,24 @@ describe('icons', () => {
   })
 })
 
-// Every icon file, not the curated sample above — a new icon that forgets the two attributes
-// must fail here even before anything imports it into a button.
-const modules = import.meta.glob<{ default: ComponentType<Record<string, never>> }>(
+// Every icon file, not the curated sample above — a new icon that forgets the two attributes, its
+// size prop or the text colour must fail here even before anything imports it into a button.
+const modules = import.meta.glob<{ default: ComponentType<{ size?: number }> }>(
   ['./*.{tsx,jsx}', '!./icons.test.tsx'], { eager: true })
 const allIcons = Object.entries(modules).map(([path, mod]) => ({
   name: path.replace('./', ''),
   Icon: mod.default,
 }))
 
-describe('every icon is hidden from assistive tech and out of the tab order', () => {
-  it.each(allIcons)('$name renders an svg carrying aria-hidden and focusable=false', ({ Icon }) => {
-    const { container } = render(<Icon />)
+describe('every icon', () => {
+  it.each(allIcons)('$name is hidden from assistive tech, out of the tab order, sized by its prop and in the text colour', ({ Icon }) => {
+    const { container } = render(<Icon size={11} />)
     const svg = container.querySelector('svg')
 
     expect(svg).toHaveAttribute('aria-hidden', 'true')
     expect(svg).toHaveAttribute('focusable', 'false')
+    expect(svg).toHaveAttribute('width', '11')
+    expect(svg).toHaveAttribute('height', '11')
+    expect(svg).toHaveAttribute('stroke', 'currentColor')
   })
 })

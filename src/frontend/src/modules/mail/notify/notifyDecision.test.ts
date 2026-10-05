@@ -35,10 +35,8 @@ describe('notifyDecision', () => {
     expect(notifyDecision(10, null, both)).toBeNull()
   })
 
-  it.each([
-    [{ sound: false, desktop: false }],
-  ])('stays silent when both settings are off', settings => {
-    expect(notifyDecision(10, 13, settings)).toBeNull()
+  it('stays silent when both settings are off', () => {
+    expect(notifyDecision(10, 13, { sound: false, desktop: false })).toBeNull()
   })
 
   it.each([

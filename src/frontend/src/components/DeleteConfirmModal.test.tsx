@@ -1,9 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useRef, useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import DeleteConfirmModal from './DeleteConfirmModal'
-import { fireEscape, pressBackdrop } from '../test-utils'
+import { fireEscape, pressBackdrop, setupUser } from '../test-utils'
 
 describe('DeleteConfirmModal', () => {
   // A confirm interrupts to ask one question, so it is an alertdialog rather than a dialog.
@@ -30,26 +29,6 @@ describe('DeleteConfirmModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('takes the focus on open and hands it back to the opener on close', () => {
-    function Host({ open }: { open: boolean }) {
-      return (
-        <div>
-          <button type="button">Delete alice</button>
-          {open && <DeleteConfirmModal entityLabel="alice" onConfirm={vi.fn()} onClose={vi.fn()} />}
-        </div>
-      )
-    }
-    const { rerender } = render(<Host open={false} />)
-    const trigger = screen.getByRole('button', { name: 'Delete alice' })
-    trigger.focus()
-
-    rerender(<Host open />)
-    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
-
-    rerender(<Host open={false} />)
-    expect(trigger).toHaveFocus()
-  })
-
   it('renders the entity label', () => {
     render(<DeleteConfirmModal entityLabel="alice@weesky.be" onConfirm={vi.fn()} onClose={vi.fn()} loading={false} />)
     expect(screen.getByText('alice@weesky.be')).toBeInTheDocument()
@@ -59,7 +38,7 @@ describe('DeleteConfirmModal', () => {
     const onClose = vi.fn()
     render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={onClose} loading={false} />)
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledOnce()
   })
 
@@ -71,14 +50,14 @@ describe('DeleteConfirmModal', () => {
   it('calls onConfirm when Delete is clicked', async () => {
     const onConfirm = vi.fn()
     render(<DeleteConfirmModal entityLabel="x" onConfirm={onConfirm} onClose={vi.fn()} loading={false} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Delete' }))
     expect(onConfirm).toHaveBeenCalledOnce()
   })
 
   it('does not close itself when onConfirm returns void', async () => {
     const onClose = vi.fn()
     render(<DeleteConfirmModal entityLabel="x" onConfirm={vi.fn()} onClose={onClose} loading={false} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Delete' }))
     expect(onClose).not.toHaveBeenCalled()
   })
 
@@ -90,7 +69,7 @@ describe('DeleteConfirmModal', () => {
     const onConfirm = vi.fn(() => new Promise<void>(resolve => { settle = resolve }))
     render(<DeleteConfirmModal entityLabel="x" onConfirm={onConfirm} onClose={onClose} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Delete' }))
     expect(onClose).not.toHaveBeenCalled()
 
     settle()
@@ -146,8 +125,8 @@ describe('DeleteConfirmModal', () => {
   it('prefers the return ref over an opener the confirmed action left standing', async () => {
     render(<Host />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete alice' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Delete alice' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Delete' }))
 
     expect(screen.getByTestId('region')).toHaveFocus()
   })
@@ -158,8 +137,8 @@ describe('DeleteConfirmModal', () => {
     render(<Host />)
     const trigger = screen.getByRole('button', { name: 'Delete alice' })
 
-    await userEvent.click(trigger)
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await setupUser().click(trigger)
+    await setupUser().click(screen.getByRole('button', { name: 'Close' }))
 
     expect(trigger).toHaveFocus()
   })
@@ -170,9 +149,9 @@ describe('DeleteConfirmModal', () => {
     render(<Host keepOpen />)
     const trigger = screen.getByRole('button', { name: 'Delete alice' })
 
-    await userEvent.click(trigger)
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await setupUser().click(trigger)
+    await setupUser().click(screen.getByRole('button', { name: 'Delete' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Close' }))
 
     expect(trigger).toHaveFocus()
   })

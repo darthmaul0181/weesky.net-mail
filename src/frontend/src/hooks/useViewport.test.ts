@@ -6,19 +6,9 @@ import { changeViewport, mockViewport, resetViewport, viewportListenerCount } fr
 afterEach(resetViewport)
 
 describe('useViewport', () => {
-  it('reads phone below 640px', () => {
-    mockViewport('phone')
-    expect(renderHook(() => useViewport()).result.current).toBe('phone')
-  })
-
-  it('reads tablet between 640 and 1023px', () => {
-    mockViewport('tablet')
-    expect(renderHook(() => useViewport()).result.current).toBe('tablet')
-  })
-
-  it('reads desktop at 1024px and above', () => {
-    mockViewport('desktop')
-    expect(renderHook(() => useViewport()).result.current).toBe('desktop')
+  it.each(['phone', 'tablet', 'desktop'] as const)('reads the %s tier', tier => {
+    mockViewport(tier)
+    expect(renderHook(() => useViewport()).result.current).toBe(tier)
   })
 
   it('follows a tier change', async () => {

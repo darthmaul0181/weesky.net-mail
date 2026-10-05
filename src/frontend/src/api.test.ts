@@ -58,6 +58,37 @@ const fetchCall = (n = 0) => vi.mocked(fetch).mock.calls[n] as [string, SentInit
 /** The JSON a request() carried; a body that is not a string fails the parse, and the test with it. */
 const sentJson = (options: SentInit): unknown => JSON.parse(typeof options.body === 'string' ? options.body : '')
 
+/** One call on the api, and the one request it must send: its exact URL and verb, and its body. */
+interface Route {
+  name: string
+  call: (api: Api) => Promise<unknown>
+  method: string
+  path: string
+  body?: unknown
+  /** The status the server answers, when it is not the describe's 200. */
+  status?: number
+}
+type Api = (typeof import('./api.js'))['api']
+
+/** `$name` would quote and cut a long title; `%s` over the name keeps it whole. */
+const byName = (rows: Route[]) => rows.map(row => [row.name, row] as const)
+
+async function expectRoute({ call, method, path, body, status }: Route) {
+  if (status) mockFetch(status)
+  const { api, API_BASE } = await import('./api.js')
+  await call(api)
+  const [url, options] = fetchCall()
+  expect(url).toBe(API_BASE + path)
+  expect(options.method).toBe(method)
+  if (body !== undefined) expect(sentJson(options)).toEqual(body)
+}
+
+const IDENTITIES = [{ address: 'a@x.be', displayName: 'A', isDefault: true }]
+const USER = {
+  userName: 'alice', domainId: 'WSY', password: null, fullName: '', quotaMb: 1024, active: true, admin: false,
+}
+const RULES = [{ id: '1', name: 'r', enabled: true, matchAll: true, stopAfter: false, conditions: [], actions: [] }]
+
 describe('request — response handling', () => {
   it('returns null on 204', async () => {
     mockFetch(204)
@@ -118,73 +149,6 @@ describe('request — response handling', () => {
 })
 
 describe('api methods', () => {
-  beforeEach(() => mockFetch(200))
-
-  it('login calls POST /api/Login', async () => {
-    const { api } = await import('./api.js')
-    await api.login('user@example.com', 'pass')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Login'),
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
-
-  it('logout calls DELETE /api/Login', async () => {
-    mockFetch(204)
-    const { api } = await import('./api.js')
-    await api.logout()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Login'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('createAlias calls POST /api/Aliases', async () => {
-    const { api } = await import('./api.js')
-    await api.createAlias('test', 'example.com')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Aliases'),
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
-
-  it('deleteAlias calls DELETE /api/Aliases', async () => {
-    const { api } = await import('./api.js')
-    await api.deleteAlias('test', 'example.com')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Aliases'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('getIdentities calls GET /api/Identities', async () => {
-    const { api } = await import('./api.js')
-    await api.getIdentities()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Identities'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('putIdentities PUTs the whole list under an identities key', async () => {
-    const { api } = await import('./api.js')
-    const rows = [{ address: 'a@x.be', displayName: 'A', isDefault: true }]
-    await api.putIdentities(rows)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Identities'),
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ identities: rows }) })
-    )
-  })
-
-  it('getContacts calls GET /api/Contacts', async () => {
-    const { api } = await import('./api.js')
-    await api.getContacts()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Contacts'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
   const draft: ContactDraft = {
     firstName: 'Bruno', lastName: 'Mertens', nickname: null, displayName: null, middleName: null,
     namePrefix: null, nameSuffix: null, organization: null, department: null, jobTitle: null,
@@ -192,41 +156,43 @@ describe('api methods', () => {
     addresses: [{ position: null, address: 'bruno@example.com', type: '', pref: null }],
   }
 
-  it('createContact POSTs the contact', async () => {
-    const { api } = await import('./api.js')
-    await api.createContact(draft)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Contacts'),
-      expect.objectContaining({ method: 'POST', body: JSON.stringify(draft) })
-    )
-  })
+  beforeEach(() => mockFetch(200))
 
-  it('updateContact PUTs to the contact id', async () => {
-    const { api } = await import('./api.js')
-    await api.updateContact('11111111-1111-1111-1111-111111111111', { ...draft, firstName: 'B' })
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Contacts/11111111-1111-1111-1111-111111111111'),
-      expect.objectContaining({ method: 'PUT' })
-    )
-  })
-
-  it('deleteContact DELETEs the contact id', async () => {
-    const { api } = await import('./api.js')
-    await api.deleteContact('22222222-2222-2222-2222-222222222222')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Contacts/22222222-2222-2222-2222-222222222222'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('setContactFavorite PUTs the flag to the Favorite sub-route', async () => {
-    const { api } = await import('./api.js')
-    await api.setContactFavorite('33333333-3333-3333-3333-333333333333', true)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Contacts/33333333-3333-3333-3333-333333333333/Favorite'),
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ isFavorite: true }) })
-    )
-  })
+  it.each(byName([
+    { name: 'login calls POST /api/Login',
+      call: api => api.login('user@example.com', 'pass'), method: 'POST', path: '/api/Login' },
+    { name: 'createAlias calls POST /api/Aliases',
+      call: api => api.createAlias('test', 'example.com'), method: 'POST', path: '/api/Aliases' },
+    { name: 'deleteAlias calls DELETE /api/Aliases',
+      call: api => api.deleteAlias('test', 'example.com'), method: 'DELETE', path: '/api/Aliases' },
+    { name: 'getIdentities calls GET /api/Identities',
+      call: api => api.getIdentities(), method: 'GET', path: '/api/Identities' },
+    { name: 'getContacts calls GET /api/Contacts',
+      call: api => api.getContacts(), method: 'GET', path: '/api/Contacts' },
+    { name: 'createContact POSTs the contact',
+      call: api => api.createContact(draft), method: 'POST', path: '/api/Contacts',
+      body: draft },
+    { name: 'updateContact PUTs to the contact id',
+      call: api => api.updateContact('11111111-1111-1111-1111-111111111111', { ...draft, firstName: 'B' }), method: 'PUT', path: '/api/Contacts/11111111-1111-1111-1111-111111111111' },
+    { name: 'deleteContact DELETEs the contact id',
+      call: api => api.deleteContact('22222222-2222-2222-2222-222222222222'), method: 'DELETE', path: '/api/Contacts/22222222-2222-2222-2222-222222222222' },
+    { name: 'setContactFavorite PUTs the flag to the Favorite sub-route',
+      call: api => api.setContactFavorite('33333333-3333-3333-3333-333333333333', true), method: 'PUT', path: '/api/Contacts/33333333-3333-3333-3333-333333333333/Favorite',
+      body: { isFavorite: true } },
+    { name: 'changePassword calls PATCH /api/Account/ChangeSecret',
+      call: api => api.changePassword('old', 'new'), method: 'PATCH', path: '/api/Account/ChangeSecret' },
+    { name: 'getAccount calls GET /api/Account',
+      call: api => api.getAccount(), method: 'GET', path: '/api/Account' },
+    { name: 'getQuota calls GET /api/Account/Quota',
+      call: api => api.getQuota(), method: 'GET', path: '/api/Account/Quota' },
+    { name: 'changeFullName calls POST /api/Account/FullName',
+      call: api => api.changeFullName('John Doe'), method: 'POST', path: '/api/Account/FullName' },
+    { name: 'logout calls DELETE /api/Login',
+      call: api => api.logout(), method: 'DELETE', path: '/api/Login', status: 204 },
+    { name: 'putIdentities PUTs the whole list under an identities key',
+      call: api => api.putIdentities(IDENTITIES), method: 'PUT', path: '/api/Identities',
+      body: { identities: IDENTITIES } },
+  ]))('%s', (_name, route) => expectRoute(route))
 
   // `lang` names the language the birthdays calendar is written in, should this read create it.
   it('getCalendars sends the zone and the language', async () => {
@@ -242,42 +208,6 @@ describe('api methods', () => {
     expect(fetchCall()[0]).toMatch(/\/api\/Calendars\/Birthdays\?tz=Europe%2FBrussels&lang=fr$/)
     expect(fetchCall()[1].method).toBe('PUT')
     expect(sentJson(fetchCall()[1])).toEqual({ enabled: false })
-  })
-
-  it('changePassword calls PATCH /api/Account/ChangeSecret', async () => {
-    const { api } = await import('./api.js')
-    await api.changePassword('old', 'new')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Account/ChangeSecret'),
-      expect.objectContaining({ method: 'PATCH' })
-    )
-  })
-
-  it('getAccount calls GET /api/Account', async () => {
-    const { api } = await import('./api.js')
-    await api.getAccount()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Account'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('getQuota calls GET /api/Account/Quota', async () => {
-    const { api } = await import('./api.js')
-    await api.getQuota()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Account/Quota'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('changeFullName calls POST /api/Account/FullName', async () => {
-    const { api } = await import('./api.js')
-    await api.changeFullName('John Doe')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Account/FullName'),
-      expect.objectContaining({ method: 'POST' })
-    )
   })
 
   it('posts an imported CSV as multipart without a JSON content type', async () => {
@@ -318,136 +248,35 @@ describe('api methods', () => {
 describe('admin api methods', () => {
   beforeEach(() => mockFetch(200))
 
-  it('adminGetUsers calls GET /api/Admin/users', async () => {
-    const { api } = await import('./api.js')
-    await api.adminGetUsers()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/users'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('adminCreateUser calls POST /api/Admin/users', async () => {
-    const { api } = await import('./api.js')
-    await api.adminCreateUser({
-      userName: 'alice', domainId: 'WSY', password: 'pw', fullName: '', quotaMb: 1024, active: true, admin: false,
-    })
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/users'),
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
-
-  it('adminUpdateUser calls PUT /api/Admin/users/:id', async () => {
-    const { api } = await import('./api.js')
-    await api.adminUpdateUser(5, {
-      userName: 'alice', domainId: 'WSY', password: null, fullName: '', quotaMb: 1024, active: true, admin: false,
-    })
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/users/5'),
-      expect.objectContaining({ method: 'PUT' })
-    )
-  })
-
-  it('adminDeleteUser calls DELETE /api/Admin/users/:id', async () => {
-    const { api } = await import('./api.js')
-    await api.adminDeleteUser(5)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/users/5'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('adminGetDomains calls GET /api/Admin/domains', async () => {
-    const { api } = await import('./api.js')
-    await api.adminGetDomains()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('adminCreateDomain calls POST /api/Admin/domains', async () => {
-    const { api } = await import('./api.js')
-    await api.adminCreateDomain({ id: 'TST', name: 'test.com' })
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains'),
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
-
-  it('adminUpdateDomain calls PUT /api/Admin/domains/:id', async () => {
-    const { api } = await import('./api.js')
-    await api.adminUpdateDomain('WSY', { id: 'WSY', name: 'new.com' })
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/WSY'),
-      expect.objectContaining({ method: 'PUT' })
-    )
-  })
-
-  it('adminDeleteDomain calls DELETE /api/Admin/domains/:id', async () => {
-    const { api } = await import('./api.js')
-    await api.adminDeleteDomain('WSY')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/WSY'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  // Absent by default rather than false: the API treats the flag's presence as the acknowledgement.
-  it('adminDeleteDomain omits the alias acknowledgement unless it is given', async () => {
-    const { api } = await import('./api.js')
-    await api.adminDeleteDomain('WSY')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.not.stringContaining('deleteAliases'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('adminDeleteDomain carries the alias acknowledgement when confirmed', async () => {
-    const { api } = await import('./api.js')
-    await api.adminDeleteDomain('WSY', true)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/WSY?deleteAliases=true'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('adminGetUserQuota calls GET /api/Admin/users/:id/quota', async () => {
-    const { api } = await import('./api.js')
-    await api.adminGetUserQuota(5)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/users/5/quota'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('adminGetVirtualDomains calls GET /api/Admin/domains/virtuals', async () => {
-    const { api } = await import('./api.js')
-    await api.adminGetVirtualDomains()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/virtuals'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('adminAddVirtualDomainOwner calls PUT /api/Admin/domains/virtuals/:domainId', async () => {
-    const { api } = await import('./api.js')
-    await api.adminAddVirtualDomainOwner('dom1', 42)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/virtuals/dom1'),
-      expect.objectContaining({ method: 'PUT' })
-    )
-  })
-
-  it('adminRemoveVirtualDomainOwner calls DELETE /api/Admin/domains/virtuals/:domainId/:userId', async () => {
-    const { api } = await import('./api.js')
-    await api.adminRemoveVirtualDomainOwner('dom1', 42)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/virtuals/dom1/42'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
+  it.each(byName([
+    { name: 'adminGetUsers calls GET /api/Admin/users',
+      call: api => api.adminGetUsers(), method: 'GET', path: '/api/Admin/users' },
+    { name: 'adminDeleteUser calls DELETE /api/Admin/users/:id',
+      call: api => api.adminDeleteUser(5), method: 'DELETE', path: '/api/Admin/users/5' },
+    { name: 'adminGetDomains calls GET /api/Admin/domains',
+      call: api => api.adminGetDomains(), method: 'GET', path: '/api/Admin/domains' },
+    { name: 'adminCreateDomain calls POST /api/Admin/domains',
+      call: api => api.adminCreateDomain({ id: 'TST', name: 'test.com' }), method: 'POST', path: '/api/Admin/domains' },
+    { name: 'adminUpdateDomain calls PUT /api/Admin/domains/:id',
+      call: api => api.adminUpdateDomain('WSY', { id: 'WSY', name: 'new.com' }), method: 'PUT', path: '/api/Admin/domains/WSY' },
+    // Absent by default rather than false: the API treats the flag's presence as the acknowledgement.
+    { name: 'adminDeleteDomain calls DELETE /api/Admin/domains/:id, with no alias acknowledgement unless given',
+      call: api => api.adminDeleteDomain('WSY'), method: 'DELETE', path: '/api/Admin/domains/WSY' },
+    { name: 'adminDeleteDomain carries the alias acknowledgement when confirmed',
+      call: api => api.adminDeleteDomain('WSY', true), method: 'DELETE', path: '/api/Admin/domains/WSY?deleteAliases=true' },
+    { name: 'adminGetUserQuota calls GET /api/Admin/users/:id/quota',
+      call: api => api.adminGetUserQuota(5), method: 'GET', path: '/api/Admin/users/5/quota' },
+    { name: 'adminGetVirtualDomains calls GET /api/Admin/domains/virtuals',
+      call: api => api.adminGetVirtualDomains(), method: 'GET', path: '/api/Admin/domains/virtuals' },
+    { name: 'adminAddVirtualDomainOwner calls PUT /api/Admin/domains/virtuals/:domainId',
+      call: api => api.adminAddVirtualDomainOwner('dom1', 42), method: 'PUT', path: '/api/Admin/domains/virtuals/dom1' },
+    { name: 'adminRemoveVirtualDomainOwner calls DELETE /api/Admin/domains/virtuals/:domainId/:userId',
+      call: api => api.adminRemoveVirtualDomainOwner('dom1', 42), method: 'DELETE', path: '/api/Admin/domains/virtuals/dom1/42' },
+    { name: 'adminCreateUser calls POST /api/Admin/users',
+      call: api => api.adminCreateUser({ ...USER, password: 'pw' }), method: 'POST', path: '/api/Admin/users' },
+    { name: 'adminUpdateUser calls PUT /api/Admin/users/:id',
+      call: api => api.adminUpdateUser(5, USER), method: 'PUT', path: '/api/Admin/users/5' },
+  ]))('%s', (_name, route) => expectRoute(route))
 })
 
 describe('rules api methods', () => {
@@ -462,69 +291,24 @@ describe('rules api methods', () => {
     markLoggedIn()
   })
 
-  it('getRuleProviders calls GET /api/Rules/Providers', async () => {
-    const { api } = await import('./api.js')
-    await api.getRuleProviders()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Rules/Providers'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('getRules calls GET /api/Rules', async () => {
-    const { api } = await import('./api.js')
-    await api.getRules()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Rules'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('saveRules calls PUT /api/Rules with body', async () => {
-    const { api } = await import('./api.js')
-    const rules = [{ id: '1', name: 'r', enabled: true, matchAll: true, stopAfter: false, conditions: [], actions: [] }]
-    await api.saveRules(rules, 'weesky', null)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Rules'),
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ rules, providerId: 'weesky', scriptName: null }) })
-    )
-  })
-
-  it('deleteRules calls DELETE /api/Rules', async () => {
-    const { api } = await import('./api.js')
-    await api.deleteRules()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Rules'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('checkCompatibility calls POST /api/Rules/CompatibilityCheck', async () => {
-    const { api } = await import('./api.js')
-    await api.checkCompatibility('rainloop', [])
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Rules/CompatibilityCheck'),
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
-
-  it('getRawScript calls GET /api/Rules/Raw', async () => {
-    const { api } = await import('./api.js')
-    await api.getRawScript()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Rules/Raw'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('saveRawScript calls PUT /api/Rules/Raw with body', async () => {
-    const { api } = await import('./api.js')
-    await api.saveRawScript('keep;', 'myscript')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Rules/Raw'),
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ content: 'keep;', scriptName: 'myscript' }) })
-    )
-  })
+  it.each(byName([
+    { name: 'getRuleProviders calls GET /api/Rules/Providers',
+      call: api => api.getRuleProviders(), method: 'GET', path: '/api/Rules/Providers' },
+    { name: 'getRules calls GET /api/Rules',
+      call: api => api.getRules(), method: 'GET', path: '/api/Rules' },
+    { name: 'deleteRules calls DELETE /api/Rules',
+      call: api => api.deleteRules(), method: 'DELETE', path: '/api/Rules' },
+    { name: 'checkCompatibility calls POST /api/Rules/CompatibilityCheck',
+      call: api => api.checkCompatibility('rainloop', []), method: 'POST', path: '/api/Rules/CompatibilityCheck' },
+    { name: 'getRawScript calls GET /api/Rules/Raw',
+      call: api => api.getRawScript(), method: 'GET', path: '/api/Rules/Raw' },
+    { name: 'saveRawScript calls PUT /api/Rules/Raw with body',
+      call: api => api.saveRawScript('keep;', 'myscript'), method: 'PUT', path: '/api/Rules/Raw',
+      body: { content: 'keep;', scriptName: 'myscript' } },
+    { name: 'saveRules calls PUT /api/Rules with body',
+      call: api => api.saveRules(RULES, 'weesky', null), method: 'PUT', path: '/api/Rules',
+      body: { rules: RULES, providerId: 'weesky', scriptName: null } },
+  ]))('%s', (_name, route) => expectRoute(route))
 })
 
 describe('401 handling', () => {
@@ -792,88 +576,29 @@ describe('account transport', () => {
 describe('connected accounts', () => {
   beforeEach(() => mockFetch(200))
 
-  it('getConnectedAccounts calls GET /api/ConnectedAccounts', async () => {
-    const { api } = await import('./api.js')
-    await api.getConnectedAccounts()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/ConnectedAccounts'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
-  it('connectAccount POSTs to /api/ConnectedAccounts', async () => {
-    const { api } = await import('./api.js')
-    await api.connectAccount('dom-1', 'a@b.c', 'secret')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/ConnectedAccounts'),
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ domainId: 'dom-1', email: 'a@b.c', password: 'secret' }),
-      })
-    )
-  })
-
-  it('updateConnectedAccountPassword PUTs to the Password sub-route', async () => {
-    const { api } = await import('./api.js')
-    await api.updateConnectedAccountPassword('acct-1', 'newpass')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/ConnectedAccounts/acct-1/Password'),
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ password: 'newpass' }) })
-    )
-  })
-
-  it('deleteConnectedAccount DELETEs the account id', async () => {
-    const { api } = await import('./api.js')
-    await api.deleteConnectedAccount('acct-1')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/ConnectedAccounts/acct-1'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
-
-  it('startOAuthConnect POSTs the target to the Start sub-route', async () => {
-    const { api } = await import('./api.js')
-    await api.startOAuthConnect({ domainId: 'd1' })
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/ConnectedAccounts/OAuth/Start'),
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ domainId: 'd1', accountId: null }),
-      })
-    )
-  })
-
-  it('completeOAuthConnect POSTs the state to the Complete sub-route', async () => {
-    const { api } = await import('./api.js')
-    await api.completeOAuthConnect('s1')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/ConnectedAccounts/OAuth/Complete'),
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ state: 's1' }) })
-    )
-  })
-
-  it('getConnectableDomains calls GET /api/ConnectedAccounts/Domains', async () => {
-    const { api } = await import('./api.js')
-    await api.getConnectableDomains()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/ConnectedAccounts/Domains'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
+  it.each(byName([
+    { name: 'getConnectedAccounts calls GET /api/ConnectedAccounts',
+      call: api => api.getConnectedAccounts(), method: 'GET', path: '/api/ConnectedAccounts' },
+    { name: 'connectAccount POSTs to /api/ConnectedAccounts',
+      call: api => api.connectAccount('dom-1', 'a@b.c', 'secret'), method: 'POST', path: '/api/ConnectedAccounts',
+      body: { domainId: 'dom-1', email: 'a@b.c', password: 'secret' } },
+    { name: 'updateConnectedAccountPassword PUTs to the Password sub-route',
+      call: api => api.updateConnectedAccountPassword('acct-1', 'newpass'), method: 'PUT', path: '/api/ConnectedAccounts/acct-1/Password',
+      body: { password: 'newpass' } },
+    { name: 'deleteConnectedAccount DELETEs the account id',
+      call: api => api.deleteConnectedAccount('acct-1'), method: 'DELETE', path: '/api/ConnectedAccounts/acct-1' },
+    { name: 'startOAuthConnect POSTs the target to the Start sub-route',
+      call: api => api.startOAuthConnect({ domainId: 'd1' }), method: 'POST', path: '/api/ConnectedAccounts/OAuth/Start',
+      body: { domainId: 'd1', accountId: null } },
+    { name: 'completeOAuthConnect POSTs the state to the Complete sub-route',
+      call: api => api.completeOAuthConnect('s1'), method: 'POST', path: '/api/ConnectedAccounts/OAuth/Complete',
+      body: { state: 's1' } },
+    { name: 'getConnectableDomains calls GET /api/ConnectedAccounts/Domains',
+      call: api => api.getConnectableDomains(), method: 'GET', path: '/api/ConnectedAccounts/Domains' },
+  ]))('%s', (_name, route) => expectRoute(route))
 })
 
 describe('admin external domains', () => {
-  beforeEach(() => mockFetch(200))
-
-  it('adminGetExternalDomains calls GET /api/Admin/domains/external', async () => {
-    const { api } = await import('./api.js')
-    await api.adminGetExternalDomains()
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/external'),
-      expect.objectContaining({ method: 'GET' })
-    )
-  })
-
   const domain: ExternalDomainPayload = {
     name: 'example.com', imapHost: 'imap.example.com', imapPort: 993, imapSecurity: 'SslOnConnect',
     smtpHost: 'smtp.example.com', smtpPort: 587, smtpSecurity: 'StartTls', sieveHost: null, sievePort: null,
@@ -881,32 +606,20 @@ describe('admin external domains', () => {
     oauthClientId: null, oauthClientSecret: null,
   }
 
-  it('adminCreateExternalDomain POSTs the domain', async () => {
-    const { api } = await import('./api.js')
-    await api.adminCreateExternalDomain(domain)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/external'),
-      expect.objectContaining({ method: 'POST', body: JSON.stringify(domain) })
-    )
-  })
+  beforeEach(() => mockFetch(200))
 
-  it('adminUpdateExternalDomain PUTs to the domain id', async () => {
-    const { api } = await import('./api.js')
-    await api.adminUpdateExternalDomain('dom-1', domain)
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/external/dom-1'),
-      expect.objectContaining({ method: 'PUT', body: JSON.stringify(domain) })
-    )
-  })
-
-  it('adminDeleteExternalDomain DELETEs the domain id', async () => {
-    const { api } = await import('./api.js')
-    await api.adminDeleteExternalDomain('dom-1')
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/Admin/domains/external/dom-1'),
-      expect.objectContaining({ method: 'DELETE' })
-    )
-  })
+  it.each(byName([
+    { name: 'adminGetExternalDomains calls GET /api/Admin/domains/external',
+      call: api => api.adminGetExternalDomains(), method: 'GET', path: '/api/Admin/domains/external' },
+    { name: 'adminCreateExternalDomain POSTs the domain',
+      call: api => api.adminCreateExternalDomain(domain), method: 'POST', path: '/api/Admin/domains/external',
+      body: domain },
+    { name: 'adminUpdateExternalDomain PUTs to the domain id',
+      call: api => api.adminUpdateExternalDomain('dom-1', domain), method: 'PUT', path: '/api/Admin/domains/external/dom-1',
+      body: domain },
+    { name: 'adminDeleteExternalDomain DELETEs the domain id',
+      call: api => api.adminDeleteExternalDomain('dom-1'), method: 'DELETE', path: '/api/Admin/domains/external/dom-1' },
+  ]))('%s', (_name, route) => expectRoute(route))
 })
 
 describe('mail endpoints', () => {

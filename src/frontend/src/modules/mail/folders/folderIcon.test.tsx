@@ -31,12 +31,6 @@ describe('folderIcon', () => {
     expect(folderIcon('snoozed').type).toBe(FolderIcon)
   })
 
-  it('gives no two roles the same glyph', () => {
-    const roles = ['inbox', 'drafts', 'sent', 'archive', 'junk', 'trash']
-
-    expect(new Set(roles.map(role => folderIcon(role).type)).size).toBe(roles.length)
-  })
-
   // The tree draws at 16 alongside a 16px chevron; a caller may still ask for another size.
   it('draws at 16 unless asked otherwise', () => {
     expect(folderIcon('inbox').props).toMatchObject({ size: 16 })

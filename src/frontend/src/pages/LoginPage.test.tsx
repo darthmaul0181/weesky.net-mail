@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { api, markLoggedIn, ApiError } from '../api.js'
+import { setupUser } from '../test-utils'
 import LoginPage from './LoginPage'
 
 // importOriginal keeps the real ApiError so rejections carry `.status`; only the network call
@@ -15,7 +15,7 @@ vi.mock('../api.js', async importOriginal => ({
 beforeEach(() => vi.clearAllMocks())
 
 async function fillAndSubmit(email = 'user@example.com', password = 'secret') {
-  const user = userEvent.setup()
+  const user = setupUser()
   await user.type(screen.getByPlaceholderText('Email address'), email)
   await user.type(screen.getByPlaceholderText('Password'), password)
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
@@ -23,96 +23,36 @@ async function fillAndSubmit(email = 'user@example.com', password = 'secret') {
 }
 
 describe('LoginPage', () => {
-  it('renders email, password and submit button', () => {
+  // The visible design carries no <label> — the placeholder is what sights it — but an
+  // accessible name cannot rely on the placeholder alone (gone once typed, unreliable in AT).
+  it('renders email and password fields with accessible names, and a submit button', () => {
     render(<LoginPage onLogin={vi.fn()} />)
-    expect(screen.getByPlaceholderText('Email address')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument()
+    expect(screen.getByLabelText('Email address')).toHaveAttribute('placeholder', 'Email address')
+    expect(screen.getByLabelText('Password')).toHaveAttribute('placeholder', 'Password')
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
-  // The visible design carries no <label> — the placeholder is what sights it — but an
-  // accessible name cannot rely on the placeholder alone (gone once typed, unreliable in AT).
-  it('names the fields for assistive tech, visually hidden', () => {
-    render(<LoginPage onLogin={vi.fn()} />)
-    expect(screen.getByLabelText('Email address')).toBeInTheDocument()
-    expect(screen.getByLabelText('Password')).toBeInTheDocument()
-  })
-
-  it('calls onLogin after successful login', async () => {
+  it('marks the session and calls onLogin after a successful login', async () => {
     vi.mocked(api.login).mockResolvedValue({ expiresIn: 3600 })
     const onLogin = vi.fn()
     render(<LoginPage onLogin={onLogin} />)
     await fillAndSubmit()
     await waitFor(() => expect(onLogin).toHaveBeenCalledOnce())
+    expect(markLoggedIn).toHaveBeenCalledOnce()
   })
 
-  it('calls markLoggedIn after successful login', async () => {
-    vi.mocked(api.login).mockResolvedValue({ expiresIn: 3600 })
-    render(<LoginPage onLogin={vi.fn()} />)
-    await fillAndSubmit()
-    await waitFor(() => expect(markLoggedIn).toHaveBeenCalledOnce())
-  })
-
-  it('shows an invalid-credentials message on a 401', async () => {
-    vi.mocked(api.login).mockRejectedValue(new ApiError('unauthorized', 401, null))
-    render(<LoginPage onLogin={vi.fn()} />)
-    await fillAndSubmit()
-    await waitFor(() => expect(screen.getByText('Invalid credentials.')).toBeInTheDocument())
-  })
-
-  it('shows an invalid-credentials message on a 400', async () => {
-    vi.mocked(api.login).mockRejectedValue(new ApiError('bad request', 400, null))
-    render(<LoginPage onLogin={vi.fn()} />)
-    await fillAndSubmit()
-    await waitFor(() => expect(screen.getByText('Invalid credentials.')).toBeInTheDocument())
-  })
-
-  it('shows a too-many-attempts message on a 429', async () => {
-    vi.mocked(api.login).mockRejectedValue(new ApiError('rate limited', 429, null))
-    render(<LoginPage onLogin={vi.fn()} />)
-    await fillAndSubmit()
-    await waitFor(() =>
-      expect(
-        screen.getByText('Too many sign-in attempts. Wait a few minutes, then try again.')
-      ).toBeInTheDocument()
-    )
-  })
-
-  it('shows an unavailable message on a 500', async () => {
-    vi.mocked(api.login).mockRejectedValue(new ApiError('server error', 500, null))
-    render(<LoginPage onLogin={vi.fn()} />)
-    await fillAndSubmit()
-    await waitFor(() =>
-      expect(
-        screen.getByText('Sign-in is unavailable right now. Check your connection and try again.')
-      ).toBeInTheDocument()
-    )
-  })
-
-  it('shows an unavailable message on a network failure', async () => {
-    vi.mocked(api.login).mockRejectedValue(new TypeError('Failed to fetch'))
-    render(<LoginPage onLogin={vi.fn()} />)
-    await fillAndSubmit()
-    await waitFor(() =>
-      expect(
-        screen.getByText('Sign-in is unavailable right now. Check your connection and try again.')
-      ).toBeInTheDocument()
-    )
-  })
-
-  it('shows the error banner with role="alert"', async () => {
-    vi.mocked(api.login).mockRejectedValue(new ApiError('unauthorized', 401, null))
-    render(<LoginPage onLogin={vi.fn()} />)
-    await fillAndSubmit()
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials.'))
-  })
-
-  it('does not call onLogin on failed login', async () => {
-    vi.mocked(api.login).mockRejectedValue(new ApiError('unauthorized', 401, null))
+  it.each([
+    ['a 401', new ApiError('unauthorized', 401, null), 'Invalid credentials.'],
+    ['a 400', new ApiError('bad request', 400, null), 'Invalid credentials.'],
+    ['a 429', new ApiError('rate limited', 429, null), 'Too many sign-in attempts. Wait a few minutes, then try again.'],
+    ['a 500', new ApiError('server error', 500, null), 'Sign-in is unavailable right now. Check your connection and try again.'],
+    ['a network failure', new TypeError('Failed to fetch'), 'Sign-in is unavailable right now. Check your connection and try again.'],
+  ])('announces the matching message in an alert and does not sign in on %s', async (_, rejection, message) => {
+    vi.mocked(api.login).mockRejectedValue(rejection)
     const onLogin = vi.fn()
     render(<LoginPage onLogin={onLogin} />)
     await fillAndSubmit()
-    await waitFor(() => screen.getByText('Invalid credentials.'))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(message))
     expect(onLogin).not.toHaveBeenCalled()
   })
 })

@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import LogoSection from './LogoSection'
-import { createTestQueryClient, withQueryClient } from '../../../test-utils'
+import { createTestQueryClient, setupUser, withQueryClient } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({ getAppSettings: vi.fn(), setAppLogo: vi.fn(), deleteAppLogo: vi.fn() }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
@@ -18,15 +17,17 @@ function renderSection(settings: Record<string, string> = { 'app.logo': '' }) {
 }
 
 async function choose(file = new File(['x'], 'logo.png', { type: 'image/png' })) {
-  await userEvent.upload(screen.getByLabelText('Logo file'), file)
+  await user.upload(screen.getByLabelText('Logo file'), file)
 }
 
 let previews = 0
 
 interface Settle { resolve: (value: unknown) => void; reject: (reason: Error) => void }
 
+let user: ReturnType<typeof setupUser>
 beforeEach(() => {
   vi.clearAllMocks()
+  user = setupUser()
   previews = 0
   URL.createObjectURL = vi.fn(() => `blob:preview-${++previews}`)
   URL.revokeObjectURL = vi.fn()
@@ -64,7 +65,7 @@ describe('LogoSection', () => {
     expect(change).toBeDisabled()
     expect(change).toHaveAttribute('aria-busy', 'true')
     finish({ images, lowResolution: false })
-    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('button', { name: 'Change logo…' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Change logo…' })).toHaveAttribute('aria-busy', 'false')
   })
@@ -87,7 +88,7 @@ describe('LogoSection', () => {
     renderSection()
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
-    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mocks.setAppLogo).toHaveBeenCalledWith(images))
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The logo was saved'))
@@ -111,7 +112,7 @@ describe('LogoSection', () => {
     renderSection()
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
-    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
     dropFocusToBody()
     finish(null)
 
@@ -125,7 +126,7 @@ describe('LogoSection', () => {
     renderSection()
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
-    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
     dropFocusToBody()
     refuse(new Error('refused'))
 
@@ -158,7 +159,7 @@ describe('LogoSection', () => {
     renderSection()
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
-    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
@@ -192,7 +193,7 @@ describe('LogoSection', () => {
     finishFirst({ images, lowResolution: true })
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(screen.queryByText(/blurry/)).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     // Blobs compare equal by value, so the renditions sent are checked by identity.
     await waitFor(() => expect(mocks.setAppLogo).toHaveBeenCalled())
@@ -208,23 +209,17 @@ describe('LogoSection', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/blurry/)
   })
 
-  it('names an unreadable file and offers no save', async () => {
-    prepare.prepareLogo.mockRejectedValue(new Error('application.logoUnreadable'))
+  it.each([
+    ['an unreadable file', 'application.logoUnreadable', 'This file isn’t a readable image'],
+    ['an image too detailed to fit the size limits', 'application.logoTooDetailed', /too detailed/],
+  ])('names %s and offers no save', async (_case, key, text) => {
+    prepare.prepareLogo.mockRejectedValue(new Error(key))
     renderSection()
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('This file isn’t a readable image')
+    expect(await screen.findByRole('alert')).toHaveTextContent(text)
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
-  })
-
-  it('names an image too detailed to fit the size limits', async () => {
-    prepare.prepareLogo.mockRejectedValue(new Error('application.logoTooDetailed'))
-    renderSection()
-    await screen.findByRole('button', { name: 'Change logo…' })
-    await choose()
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/too detailed/)
   })
 
   // The API's refusal carries prose, not a known code: the toast falls back to the section's own words.
@@ -233,7 +228,7 @@ describe('LogoSection', () => {
     renderSection()
     await screen.findByRole('button', { name: 'Change logo…' })
     await choose()
-    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the logo', 'error'))
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
@@ -246,8 +241,8 @@ describe('LogoSection', () => {
       return Promise.resolve(null)
     })
     renderSection({ 'app.logo': 'v1' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore default' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+    await user.click(await screen.findByRole('button', { name: 'Restore default' }))
+    await user.click(await screen.findByRole('button', { name: 'Restore' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(mocks.deleteAppLogo).toHaveBeenCalled()
@@ -262,8 +257,8 @@ describe('LogoSection', () => {
     await screen.findByRole('button', { name: 'Restore default' })
     await choose()
     await screen.findByRole('alert')
-    await userEvent.click(screen.getByRole('button', { name: 'Restore default' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+    await user.click(screen.getByRole('button', { name: 'Restore default' }))
+    await user.click(await screen.findByRole('button', { name: 'Restore' }))
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The default logo is back'))
     expect(screen.queryByText('This file isn’t a readable image')).not.toBeInTheDocument()
@@ -272,8 +267,8 @@ describe('LogoSection', () => {
   it('reports a refused restore in a toast', async () => {
     mocks.deleteAppLogo.mockRejectedValue(new Error('boom'))
     renderSection({ 'app.logo': 'v1' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore default' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+    await user.click(await screen.findByRole('button', { name: 'Restore default' }))
+    await user.click(await screen.findByRole('button', { name: 'Restore' }))
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not restore the default logo', 'error'))
   })

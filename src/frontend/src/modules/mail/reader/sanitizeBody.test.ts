@@ -296,7 +296,7 @@ describe('renderBodyDocument', () => {
     })
   })
 
-  it('grants the body no capability it did not already have', () => {
+  it('adds no script of its own around the sanitised body', () => {
     const document = renderBodyDocument(sanitizeBody('<script>alert(1)</script><p>hi</p>'))
 
     expect(document).not.toContain('<script')

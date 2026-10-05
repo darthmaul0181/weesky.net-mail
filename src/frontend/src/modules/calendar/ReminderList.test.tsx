@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ReminderList from './ReminderList'
-import { pickOption } from '../../test-utils'
+import { pickOption, setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 function draw(reminders: number[], allDay = false, foreignAlarms: string[] = [],
   onChange = vi.fn()) {
@@ -19,11 +21,11 @@ describe('ReminderList', () => {
     expect(bells[0]).toHaveTextContent('15 minutes before')
     expect(bells[1]).toHaveTextContent('1 day before')
 
-    await userEvent.click(bells[0]!)
+    await user.click(bells[0]!)
     expect(screen.getByRole('option', { name: '15 minutes before', selected: true }))
       .toBeInTheDocument()
-    await userEvent.click(bells[0]!)
-    await userEvent.click(bells[1]!)
+    await user.click(bells[0]!)
+    await user.click(bells[1]!)
     expect(screen.getByRole('option', { name: '1 day before', selected: true }))
       .toBeInTheDocument()
   })
@@ -31,7 +33,7 @@ describe('ReminderList', () => {
   // A whole day has no hour, so the ladder is the moments the phones offer instead of distances.
   it('offers the all-day ladder when the event has no hour', async () => {
     draw([900], true)
-    await userEvent.click(screen.getByRole('combobox'))
+    await user.click(screen.getByRole('combobox'))
     expect(screen.getByRole('option', { name: 'The day before at 09:00', selected: true }))
       .toBeInTheDocument()
   })
@@ -41,13 +43,13 @@ describe('ReminderList', () => {
     draw([7])
     const box = screen.getByRole('combobox')
     expect(box).toHaveTextContent('7 minutes before')
-    await userEvent.click(box)
+    await user.click(box)
     expect(screen.getByRole('option', { name: '7 minutes before' })).toBeInTheDocument()
   })
 
   it('adds a reminder', async () => {
     const onChange = draw([])
-    await userEvent.click(screen.getByRole('button', { name: 'Add a reminder' }))
+    await user.click(screen.getByRole('button', { name: 'Add a reminder' }))
     expect(onChange).toHaveBeenCalledWith([15])
   })
 
@@ -58,7 +60,7 @@ describe('ReminderList', () => {
 
   it('removes the one whose ✕ was pressed', async () => {
     const onChange = draw([15, 60, 1440])
-    await userEvent.click(screen.getAllByRole('button', { name: 'Remove this reminder' })[1]!)
+    await user.click(screen.getAllByRole('button', { name: 'Remove this reminder' })[1]!)
     expect(onChange).toHaveBeenCalledWith([15, 1440])
   })
 

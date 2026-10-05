@@ -3,15 +3,14 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClientProvider, type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import { StrictMode, type ReactNode } from 'react'
 import type { MailFolderPage, MailMessageSummary } from '../api/mailTypes'
+import { pageOf, summaryOf } from '../mailTestHarness'
 import { mailKeys, useSetFlags } from '../queries'
 import { createTestQueryClient, settle } from '../../../test-utils'
 import { findCachedSummary, useCachedSummaryFlags, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 
 const mocks = vi.hoisted(() => ({ setMessageFlags: vi.fn() }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 
 let client: QueryClient
 /** What main.tsx renders into. Its double-invoke of mount effects is the one route to a
@@ -19,17 +18,6 @@ let client: QueryClient
 function wrapper({ children }: { children: ReactNode }) {
   return <StrictMode><QueryClientProvider client={client}>{children}</QueryClientProvider></StrictMode>
 }
-
-const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
-  uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-07-22T10:00:00Z',
-  seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
-  priority: 'normal',
-  ...over,
-})
-
-const pageOf = (messages: MailMessageSummary[]): MailFolderPage => ({
-  folderPath: 'INBOX', uidValidity: 1, total: 20, page: 0, pageSize: 50, messages,
-})
 
 const pagesKey = mailKeys.messages('primary', 'INBOX', 0, 50)
 const streamKey = mailKeys.messageStream('primary', 'INBOX', 100)
@@ -47,7 +35,7 @@ function seedGrouped(...groups: MailMessageSummary[][]) {
 
 function seedStream(...blocks: MailMessageSummary[][]) {
   const stream: InfiniteData<MailFolderPage> = {
-    pages: blocks.map(pageOf), pageParams: blocks.map((_, index) => index),
+    pages: blocks.map(block => pageOf(block)), pageParams: blocks.map((_, index) => index),
   }
   client.setQueryData(streamKey, stream)
 }
@@ -89,7 +77,7 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('fires once when the detail arrives on an unread message', async () => {
-    seedPage([summary(1), summary(2)])
+    seedPage([summaryOf(1), summaryOf(2)])
 
     const host = await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: false })
     expect(mocks.setMessageFlags).not.toHaveBeenCalled()
@@ -105,7 +93,7 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('fires once on a mount whose effect StrictMode double-invokes', async () => {
-    seedPage([summary(2)])
+    seedPage([summaryOf(2)])
 
     // Mounted straight into the fired state, which is where main.tsx's double-invoke bites and
     // where nothing but the arming ref stands between one write and two.
@@ -115,7 +103,7 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('does not fire on an already-read message', async () => {
-    seedPage([summary(2, { seen: true })])
+    seedPage([summaryOf(2, { seen: true })])
 
     await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
 
@@ -123,7 +111,7 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('does not fire on a message a grouped page already shows read', async () => {
-    seedGrouped([summary(2, { seen: true }), summary(1)])
+    seedGrouped([summaryOf(2, { seen: true }), summaryOf(1)])
 
     await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
 
@@ -131,14 +119,14 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('does not fire again after Mark as unread while the uid is unchanged', async () => {
-    seedPage([summary(2)])
+    seedPage([summaryOf(2)])
 
     const host = await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
 
     // What "Mark as unread" leaves behind: the cached summary is unread again, and the reader
     // is still open on the same message.
-    await act(async () => { client.setQueryData(pagesKey, pageOf([summary(2, { seen: false })])) })
+    await act(async () => { client.setQueryData(pagesKey, pageOf([summaryOf(2, { seen: false })])) })
     await settle()
     await host.rerender({ detailLoaded: true })
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
@@ -154,12 +142,12 @@ describe('useMarkSeenOnOpen', () => {
     // The arming is consumed by the opening even though nothing was written, so a message the
     // user opens read and then marks unread stays unread. Looking the cache up first and
     // returning before arming would flip it straight back.
-    seedPage([summary(2, { seen: true })])
+    seedPage([summaryOf(2, { seen: true })])
 
     const host = await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
     expect(mocks.setMessageFlags).not.toHaveBeenCalled()
 
-    await act(async () => { client.setQueryData(pagesKey, pageOf([summary(2, { seen: false })])) })
+    await act(async () => { client.setQueryData(pagesKey, pageOf([summaryOf(2, { seen: false })])) })
     await host.rerender({ detailLoaded: false })
     await host.rerender({ detailLoaded: true })
 
@@ -168,13 +156,13 @@ describe('useMarkSeenOnOpen', () => {
 
   it('re-arms when the uid goes through null and back to the same message', async () => {
     // Right/bottom pane: the reader stays mounted at uid null while the user switches folders.
-    seedPage([summary(2)])
+    seedPage([summaryOf(2)])
 
     const host = await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
 
     await host.rerender({ uid: null, detailLoaded: false })
-    await act(async () => { client.setQueryData(pagesKey, pageOf([summary(2, { seen: false })])) })
+    await act(async () => { client.setQueryData(pagesKey, pageOf([summaryOf(2, { seen: false })])) })
     await host.rerender({ uid: 2, detailLoaded: true })
 
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
@@ -196,7 +184,7 @@ describe('useMarkSeenOnOpen', () => {
       await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
 
-      await act(async () => { seedPage([summary(42), summary(43)]) })
+      await act(async () => { seedPage([summaryOf(42), summaryOf(43)]) })
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
@@ -209,7 +197,7 @@ describe('useMarkSeenOnOpen', () => {
     it('marks again when it lands as a stream block', async () => {
       await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
 
-      await act(async () => { seedStream([summary(1)], [summary(42)]) })
+      await act(async () => { seedStream([summaryOf(1)], [summaryOf(42)]) })
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
@@ -219,7 +207,7 @@ describe('useMarkSeenOnOpen', () => {
     it('marks again when it lands as a grouped page', async () => {
       await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
 
-      await act(async () => { seedGrouped([summary(1)], [summary(43), summary(42)]) })
+      await act(async () => { seedGrouped([summaryOf(1)], [summaryOf(43), summaryOf(42)]) })
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
@@ -230,7 +218,7 @@ describe('useMarkSeenOnOpen', () => {
     it('leaves a listing that already says read alone', async () => {
       await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
 
-      await act(async () => { seedPage([summary(42, { seen: true })]) })
+      await act(async () => { seedPage([summaryOf(42, { seen: true })]) })
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
@@ -241,12 +229,12 @@ describe('useMarkSeenOnOpen', () => {
     it('reconciles once and stops watching the cache', async () => {
       await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
 
-      await act(async () => { seedPage([summary(1)]) })
+      await act(async () => { seedPage([summaryOf(1)]) })
       await settle()
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
 
       // The uid turning up in a later refetch is not a second opening.
-      await act(async () => { seedPage([summary(1), summary(42)]) })
+      await act(async () => { seedPage([summaryOf(1), summaryOf(42)]) })
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
@@ -260,7 +248,7 @@ describe('useMarkSeenOnOpen', () => {
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
 
       await markUnread()
-      await act(async () => { seedPage([summary(42)]) })
+      await act(async () => { seedPage([summaryOf(42)]) })
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenLastCalledWith('INBOX', [42], 'seen', false, { accountId: 'primary' })
@@ -279,7 +267,7 @@ describe('useMarkSeenOnOpen', () => {
       await renderHost({ folderPath: 'INBOX', uid: 42, detailLoaded: true })
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(2)
 
-      await act(async () => { seedPage([summary(42)]) })
+      await act(async () => { seedPage([summaryOf(42)]) })
       await settle()
 
       expect(mocks.setMessageFlags).toHaveBeenCalledTimes(3)
@@ -289,7 +277,7 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('re-arms when the uid changes', async () => {
-    seedPage([summary(1), summary(2)])
+    seedPage([summaryOf(1), summaryOf(2)])
 
     const host = await renderHost({ folderPath: 'INBOX', uid: 1, detailLoaded: true })
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(1)
@@ -301,7 +289,7 @@ describe('useMarkSeenOnOpen', () => {
     // Returning to a message opened earlier this session re-arms: marked unread meanwhile, it
     // is marked read again.
     await act(async () => {
-      client.setQueryData(pagesKey, pageOf([summary(1), summary(2, { seen: true })]))
+      client.setQueryData(pagesKey, pageOf([summaryOf(1), summaryOf(2, { seen: true })]))
     })
     await host.rerender({ uid: 1, detailLoaded: true })
     expect(mocks.setMessageFlags).toHaveBeenCalledTimes(3)
@@ -309,7 +297,7 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('stays silent on failure', async () => {
-    seedPage([summary(2)])
+    seedPage([summaryOf(2)])
     mocks.setMessageFlags.mockRejectedValue(new Error('boom'))
 
     await renderHost({ folderPath: 'INBOX', uid: 2, detailLoaded: true })
@@ -323,7 +311,7 @@ describe('useMarkSeenOnOpen', () => {
   })
 
   it('does nothing without a folder, a uid or a loaded detail', async () => {
-    seedPage([summary(2)])
+    seedPage([summaryOf(2)])
 
     await renderHost({ folderPath: null, uid: 2, detailLoaded: true })
     await renderHost({ folderPath: 'INBOX', uid: null, detailLoaded: true })
@@ -339,26 +327,26 @@ describe('findCachedSummary', () => {
   })
 
   it('finds a message in the paged cache', () => {
-    seedPage([summary(1), summary(2, { seen: true })])
+    seedPage([summaryOf(1), summaryOf(2, { seen: true })])
 
     expect(findCachedSummary(client, 'primary', 'INBOX', 2)?.seen).toBe(true)
   })
 
   it('finds a member of a grouped page thread', () => {
-    seedGrouped([summary(1)], [summary(9), summary(5, { flagged: true })])
+    seedGrouped([summaryOf(1)], [summaryOf(9), summaryOf(5, { flagged: true })])
 
     expect(findCachedSummary(client, 'primary', 'INBOX', 5)?.flagged).toBe(true)
   })
 
   it('finds a message in a later stream block', () => {
-    seedStream([summary(1)], [summary(5, { flagged: true })])
+    seedStream([summaryOf(1)], [summaryOf(5, { flagged: true })])
 
     expect(findCachedSummary(client, 'primary', 'INBOX', 5)?.flagged).toBe(true)
   })
 
   it('answers undefined for an unknown uid or another folder', () => {
-    seedPage([summary(1)])
-    seedStream([summary(1)])
+    seedPage([summaryOf(1)])
+    seedStream([summaryOf(1)])
 
     expect(findCachedSummary(client, 'primary', 'INBOX', 999)).toBeUndefined()
     expect(findCachedSummary(client, 'primary', 'Archive', 1)).toBeUndefined()
@@ -376,12 +364,12 @@ describe('useCachedSummaryFlags', () => {
   }
 
   it('follows a write to the list caches of the open folder', async () => {
-    seedPage([summary(5)])
+    seedPage([summaryOf(5)])
     render(<FlagsHost />, { wrapper })
     await settle()
     expect(screen.getByText('false false')).toBeInTheDocument()
 
-    act(() => seedStream([summary(5, { seen: true, flagged: true })]))
+    act(() => seedStream([summaryOf(5, { seen: true, flagged: true })]))
     act(() => client.removeQueries({ queryKey: pagesKey }))
 
     expect(await screen.findByText('true true')).toBeInTheDocument()
@@ -389,14 +377,14 @@ describe('useCachedSummaryFlags', () => {
 
   // Every cache event app-wide reaches the subscription; only the folder's lists may cost a scan.
   it('does not rescan the lists on an unrelated cache write', async () => {
-    seedPage([summary(5)])
+    seedPage([summaryOf(5)])
     render(<FlagsHost />, { wrapper })
     await settle()
     const scan = vi.spyOn(client, 'getQueriesData')
 
     act(() => {
       client.setQueryData(['contacts', 'primary'], { contacts: [] })
-      client.setQueryData(mailKeys.messages('primary', 'Archive', 0, 50), pageOf([summary(5)]))
+      client.setQueryData(mailKeys.messages('primary', 'Archive', 0, 50), pageOf([summaryOf(5)]))
     })
     await settle()
 

@@ -1,38 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import type {
-  MailFolderNode, MailFolderPage, MailMessageSummary, MailSearchResult,
+  MailFolderNode, MailFolderPage, MailSearchResult,
 } from '../api/mailTypes'
 import {
   blankPage, mapPageSummaries, pageSummaries, patchFolderCounts, patchFolderUnread,
   patchPage, patchSearchResults, patchSummaries, removeFromPage, removeSearchResults,
   removeSummaries,
 } from './listPatch'
-
-const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
-  uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-07-22T10:00:00Z',
-  seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
-  priority: 'normal',
-  ...over,
-})
+import { folderNodeOf, pageOf, summaryOf } from '../mailTestHarness'
 
 const result = (uid: number, folderPath: string, seen = true): MailSearchResult =>
-  ({ ...summary(uid, { seen }), folderPath, uidValidity: 1 })
+  ({ ...summaryOf(uid, { seen }), folderPath, uidValidity: 1 })
 
 const node = (
   path: string, unread: number | undefined, children: MailFolderNode[] = [], total = 10,
-): MailFolderNode => ({
-  path, name: path, selectable: true, subscribed: true,
-  total, unread, uidValidity: 1, uidNext: 100, children,
-})
-
-const flatPage = (messages: MailMessageSummary[]): MailFolderPage => ({
-  folderPath: 'INBOX', uidValidity: 1, total: 20, page: 0, pageSize: 50, messages,
-})
+): MailFolderNode => folderNodeOf({ path, unread, children, total, uidNext: 100 })
 
 /** A grouped page as the backend sends one: the rows live in `threads`, `messages` stays empty. */
 const groupedPage = (groups: number[][]): MailFolderPage => ({
-  ...flatPage([]),
-  threads: groups.map(uids => ({ messages: uids.map(uid => summary(uid)) })),
+  ...pageOf([]),
+  threads: groups.map(uids => ({ messages: uids.map(uid => summaryOf(uid)) })),
   totalThreads: groups.length,
 })
 
@@ -40,31 +27,31 @@ const threadUids = (page: MailFolderPage) => page.threads!.map(t => t.messages.m
 
 describe('patchSummaries', () => {
   it('rewrites only the targeted uids', () => {
-    const { messages } = patchSummaries([summary(1), summary(2)], [2], 'seen', true)
+    const { messages } = patchSummaries([summaryOf(1), summaryOf(2)], [2], 'seen', true)
     expect(messages[0]!.seen).toBe(false)
     expect(messages[1]!.seen).toBe(true)
   })
 
   it('counts the unread delta only for real transitions', () => {
-    const input = [summary(1, { seen: true }), summary(2, { seen: false })]
+    const input = [summaryOf(1, { seen: true }), summaryOf(2, { seen: false })]
     const { unreadDelta, found } = patchSummaries(input, [1, 2], 'seen', true)
     expect(unreadDelta).toBe(-1)
     expect(found).toBe(2)
   })
 
   it('marking unread raises the count', () => {
-    const { unreadDelta } = patchSummaries([summary(1, { seen: true })], [1], 'seen', false)
+    const { unreadDelta } = patchSummaries([summaryOf(1, { seen: true })], [1], 'seen', false)
     expect(unreadDelta).toBe(1)
   })
 
   it('flagged never moves the unread delta', () => {
-    const { unreadDelta, messages } = patchSummaries([summary(1)], [1], 'flagged', true)
+    const { unreadDelta, messages } = patchSummaries([summaryOf(1)], [1], 'flagged', true)
     expect(unreadDelta).toBe(0)
     expect(messages[0]!.flagged).toBe(true)
   })
 
   it('reports zero found when no target is present', () => {
-    const { found, messages } = patchSummaries([summary(1)], [99], 'seen', true)
+    const { found, messages } = patchSummaries([summaryOf(1)], [99], 'seen', true)
     expect(found).toBe(0)
     expect(messages[0]!.seen).toBe(false)
   })
@@ -96,19 +83,19 @@ describe('patchFolderUnread', () => {
 
 describe('removeSummaries', () => {
   it('removes only the targeted uids', () => {
-    const { messages } = removeSummaries([summary(1), summary(2), summary(3)], [2])
+    const { messages } = removeSummaries([summaryOf(1), summaryOf(2), summaryOf(3)], [2])
     expect(messages.map(m => m.uid)).toEqual([1, 3])
   })
 
   it('counts removed and removedUnread from what was actually present', () => {
-    const input = [summary(1, { seen: false }), summary(2, { seen: true })]
+    const input = [summaryOf(1, { seen: false }), summaryOf(2, { seen: true })]
     const { removed, removedUnread } = removeSummaries(input, [1, 2, 99])
     expect(removed).toBe(2)
     expect(removedUnread).toBe(1)
   })
 
   it('an absent uid contributes nothing to either count', () => {
-    const input = [summary(1)]
+    const input = [summaryOf(1)]
     const { removed, removedUnread, messages } = removeSummaries(input, [99])
     expect(removed).toBe(0)
     expect(removedUnread).toBe(0)
@@ -116,7 +103,7 @@ describe('removeSummaries', () => {
   })
 
   it('returns the same array reference when nothing matched', () => {
-    const input = [summary(1), summary(2)]
+    const input = [summaryOf(1), summaryOf(2)]
     const { messages } = removeSummaries(input, [99])
     expect(messages).toBe(input)
   })
@@ -205,7 +192,7 @@ describe('removeSearchResults', () => {
 
 describe('mapPageSummaries', () => {
   it('rewrites the flat list and grows no threads field on a flat page', () => {
-    const mapped = mapPageSummaries(flatPage([summary(1), summary(2)]), messages =>
+    const mapped = mapPageSummaries(pageOf([summaryOf(1), summaryOf(2)]), messages =>
       messages.filter(message => message.uid !== 1))
 
     expect(mapped.messages.map(m => m.uid)).toEqual([2])
@@ -230,7 +217,7 @@ describe('mapPageSummaries', () => {
 
 describe('pageSummaries', () => {
   it('answers the flat list itself on a flat page', () => {
-    const page = flatPage([summary(1)])
+    const page = pageOf([summaryOf(1)])
     expect(pageSummaries(page)).toBe(page.messages)
   })
 
@@ -240,7 +227,7 @@ describe('pageSummaries', () => {
 
   it('counts a uid held by both faces once', () => {
     // A merged block 0 (useListRefresh) keeps the fresh flat list beside its merged threads.
-    const page = { ...groupedPage([[3, 2]]), messages: [summary(3), summary(2)] }
+    const page = { ...groupedPage([[3, 2]]), messages: [summaryOf(3), summaryOf(2)] }
     expect(pageSummaries(page).map(m => m.uid)).toEqual([3, 2])
   })
 })
@@ -259,7 +246,7 @@ describe('patchPage', () => {
   })
 
   it('patches a flat page exactly as patchSummaries does', () => {
-    const patch = patchPage(flatPage([summary(1), summary(2)]), [1], 'flagged', true)
+    const patch = patchPage(pageOf([summaryOf(1), summaryOf(2)]), [1], 'flagged', true)
 
     expect(patch.found).toBe(1)
     expect(patch.page.messages.map(m => m.flagged)).toEqual([true, false])
@@ -291,7 +278,7 @@ describe('removeFromPage', () => {
 
   it('reports zero removed when no face holds the uid', () => {
     expect(removeFromPage(groupedPage([[1]]), [99]).removed).toBe(0)
-    expect(removeFromPage(flatPage([summary(1)]), [99]).removed).toBe(0)
+    expect(removeFromPage(pageOf([summaryOf(1)]), [99]).removed).toBe(0)
   })
 })
 
@@ -306,7 +293,7 @@ describe('blankPage', () => {
   })
 
   it('gives a flat page no threads field of its own', () => {
-    const blanked = blankPage(flatPage([summary(1)]))
+    const blanked = blankPage(pageOf([summaryOf(1)]))
 
     expect(blanked.messages).toEqual([])
     expect(blanked.total).toBe(0)

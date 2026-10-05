@@ -72,48 +72,7 @@ describe('formOf', () => {
     const twice = { email: 'marc@example.org', isOrganizer: false }
     expect(formOf(detailOf({ attendees: [twice, twice] }), null, TZ).attendees).toHaveLength(2)
   })
-})
 
-describe('newEventForm', () => {
-  it('reads the slot the user dragged, in the zone the screen is on', () => {
-    const form = newEventForm(
-      new Date('2026-09-14T07:00:00Z'), new Date('2026-09-14T08:30:00Z'), false, 'c1', TZ)
-
-    expect(form).toMatchObject({
-      calendarId: 'c1', title: '', isAllDay: false, timeZone: TZ,
-      startDate: '2026-09-14', startTime: '09:00', endDate: '2026-09-14', endTime: '10:30',
-      availability: 'Busy', visibility: 'Default', keepRepeat: false,
-      attendees: [], canInvite: true,
-    })
-    expect(form.repeat).toEqual({ kind: 'never' })
-  })
-
-  // A day off does not block a free/busy: the clients that write all-day events write them free.
-  it('is born free when it is a whole day', () => {
-    const form = newEventForm(
-      new Date('2026-09-14T07:00:00Z'), new Date('2026-09-15T07:00:00Z'), true, 'c1', TZ)
-
-    expect(form.isAllDay).toBe(true)
-    expect(form.availability).toBe('Free')
-    expect(form.startDate).toBe('2026-09-14')
-    expect(form.endDate).toBe('2026-09-15')
-  })
-
-  // A reminder is asked for, never handed out: a new event is born silent whether it has hours
-  // or not, and "+ Add a reminder" is the one door in.
-  it('gives a new event no reminder at all', () => {
-    const at = (iso: string) => new Date(iso)
-    const dated = newEventForm(
-      at('2026-09-14T07:00:00Z'), at('2026-09-14T08:00:00Z'), false, 'c1', TZ)
-    const whole = newEventForm(
-      at('2026-09-14T07:00:00Z'), at('2026-09-15T07:00:00Z'), true, 'c1', TZ)
-
-    expect(dated.reminders).toEqual([])
-    expect(whole.reminders).toEqual([])
-  })
-})
-
-describe('formOf', () => {
   it('gives a floating event the browser zone, since it carries none of its own', () => {
     const form = formOf(
       detailOf({ fields: fields({ timeZone: undefined }) }), null, 'Europe/Brussels')
@@ -205,6 +164,45 @@ describe('formOf', () => {
       frequency: 'MONTHLY', interval: 1, byDay: [], end: 'Never', bySetPos: -1, bySetPosDay: 'FR',
     }
     expect(formOf(positioned, null, TZ).keepRepeat).toBe(true)
+  })
+})
+
+describe('newEventForm', () => {
+  it('reads the slot the user dragged, in the zone the screen is on', () => {
+    const form = newEventForm(
+      new Date('2026-09-14T07:00:00Z'), new Date('2026-09-14T08:30:00Z'), false, 'c1', TZ)
+
+    expect(form).toMatchObject({
+      calendarId: 'c1', title: '', isAllDay: false, timeZone: TZ,
+      startDate: '2026-09-14', startTime: '09:00', endDate: '2026-09-14', endTime: '10:30',
+      availability: 'Busy', visibility: 'Default', keepRepeat: false,
+      attendees: [], canInvite: true,
+    })
+    expect(form.repeat).toEqual({ kind: 'never' })
+  })
+
+  // A day off does not block a free/busy: the clients that write all-day events write them free.
+  it('is born free when it is a whole day', () => {
+    const form = newEventForm(
+      new Date('2026-09-14T07:00:00Z'), new Date('2026-09-15T07:00:00Z'), true, 'c1', TZ)
+
+    expect(form.isAllDay).toBe(true)
+    expect(form.availability).toBe('Free')
+    expect(form.startDate).toBe('2026-09-14')
+    expect(form.endDate).toBe('2026-09-15')
+  })
+
+  // A reminder is asked for, never handed out: a new event is born silent whether it has hours
+  // or not, and "+ Add a reminder" is the one door in.
+  it('gives a new event no reminder at all', () => {
+    const at = (iso: string) => new Date(iso)
+    const dated = newEventForm(
+      at('2026-09-14T07:00:00Z'), at('2026-09-14T08:00:00Z'), false, 'c1', TZ)
+    const whole = newEventForm(
+      at('2026-09-14T07:00:00Z'), at('2026-09-15T07:00:00Z'), true, 'c1', TZ)
+
+    expect(dated.reminders).toEqual([])
+    expect(whole.reminders).toEqual([])
   })
 })
 

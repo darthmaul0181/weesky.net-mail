@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { mockViewport, resetViewport } from '../../../test-utils'
+import { mockViewport, resetViewport, setupUser } from '../../../test-utils'
 import { expectNoAxeViolations } from '../../../a11y-test'
 import EditorToolbar from './EditorToolbar'
 import type { EditorHandle } from './SquireEditor'
@@ -43,12 +42,14 @@ describe('EditorToolbar', () => {
     expect(screen.getByRole('button', { name: 'Italic' }).className).not.toContain('is-active')
   })
 
-  it('applies a text colour from the swatch grid', () => {
+  it('applies a text colour from the swatch grid and shows it under its button', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
     fireEvent.click(screen.getByRole('button', { name: 'Red' }))
     expect(editor.setTextColour).toHaveBeenCalledWith('#d0021b')
+    expect(screen.getByRole('button', { name: 'Text colour' })
+      .querySelector('.compose-tool-ink')).toHaveStyle({ background: '#d0021b' })
   })
 
   it('applies a highlight colour from its own swatch grid', () => {
@@ -60,14 +61,6 @@ describe('EditorToolbar', () => {
     expect(editor.setTextColour).not.toHaveBeenCalled()
   })
 
-  it('shows the last applied colour under its button', () => {
-    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Text colour' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Red' }))
-    expect(screen.getByRole('button', { name: 'Text colour' })
-      .querySelector('.compose-tool-ink')).toHaveStyle({ background: '#d0021b' })
-  })
-
   it('closes a popover on an outside mousedown', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
@@ -75,30 +68,6 @@ describe('EditorToolbar', () => {
     expect(screen.getByRole('button', { name: 'Red' })).toBeInTheDocument()
     fireEvent.mouseDown(document.body)
     expect(screen.queryByRole('button', { name: 'Red' })).not.toBeInTheDocument()
-  })
-
-  it('closes a popover on Escape and hands the focus back to its button', async () => {
-    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-    const trigger = screen.getByRole('button', { name: 'Highlight colour' })
-    await userEvent.click(trigger)
-    screen.getByRole('button', { name: 'Yellow' }).focus()
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-
-    expect(screen.queryByRole('button', { name: 'Yellow' })).not.toBeInTheDocument()
-    expect(trigger).toHaveFocus()
-  })
-
-  // The URL box holds the focus, and the popover it lives in is gone the moment it is applied.
-  it('hands the focus back to the Link button once a URL is applied', async () => {
-    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-    const trigger = screen.getByRole('button', { name: 'Link' })
-    await userEvent.click(trigger)
-    fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://weesky.net' } })
-
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
-
-    expect(trigger).toHaveFocus()
   })
 
   // `fireEvent.click` (unlike userEvent.click) does not move focus in jsdom, which stands in for
@@ -204,31 +173,35 @@ describe('EditorToolbar', () => {
     })
 
     it('walks the two dimensions with the arrow keys', async () => {
+      const user = setupUser()
       open('Text colour')
       screen.getByRole('button', { name: 'Black' }).focus()
 
-      await userEvent.keyboard('{ArrowRight}')
+      await user.keyboard('{ArrowRight}')
       expect(screen.getByRole('button', { name: 'Dark grey' })).toHaveFocus()
 
-      await userEvent.keyboard('{ArrowDown}')
+      await user.keyboard('{ArrowDown}')
       expect(screen.getByRole('button', { name: 'Coral' })).toHaveFocus()
 
-      await userEvent.keyboard('{End}')
+      await user.keyboard('{End}')
       expect(screen.getByRole('button', { name: 'Olive' })).toHaveFocus()
     })
 
     /* The grid spends no Escape — it opts out of `cellEntry`, so the key passes it and reaches the
        layer the popover registered. Fired from the focused swatch, the way a real press arrives. */
-    it('leaves Escape to the popover, which closes from a swatch holding the focus', async () => {
-      open('Text colour')
-      const trigger = screen.getByRole('button', { name: 'Text colour' })
-      screen.getByRole('button', { name: 'Red' }).focus()
+    it.each([['Text colour', 'Red'], ['Highlight colour', 'Yellow']])(
+      'leaves Escape to the %s popover, which closes from a swatch holding the focus',
+      async (name, swatch) => {
+        const user = setupUser()
+        open(name)
+        const trigger = screen.getByRole('button', { name })
+        screen.getByRole('button', { name: swatch }).focus()
 
-      await userEvent.keyboard('{Escape}')
+        await user.keyboard('{Escape}')
 
-      expect(screen.queryByRole('grid', { name: 'Text colour' })).toBeNull()
-      expect(trigger).toHaveFocus()
-    })
+        expect(screen.queryByRole('grid', { name })).toBeNull()
+        expect(trigger).toHaveFocus()
+      })
 
     // A trigger that opens a surface is not a toggle: aria-pressed would announce it unpressed.
     it('marks its trigger expanded rather than pressed', () => {
@@ -247,16 +220,6 @@ describe('EditorToolbar', () => {
 
       await expectNoAxeViolations(container)
     })
-  })
-
-  // A form is opened to be filled in, so it takes the focus onto its field — by a ref, never
-  // `autoFocus`. The colour grids place no focus at all; Tab reaches them from their trigger.
-  it('opens the link popover on its URL box', () => {
-    render(<EditorToolbar editor={fakeEditor()} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Link' }))
-
-    expect(screen.getByLabelText('Link URL')).toHaveFocus()
   })
 
   it('applies font, size and alignment from their menus', () => {
@@ -315,21 +278,13 @@ describe('EditorToolbar', () => {
     ])
   })
 
-  it('inserts a link through the URL popover', () => {
+  it('inserts a link through the URL popover, then closes it and clears the URL', () => {
     const editor = fakeEditor()
     render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Link' }))
     fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://weesky.net' } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(editor.makeLink).toHaveBeenCalledWith('https://weesky.net')
-  })
-
-  it('closes the link popover and clears the URL after applying', () => {
-    const editor = fakeEditor()
-    render(<EditorToolbar editor={editor} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Link' }))
-    fireEvent.change(screen.getByLabelText('Link URL'), { target: { value: 'https://weesky.net' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(screen.queryByLabelText('Link URL')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Link' }))
     expect(screen.getByLabelText('Link URL')).toHaveValue('')
@@ -345,11 +300,15 @@ describe('EditorToolbar', () => {
     expect(screen.queryByRole('button', { name: /indent/i })).not.toBeInTheDocument()
   })
 
+  // A handler that throws never reaches the caller of fireEvent: it surfaces on window instead.
   it('does nothing without an editor', () => {
+    const onError = vi.fn()
+    window.addEventListener('error', onError)
     render(<EditorToolbar editor={null} plainText={false} onPickImages={noop} onTogglePlainText={noop} />)
     fireEvent.click(screen.getByRole('button', { name: 'Bold' }))
     pick('Font', 'Georgia')
-    // no throw is the assertion
+    window.removeEventListener('error', onError)
+    expect(onError).not.toHaveBeenCalled()
   })
 
   it('folds down to the toggle in plain-text mode', () => {

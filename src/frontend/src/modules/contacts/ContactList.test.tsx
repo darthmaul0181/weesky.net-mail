@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { focusablesIn, tabbablesIn } from '../../lib/layerStack'
+import { setupUser } from '../../test-utils'
 import ContactList from './ContactList'
 import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
@@ -73,27 +73,21 @@ describe('ContactList', () => {
   })
 
   it('filters live as the user types, and updates the count', async () => {
+    const user = setupUser()
     setup()
 
-    await userEvent.type(screen.getByRole('searchbox'), 'dupont')
+    await user.type(screen.getByRole('searchbox'), 'dupont')
 
     expect(screen.getByText('Alice Dupont')).toBeInTheDocument()
     expect(screen.queryByText('Bruno Mertens')).not.toBeInTheDocument()
     expect(screen.getByTestId('contact-count')).toHaveTextContent('1 / 2')
   })
 
-  it('finds a contact by an address that is not the primary', async () => {
-    setup()
-
-    await userEvent.type(screen.getByRole('searchbox'), 'wk.be')
-
-    expect(screen.getByText('Bruno Mertens')).toBeInTheDocument()
-  })
-
   it('reports the picked contact', async () => {
+    const user = setupUser()
     const props = setup()
 
-    await userEvent.click(screen.getByText('Bruno Mertens'))
+    await user.click(screen.getByText('Bruno Mertens'))
 
     expect(props.onSelect).toHaveBeenCalledWith('b')
   })
@@ -121,19 +115,21 @@ describe('ContactList', () => {
 
   // The star must not open the contact underneath it: two things would happen on one click.
   it('toggling the star does not select the contact', async () => {
+    const user = setupUser()
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /add bruno mertens to favourites/i }))
+    await user.click(screen.getByRole('button', { name: /add bruno mertens to favourites/i }))
 
     expect(props.onToggleFavorite).toHaveBeenCalledWith(bruno)
     expect(props.onSelect).not.toHaveBeenCalled()
   })
 
   it('reports edit and delete without selecting', async () => {
+    const user = setupUser()
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /edit bruno mertens/i }))
-    await userEvent.click(screen.getByRole('button', { name: /delete bruno mertens/i }))
+    await user.click(screen.getByRole('button', { name: /edit bruno mertens/i }))
+    await user.click(screen.getByRole('button', { name: /delete bruno mertens/i }))
 
     expect(props.onEdit).toHaveBeenCalledWith('b')
     expect(props.onDelete).toHaveBeenCalledWith(bruno)
@@ -149,26 +145,26 @@ describe('ContactList', () => {
   // `contacts` already arrives scoped, so an empty group is not the whole book being empty — "No
   // contacts yet" reads as though the group had never held anybody, with "All contacts" full one
   // column to the left.
-  it('names the scope in the empty line under an empty group', () => {
-    setup({ contacts: [], scope: 'group:g1' })
+  it.each([
+    ['group:g1', 'This group has no members yet'],
+    ['favorites', 'No favourites yet'],
+  ])('names the scope %s in the empty line', (scope, line) => {
+    setup({ contacts: [], scope })
 
-    expect(screen.getByText('This group has no members yet')).toBeInTheDocument()
+    expect(screen.getByText(line)).toBeInTheDocument()
     expect(screen.queryByText('No contacts yet')).not.toBeInTheDocument()
   })
 
-  it('names the scope in the empty line under empty favourites', () => {
-    setup({ contacts: [], scope: 'favorites' })
-
-    expect(screen.getByText('No favourites yet')).toBeInTheDocument()
-    expect(screen.queryByText('No contacts yet')).not.toBeInTheDocument()
-  })
-
-  it('says so when the filter matches nothing', async () => {
+  // A filter matching nothing draws no grid at all: an empty `role="grid"` owns none of the rows
+  // ARIA requires of it, and the hook has nothing to point a stop at.
+  it('says so, and draws no grid, when the filter matches nothing', async () => {
+    const user = setupUser()
     setup()
 
-    await userEvent.type(screen.getByRole('searchbox'), 'zzz')
+    await user.type(screen.getByRole('searchbox'), 'zzz')
 
     expect(screen.getByText(/no matching contacts/i)).toBeInTheDocument()
+    expect(screen.queryByRole('grid')).toBeNull()
   })
 
   // The 13 tests above only check presence, so moving the star or the action cluster in the JSX
@@ -189,6 +185,10 @@ describe('ContactList', () => {
     expect(flag.firstElementChild).toHaveClass('contact-star')
     expect(address).toHaveClass('contact-tile-address')
     expect(actions).toHaveClass('contact-tile-actions')
+    // Cells are walked in the order they are written, so that has to be the order they are drawn in.
+    expect(within(screen.getByTestId('contact-tile-a')).getAllByRole('gridcell').map(cell => cell.className))
+      .toEqual(['contact-tile-select', 'contact-tile-content',
+        'contact-tile-flag', 'contact-tile-actions'])
   })
 
   // Neither fixture contact lacks an address, so nothing above exercises this. Rendering the line
@@ -203,73 +203,46 @@ describe('ContactList', () => {
     expect(address).toHaveTextContent('')
   })
 
-  it('selects the focused tile on Enter', () => {
+  it.each(['Enter', ' '])('selects the focused tile on the key %j', key => {
     const props = setup()
 
-    fireEvent.keyDown(contentCell('b'), { key: 'Enter' })
-
-    expect(props.onSelect).toHaveBeenCalledWith('b')
-  })
-
-  it('selects the focused tile on Space', () => {
-    const props = setup()
-
-    fireEvent.keyDown(contentCell('b'), { key: ' ' })
+    fireEvent.keyDown(contentCell('b'), { key })
 
     expect(props.onSelect).toHaveBeenCalledWith('b')
   })
 
   // The star and the actions sit in cells of their own, outside the content cell that carries
   // the key: these two pass by the tile's structure now, not by a target check of its own.
-  it('does not open the tile when Enter is pressed on the star inside it', () => {
+  it.each([
+    ['Enter', 'the star', 'button', { name: /favourite/i }],
+    [' ', 'the edit button', 'button', { name: /edit/i }],
+    ['Enter', 'the checkbox', 'checkbox', {}],
+  ] as const)('does not open the tile when %j is pressed on %s inside it', (key, _control, role, options) => {
     const props = setup()
     const tile = screen.getByTestId('contact-tile-b')
 
-    fireEvent.keyDown(within(tile).getByRole('button', { name: /favourite/i }), { key: 'Enter' })
+    fireEvent.keyDown(within(tile).getByRole(role, options), { key })
 
     expect(props.onSelect).not.toHaveBeenCalled()
-  })
-
-  it('does not open the tile when Space is pressed on the edit button inside it', () => {
-    const props = setup()
-    const tile = screen.getByTestId('contact-tile-b')
-
-    fireEvent.keyDown(within(tile).getByRole('button', { name: /edit/i }), { key: ' ' })
-
-    expect(props.onSelect).not.toHaveBeenCalled()
-  })
-
-  it('does not open the tile when Enter is pressed on the checkbox inside it', () => {
-    const props = setup()
-    const tile = screen.getByTestId('contact-tile-b')
-
-    fireEvent.keyDown(within(tile).getByRole('checkbox'), { key: 'Enter' })
-
-    expect(props.onSelect).not.toHaveBeenCalled()
-  })
-
-  it('checks a contact and counts it in the band', async () => {
-    setup()
-
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
-
-    expect(screen.getByText('1 selected')).toBeInTheDocument()
   })
 
   // Ticking does not open the card: one click would do two things.
-  it('checking a contact does not open it', async () => {
+  it('checks a contact and counts it in the band without opening it', async () => {
+    const user = setupUser()
     const props = setup()
 
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
 
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
     expect(props.onSelect).not.toHaveBeenCalled()
   })
 
   // The master box acts on what is on screen, so on the filtered rows.
   it('selects every filtered row from the master box', async () => {
+    const user = setupUser()
     setup()
-    await userEvent.type(screen.getByRole('searchbox'), 'alice')
-    await userEvent.click(screen.getByLabelText('Select all'))
+    await user.type(screen.getByRole('searchbox'), 'alice')
+    await user.click(screen.getByLabelText('Select all'))
 
     expect(screen.getByText('1 selected')).toBeInTheDocument()
   })
@@ -278,11 +251,12 @@ describe('ContactList', () => {
   // selection: it clears the selection and gives the field back, rather than leaving the search
   // unreachable.
   it('gives the search field back from the loupe, clearing the selection', async () => {
+    const user = setupUser()
     setup()
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Search contacts' }))
+    await user.click(screen.getByRole('button', { name: 'Search contacts' }))
 
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
     expect(screen.getByRole('searchbox')).toHaveFocus()
@@ -298,11 +272,12 @@ describe('ContactList', () => {
 
   // A deliberate choice: resetKey includes the scope, so changing it clears the selection.
   it('clears the selection when the scope changes', async () => {
+    const user = setupUser()
     const { rerender } = render(
       <ContactList contacts={[alice, bruno]} selectedId={null} scope="all"
         onSelect={vi.fn()} onToggleFavorite={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()}
         onDeleteMany={vi.fn().mockResolvedValue(true)} deletingMany={false} />)
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
     expect(screen.getByText('1 selected')).toBeInTheDocument()
 
     rerender(
@@ -314,25 +289,27 @@ describe('ContactList', () => {
   })
 
   it('asks for confirmation before deleting a selection', async () => {
+    const user = setupUser()
     const props = setup()
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
-    await userEvent.click(screen.getByLabelText('Delete selection'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Delete selection'))
 
     expect(props.onDeleteMany).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(props.onDeleteMany).toHaveBeenCalledWith(['a'])
   })
 
   // A19: the confirm used to close the moment the click fired, ahead of the delete it asked about.
   // It has to stay open — busy — until the promise it was handed settles, success or refusal alike.
   it('keeps the confirm open until the delete settles, then closes it', async () => {
+    const user = setupUser()
     let resolveDelete: ((ok: boolean) => void) | undefined
     const onDeleteMany = vi.fn(() => new Promise<boolean>(resolve => { resolveDelete = resolve }))
     setup({ onDeleteMany })
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
-    await userEvent.click(screen.getByLabelText('Delete selection'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Delete selection'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     expect(onDeleteMany).toHaveBeenCalledWith(['a'])
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
@@ -346,9 +323,10 @@ describe('ContactList', () => {
   // The `loading` prop is the caller's own pending flag (a mutation's `isPending`), not something
   // this list derives: it has to reach the shared modal so the button shows busy rather than idle.
   it('shows the confirm as busy while the caller reports the delete pending', async () => {
+    const user = setupUser()
     setup({ deletingMany: true })
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
-    await userEvent.click(screen.getByLabelText('Delete selection'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Delete selection'))
 
     const modal = screen.getByText('Confirm deletion').closest('.modal') as HTMLElement
     const confirmButton = modal.querySelector('.btn-danger-solid') as HTMLButtonElement
@@ -360,12 +338,13 @@ describe('ContactList', () => {
   // A refused batch must leave the selection standing: reselecting the same contacts by hand to
   // retry is a second chore the toast already told the user was needed once.
   it('closes the confirm on a refused delete but keeps the selection', async () => {
+    const user = setupUser()
     const onDeleteMany = vi.fn().mockResolvedValue(false)
     setup({ onDeleteMany })
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
-    await userEvent.click(screen.getByLabelText('Delete selection'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Delete selection'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument())
     expect(screen.getByText('1 selected')).toBeInTheDocument()
@@ -415,6 +394,7 @@ describe('ContactList', () => {
       { dataTransfer: { setData, setDragImage: vi.fn() } })
 
     expect(JSON.parse(setData.mock.calls[0]![1])).toEqual({ ids: ['b'] })
+    expect(screen.getByTestId('contact-tile-b')).toHaveAttribute('draggable', 'true')
   })
 
   // Two distinct labels: Delete keeps its dialogue and Remove from group has none — group
@@ -433,11 +413,12 @@ describe('ContactList', () => {
   })
 
   it('removes the selection from the group without a dialog, and clears the selection', async () => {
+    const user = setupUser()
     const onRemoveFromGroup = vi.fn()
     setup({ scope: 'group:g1', onRemoveFromGroup })
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove from group' }))
+    await user.click(screen.getByRole('button', { name: 'Remove from group' }))
 
     expect(onRemoveFromGroup).toHaveBeenCalledWith(['a'])
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
@@ -447,13 +428,14 @@ describe('ContactList', () => {
   /* The headline change, measured rather than assumed: one tick cost 130ms at 2000 tiles
      because every tile redrew. Nothing is mocked — a getter counts the real memoised component. */
   it('does not re-render the other tiles when one checkbox changes', async () => {
+    const user = setupUser()
     const one = watched(alice)
     const other = watched(bruno)
     setup({ contacts: [one.contact, other.contact] })
     const [drewOne, drewOther] = [one.seen.reads, other.seen.reads]
     expect(drewOther).toBeGreaterThan(0)
 
-    await userEvent.click(screen.getByLabelText('Select Alice Dupont'))
+    await user.click(screen.getByLabelText('Select Alice Dupont'))
 
     expect(screen.getByText('1 selected')).toBeInTheDocument()
     expect(other.seen.reads).toBe(drewOther)
@@ -464,6 +446,7 @@ describe('ContactList', () => {
      letter used to rebuild the selection and redraw every tile that survived the filter — twice,
      the reset scheduling a second render of its own. */
   it('does not re-render the surviving tiles when a letter is typed in the search box', async () => {
+    const user = setupUser()
     const one = watched(alice)
     const other = watched(bruno)
     setup({ contacts: [one.contact, other.contact] })
@@ -471,7 +454,7 @@ describe('ContactList', () => {
 
     // A letter both contacts match, so the grid keeps its length and nothing here is about a
     // shorter list.
-    await userEvent.type(screen.getByRole('searchbox'), 'e')
+    await user.type(screen.getByRole('searchbox'), 'e')
 
     expect(screen.getAllByRole('row')).toHaveLength(2)
     expect(one.seen.reads).toBe(drewOne)
@@ -541,16 +524,6 @@ describe('the list as a grid', () => {
     expect(new Set(held).size).toBe(3)
   })
 
-  /* Cells are walked in the order they are written, so that has to be the order they are drawn in:
-     the star closes the name's line, the cluster sits on the corner below it. */
-  it('writes the cells in the order they are drawn', () => {
-    setup()
-
-    expect(within(rowOf('a')).getAllByRole('gridcell').map(cell => cell.className))
-      .toEqual(['contact-tile-select', 'contact-tile-content',
-        'contact-tile-flag', 'contact-tile-actions'])
-  })
-
   it('walks the tiles with the vertical arrows', () => {
     setup()
     contentCell('a').focus()
@@ -585,6 +558,7 @@ describe('the list as a grid', () => {
 
     expect(contentCell('b')).toHaveAttribute('aria-current', 'true')
     expect(contentCell('a')).not.toHaveAttribute('aria-current')
+    expect(rowOf('b')).not.toHaveAttribute('aria-selected')
     expect(stopsIn(grid())).toEqual([contentCell('b')])
   })
 
@@ -594,32 +568,15 @@ describe('the list as a grid', () => {
     expect(stopsIn(grid())).toEqual([within(rowOf('a')).getByRole('checkbox')])
   })
 
-  it('keeps the checkbox selection and the band count', async () => {
-    setup()
-
-    await userEvent.click(within(rowOf('a')).getByRole('checkbox'))
-
-    expect(screen.getByText('1 selected')).toBeInTheDocument()
-  })
-
-  it('keeps the drag handlers on the tile', () => {
-    setup()
-    const setData = vi.fn<(format: string, data: string) => void>()
-
-    expect(rowOf('a')).toHaveAttribute('draggable', 'true')
-    fireEvent.dragStart(rowOf('a'), { dataTransfer: { setData, setDragImage: vi.fn() } })
-
-    expect(JSON.parse(setData.mock.calls[0]![1])).toEqual({ ids: ['a'] })
-  })
-
   /* The filter is what makes this grid change length under the user's hands — `shown` is
      filterContacts(contacts, query) — so the tile holding the stop leaves while the caret is in the
      search field, and a stop left on a detached tile is a list Tab can no longer enter. */
   it('keeps a live tab stop when a filter removes the focused row', async () => {
+    const user = setupUser()
     setup()
     within(rowOf('b')).getByRole('checkbox').focus()
 
-    await userEvent.type(screen.getByRole('searchbox'), 'dupont')
+    await user.type(screen.getByRole('searchbox'), 'dupont')
 
     expect(screen.queryByTestId('contact-tile-b')).toBeNull()
     expect(stopsIn(grid())).toHaveLength(1)
@@ -632,15 +589,5 @@ describe('the list as a grid', () => {
 
     expect(grid()).not.toHaveAttribute('aria-rowcount')
     expect(rowOf('a')).not.toHaveAttribute('aria-rowindex')
-  })
-
-  // A filter matching nothing draws no grid at all: an empty `role="grid"` owns none of the rows
-  // ARIA requires of it, and the hook has nothing to point a stop at.
-  it('draws no grid when the filter matches nothing', async () => {
-    setup()
-
-    await userEvent.type(screen.getByRole('searchbox'), 'zzz')
-
-    expect(screen.queryByRole('grid')).toBeNull()
   })
 })

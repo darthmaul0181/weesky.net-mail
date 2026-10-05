@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import CreateFolderModal from './CreateFolderModal'
-import { fireEscape, optionsOf } from '../../../test-utils'
+import { fireEscape, optionsOf, setupUser } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
+import { folderNodeOf } from '../mailTestHarness'
 
 const mocks = vi.hoisted(() => ({ create: vi.fn() }))
 
@@ -10,18 +11,11 @@ vi.mock('../queries', () => ({
   useCreateFolder: () => ({ mutateAsync: mocks.create, isPending: false }),
 }))
 
-function node(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
-}
-
 const tree: MailFolderNode[] = [
-  node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-  node({
+  folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  folderNodeOf({
     path: 'Projects', name: 'Projects',
-    children: [node({ path: 'Projects/Alpha', name: 'Alpha' })],
+    children: [folderNodeOf({ path: 'Projects/Alpha', name: 'Alpha' })],
   }),
 ]
 
@@ -93,17 +87,16 @@ describe('CreateFolderModal', () => {
     const { container } = renderModal()
 
     expect(container.querySelectorAll('.field-h')).toHaveLength(2)
-    // Labels sit beside their control, so the association must be explicit.
-    expect(screen.getByLabelText('Name')).toHaveAttribute('id', 'new-folder-name')
-    expect(screen.getByLabelText('Parent')).toHaveAttribute('id', 'new-folder-parent')
+    // Labels sit beside their control, so the association must be explicit: found by its label.
+    expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Parent')).toBeInTheDocument()
   })
 
   it('submits on Enter, like every other form in the app', async () => {
     mocks.create.mockResolvedValue('Reports')
-    const { container } = renderModal()
+    renderModal()
 
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Reports' } })
-    fireEvent.submit(container.querySelector('form')!)
+    await setupUser().type(screen.getByLabelText('Name'), 'Reports{Enter}')
 
     await waitFor(() =>
       expect(mocks.create).toHaveBeenCalledWith({ parentPath: 'INBOX', name: 'Reports' }))

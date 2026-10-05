@@ -1,6 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +7,10 @@ import { calendarOf, occurrenceOf, renderInCalendar } from './calendarTestHarnes
 import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import EventPreview from './EventPreview'
 import type { Calendar, EventDetail, Occurrence } from './calendarTypes'
-import { createTestQueryClient } from '../../test-utils'
+import { createTestQueryClient, setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 vi.mock('../../api.js', () => ({
   api: { getEvent: vi.fn() },
@@ -227,13 +229,6 @@ describe('EventPreview', () => {
     expect(bubble).toHaveStyle({ top: '42px' })  // 300 − 250 − 8
   })
 
-  it('closes on Escape', async () => {
-    const onClose = vi.fn()
-    draw(DENTIST, anchorAt(200, 300), { onClose })
-    await userEvent.keyboard('{Escape}')
-    expect(onClose).toHaveBeenCalled()
-  })
-
   // The bubble is what launched the confirm and is the screen behind it: one Escape must answer
   // the dialog and leave the bubble standing.
   it('stays open when a dialog over it answers Escape', async () => {
@@ -242,7 +237,7 @@ describe('EventPreview', () => {
     draw(DENTIST, anchorAt(200, 300), { onClose })
     render(<DeleteConfirmModal entityLabel="Dentist" onConfirm={vi.fn()} onClose={onDialogClose} />)
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
 
     expect(onDialogClose).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
@@ -271,7 +266,7 @@ describe('EventPreview', () => {
 
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
 
     expect(onClose).toHaveBeenCalled()
     expect(anchor).toHaveFocus()
@@ -281,7 +276,7 @@ describe('EventPreview', () => {
     const anchor = anchorAt(200, 300)
     draw(DENTIST, anchor, { onClose: vi.fn() })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(anchor).toHaveFocus()
   })
@@ -318,7 +313,7 @@ describe('EventPreview', () => {
     anchor.remove()
     drawWithRegion(anchor)
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
 
     expect(screen.getByTestId('region')).toHaveFocus()
   })
@@ -339,7 +334,7 @@ describe('EventPreview', () => {
   it('closes on a click outside itself', async () => {
     const onClose = vi.fn()
     draw(DENTIST, anchorAt(200, 300), { onClose })
-    await userEvent.click(document.body)
+    await user.click(document.body)
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -358,7 +353,7 @@ describe('EventPreview', () => {
   it('stays open on a click inside itself', async () => {
     const onClose = vi.fn()
     const bubble = draw(DENTIST, anchorAt(200, 300), { onClose })
-    await userEvent.click(bubble.querySelector('.event-preview-title') as HTMLElement)
+    await user.click(bubble.querySelector('.event-preview-title') as HTMLElement)
     expect(onClose).not.toHaveBeenCalled()
   })
 
@@ -366,9 +361,9 @@ describe('EventPreview', () => {
     const onEdit = vi.fn()
     const onDelete = vi.fn()
     draw(DENTIST, anchorAt(200, 300), { onEdit, onDelete })
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(onEdit).toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
     expect(onDelete).toHaveBeenCalled()
   })
 
@@ -386,10 +381,11 @@ describe('EventPreview', () => {
           { email: 'jean@example.net', partStat: 'NEEDS-ACTION', isOrganizer: false },
         ],
       }))
-      draw()
+      const bubble = draw()
       expect(await screen.findByText('Organised by Marc Dupont')).toBeInTheDocument()
       expect(screen.getByText('Alice, jean@example.net')).toBeInTheDocument()
       expect(screen.queryByText('ACCEPTED')).toBeNull()
+      expect(bubble.querySelector('.attendee-dot')).toBeNull()
     })
 
   it('says what the user answered, off the occurrence the server stamped', async () => {
@@ -442,14 +438,6 @@ describe('EventPreview', () => {
     expect(screen.queryByText(/Organised by/)).toBeNull()
   })
 
-  it('draws names only on a received event', async () => {
-    api.getEvent.mockResolvedValue(detailOf({ id: 'e1', canInvite: false, attendees: [
-      { email: 'lea@example.net', name: 'Léa', isOrganizer: true }, { email: 'marc@example.org', name: 'Marc', isOrganizer: false, partStat: 'ACCEPTED' }] }))
-    const preview = draw(DENTIST)
-    await screen.findByText(/Organised by Léa/)
-    expect(preview.querySelector('.attendee-dot')).toBeNull()
-  })
-
   it('draws a dot for each line of a guest listed twice', async () => {
     const julie = { email: 'julie@example.net', isOrganizer: false, partStat: 'DECLINED' }
     api.getEvent.mockResolvedValue(detailOf({ id: 'e1', attendees: [julie, julie] }))
@@ -496,7 +484,7 @@ describe('EventPreview on a birthday', () => {
     openBirthday({}, birthdays(), { onOpenContact })
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: 'Open card' }))
+    await user.click(screen.getByRole('button', { name: 'Open card' }))
     expect(onOpenContact).toHaveBeenCalled()
   })
 

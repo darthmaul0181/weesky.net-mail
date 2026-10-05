@@ -69,15 +69,6 @@ describe('ReaderActions', () => {
     expect(screen.getByRole('button', { name: 'Message actions' })).toBeInTheDocument()
   })
 
-  it('the kebab opens a menu with the two flag entries', () => {
-    render(<ReaderActions {...base} seen flagged={false} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
-
-    expect(screen.getByRole('menuitem', { name: 'Mark as unread' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Star' })).toBeInTheDocument()
-  })
-
   it('labels follow the state', () => {
     render(<ReaderActions {...base} seen={false} flagged />)
 
@@ -134,14 +125,6 @@ describe('ReaderActions', () => {
   })
 
   describe('the header delete button', () => {
-    it('shows whether or not the colour toggle is present', () => {
-      const { rerender } = render(<ReaderActions {...base} showColourToggle={false} />)
-      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
-
-      rerender(<ReaderActions {...base} showColourToggle />)
-      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
-    })
-
     // Rendered order is [colour toggle?] [rule?] [delete] [kebab].
     it('sits between the colour rule and the kebab', () => {
       const { container } = render(<ReaderActions {...base} showColourToggle />)
@@ -155,7 +138,7 @@ describe('ReaderActions', () => {
       expect(kebabAt).toBeGreaterThan(deleteAt)
     })
 
-    it('names itself per deleteLabel and fires onDelete', () => {
+    it('fires onDelete', () => {
       const onDelete = vi.fn()
       render(<ReaderActions {...base} onDelete={onDelete} />)
 
@@ -186,7 +169,7 @@ describe('ReaderActions', () => {
   })
 
   describe('the quote actions', () => {
-    it('fires the three quote actions and disables them while preparing', () => {
+    it('fires the three quote actions', () => {
       const onReply = vi.fn(); const onReplyAll = vi.fn(); const onForward = vi.fn()
       render(<ReaderActions {...base} onReply={onReply} onReplyAll={onReplyAll} onForward={onForward} preparing={false} />)
 
@@ -201,6 +184,7 @@ describe('ReaderActions', () => {
     it('disables the quote actions while a preparation is pending', () => {
       render(<ReaderActions {...base} onReply={vi.fn()} onReplyAll={vi.fn()} onForward={vi.fn()} preparing />)
       expect(screen.getByRole('button', { name: 'Reply' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Reply all' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Forward' })).toBeDisabled()
     })
   })
