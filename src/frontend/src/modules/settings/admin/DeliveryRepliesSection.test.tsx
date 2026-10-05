@@ -1,10 +1,9 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../../api.js'
 import DeliveryRepliesSection from './DeliveryRepliesSection'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, setupUser } from '../../../test-utils'
 
 vi.mock('../../../api.js', () => ({ api: {
   adminGetDeliveryReplyKey: vi.fn(), adminGenerateDeliveryReplyKey: vi.fn(),
@@ -22,26 +21,33 @@ function mountExposingClient() {
 const mount = () => mountExposingClient().addToast
 
 describe('DeliveryRepliesSection', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  let user: ReturnType<typeof setupUser>
+  beforeEach(() => {
+    vi.clearAllMocks()
+    user = setupUser()
+  })
 
-  it('without a key: generate is offered, the switch is disabled', async () => {
+  it('without a key: generate is offered, the switch is disabled and looks locked', async () => {
     vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: false, enabled: false })
     mount()
     expect(await screen.findByRole('button', { name: 'Generate a key' })).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Apply replies at delivery' })).toBeDisabled()
+    const toggle = screen.getByRole('checkbox', { name: 'Apply replies at delivery' })
+    expect(toggle).toBeDisabled()
+    expect(toggle.closest('.toggle-switch')).toHaveClass('is-locked')
   })
 
   it('generating shows the key once, with Copy', async () => {
     vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: false, enabled: false })
     vi.mocked(api.adminGenerateDeliveryReplyKey).mockResolvedValue({ key: 'abc-key' })
     const addToast = mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Generate a key' }))
+    await user.click(await screen.findByRole('button', { name: 'Generate a key' }))
     const dialog = await screen.findByRole('dialog', { name: 'Delivery key' })
     // toHaveTextContent cannot see an <input>'s value — it is not part of .textContent — so the
     // key (a read-only field, selectable by hand) is asserted through its displayed value instead.
     expect(dialog.querySelector('input')).toHaveValue('abc-key')
-    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
-    await userEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    Object.defineProperty(navigator, 'clipboard',
+      { value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true })
+    await user.click(screen.getByRole('button', { name: 'Copy' }))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('abc-key')
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Key copied.'))
   })
@@ -52,7 +58,7 @@ describe('DeliveryRepliesSection', () => {
     mount()
     expect(await screen.findByText('No call received since the key was created')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Apply replies at delivery' })).not.toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }))
     expect(screen.getByText('Regenerate the key?')).toBeInTheDocument()
     expect(api.adminGenerateDeliveryReplyKey).not.toHaveBeenCalled()
   })
@@ -62,7 +68,7 @@ describe('DeliveryRepliesSection', () => {
     vi.mocked(api.adminSetDeliveryReplies).mockResolvedValue(null)
     const addToast = mount()
     expect(await screen.findByText(/Last call received on/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Apply replies at delivery' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Apply replies at delivery' }))
     expect(api.adminSetDeliveryReplies).toHaveBeenCalledWith({ enabled: false })
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Replies are now applied when the mail is opened.'))
   })
@@ -71,11 +77,11 @@ describe('DeliveryRepliesSection', () => {
     vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
     vi.mocked(api.adminDeleteDeliveryReplyKey).mockResolvedValue(null)
     const addToast = mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
     // .at(-1) needs es2022 lib, which this project's tsconfig does not set (SchedulingAccountSection's
     // own tests use the same indexed form for the identical reason).
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
+    await user.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The key was deleted.'))
   })
 
@@ -89,10 +95,10 @@ describe('DeliveryRepliesSection', () => {
         : { configured: false, enabled: false }))
     vi.mocked(api.adminDeleteDeliveryReplyKey).mockImplementation(async () => { configured = false; return null })
     mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
+    await user.click(deleteButtons[deleteButtons.length - 1]!)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument())
     expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
@@ -108,27 +114,20 @@ describe('DeliveryRepliesSection', () => {
       .mockResolvedValueOnce({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
       .mockReturnValue(new Promise(resolve => { resolveRefetch = resolve }))
     const { client } = mountExposingClient()
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
 
     // Another admin deleted it: the refetch lands while the confirm stands.
     void client.invalidateQueries()
     await act(async () => resolveRefetch({ configured: false, enabled: false }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
   })
 
   describe('the switch look', () => {
-    it('carries is-locked without a key', async () => {
-      vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: false, enabled: false })
-      mount()
-      const toggle = await screen.findByRole('checkbox', { name: 'Apply replies at delivery' })
-      expect(toggle.closest('.toggle-switch')).toHaveClass('is-locked')
-    })
-
     it('is not locked once a key exists', async () => {
       vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
       mount()
@@ -159,7 +158,7 @@ describe('DeliveryRepliesSection', () => {
         .mockReturnValue(new Promise(resolve => { resolveRefetch = resolve }))
       vi.mocked(api.adminGenerateDeliveryReplyKey).mockResolvedValue({ key: 'abc-key' })
       mount()
-      await userEvent.click(await screen.findByRole('button', { name: 'Generate a key' }))
+      await user.click(await screen.findByRole('button', { name: 'Generate a key' }))
       await screen.findByRole('dialog', { name: 'Delivery key' })
       expect(screen.getByRole('button', { name: 'Generate a key' })).toBeInTheDocument()
 
@@ -168,7 +167,7 @@ describe('DeliveryRepliesSection', () => {
       await act(async () => resolveRefetch({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' }))
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Generate a key' })).not.toBeInTheDocument())
 
-      await userEvent.keyboard('{Escape}')
+      await user.keyboard('{Escape}')
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
       expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()
@@ -181,12 +180,12 @@ describe('DeliveryRepliesSection', () => {
       vi.mocked(api.adminGetDeliveryReplyKey).mockResolvedValue({ configured: true, enabled: false, createdAt: '2026-09-14T16:00:00Z' })
       vi.mocked(api.adminGenerateDeliveryReplyKey).mockResolvedValue({ key: 'new-key' })
       mount()
-      await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+      await user.click(await screen.findByRole('button', { name: 'Regenerate' }))
       const confirmButtons = screen.getAllByRole('button', { name: 'Regenerate' })
-      await userEvent.click(confirmButtons[confirmButtons.length - 1]!)
+      await user.click(confirmButtons[confirmButtons.length - 1]!)
       await screen.findByRole('dialog', { name: 'Delivery key' })
 
-      await userEvent.keyboard('{Escape}')
+      await user.keyboard('{Escape}')
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
       expect(screen.getByRole('heading', { name: "Guests' replies at delivery" })).toHaveFocus()

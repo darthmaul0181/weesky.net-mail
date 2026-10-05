@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import FolderManager from './FolderManager'
 import { fireEscape } from '../../../test-utils'
 import type { MailFolderNode } from '../api/mailTypes'
+import { folderNodeOf } from '../mailTestHarness'
 
 const mocks = vi.hoisted(() => ({
   rename: vi.fn(),
@@ -16,20 +17,13 @@ vi.mock('../queries', () => ({
   useSetFolderSubscription: () => ({ mutateAsync: mocks.subscribe, isPending: false }),
 }))
 
-function node(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
-}
-
 const tree: MailFolderNode[] = [
-  node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+  folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
   // Not the inbox: it is locked for its own reasons and cannot show the rule covers every role.
-  node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
-  node({
+  folderNodeOf({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+  folderNodeOf({
     path: 'Projects', name: 'Projects',
-    children: [node({ path: 'Projects/Alpha', name: 'Alpha', subscribed: false })],
+    children: [folderNodeOf({ path: 'Projects/Alpha', name: 'Alpha', subscribed: false })],
   }),
 ]
 
@@ -54,10 +48,10 @@ describe('the folder list', () => {
     const { container } = render(
       <FolderManager
         folders={[
-          node({ path: 'Zeta', name: 'Zeta' }),
-          node({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
-          node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-          node({ path: 'Alpha', name: 'Alpha' }),
+          folderNodeOf({ path: 'Zeta', name: 'Zeta' }),
+          folderNodeOf({ path: 'Corbeille', name: 'Corbeille', specialUse: 'trash' }),
+          folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+          folderNodeOf({ path: 'Alpha', name: 'Alpha' }),
         ]}
         onNotify={vi.fn()}
       />)
@@ -86,7 +80,7 @@ describe('the folder list', () => {
   it('shows the inbox as always visible', () => {
     render(
       <FolderManager
-        folders={[node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false })]}
+        folders={[folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false })]}
         onNotify={vi.fn()}
       />)
 
@@ -100,7 +94,7 @@ describe('the folder list', () => {
   it('shows a role-holding folder as always visible', () => {
     render(
       <FolderManager
-        folders={[node({ path: 'SentMail', name: 'SentMail', specialUse: 'sent', subscribed: false })]}
+        folders={[folderNodeOf({ path: 'SentMail', name: 'SentMail', specialUse: 'sent', subscribed: false })]}
         onNotify={vi.fn()}
       />)
 
@@ -216,6 +210,7 @@ describe('renaming a folder', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Rename folder' })
     expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(screen.getByLabelText('New name')).toHaveValue('Projects')
     expect(screen.getByLabelText('New name')).toHaveFocus()
   })
 

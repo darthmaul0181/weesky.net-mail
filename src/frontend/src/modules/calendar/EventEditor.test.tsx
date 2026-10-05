@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { calendarOf, renderInCalendar, TZ } from './calendarTestHarness'
 import type { EventDetail } from './calendarTypes'
 import EventEditor, { type EventEditorProps } from './EventEditor'
 import type { EventFormState } from './eventForm'
-import { pickOption } from '../../test-utils'
+import { pickOption, setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 vi.mock('../contacts/queries', () => ({ useContacts: () => ({ data: [] }) }))
 
@@ -73,12 +75,12 @@ describe('EventEditor', () => {
   // counted in minutes before it would ring at 23:45 the night before.
   it('puts the hours to sleep at 00:00 and moves the reminder onto the other ladder on All day', async () => {
     draw()
-    await userEvent.click(screen.getByLabelText('All day'))
+    await user.click(screen.getByLabelText('All day'))
     expect(screen.getByLabelText('Start time')).toBeDisabled()
     expect(screen.getByLabelText('Start time')).toHaveValue('00:00')
     expect(screen.getByLabelText('End time')).toBeDisabled()
     expect(screen.getByLabelText('End time')).toHaveValue('00:00')
-    await userEvent.click(screen.getByRole('combobox', { name: 'Reminder' }))
+    await user.click(screen.getByRole('combobox', { name: 'Reminder' }))
     expect(screen.getByRole('option', { name: 'The day before at 18:00', selected: true }))
       .toBeInTheDocument()
   })
@@ -86,8 +88,8 @@ describe('EventEditor', () => {
   // The clocks behind the sleeping boxes are kept: the switch turned back off finds them.
   it('remembers the hours a whole day hid', async () => {
     draw()
-    await userEvent.click(screen.getByLabelText('All day'))
-    await userEvent.click(screen.getByLabelText('All day'))
+    await user.click(screen.getByLabelText('All day'))
+    await user.click(screen.getByLabelText('All day'))
     expect(screen.getByLabelText('Start time')).toHaveValue('09:00')
     expect(screen.getByLabelText('End time')).toHaveValue('10:00')
   })
@@ -106,7 +108,7 @@ describe('EventEditor', () => {
   it('puts the end date to sleep on the start date once the event repeats', async () => {
     draw({ initial: form({ endDate: '2026-09-20' }) })
     expect(screen.getByLabelText('End date')).toBeEnabled()
-    await userEvent.click(screen.getByLabelText('Repeats'))
+    await user.click(screen.getByLabelText('Repeats'))
     expect(screen.getByLabelText('End date')).toBeDisabled()
     expect(screen.getByLabelText('End date')).toHaveValue('2026-09-14')
   })
@@ -123,14 +125,14 @@ describe('EventEditor', () => {
   // The switch turns on Outlook's default: every week, on the start's own weekday, for ever.
   it('turns on a weekly rule on the start weekday, and remembers a rule it was turned off on', async () => {
     draw()
-    await userEvent.click(screen.getByLabelText('Repeats'))
+    await user.click(screen.getByLabelText('Repeats'))
     expect(screen.getByRole('checkbox', { name: 'Monday' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Tuesday' })).not.toBeChecked()
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Wednesday' }))
-    await userEvent.click(screen.getByLabelText('Repeats'))
+    await user.click(screen.getByRole('checkbox', { name: 'Wednesday' }))
+    await user.click(screen.getByLabelText('Repeats'))
     expect(screen.queryByRole('checkbox', { name: 'Wednesday' })).toBeNull()
-    await userEvent.click(screen.getByLabelText('Repeats'))
+    await user.click(screen.getByLabelText('Repeats'))
     expect(screen.getByRole('checkbox', { name: 'Wednesday' })).toBeChecked()
   })
 
@@ -141,7 +143,7 @@ describe('EventEditor', () => {
     expect(screen.getByLabelText('End date')).toBeEnabled()
     expect(screen.getByLabelText('End date')).toHaveValue('2026-09-16')
 
-    await userEvent.click(screen.getByLabelText('Repeats'))
+    await user.click(screen.getByLabelText('Repeats'))
     expect(screen.getByLabelText('End date')).toBeDisabled()
     expect(screen.getByLabelText('End date')).toHaveValue('2026-09-14')
   })
@@ -172,7 +174,7 @@ describe('EventEditor', () => {
     expect(screen.getByRole('group', { name: 'Repeats' })).toBeInTheDocument()
 
     // Replacing starts from a rule the block can draw, never from the one it cannot.
-    await userEvent.click(screen.getByRole('button', { name: 'Replace' }))
+    await user.click(screen.getByRole('button', { name: 'Replace' }))
     expect(screen.getByLabelText('Repeats')).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Monday' })).toBeChecked()
   })
@@ -203,11 +205,11 @@ describe('EventEditor', () => {
   it('keeps More options folded on a plain event', async () => {
     draw({ initial: form({ description: '' }) })
     expect(screen.queryByLabelText('Web address')).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: 'More options' }))
+    await user.click(screen.getByRole('button', { name: 'More options' }))
     expect(screen.getByLabelText('Web address')).toBeInTheDocument()
   })
 
-  it('lists the attendees of a received event, without their answers', () => {
+  it('lists the attendees of a received event by name, without their answers or the guests field', () => {
     draw({
       initial: form({ canInvite: false }),
       detail: detailOf({
@@ -222,6 +224,7 @@ describe('EventEditor', () => {
     expect(screen.getByText('me@weesky.be')).toBeInTheDocument()
     expect(screen.queryByText('ACCEPTED')).toBeNull()
     expect(screen.queryByText('accepted')).toBeNull()
+    expect(screen.queryByLabelText('Attendees')).toBeNull()
   })
 
   it('says what the user answered, and nothing when they are not invited', () => {
@@ -248,19 +251,9 @@ describe('EventEditor', () => {
     expect(screen.getByText('accepted')).toBeInTheDocument()
   })
 
-  it('shows names only, no field, on a received event', () => {
-    draw({
-      initial: form({ canInvite: false }),
-      detail: detailOf({ canInvite: false, attendees: [{ email: 'lea@example.net', name: 'Léa', isOrganizer: true }, { email: 'me@weesky.be', isOrganizer: false, partStat: 'ACCEPTED' }], myPartStat: 'ACCEPTED' }),
-    })
-    expect(screen.queryByLabelText('Attendees')).toBeNull()
-    expect(screen.getByText('Léa')).toBeInTheDocument()
-    expect(screen.queryByText('Read only until invitations are supported')).toBeNull()
-  })
-
   it('hands the guests to onSave', async () => {
     const { onSave } = draw({ initial: form({ attendees: [{ email: 'marc@example.org' }], canInvite: true }) })
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSave.mock.calls[0]![0].attendees).toEqual([{ email: 'marc@example.org' }])
   })
 
@@ -290,13 +283,13 @@ describe('EventEditor', () => {
     })
     expect(chipOf(room)).not.toHaveClass('is-invalid')
     expect(chipOf(jose)).not.toHaveClass('is-invalid')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSave.mock.calls[0]![0].attendees).toEqual([{ email: room, name: 'Salle Mercure' }, { email: jose }])
 
-    await userEvent.type(screen.getByLabelText('Attendees'), 'marc{Enter}100%@example.org{Enter}')
+    await user.type(screen.getByLabelText('Attendees'), 'marc{Enter}100%@example.org{Enter}')
     expect(chipOf('marc')).toHaveClass('is-invalid')
     expect(chipOf('100%@example.org')).toHaveClass('is-invalid')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(screen.getByText('An attendee address is not valid')).toBeInTheDocument()
     expect(onSave).toHaveBeenCalledTimes(1)
   })
@@ -313,16 +306,16 @@ describe('EventEditor', () => {
     const answers = () => [...document.querySelectorAll('.attendee-status li')].map(li => li.textContent)
     expect(answers()).toEqual(['Marcaccepted', 'Léadeclined'])
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove marc@example.org' }))
+    await user.click(screen.getByRole('button', { name: 'Remove marc@example.org' }))
     expect(answers()).toEqual(['Léadeclined'])
 
-    await userEvent.type(screen.getByLabelText('Attendees'), 'julie@example.net{Enter}')
+    await user.type(screen.getByLabelText('Attendees'), 'julie@example.net{Enter}')
     expect(answers()).toEqual(['Léadeclined', 'julie@example.netno answer yet'])
   })
 
   it('hands the whole form to the save, with no scope of its own', async () => {
     const { onSave } = draw()
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Dentist', calendarId: 'a' }), null)
   })
@@ -330,7 +323,7 @@ describe('EventEditor', () => {
   it('refuses an end that comes before its start', async () => {
     const { onSave } = draw()
     fireEvent.change(screen.getByLabelText('End time'), { target: { value: '08:00' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getByText('The end comes before the start')).toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()
@@ -350,7 +343,7 @@ describe('EventEditor', () => {
         saving={false} error="This event changed elsewhere since you opened it."
         onReload={onReload} fullScreen={false}
         onSave={vi.fn()} onDelete={vi.fn()} onClose={vi.fn()} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    await user.click(screen.getByRole('button', { name: 'Reload' }))
     expect(onReload).toHaveBeenCalled()
   })
 
@@ -358,7 +351,7 @@ describe('EventEditor', () => {
   // identical lines.
   it('does not leave two identical reminders behind an All day flip', async () => {
     draw({ initial: form({ reminders: [5, 10] }) })
-    await userEvent.click(screen.getByLabelText('All day'))
+    await user.click(screen.getByLabelText('All day'))
     expect(screen.getAllByRole('combobox', { name: 'Reminder' })).toHaveLength(1)
   })
 
@@ -391,20 +384,20 @@ describe('EventEditor', () => {
     const close = screen.getByRole('button', { name: 'Close' })
 
     expect(close).toBeDisabled()
-    await userEvent.click(close)
+    await user.click(close)
 
     expect(onClose).not.toHaveBeenCalled()
   })
 
   it('reports a clean form as clean and a touched one as dirty', async () => {
     const { onClose } = draw()
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledWith(false)
 
     cleanup()
     const second = draw()
-    await userEvent.type(screen.getByLabelText('Title'), '!')
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.type(screen.getByLabelText('Title'), '!')
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(second.onClose).toHaveBeenCalledWith(true)
   })
 

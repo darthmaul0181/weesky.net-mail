@@ -2,34 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { type InfiniteData, type QueryClient } from '@tanstack/react-query'
 import type {
-  InvitationResponse, MailFolderNode, MailFolderPage, MailInvitation, MailMessageSummary,
+  InvitationResponse, MailFolderNode, MailFolderPage, MailInvitation,
 } from './api/mailTypes'
 import { mailKeys, useRespondInvitation } from './queries'
 import { createTestQueryClient, withQueryClient } from '../../test-utils'
+import { folderNodeOf, pageOf, summaryOf } from './mailTestHarness'
 
 const mocks = vi.hoisted(() => ({ respondInvitation: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
-vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../contexts/AuthContext', () => import('../../test-auth'))
 
 let client: QueryClient
 let wrapper: ReturnType<typeof withQueryClient>
-
-const summary = (uid: number, over: Partial<MailMessageSummary> = {}): MailMessageSummary => ({
-  uid, subject: 's', fromName: 'n', fromAddress: 'a@b.c', to: [], date: '2026-09-12T10:00:00Z',
-  seen: false, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
-  priority: 'normal',
-  ...over,
-})
-
-const pageOf = (messages: MailMessageSummary[]): MailFolderPage =>
-  ({ folderPath: 'INBOX', uidValidity: 1, total: 20, page: 0, pageSize: 50, messages })
-
-const node = (path: string, total: number, unread: number): MailFolderNode => ({
-  path, name: path, selectable: true, subscribed: true,
-  total, unread, uidValidity: 1, uidNext: 100, children: [],
-})
 
 const pagesKey = mailKeys.messages('primary', 'INBOX', 0, 50)
 const streamKey = mailKeys.messageStream('primary', 'INBOX', 100)
@@ -46,11 +30,11 @@ const args = {
 
 /** uid 7 sits in the page AND in stream block 0 — the row must count once, not twice. */
 function seed() {
-  client.setQueryData(pagesKey, pageOf([summary(7), summary(8, { seen: true })]))
+  client.setQueryData(pagesKey, pageOf([summaryOf(7), summaryOf(8, { seen: true })]))
   client.setQueryData(streamKey, {
-    pages: [pageOf([summary(7), summary(9)])], pageParams: [0],
+    pages: [pageOf([summaryOf(7), summaryOf(9)])], pageParams: [0],
   } satisfies InfiniteData<MailFolderPage>)
-  client.setQueryData(foldersKey, [node('INBOX', 20, 5)])
+  client.setQueryData(foldersKey, [folderNodeOf({ path: 'INBOX', total: 20, unread: 5, uidNext: 100 })])
 }
 
 const page = () => client.getQueryData<MailFolderPage>(pagesKey)!

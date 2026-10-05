@@ -1,9 +1,8 @@
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
-import { createTestQueryClient, holdNextCall, pickOption, settle } from '../../../test-utils'
+import { createTestQueryClient, holdNextCall, pasteInto, pickOption, settle, setupUser } from '../../../test-utils'
 import { mailKeys } from '../../mail/queries'
 import AliasesPage from './AliasesPage'
 
@@ -16,9 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../api.js', () => ({ api: mocks }))
 // The page reads the active account through useAccountId, which is the real hook here — only
 // its auth source is stubbed, so the cache keys under test are the ones the app really uses.
-vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../../contexts/AuthContext', () => import('../../../test-auth'))
 
 const ACCOUNT = {
   userName: 'john',
@@ -33,9 +30,12 @@ const ALIASES = [
 ]
 
 let queryClient: QueryClient
+let user: ReturnType<typeof setupUser>
 
+// One user per test, made before any test stubs navigator.clipboard: setup() installs its own.
 beforeEach(() => {
   vi.clearAllMocks()
+  user = setupUser()
   localStorage.clear()
   mocks.getAccount.mockResolvedValue(ACCOUNT)
   mocks.getAliases.mockResolvedValue(ALIASES)
@@ -72,6 +72,12 @@ describe('AliasesPage', () => {
     expect(await screen.findByText('No aliases for this domain.')).toBeInTheDocument()
   })
 
+  it('announces the first load', () => {
+    mocks.getAliases.mockReturnValue(new Promise(() => {}))
+    renderPage()
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+  })
+
   it('shows an error alert when alias load fails', async () => {
     mocks.getAliases.mockRejectedValue(new Error('net'))
     renderPage()
@@ -85,9 +91,9 @@ describe('AliasesPage', () => {
     await screen.findByText('alias1')
     unmount()
 
-    const { container } = renderPage()
+    renderPage()
     expect(screen.getByText('alias1')).toBeInTheDocument()
-    expect(container.querySelector('.loading-center')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
     expect(mocks.getAliases).toHaveBeenCalledTimes(1)
   })
 
@@ -125,7 +131,7 @@ describe('AliasesPage', () => {
     act(() => { void queryClient.invalidateQueries({ queryKey: mailKeys.aliases('primary') }) })
     await settle()
 
-    expect(document.querySelector('.loading-center')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
     // The same DOM node, not a new one: a role="alert" only announces on insertion or a text
     // change, so this is what proves the refetch drew no second announcement.
     expect(screen.getByRole('alert')).toBe(banner)
@@ -140,7 +146,7 @@ describe('AliasesPage', () => {
   it('filters visible aliases by search term', async () => {
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'alias1')
+    await user.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'alias1')
     expect(screen.getByText('alias1')).toBeInTheDocument()
     expect(screen.queryByText('alias2')).not.toBeInTheDocument()
     expect(screen.getByText('1 of 2 addresses match')).toBeInTheDocument()
@@ -149,7 +155,7 @@ describe('AliasesPage', () => {
   it('shows an error toast when search term exceeds 30 characters', async () => {
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'a'.repeat(31))
+    await pasteInto(user, screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'a'.repeat(31))
     expect(await screen.findByText('An alias cannot exceed 30 characters')).toBeInTheDocument()
   })
 
@@ -171,33 +177,22 @@ describe('AliasesPage', () => {
     expect(await screen.findByRole('combobox', { name: 'Domain' })).toHaveTextContent('@weesky.be')
   })
 
-  it('deletes an alias when the delete button is clicked', async () => {
-    mocks.deleteAlias.mockResolvedValue(null)
-    // The delete's own success already patches the cache; the settled invalidate that follows it
-    // re-reads the server, which has to answer with the alias gone too, or the refetch would
-    // stomp the very removal it is meant to reconcile.
-    mocks.getAliases.mockResolvedValueOnce(ALIASES).mockResolvedValue(ALIASES.filter(a => a.name !== 'alias1'))
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
-    await waitFor(() => expect(mocks.deleteAlias).toHaveBeenCalledWith('alias1', 'weesky.be'))
-    await waitFor(() => expect(screen.queryByText('alias1')).not.toBeInTheDocument())
-  })
-
   // The tile's own delete goes with the tile in the very commit the confirm closes in, so focus
   // falls back to what the page is called rather than to <body>.
-  it('hands focus to the page heading when the deleted tile takes its button', async () => {
+  it('deletes the alias, says so, and hands focus to the page heading when the tile takes its button', async () => {
     mocks.deleteAlias.mockResolvedValue(null)
+    // The settled refetch must answer with the alias gone too, or it would stomp the removal.
     mocks.getAliases.mockResolvedValueOnce(ALIASES).mockResolvedValue(ALIASES.filter(a => a.name !== 'alias1'))
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getAllByTitle('Delete')[0]!)
 
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+    await user.click(await screen.findByText('Delete', { selector: 'button' }))
 
     await waitFor(() => expect(screen.queryByText('alias1')).not.toBeInTheDocument())
+    expect(mocks.deleteAlias).toHaveBeenCalledWith('alias1', 'weesky.be')
     expect(screen.getByRole('heading', { name: 'Aliases' })).toHaveFocus()
+    expect(await screen.findByText('alias1@weesky.be deleted')).toBeInTheDocument()
   })
 
   // The control for the latency cases in the other modules: this page drops the tile from its own
@@ -207,9 +202,9 @@ describe('AliasesPage', () => {
     mocks.getAliases.mockResolvedValueOnce(ALIASES).mockResolvedValue(ALIASES.filter(a => a.name !== 'alias1'))
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(screen.getAllByTitle('Delete')[0]!)
 
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+    await user.click(await screen.findByText('Delete', { selector: 'button' }))
 
     await waitFor(() => expect(screen.queryByText('alias1')).not.toBeInTheDocument())
     expect(screen.getByRole('heading', { name: 'Aliases' })).toHaveFocus()
@@ -222,20 +217,10 @@ describe('AliasesPage', () => {
       .mockResolvedValue([...ALIASES, { name: 'new', domain: 'weesky.be' }])
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'new')
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await user.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'new')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(mocks.createAlias).toHaveBeenCalledWith('new', 'weesky.be'))
     expect(await screen.findByText('new@weesky.be added')).toBeInTheDocument()
-  })
-
-  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
-  it('shows the local fallback when alias creation fails', async () => {
-    mocks.createAlias.mockRejectedValue(new Error('Alias exists'))
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'bad')
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
-    expect(await screen.findByText('Failed to create alias.')).toBeInTheDocument()
   })
 
   // Both caches hold a 5-minute staleTime, so without these the identity picker misses a
@@ -245,8 +230,8 @@ describe('AliasesPage', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'new')
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await user.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'new')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.aliases('primary') }))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('primary') })
@@ -257,8 +242,8 @@ describe('AliasesPage', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+    await user.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(await screen.findByText('Delete', { selector: 'button' }))
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.aliases('primary') }))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.identities('primary') })
@@ -284,7 +269,7 @@ describe('AliasesPage', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Copy the address')[1]!)
+    await user.click(screen.getAllByTitle('Copy the address')[1]!)
     expect(writeText).toHaveBeenCalledWith('alias2@weesky.be')
     expect(await screen.findByText('alias2@weesky.be copied')).toBeInTheDocument()
   })
@@ -294,7 +279,7 @@ describe('AliasesPage', () => {
       { value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) }, configurable: true })
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Copy the address')[0]!)
+    await user.click(screen.getAllByTitle('Copy the address')[0]!)
     expect(await screen.findByText('Could not copy the address.')).toBeInTheDocument()
   })
 
@@ -304,21 +289,12 @@ describe('AliasesPage', () => {
     renderPage()
     await screen.findByText('alias1')
     screen.getByPlaceholderText('Type to filter the index, or to create an address').focus()
-    await userEvent.tab()
+    await user.tab()
     expect(screen.getByRole('gridcell', { name: 'alias1@weesky.be' })).toHaveFocus()
-    await userEvent.keyboard('{ArrowRight}{F2}')
+    await user.keyboard('{ArrowRight}{F2}')
     expect(screen.getAllByTitle('Copy the address')[1]).toHaveFocus()
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
     expect(screen.getByRole('gridcell', { name: 'alias2@weesky.be' })).toHaveFocus()
-  })
-
-  it('shows a success toast after deleting an alias', async () => {
-    mocks.deleteAlias.mockResolvedValue(null)
-    renderPage()
-    await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
-    expect(await screen.findByText('alias1@weesky.be deleted')).toBeInTheDocument()
   })
 
   it('handles getAccount failure gracefully', async () => {
@@ -332,8 +308,8 @@ describe('AliasesPage', () => {
     mocks.deleteAlias.mockRejectedValue(new Error('Not found'))
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.click(screen.getAllByTitle('Delete')[0]!)
-    await userEvent.click(await screen.findByText('Delete', { selector: 'button' }))
+    await user.click(screen.getAllByTitle('Delete')[0]!)
+    await user.click(await screen.findByText('Delete', { selector: 'button' }))
     expect(await screen.findByText('Failed to delete alias.')).toBeInTheDocument()
     await waitFor(() => expect(mocks.getAliases).toHaveBeenCalledTimes(2))
   })
@@ -348,7 +324,7 @@ describe('AliasesPage', () => {
     const area = container.querySelector<HTMLElement>('.alias-scroll-area')!
     expect(screen.getByRole('button', { name: 'A' })).toHaveClass('is-active')
     // jsdom lays nothing out, so every letter reads as reached and the last one lights.
-    await userEvent.click(screen.getByRole('button', { name: 'B' }))
+    await user.click(screen.getByRole('button', { name: 'B' }))
     fireEvent.scroll(area)
     expect(screen.getByRole('button', { name: 'B' })).toHaveClass('is-active')
   })
@@ -360,17 +336,14 @@ describe('AliasesPage', () => {
       .mockResolvedValue([...ALIASES, { name: 'newone', domain: 'weesky.be' }])
     const { container } = renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'NewOne')
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await user.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'NewOne')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
     const cell = await waitFor(() => {
       const el = container.querySelector('.alias-cell.is-new')
       if (!el) throw new Error('name not yet highlighted')
       return el
     })
-    // jsdom never fires animation events React listens for, so the handler is called through
-    // React's own props; there is no public type for that internal shape.
-    const propsKey = Object.keys(cell).find(k => k.startsWith('__reactProps'))!
-    act(() => { (cell as unknown as Record<string, { onAnimationEnd: () => void }>)[propsKey]!.onAnimationEnd() })
+    fireEvent.animationEnd(cell)
     await waitFor(() => expect(container.querySelector('.alias-cell.is-new')).toBeNull())
   })
 
@@ -388,15 +361,16 @@ describe('AliasesPage', () => {
     expect(screen.getByText('@example.com', { selector: '.alias-composer-domain' })).toBeInTheDocument()
   })
 
-  it('removes an error toast when its close button is clicked', async () => {
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when creation fails, and removes it on its close button', async () => {
     mocks.createAlias.mockRejectedValue(new Error('Alias exists'))
     renderPage()
     await screen.findByText('alias1')
-    await userEvent.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'bad')
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await user.type(screen.getByPlaceholderText('Type to filter the index, or to create an address'), 'bad')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
     await screen.findByText('Failed to create alias.')
     const closeBtn = await screen.findByRole('button', { name: 'Close' })
-    await userEvent.click(closeBtn)
+    await user.click(closeBtn)
     await waitFor(() => expect(screen.queryByText('Failed to create alias.')).not.toBeInTheDocument())
   })
 

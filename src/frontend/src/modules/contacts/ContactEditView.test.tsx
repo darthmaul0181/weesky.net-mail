@@ -1,12 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reducePhoto } from './contactPhoto'
 import ContactEditView from './ContactEditView'
 import type {
   ContactDetail, ContactDetailEmail, ContactDraft, ContactDraftEmail,
 } from './contactTypes'
-import { optionsOf, pickOption } from '../../test-utils'
+import { optionsOf, pickOption, setupUser } from '../../test-utils'
 
 // The reducer is tested on its own: this file wants the editor, not the canvas.
 vi.mock('./contactPhoto', () => ({
@@ -15,7 +14,10 @@ vi.mock('./contactPhoto', () => ({
   reducePhoto: vi.fn(async () => ({ base64: 'QUJD', blob: new Blob(['ABC']) })),
 }))
 
+let user: ReturnType<typeof setupUser>
+
 beforeEach(() => {
+  user = setupUser()
   // jsdom has no object-URL API, and the preview uses it.
   URL.createObjectURL = vi.fn(() => 'blob:preview')
   URL.revokeObjectURL = vi.fn()
@@ -133,20 +135,16 @@ describe('ContactEditView', () => {
     expect(screen.getByLabelText(/address 2/i)).toHaveValue('b.mertens@wk.be')
   })
 
-  it('starts a create with one empty address row', () => {
-    setup()
+  // The server allows a contact with only a name, so an edited contact's `addresses` can arrive
+  // empty too, not just a brand-new create — the same empty-row seed has to cover both.
+  it.each([
+    ['a create', null],
+    ['a contact being edited that has none at all', addressless],
+  ])('seeds one empty address row for %s', (_case, contact) => {
+    setup({ contact })
 
     expect(screen.getByLabelText(/address 1/i)).toHaveValue('')
     expect(screen.queryByLabelText(/address 2/i)).not.toBeInTheDocument()
-  })
-
-  // The server allows a contact with only a name, so an edited contact's `addresses` can arrive
-  // empty too, not just a brand-new create — the same empty-row seed has to cover both.
-  it('seeds one empty address row when the contact being edited has none at all', () => {
-    setup({ contact: addressless })
-
-    expect(screen.getByLabelText(/address 1/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/address 1/i)).toHaveValue('')
   })
 
   // Position 0 is the primary by definition: the badge is on the first row, and it moves when
@@ -164,7 +162,7 @@ describe('ContactEditView', () => {
   it('adds an address row on demand', async () => {
     setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /add an address/i }))
+    await user.click(screen.getByRole('button', { name: /add an address/i }))
 
     expect(screen.getByLabelText(/address 2/i)).toBeInTheDocument()
   })
@@ -172,7 +170,7 @@ describe('ContactEditView', () => {
   it('removes an address row', async () => {
     setup({ contact: bruno })
 
-    await userEvent.click(screen.getByRole('button', { name: /remove address 2/i }))
+    await user.click(screen.getByRole('button', { name: /remove address 2/i }))
 
     expect(screen.queryByLabelText(/address 2/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText(/address 1/i)).toHaveValue('bruno@x.be')
@@ -183,7 +181,7 @@ describe('ContactEditView', () => {
   it('never drops to zero address rows: removing the last one leaves an empty row', async () => {
     setup({ contact: solo })
 
-    await userEvent.click(screen.getByRole('button', { name: /remove address 1/i }))
+    await user.click(screen.getByRole('button', { name: /remove address 1/i }))
 
     expect(screen.getByLabelText(/address 1/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/address 1/i)).toHaveValue('')
@@ -194,8 +192,8 @@ describe('ContactEditView', () => {
   it('sends pref when a line is made the primary, and does not reorder the list', async () => {
     const { onSave } = setup({ contact: bruno })
 
-    await userEvent.click(screen.getByRole('button', { name: /make this the primary/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /make this the primary/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     const sent = onSave.mock.calls[0]![0].addresses
     expect(sent.map((a: ContactDraftEmail) => a.address))
@@ -208,9 +206,9 @@ describe('ContactEditView', () => {
   it('designates the third line and leaves the other two cleared', async () => {
     const { onSave } = setup({ contact: trio })
 
-    await userEvent.click(within(screen.getByTestId('address-row-2'))
+    await user.click(within(screen.getByTestId('address-row-2'))
       .getByRole('button', { name: /make this the primary/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     const sent = onSave.mock.calls[0]![0].addresses
     expect(sent.map((a: ContactDraftEmail) => a.address)).toEqual(['a@x.be', 'b@x.be', 'c@x.be'])
@@ -223,10 +221,10 @@ describe('ContactEditView', () => {
   // still kept.
   it('rend le badge à la première ligne gardée quand la ligne désignée est vidée', async () => {
     const { onSave } = setup({ contact: trio })
-    await userEvent.click(within(screen.getByTestId('address-row-2'))
+    await user.click(within(screen.getByTestId('address-row-2'))
       .getByRole('button', { name: /make this the primary/i }))
-    await userEvent.clear(screen.getByLabelText(/address 3/i))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.clear(screen.getByLabelText(/address 3/i))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(within(screen.getByTestId('address-row-0')).getByText(/^primary$/i)).toBeInTheDocument()
     expect(within(screen.getByTestId('address-row-2')).queryByText(/^primary$/i)).not.toBeInTheDocument()
@@ -245,9 +243,9 @@ describe('ContactEditView', () => {
   it('returns the position of every seeded line, and null for a new one', async () => {
     const { onSave } = setup({ contact: bruno })
 
-    await userEvent.click(screen.getByRole('button', { name: /add an address/i }))
-    await userEvent.type(screen.getByLabelText(/address 3/i), 'troisieme@x.be')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /add an address/i }))
+    await user.type(screen.getByLabelText(/address 3/i), 'troisieme@x.be')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].addresses).toEqual([
       { position: 0, address: 'bruno@x.be', type: 'INTERNET', pref: 1 },
@@ -261,7 +259,7 @@ describe('ContactEditView', () => {
   it('returns the display name the card carries, untouched', async () => {
     const { onSave } = setup({ contact: bruno })
 
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].displayName).toBe('Dr. Bruno Mertens')
   })
@@ -274,29 +272,24 @@ describe('ContactEditView', () => {
     expect(screen.getByRole('button', { name: /save contact/i })).toBeDisabled()
   })
 
-  it('enables save on a name alone', async () => {
+  it.each([
+    ['a name', /first name/i, 'Bruno'],
+    ['an address', /address 1/i, 'bruno@x.be'],
+  ])('enables save on %s alone', async (_what, label, value) => {
     setup()
 
-    await userEvent.type(screen.getByLabelText(/first name/i), 'Bruno')
-
-    expect(screen.getByRole('button', { name: /save contact/i })).toBeEnabled()
-  })
-
-  it('enables save on an address alone', async () => {
-    setup()
-
-    await userEvent.type(screen.getByLabelText(/address 1/i), 'bruno@x.be')
+    await user.type(screen.getByLabelText(label), value)
 
     expect(screen.getByRole('button', { name: /save contact/i })).toBeEnabled()
   })
 
   it('submits the draft, blank address rows dropped', async () => {
     const props = setup()
-    await userEvent.type(screen.getByLabelText(/first name/i), 'Bruno')
-    await userEvent.click(screen.getByRole('button', { name: /add an address/i }))
-    await userEvent.type(screen.getByLabelText(/address 1/i), 'bruno@x.be')
+    await user.type(screen.getByLabelText(/first name/i), 'Bruno')
+    await user.click(screen.getByRole('button', { name: /add an address/i }))
+    await user.type(screen.getByLabelText(/address 1/i), 'bruno@x.be')
 
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(props.onSave).toHaveBeenCalledWith({
       ...noCarriedFields,
@@ -309,9 +302,9 @@ describe('ContactEditView', () => {
 
   it('sends null rather than an empty string for a blank name', async () => {
     const props = setup()
-    await userEvent.type(screen.getByLabelText(/address 1/i), 'a@x.be')
+    await user.type(screen.getByLabelText(/address 1/i), 'a@x.be')
 
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ firstName: null, nickname: null }))
   })
@@ -319,7 +312,7 @@ describe('ContactEditView', () => {
   it('carries the favourite flag through', async () => {
     const props = setup({ contact: { ...bruno, isFavorite: true } })
 
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ isFavorite: true }))
   })
@@ -352,14 +345,14 @@ describe('ContactEditView', () => {
   it('cancels through the ✕', async () => {
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /close the editor/i }))
+    await user.click(screen.getByRole('button', { name: /close the editor/i }))
 
     expect(props.onCancel).toHaveBeenCalled()
   })
 
   it('un type absent de la liste survit à un enregistrement qui ne touche pas sa ligne', async () => {
     const { onSave } = setup({ contact: withLines })
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].phones).toEqual([
       { position: 0, number: '+32 493 82 44 15', type: 'CELL' },
@@ -379,55 +372,34 @@ describe('ContactEditView', () => {
   it('vider une famille envoie une liste vide, pas une omission', async () => {
     const { onSave } = setup({ contact: withLines })
     const bin = screen.getAllByRole('button', { name: /remove phone/i })
-    await userEvent.click(bin[1]!)
-    await userEvent.click(screen.getAllByRole('button', { name: /remove phone/i })[0]!)
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(bin[1]!)
+    await user.click(screen.getAllByRole('button', { name: /remove phone/i })[0]!)
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].phones).toEqual([])
   })
 
   it("une adresse postale sans aucune composante n'est pas envoyée, type ou pas", async () => {
     const { onSave } = setup({ contact: bruno })
-    await userEvent.click(screen.getByRole('button', { name: /add a postal address/i }))
+    await user.click(screen.getByRole('button', { name: /add a postal address/i }))
     await pickOption(screen.getByLabelText(/postal address 1 type/i), 'Work')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].postalAddresses).toEqual([])
   })
 
-  it('au plafond, le bouton d’ajout de la famille disparaît', async () => {
-    const many = {
-      ...bruno,
-      phones: Array.from({ length: 10 }, (_, i) => (
-        { position: i, number: `+3247000000${i}`, type: 'CELL', pref: 101, params: '', groupName: '' })),
-    }
-    setup({ contact: many })
+  // `ContactValidator.MaxAddressesPerContact` is 50: the 51st line fails the save, the round trip
+  // this guard exists to avoid.
+  it.each([
+    ['phones', 'phones', 10, /add a phone/i, (i: number) => (
+      { position: i, number: `+3247000000${i}`, type: 'CELL', pref: 101, params: '', groupName: '' })],
+    ['adresses', 'addresses', 50, /add an address/i, (i: number) => line(i, `a${i}@x.be`)],
+    ['adresses postales', 'postalAddresses', 10, /add a postal address/i, (i: number) => (
+      { position: i, type: 'HOME', pref: 101, params: '', groupName: '', street: `Rue ${i}` })],
+  ])('au plafond des %s, le bouton d’ajout disparaît', (_family, key, cap, button, make) => {
+    setup({ contact: { ...bruno, [key]: Array.from({ length: cap }, (_, i) => make(i)) } })
 
-    expect(screen.queryByRole('button', { name: /add a phone/i })).not.toBeInTheDocument()
-  })
-
-  // `ContactValidator.MaxAddressesPerContact`: the 51st line fails the save, the round trip this
-  // guard exists to avoid.
-  it('au plafond des adresses, le bouton d’ajout disparaît aussi', async () => {
-    const many = {
-      ...bruno,
-      addresses: Array.from({ length: 50 }, (_, i) => line(i, `a${i}@x.be`)),
-    }
-    setup({ contact: many })
-
-    expect(screen.queryByRole('button', { name: /add an address/i })).not.toBeInTheDocument()
-  })
-
-  it('au plafond des adresses postales, le bouton d’ajout disparaît aussi', async () => {
-    const many = {
-      ...bruno,
-      postalAddresses: Array.from({ length: 10 }, (_, i) => ({
-        position: i, type: 'HOME', pref: 101, params: '', groupName: '', street: `Rue ${i}`,
-      })),
-    }
-    setup({ contact: many })
-
-    expect(screen.queryByRole('button', { name: /add a postal address/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: button })).not.toBeInTheDocument()
   })
 
   // Defect 4(a): a 3.0 round trip projects PREF into the type field itself
@@ -449,7 +421,7 @@ describe('ContactEditView', () => {
 
     expect(screen.getByLabelText(/postal address 1 type/i)).toHaveTextContent('Work Email')
 
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].postalAddresses).toEqual([expect.objectContaining({ type: '' })])
   })
@@ -460,7 +432,7 @@ describe('ContactEditView', () => {
     setup({ contact: solo })
 
     expect(screen.queryByLabelText(/nickname/i)).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /add a field/i }))
+    await user.click(screen.getByRole('button', { name: /add a field/i }))
     expect(screen.getByRole('menuitem', { name: /nickname/i })).toBeInTheDocument()
   })
 
@@ -470,18 +442,12 @@ describe('ContactEditView', () => {
     expect(screen.queryByLabelText(/nickname/i)).not.toBeInTheDocument()
   })
 
-  it('affiche d’office le surnom d’une carte qui en porte un', () => {
-    setup({ contact: bruno })
-
-    expect(screen.getByLabelText(/nickname/i)).toHaveValue('bru')
-  })
-
   it('un surnom ajouté depuis le menu part à l’enregistrement', async () => {
     const { onSave } = setup({ contact: solo })
-    await userEvent.click(screen.getByRole('button', { name: /add a field/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /nickname/i }))
-    await userEvent.type(screen.getByLabelText(/nickname/i), 'bru')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /add a field/i }))
+    await user.click(screen.getByRole('menuitem', { name: /nickname/i }))
+    await user.type(screen.getByLabelText(/nickname/i), 'bru')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].nickname).toBe('bru')
   })
@@ -491,15 +457,15 @@ describe('ContactEditView', () => {
      not name this field". An empty string would leave an empty NICKNAME on the card. */
   it('envoie null pour un surnom que l’utilisateur vide', async () => {
     const { onSave } = setup({ contact: bruno })
-    await userEvent.clear(screen.getByLabelText(/nickname/i))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.clear(screen.getByLabelText(/nickname/i))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].nickname).toBeNull()
   })
 
   it('un contact qui n’a que son surnom reste enregistrable', async () => {
     const { onSave } = setup({ contact: { ...solo, addresses: [], nickname: 'bru' } })
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].nickname).toBe('bru')
   })
@@ -508,16 +474,16 @@ describe('ContactEditView', () => {
     setup({ contact: { ...bruno, organization: 'Weesky' } })
 
     expect(screen.getByLabelText(/organisation/i)).toHaveValue('Weesky')
-    await userEvent.click(screen.getByRole('button', { name: /add a field/i }))
+    await user.click(screen.getByRole('button', { name: /add a field/i }))
     expect(screen.queryByRole('menuitem', { name: /organisation/i })).not.toBeInTheDocument()
   })
 
   it('un champ ajouté depuis le menu devient saisissable et part à l’enregistrement', async () => {
     const { onSave } = setup({ contact: bruno })
-    await userEvent.click(screen.getByRole('button', { name: /add a field/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /job title/i }))
-    await userEvent.type(screen.getByLabelText(/job title/i), 'Ingénieure')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /add a field/i }))
+    await user.click(screen.getByRole('menuitem', { name: /job title/i }))
+    await user.type(screen.getByLabelText(/job title/i), 'Ingénieure')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].jobTitle).toBe('Ingénieure')
   })
@@ -526,8 +492,8 @@ describe('ContactEditView', () => {
   // null here would give back the organisation the user just cleared.
   it('envoie une chaîne vide pour une société amorcée que l’utilisateur vide', async () => {
     const { onSave } = setup({ contact: { ...bruno, organization: 'Weesky' } })
-    await userEvent.clear(screen.getByLabelText(/organisation/i))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.clear(screen.getByLabelText(/organisation/i))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].organization).toBe('')
   })
@@ -536,14 +502,14 @@ describe('ContactEditView', () => {
   // unrelated edit from rewriting a value the projector had truncated.
   it('envoie null pour une société amorcée que l’utilisateur ne touche pas', async () => {
     const { onSave } = setup({ contact: { ...bruno, organization: 'Weesky' } })
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].organization).toBeNull()
   })
 
   it('un champ vidé reste affiché tant que le formulaire vit', async () => {
     setup({ contact: { ...bruno, organization: 'Weesky' } })
-    await userEvent.clear(screen.getByLabelText(/organisation/i))
+    await user.clear(screen.getByLabelText(/organisation/i))
 
     expect(screen.getByLabelText(/organisation/i)).toBeInTheDocument()
   })
@@ -559,26 +525,21 @@ describe('ContactEditView', () => {
      the birthday and it would lose its time. */
   it('un anniversaire non touché n’est pas réécrit par une modification voisine', async () => {
     const { onSave } = setup({ contact: { ...bruno, birthday: '19930621T115900Z' } })
-    await userEvent.type(screen.getByLabelText(/first name/i), 'x')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.type(screen.getByLabelText(/first name/i), 'x')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave.mock.calls[0]![0].birthday).toBeNull()
   })
 
-  it('un anniversaire tapé part dans l’orthographe du vCard', async () => {
+  it.each([
+    ['part dans l’orthographe du vCard', '27/10/1979', '1979-10-27'],
+    ['accepte une forme que nul calendrier n’exprime', '--10-27', '--10-27'],
+  ])('un anniversaire tapé %s', async (_what, typed, sent) => {
     const { onSave } = setup({ contact: bruno })
-    await userEvent.type(screen.getByLabelText(/birthday/i), '27/10/1979')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.type(screen.getByLabelText(/birthday/i), typed)
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
-    expect(onSave.mock.calls[0]![0].birthday).toBe('1979-10-27')
-  })
-
-  it('l’anniversaire accepte une forme que nul calendrier n’exprime', async () => {
-    const { onSave } = setup({ contact: bruno })
-    await userEvent.type(screen.getByLabelText(/birthday/i), '--10-27')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
-
-    expect(onSave.mock.calls[0]![0].birthday).toBe('--10-27')
+    expect(onSave.mock.calls[0]![0].birthday).toBe(sent)
   })
 
   // The banner: the photo the card carries, never a door to replace it.
@@ -621,34 +582,26 @@ describe('ContactEditView', () => {
     setup({ contact: bruno })
     const opened = vi.spyOn(screen.getByTestId('editor-photo-input'), 'click')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Change photo' }))
+    await user.click(screen.getByRole('button', { name: 'Change photo' }))
 
     expect(opened).toHaveBeenCalled()
   })
 
-  it('submits the chosen photo as base64', async () => {
+  it('shows the chosen photo at once and submits it as base64', async () => {
     const { onSave } = setup({ contact: bruno })
 
     choose(new File(['x'], 'p.jpg'))
-    await screen.findByTestId('editor-photo')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    expect(await screen.findByTestId('editor-photo')).toHaveAttribute('src', 'blob:preview')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: 'QUJD' }))
-  })
-
-  it('shows the chosen photo at once', async () => {
-    setup({ contact: bruno })
-
-    choose(new File(['x'], 'p.jpg'))
-
-    expect(await screen.findByTestId('editor-photo')).toHaveAttribute('src', 'blob:preview')
   })
 
   it('submits an empty string when the seeded photo is removed', async () => {
     const { onSave } = setup({ contact: bruno, photo: 'blob:seeded' })
 
-    await userEvent.click(screen.getByRole('button', { name: /remove photo/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /remove photo/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: '' }))
   })
@@ -662,8 +615,8 @@ describe('ContactEditView', () => {
     const { rerender } = render(<ContactEditView {...props} photo={null} />)
 
     rerender(<ContactEditView {...props} photo="blob:late" />)
-    await userEvent.click(screen.getByRole('button', { name: /remove photo/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /remove photo/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: '' }))
   })
@@ -673,8 +626,8 @@ describe('ContactEditView', () => {
 
     choose(new File(['x'], 'p.jpg'))
     await screen.findByTestId('editor-photo')
-    await userEvent.click(screen.getByRole('button', { name: /remove photo/i }))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /remove photo/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(screen.getByTestId('editor-photo')).toHaveAttribute('src', 'blob:seeded')
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ photo: null }))
@@ -686,7 +639,7 @@ describe('ContactEditView', () => {
 
     choose(new File(['x'], 'p.heic'))
     await screen.findByTestId('editor-photo-error')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     expect(screen.getByTestId('editor-photo-error')).toHaveTextContent('This file cannot be read. Choose a JPEG, PNG, GIF or WebP image.')
     expect(screen.queryByRole('alert')).toBeNull()

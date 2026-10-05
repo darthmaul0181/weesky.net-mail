@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import SyncPage from './SyncPage'
 import { api, ApiError } from '../../../api.js'
+import { setupUser } from '../../../test-utils'
 
 // The rest of the module comes through untouched: the 404 branch is an `instanceof ApiError`
 // check, so a hand-rolled stand-in would not match the class the component imports.
@@ -34,8 +34,11 @@ beforeEach(() => {
 // ("Regenerate") as the trigger that opened it, so a case that clicks it scopes to the dialog.
 function confirmRegenerate() {
   const modal = screen.getByText('Regenerate the sync password?').closest('.modal') as HTMLElement
-  return userEvent.click(within(modal).getByRole('button', { name: 'Regenerate' }))
+  return user.click(within(modal).getByRole('button', { name: 'Regenerate' }))
 }
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 describe('SyncPage', () => {
   it('shows the address the server gave, not one composed here', async () => {
@@ -74,7 +77,7 @@ describe('SyncPage', () => {
     vi.mocked(api.setDavCardDav).mockResolvedValue({ ...ON, password: 'ABCDEFGHIJKLMNOPQRST' })
     render(<SyncPage />)
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' }))
 
     expect(api.setDavCardDav).toHaveBeenCalledWith(true)
     expect(await screen.findByText('ABCDEFGHIJKLMNOPQRST')).toBeInTheDocument()
@@ -87,7 +90,7 @@ describe('SyncPage', () => {
     vi.mocked(api.setDavCardDav).mockResolvedValue(ON)
     render(<SyncPage />)
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' }))
 
     await waitFor(() => expect(api.setDavCardDav).toHaveBeenCalledWith(true))
     expect(screen.getByText('Hidden — regenerate to get a new one')).toBeInTheDocument()
@@ -100,7 +103,7 @@ describe('SyncPage', () => {
     vi.mocked(api.setDavCardDav).mockResolvedValue({ ...ON, cardDavEnabled: false })
     render(<SyncPage />)
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' }))
 
     await waitFor(() => expect(api.setDavCardDav).toHaveBeenCalledWith(false))
     // Configured stays configured: the values are what one comes back for on a second device.
@@ -111,7 +114,7 @@ describe('SyncPage', () => {
     vi.mocked(api.getDavCredentials).mockResolvedValue(ON)
     render(<SyncPage />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    await user.click(await screen.findByRole('button', { name: 'Regenerate' }))
 
     expect(screen.getByText(/Every device will stop syncing until you enter the new password/))
       .toBeInTheDocument()
@@ -125,9 +128,9 @@ describe('SyncPage', () => {
   it('dismisses the regenerate question on its named ✕', async () => {
     vi.mocked(api.getDavCredentials).mockResolvedValue(ON)
     render(<SyncPage />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    await user.click(await screen.findByRole('button', { name: 'Regenerate' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(screen.queryByText(/Turn syncing off on your devices first/)).not.toBeInTheDocument()
     expect(api.regenerateDavSecret).not.toHaveBeenCalled()
@@ -137,7 +140,7 @@ describe('SyncPage', () => {
     vi.mocked(api.getDavCredentials).mockResolvedValue(ON)
     render(<SyncPage />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    await user.click(await screen.findByRole('button', { name: 'Regenerate' }))
     await confirmRegenerate()
 
     expect(await screen.findByText('TSRQPONMLKJIHGFEDCBA')).toBeInTheDocument()
@@ -151,7 +154,7 @@ describe('SyncPage', () => {
     vi.mocked(api.regenerateDavSecret).mockReturnValue(
       new Promise(resolve => { resolveRegenerate = resolve }))
     render(<SyncPage />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    await user.click(await screen.findByRole('button', { name: 'Regenerate' }))
 
     await confirmRegenerate()
 
@@ -188,7 +191,7 @@ describe('SyncPage', () => {
     render(<SyncPage />)
 
     const box = await screen.findByRole('checkbox', { name: 'Contacts (CardDAV)' })
-    await userEvent.click(box)
+    await user.click(box)
     // Pure server state would leave it off for the whole round trip, with nothing acknowledging
     // the click; a refusal is what has to put it back.
     expect(box).toBeChecked()
@@ -203,7 +206,7 @@ describe('SyncPage', () => {
 
     const box = await screen.findByRole('checkbox', { name: 'Calendar (CalDAV)' })
     expect(box).not.toBeChecked()
-    await userEvent.click(box)
+    await user.click(box)
 
     // The zone is what the default calendar is born in, so it travels with the switch rather than
     // being guessed server-side from a request that carries no clock. The language is what names
@@ -219,7 +222,7 @@ describe('SyncPage', () => {
     vi.mocked(api.setDavCalDav).mockReturnValue(new Promise(() => {}))
     render(<SyncPage />)
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: 'Calendar (CalDAV)' }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Calendar (CalDAV)' }))
 
     expect(screen.getByRole('checkbox', { name: 'Calendar (CalDAV)' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Contacts (CardDAV)' })).toBeChecked()
@@ -233,7 +236,7 @@ describe('SyncPage', () => {
     try {
       render(<SyncPage />)
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Régénérer' }))
+      await user.click(await screen.findByRole('button', { name: 'Régénérer' }))
 
       expect(screen.getByText(/Désactivez d’abord la synchronisation sur vos appareils/))
         .toBeInTheDocument()

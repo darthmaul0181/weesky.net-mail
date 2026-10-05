@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../../../api.js'
+import { createTestQueryClient } from '../../../test-utils'
 import { useDeliveryReplyKey, useGenerateDeliveryKey, useSetDeliveryReplies } from './useDeliveryReplyKey'
 
 vi.mock('../../../api.js', () => ({ api: {
@@ -11,7 +12,7 @@ vi.mock('../../../api.js', () => ({ api: {
 }, ApiError: class extends Error {} }))
 
 function wrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   return { client, Wrapper: ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children) }
 }
 

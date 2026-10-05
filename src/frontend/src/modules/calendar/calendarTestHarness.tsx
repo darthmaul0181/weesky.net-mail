@@ -18,6 +18,16 @@ export function calendarOf(
   }
 }
 
+/** A calendar a list shows by name; the first of a pair is usually the default. */
+export function calendarNamed(
+  id: string, displayName: string, isDefault = false, overrides: Partial<Calendar> = {},
+): Calendar {
+  return calendarOf(id, undefined, displayName, { isDefault, ...overrides })
+}
+
+/** Personal (the default) and Work: the pair every list-drawing test starts from. */
+export const CALENDAR_PAIR = [calendarNamed('a', 'Personal', true), calendarNamed('b', 'Work')]
+
 export function occurrenceOf(fields: Partial<Occurrence> & { eventId: string }): Occurrence {
   return {
     calendarId: 'a', uid: fields.eventId, instanceId: '', isOverride: false, isAllDay: false,

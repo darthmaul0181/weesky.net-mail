@@ -1,22 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import ApplicationTab from './ApplicationTab'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, setupUser } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getAppSettings: vi.fn(),
   setAppSetting: vi.fn(),
-  setAppLogo: vi.fn(),
-  deleteAppLogo: vi.fn(),
-  adminGetSchedulingAccount: vi.fn(),
-  adminSaveSchedulingAccount: vi.fn(),
-  adminDeleteSchedulingAccount: vi.fn(),
-  adminTestSchedulingAccount: vi.fn(),
 }))
 vi.mock('../../../api.js', () => ({ api: mocks }))
+// Each section the tab mounts has its own test file and its own API calls; here they would only
+// re-render on every keystroke and fail on calls this mock does not answer.
+vi.mock('./LogoSection', () => ({ default: () => <div data-section="logo" /> }))
+vi.mock('./SchedulingAccountSection', () => ({ default: () => <div data-section="scheduling" /> }))
+vi.mock('./DeliveryRepliesSection', () => ({ default: () => <div data-section="delivery" /> }))
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = createTestQueryClient()
@@ -34,12 +32,18 @@ function renderTab(settings: Record<string, string> = {
 }
 
 describe('ApplicationTab', () => {
+  let user: ReturnType<typeof setupUser>
   beforeEach(() => {
     vi.clearAllMocks()
-    // The scheduling-account section mounts alongside this tab; its own behaviour is covered in
-    // SchedulingAccountSection.test.tsx — here it just needs a resolved answer so it never rejects
-    // and leaks an unhandled error into these unrelated assertions.
-    mocks.adminGetSchedulingAccount.mockResolvedValue({ configured: false, passwordStored: false, passwordReadable: false, allowCleartext: false })
+    user = setupUser()
+  })
+
+  it('mounts its three sections, logo first and delivery replies last', async () => {
+    const { container } = renderTab()
+    await screen.findByLabelText('Application name')
+
+    expect([...container.querySelectorAll('[data-section]')].map(e => e.getAttribute('data-section')))
+      .toEqual(['logo', 'scheduling', 'delivery'])
   })
 
   it('shows the stored values, not values of its own', async () => {
@@ -54,7 +58,7 @@ describe('ApplicationTab', () => {
     renderTab()
     const toggle = await screen.findByLabelText('Enable app installation')
 
-    await userEvent.click(toggle)
+    await user.click(toggle)
 
     await waitFor(() => expect(mocks.setAppSetting)
       .toHaveBeenCalledWith('app.installable', 'false'))
@@ -73,9 +77,9 @@ describe('ApplicationTab', () => {
     renderTab()
     const name = await screen.findByLabelText('Application name')
 
-    await userEvent.clear(name)
-    await userEvent.type(name, 'Weesky Mail')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.clear(name)
+    await user.type(name, 'Weesky Mail')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mocks.setAppSetting).toHaveBeenCalledWith('app.name', 'Weesky Mail'))
     expect(mocks.setAppSetting).toHaveBeenCalledWith('app.shortName', 'Scotty')
@@ -87,7 +91,7 @@ describe('ApplicationTab', () => {
     mocks.setAppSetting.mockRejectedValue(new Error('Short name is too long'))
     await screen.findByLabelText('Application name')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the name', 'error'))
   })
@@ -101,9 +105,9 @@ describe('ApplicationTab', () => {
     const name = await screen.findByLabelText('Application name')
     mocks.setAppSetting.mockRejectedValue(new Error('Application name is too long'))
 
-    await userEvent.clear(name)
-    await userEvent.type(name, 'A name nobody accepted')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.clear(name)
+    await user.type(name, 'A name nobody accepted')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(addToast)
       .toHaveBeenCalledWith('Could not save the name', 'error'))
@@ -122,11 +126,11 @@ describe('ApplicationTab', () => {
       ? Promise.resolve(undefined)
       : Promise.reject(new Error('Short name is too long'))))
 
-    await userEvent.clear(name)
-    await userEvent.type(name, 'Weesky Mail')
-    await userEvent.clear(shortName)
-    await userEvent.type(shortName, 'A rejected short name')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.clear(name)
+    await user.type(name, 'Weesky Mail')
+    await user.clear(shortName)
+    await user.type(shortName, 'A rejected short name')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not save the name', 'error'))
     expect(screen.getByLabelText('Application name')).toHaveValue('Weesky Mail')

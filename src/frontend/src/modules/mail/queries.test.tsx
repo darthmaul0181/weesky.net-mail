@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { focusManager } from '@tanstack/react-query'
-import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
+import { createTestQueryClient, settle, waitFor, withQueryClient } from '../../test-utils'
 import { POLL_INTERVAL, mailKeys, useApplyInvitationReply, useCreateFolder, useFolders, useMessage, useMessages, useMessageStream, useReplaceIdentities, useSaveDraft, useSearchMessages, useSendMessage, useSetFlags } from './queries'
 import type { MailFolderNode, MailInvitation, MailMessageDetail } from './api/mailTypes'
+import { folderNodeOf } from './mailTestHarness'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -63,10 +64,15 @@ function createWrapper() {
 }
 
 describe('mailKeys', () => {
+  // Every key sits under `all`, the prefix switchAccount drops.
   it('scopes every key by account id', () => {
-    expect(mailKeys.folders('primary')).toEqual(['mail', 'primary', 'folders'])
-    expect(mailKeys.messages('primary', 'INBOX', 0, 30)).toEqual(['mail', 'primary', 'messages', 'INBOX', 0, 30, false])
-    expect(mailKeys.message('primary', 'INBOX', 42)).toEqual(['mail', 'primary', 'message', 'INBOX', 42])
+    const keys = [
+      mailKeys.folders('primary'), mailKeys.messages('primary', 'INBOX', 0, 30), mailKeys.message('primary', 'INBOX', 42),
+    ]
+    for (const key of keys) expect(key.slice(0, 2)).toEqual(mailKeys.all('primary'))
+    expect(mailKeys.folders('primary')).not.toEqual(mailKeys.folders('linked-1'))
+    expect(mailKeys.messages('primary', 'INBOX', 0, 30)).not.toEqual(mailKeys.messages('linked-1', 'INBOX', 0, 30))
+    expect(mailKeys.message('primary', 'INBOX', 42)).not.toEqual(mailKeys.message('linked-1', 'INBOX', 42))
   })
 
   // A stream caches a sequence of pages, a page caches one: sharing a key is a type error that
@@ -92,10 +98,6 @@ describe('mailKeys', () => {
       .toEqual(mailKeys.messageStreamIn('primary', 'INBOX'))
   })
 
-  it('gives different accounts different keys', () => {
-    expect(mailKeys.folders('primary')).not.toEqual(mailKeys.folders('linked-1'))
-  })
-
   // Criteria live in the key: two different searches are two cache entries, never one
   // overwriting the other.
   it('gives different criteria different search keys', () => {
@@ -118,14 +120,16 @@ describe('useFolders', () => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
   })
 
-  it('loads the folder tree', async () => {
+  it("loads the active account's folder tree", async () => {
     mocks.getMailFolders.mockResolvedValue([{ path: 'INBOX', name: 'INBOX', children: [] }])
+    auth.activeAccountId = 'linked-1'
     const { wrapper } = createWrapper()
 
     const { result } = renderHook(() => useFolders(), { wrapper })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.[0]!.path).toBe('INBOX')
+    expect(mocks.getMailFolders).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'linked-1' }))
   })
 
   it('surfaces a failure', async () => {
@@ -181,10 +185,10 @@ describe('useFolders', () => {
   // A notification is useful only while the tab is elsewhere, so the poll has to survive the
   // loss of focus — but only for those who asked: an untouched tab must keep costing nothing.
   it.each([
-    [{ 'mail.notifySound': 'false', 'mail.notifyDesktop': 'false' }, false],
-    [{ 'mail.notifySound': 'true', 'mail.notifyDesktop': 'false' }, true],
-    [{ 'mail.notifySound': 'false', 'mail.notifyDesktop': 'true' }, true],
-  ])('polls in the background only when a notification is on', async (preferences, expected) => {
+    ['neither notification', { 'mail.notifySound': 'false', 'mail.notifyDesktop': 'false' }, false],
+    ['the sound', { 'mail.notifySound': 'true', 'mail.notifyDesktop': 'false' }, true],
+    ['the desktop notification', { 'mail.notifySound': 'false', 'mail.notifyDesktop': 'true' }, true],
+  ])('polls in the background only when a notification is on: %s', async (_label, preferences, expected) => {
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', ...preferences })
     mocks.getMailFolders.mockResolvedValue([])
     const { wrapper, client } = createWrapper()
@@ -212,30 +216,6 @@ describe('account scoping on the wire', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30' })
-  })
-
-  it('carries the active account on a read', async () => {
-    mocks.getMailFolders.mockResolvedValue([])
-    auth.activeAccountId = 'linked-1'
-    const { wrapper } = createWrapper()
-
-    const { result } = renderHook(() => useFolders(), { wrapper })
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(mocks.getMailFolders).toHaveBeenCalledWith(
-      expect.objectContaining({ accountId: 'linked-1' }))
-  })
-
-  it('carries the active account on a paged read', async () => {
-    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
-    auth.activeAccountId = 'linked-1'
-    const { wrapper } = createWrapper()
-
-    const { result } = renderHook(() => useMessages('INBOX', 0, 30), { wrapper })
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 0, 30,
-      expect.objectContaining({ accountId: 'linked-1' }))
   })
 
   // The placeholder exists so paging does not flash empty. Carried across a mailbox it shows one
@@ -366,14 +346,16 @@ describe('useMessages', () => {
     expect(mocks.getMailMessages).not.toHaveBeenCalled()
   })
 
-  it('requests the selected folder and page', async () => {
+  it('requests the selected folder and page of the active account', async () => {
     mocks.getMailMessages.mockResolvedValue({ folderPath: 'INBOX', messages: [], total: 0, page: 1, pageSize: 50 })
+    auth.activeAccountId = 'linked-1'
     const { wrapper } = createWrapper()
 
     const { result } = renderHook(() => useMessages('INBOX', 1, 30), { wrapper })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 30, expect.anything())
+    expect(mocks.getMailMessages).toHaveBeenCalledWith('INBOX', 1, 30,
+      expect.objectContaining({ accountId: 'linked-1' }))
   })
 
   // The two modes answer different shapes for the same folder and page, so they cannot share a
@@ -565,45 +547,25 @@ describe('folder mutations', () => {
   })
 })
 
+const composeArgs = {
+  to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [],
+  priority: 'normal' as const,
+}
+
 describe('useSendMessage', () => {
   beforeEach(() => vi.clearAllMocks())
-
-  const sendArgs = {
-    to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [],
-    priority: 'normal' as const,
-  }
-  const sentTree: MailFolderNode[] = [
-    {
-      path: 'Sent', name: 'Sent', specialUse: 'sent', selectable: true, subscribed: true,
-      total: 1, unread: 0, uidValidity: 1, uidNext: 2, children: [],
-    },
-  ]
-  const sentPagesKey = mailKeys.messages('primary', 'Sent', 0, 30)
-  const sentStreamKey = mailKeys.messageStream('primary', 'Sent', 100)
 
   it('calls api.sendMessage with the composed args', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
     const { wrapper } = createWrapper()
 
     const { result } = renderHook(() => useSendMessage(), { wrapper })
-    await result.current.mutateAsync(sendArgs)
+    await result.current.mutateAsync(composeArgs)
 
-    expect(mocks.sendMessage).toHaveBeenCalledWith(sendArgs, { accountId: 'primary' })
+    expect(mocks.sendMessage).toHaveBeenCalledWith(composeArgs, { accountId: 'primary' })
   })
 
-  it('invalidates the folder tree when the tree has a sent node', async () => {
-    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
-    const { client, wrapper } = createWrapper()
-    client.setQueryData(mailKeys.folders('primary'), sentTree)
-    const invalidate = vi.spyOn(client, 'invalidateQueries')
-
-    const { result } = renderHook(() => useSendMessage(), { wrapper })
-    await result.current.mutateAsync(sendArgs)
-
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
-  })
-
-  it('does not touch any sent-folder key when the tree holds no sent node', async () => {
+  it('invalidates the folder tree and touches no sent-folder key when the tree holds no sent node', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: false })
     const { client, wrapper } = createWrapper()
     const tree: MailFolderNode[] = [
@@ -616,114 +578,92 @@ describe('useSendMessage', () => {
     const invalidate = vi.spyOn(client, 'invalidateQueries')
 
     const { result } = renderHook(() => useSendMessage(), { wrapper })
-    await result.current.mutateAsync(sendArgs)
+    await result.current.mutateAsync(composeArgs)
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
     expect(invalidate).toHaveBeenCalledTimes(1)
   })
+})
 
-  // M10: a folder with N loaded stream blocks must not replay all N on every send — the common
-  // case is that Sent is not even open, so its caches are dropped outright, cold, and cost
-  // nothing until it is opened again.
-  it("drops the sent folder's list caches instead of invalidating them, when nobody is viewing it", async () => {
-    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
-    const { client, wrapper } = createWrapper()
-    client.setQueryData(mailKeys.folders('primary'), sentTree)
-    client.setQueryData(sentPagesKey, pageOf([1], 1))
-    client.setQueryData(sentStreamKey, { pages: [pageOf([1], 1)], pageParams: [0] })
+// M10: a folder with N loaded stream blocks must not replay all N on every send or save — the
+// common case is that the folder is not even open, so its caches are dropped outright, cold, and
+// cost nothing until it is opened again. A send finds Sent in the tree, a save is told its folder.
+describe.each([
+  {
+    label: 'a send', folder: 'Sent', useWrite: useSendMessage,
+    prime: () => mocks.sendMessage.mockResolvedValue({ appendedToSent: true }),
+  },
+  {
+    label: 'a draft save', folder: 'Drafts', useWrite: useSaveDraft,
+    prime: () => mocks.saveDraft.mockResolvedValue({ uid: 9, folderPath: 'Drafts' }),
+  },
+])('after $label', ({ folder, useWrite, prime }) => {
+  const pagesKey = mailKeys.messages('primary', folder, 0, 30)
+  const streamKey = mailKeys.messageStream('primary', folder, 100)
+  const sentTree = [folderNodeOf({ path: 'Sent', specialUse: 'sent' })]
 
-    const { result } = renderHook(() => useSendMessage(), { wrapper })
-    await result.current.mutateAsync(sendArgs)
+  function setup() {
+    const created = createWrapper()
+    created.client.setQueryData(mailKeys.folders('primary'), sentTree)
+    return created
+  }
 
-    expect(client.getQueryData(sentPagesKey)).toBeUndefined()
-    expect(client.getQueryData(sentStreamKey)).toBeUndefined()
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prime()
+  })
+
+  it("invalidates the folder tree and drops the folder's list caches when nobody is viewing it", async () => {
+    const { client, wrapper } = setup()
+    client.setQueryData(pagesKey, pageOf([1], 1))
+    client.setQueryData(streamKey, { pages: [pageOf([1], 1)], pageParams: [0] })
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+
+    const { result } = renderHook(() => useWrite(), { wrapper })
+    await result.current.mutateAsync(composeArgs)
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
+    expect(client.getQueryData(pagesKey)).toBeUndefined()
+    expect(client.getQueryData(streamKey)).toBeUndefined()
   })
 
   // The other half of M10: a folder actually on screen must refresh, not blank — so its query
   // stays in the cache (never removed) and is invalidated in place instead.
-  it("keeps the sent folder's list alive and refetches it when it is open", async () => {
-    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+  it("keeps the folder's list alive and refetches it when it is open", async () => {
     mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
-    const { client, wrapper } = createWrapper()
-    client.setQueryData(mailKeys.folders('primary'), sentTree)
+    const { client, wrapper } = setup()
 
-    const list = renderHook(() => useMessages('Sent', 0, 30), { wrapper })
+    const list = renderHook(() => useMessages(folder, 0, 30), { wrapper })
     await waitFor(() => expect(list.result.current.isSuccess).toBe(true))
     mocks.getMailMessages.mockClear()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
 
-    const send = renderHook(() => useSendMessage(), { wrapper })
-    await send.result.current.mutateAsync(sendArgs)
+    const write = renderHook(() => useWrite(), { wrapper })
+    await write.result.current.mutateAsync(composeArgs)
 
     // Never blanked: the query the list is observing is still in the cache with its rows.
-    expect(client.getQueryData(sentPagesKey)).toBeDefined()
+    expect(client.getQueryData(pagesKey)).toBeDefined()
     expect(list.result.current.data).toBeDefined()
     await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalled())
     // Never the stream: an invalidate there would replay every loaded block.
-    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: sentStreamKey })
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: streamKey })
   })
 
   // The stream itself must never be invalidated even while it is the one being observed.
-  it('never invalidates the sent stream when it is the one open', async () => {
-    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
+  it('never invalidates the stream when it is the one open', async () => {
     mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
-    const { client, wrapper } = createWrapper()
-    client.setQueryData(mailKeys.folders('primary'), sentTree)
+    const { client, wrapper } = setup()
 
-    const stream = renderHook(() => useMessageStream('Sent', 100, true), { wrapper })
+    const stream = renderHook(() => useMessageStream(folder, 100, true), { wrapper })
     await waitFor(() => expect(stream.result.current.isSuccess).toBe(true))
     mocks.getMailMessages.mockClear()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
 
-    const send = renderHook(() => useSendMessage(), { wrapper })
-    await send.result.current.mutateAsync(sendArgs)
+    const write = renderHook(() => useWrite(), { wrapper })
+    await write.result.current.mutateAsync(composeArgs)
 
-    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: sentStreamKey })
-    expect(client.getQueryData(sentStreamKey)).toBeDefined()
-  })
-})
-
-describe('useSaveDraft', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  const draftArgs = {
-    to: ['a@b.c'], cc: [], bcc: [], subject: 's', htmlBody: '<p>x</p>', attachmentIds: [],
-    priority: 'normal' as const,
-  }
-
-  it('invalidates the folder tree and drops the drafts folder caches when nobody is viewing it', async () => {
-    mocks.saveDraft.mockResolvedValue({ uid: 9, folderPath: 'Drafts' })
-    const { client, wrapper } = createWrapper()
-    const draftsPagesKey = mailKeys.messages('primary', 'Drafts', 0, 30)
-    const draftsStreamKey = mailKeys.messageStream('primary', 'Drafts', 100)
-    client.setQueryData(draftsPagesKey, pageOf([1], 1))
-    client.setQueryData(draftsStreamKey, { pages: [pageOf([1], 1)], pageParams: [0] })
-    const invalidate = vi.spyOn(client, 'invalidateQueries')
-
-    const { result } = renderHook(() => useSaveDraft(), { wrapper })
-    await result.current.mutateAsync(draftArgs)
-
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: mailKeys.folders('primary') })
-    expect(client.getQueryData(draftsPagesKey)).toBeUndefined()
-    expect(client.getQueryData(draftsStreamKey)).toBeUndefined()
-  })
-
-  it("keeps the drafts folder's list alive and refetches it when it is open", async () => {
-    mocks.saveDraft.mockResolvedValue({ uid: 9, folderPath: 'Drafts' })
-    mocks.getMailMessages.mockResolvedValue(pageOf([1], 1))
-    const { client, wrapper } = createWrapper()
-    const draftsPagesKey = mailKeys.messages('primary', 'Drafts', 0, 30)
-
-    const list = renderHook(() => useMessages('Drafts', 0, 30), { wrapper })
-    await waitFor(() => expect(list.result.current.isSuccess).toBe(true))
-    mocks.getMailMessages.mockClear()
-
-    const save = renderHook(() => useSaveDraft(), { wrapper })
-    await save.result.current.mutateAsync(draftArgs)
-
-    expect(client.getQueryData(draftsPagesKey)).toBeDefined()
-    expect(list.result.current.data).toBeDefined()
-    await waitFor(() => expect(mocks.getMailMessages).toHaveBeenCalled())
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: streamKey })
+    expect(client.getQueryData(streamKey)).toBeDefined()
   })
 })
 

@@ -11,6 +11,7 @@ import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import { collator } from '../../../lib/intl'
 import Toasts from '../../../components/Toasts'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
+import LoadingBlock from '../../../components/LoadingBlock'
 import AtSignIcon from '../../../icons/AtSignIcon'
 import SearchIcon from '../../../icons/SearchIcon'
 import type { AccountDomain } from '../../../lib/accountIdentity'
@@ -171,9 +172,7 @@ export default function AliasesPage() {
       {loadFailed && <div className="alert alert-error" role="alert">{t('aliases.loadFailed')}</div>}
 
       {firstLoad ? (
-        <div className="loading-center">
-          <span className="spinner" />
-        </div>
+        <LoadingBlock />
       ) : letters.length === 0 ? (
         <div className="alias-empty-grid">{t('aliases.empty')}</div>
       ) : (

@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { useLayoutEffect, useRef, type AriaAttributes } from 'react'
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { pushLayer, type LayerHandle } from '../lib/layerStack'
 import { useGridNav } from './useGridNav'
+import { setupUser } from '../test-utils'
 
 const THREE = [['A1', 'A2', 'A3'], ['B1', 'B2', 'B3'], ['C1', 'C2', 'C3']]
 
@@ -223,9 +223,10 @@ describe('useGridNav', () => {
   })
 
   it('carries the tab stop to a widget clicked with the pointer', async () => {
+    const user = setupUser()
     render(<Grid rows={THREE} />)
 
-    await userEvent.click(widget('C3'))
+    await user.click(widget('C3'))
 
     expect(stops()).toEqual(['-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '0'])
   })
@@ -345,14 +346,15 @@ describe('useGridNav', () => {
   /* One stop in, one stop out: Tab leaves the grid rather than walking its widgets, which is the
      whole point of the roving tabindex. */
   it('leaves the grid on Tab', async () => {
+    const user = setupUser()
     render(<Grid rows={THREE} />)
     widget('B2').focus()
 
-    await userEvent.tab()
+    await user.tab()
     expect(widget('After')).toHaveFocus()
 
     widget('B2').focus()
-    await userEvent.tab({ shift: true })
+    await user.tab({ shift: true })
     expect(widget('Before')).toHaveFocus()
   })
 
@@ -360,10 +362,11 @@ describe('useGridNav', () => {
      list would find its last item past the last one Tab can reach, prevent nothing, and let focus
      walk out of the dialog. `tabbablesIn` is the list Tab asks for. */
   it('keeps Tab inside a trap standing over a roving grid', async () => {
+    const user = setupUser()
     render(<TrappedGrid />)
     widget('A1').focus()
 
-    await userEvent.tab()
+    await user.tab()
 
     expect(widget('Before')).toHaveFocus()
     expect(widget('Outside')).not.toHaveFocus()
@@ -553,24 +556,26 @@ describe('useGridNav', () => {
      `display: none` until the row is hovered — and a hidden widget is in no tab order at all, so
      Tab would never come back into the grid. One layout read, on the way out. */
   it('moves a stop nothing draws when focus leaves the grid', async () => {
+    const user = setupUser()
     render(<Grid rows={THREE} />)
     const hidden = widget('B3')
     screen.getAllByRole('button').forEach(button => drawn(button, button !== hidden))
     hidden.focus()
     expect(hidden).toHaveAttribute('tabindex', '0')
 
-    await userEvent.tab()
+    await user.tab()
 
     expect(widget('B1')).toHaveAttribute('tabindex', '0')
     expect(hidden).toHaveAttribute('tabindex', '-1')
   })
 
   it('leaves a stop that is drawn exactly where it is', async () => {
+    const user = setupUser()
     render(<Grid rows={THREE} />)
     screen.getAllByRole('button').forEach(button => drawn(button, true))
     widget('B3').focus()
 
-    await userEvent.tab()
+    await user.tab()
 
     expect(widget('B3')).toHaveAttribute('tabindex', '0')
   })

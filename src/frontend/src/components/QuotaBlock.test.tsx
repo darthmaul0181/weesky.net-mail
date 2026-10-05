@@ -15,13 +15,8 @@ function quota(storageBytesUsed: number, storageBytesLimit: number): Quota {
 // ── QuotaBlock ────────────────────────────────────────────────
 
 describe('QuotaBlock', () => {
-  it('renders nothing when quota is null', () => {
-    const { container } = render(<QuotaBlock quota={null} />)
-    expect(container.firstChild).toBeNull()
-  })
-
-  it('renders nothing when storageBytesLimit is 0', () => {
-    const { container } = render(<QuotaBlock quota={quota(0, 0)} />)
+  it.each([['null', null], ['a storageBytesLimit of 0', quota(0, 0)]])('renders nothing for %s', (_, q) => {
+    const { container } = render(<QuotaBlock quota={q} />)
     expect(container.firstChild).toBeNull()
   })
 
@@ -42,35 +37,28 @@ describe('QuotaBlock', () => {
     render(<QuotaBlock quota={quota(50 * MB, 100 * MB)} />)
     expect(screen.getByText('50%')).toBeInTheDocument()
   })
+})
 
-  it('applies is-danger class at ≥ 90% usage', () => {
-    const { container } = render(<QuotaBlock quota={quota(95 * MB, 100 * MB)} />)
-    expect(container.querySelector('.panel-quota-bar')).toHaveClass('is-danger')
-  })
+// ── Level class, same rule for both ─────────────────────────
 
-  it('applies is-warn class at 75–89% usage', () => {
-    const { container } = render(<QuotaBlock quota={quota(80 * MB, 100 * MB)} />)
-    expect(container.querySelector('.panel-quota-bar')).toHaveClass('is-warn')
-  })
-
-  it('has no level class below 75%', () => {
-    const { container } = render(<QuotaBlock quota={quota(40 * MB, 100 * MB)} />)
-    const bar = container.querySelector('.panel-quota-bar')
-    expect(bar).not.toHaveClass('is-danger')
-    expect(bar).not.toHaveClass('is-warn')
-  })
+describe.each([['QuotaBlock', QuotaBlock], ['QuotaMini', QuotaMini]])('%s level class', (_, Component) => {
+  it.each([[95, 'is-danger'], [90, 'is-danger'], [80, 'is-warn'], [75, 'is-warn'], [40, 'none']])(
+    'at %i%% usage carries %s',
+    (percent, level) => {
+      const { container } = render(<Component quota={quota(percent * MB, 100 * MB)} />)
+      const bar = container.querySelector('.panel-quota-bar')!
+      for (const cls of ['is-danger', 'is-warn']) {
+        if (cls === level) expect(bar).toHaveClass(cls)
+        else expect(bar).not.toHaveClass(cls)
+      }
+    })
 })
 
 // ── QuotaMini ─────────────────────────────────────────────────
 
 describe('QuotaMini', () => {
-  it('renders — when quota is null', () => {
-    render(<QuotaMini quota={null} />)
-    expect(screen.getByText('—')).toBeInTheDocument()
-  })
-
-  it('renders — when storageBytesLimit is zero', () => {
-    render(<QuotaMini quota={quota(0, 0)} />)
+  it.each([['null', null], ['a storageBytesLimit of 0', quota(0, 0)]])('renders — for %s', (_, q) => {
+    render(<QuotaMini quota={q} />)
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
@@ -82,15 +70,5 @@ describe('QuotaMini', () => {
   it('displays used / total in GB when values reach 1 GB', () => {
     render(<QuotaMini quota={quota(1 * GB, 2 * GB)} />)
     expect(screen.getByText(/1\.0 \/ 2\.0 GB/)).toBeInTheDocument()
-  })
-
-  it('applies is-danger class when usage is ≥ 90%', () => {
-    const { container } = render(<QuotaMini quota={quota(92 * MB, 100 * MB)} />)
-    expect(container.querySelector('.panel-quota-bar')).toHaveClass('is-danger')
-  })
-
-  it('applies is-warn class when usage is between 75% and 90%', () => {
-    const { container } = render(<QuotaMini quota={quota(80 * MB, 100 * MB)} />)
-    expect(container.querySelector('.panel-quota-bar')).toHaveClass('is-warn')
   })
 })

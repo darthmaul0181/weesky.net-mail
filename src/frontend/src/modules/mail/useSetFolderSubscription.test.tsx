@@ -4,29 +4,21 @@ import type { QueryClient } from '@tanstack/react-query'
 import { useSetFolderSubscription, mailKeys } from './queries'
 import { createTestQueryClient, settle, withQueryClient } from '../../test-utils'
 import type { MailFolderNode } from './api/mailTypes'
+import { folderNodeOf } from './mailTestHarness'
 
 const mocks = vi.hoisted(() => ({ setMailFolderSubscription: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
-vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeAccount: { id: 'primary' }, activeAccountId: 'primary' }),
-}))
+vi.mock('../../contexts/AuthContext', () => import('../../test-auth'))
 
 const ACC = 'primary'
-
-function node(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
-}
 
 function seededClient() {
   const client = createTestQueryClient()
   client.setQueryData(mailKeys.folders(ACC), [
-    node({ path: 'Projects', name: 'Projects', subscribed: true }),
-    node({
+    folderNodeOf({ path: 'Projects', name: 'Projects', subscribed: true }),
+    folderNodeOf({
       path: 'Parent', name: 'Parent',
-      children: [node({ path: 'Parent/Child', name: 'Child', subscribed: true })],
+      children: [folderNodeOf({ path: 'Parent/Child', name: 'Child', subscribed: true })],
     }),
   ])
   return client

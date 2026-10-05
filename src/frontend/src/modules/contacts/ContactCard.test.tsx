@@ -1,13 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import ContactCard from './ContactCard'
 import Modal from '../../components/Modal'
 import { contactOf } from './contactTestHarness'
 import type { ContactDetail } from './contactTypes'
-import { createTestQueryClient } from '../../test-utils'
+import { createTestQueryClient, setupUser } from '../../test-utils'
 
 vi.mock('../../api.js', () => ({
   api: { getContact: vi.fn(), getContactPhoto: vi.fn() },
@@ -181,12 +180,13 @@ describe('ContactCard', () => {
   /* The composer is this application's own; handing a mailto: to the operating system on a
      machine with no mail client does nothing at all. */
   it('opens the composer on the primary address rather than a mailto:', async () => {
+    const user = setupUser()
     const onWrite = vi.fn()
     setup({ onWrite })
 
     const button = await screen.findByRole('button', { name: /write/i })
     expect(button).not.toHaveAttribute('href')
-    await userEvent.click(button)
+    await user.click(button)
 
     expect(onWrite).toHaveBeenCalledWith('bruno@x.be')
   })
@@ -288,12 +288,13 @@ describe('ContactCard', () => {
   // The tile's own arrangement, one surface up: the star and the pencil on the row, the
   // destructive one a click deeper.
   it('offers the favourite toggle and edit in the head, delete behind the kebab', async () => {
+    const user = setupUser()
     const props = setup()
 
-    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
-    await userEvent.click(screen.getByRole('button', { name: /add to favourites/i }))
-    await userEvent.click(screen.getByRole('button', { name: /contact actions/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /^delete$/i }))
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    await user.click(screen.getByRole('button', { name: /add to favourites/i }))
+    await user.click(screen.getByRole('button', { name: /contact actions/i }))
+    await user.click(screen.getByRole('menuitem', { name: /^delete$/i }))
 
     expect(props.onEdit).toHaveBeenCalledWith('b')
     expect(props.onToggleFavorite).toHaveBeenCalledWith(bruno)
@@ -346,12 +347,13 @@ describe('ContactCard', () => {
   })
 
   it('removes a chip from its group without touching the others', async () => {
+    const user = setupUser()
     const onRemoveFromGroup = vi.fn()
     setup({
       groups: [{ id: 'g1', name: 'Friends' }, { id: 'g2', name: 'Family' }], onRemoveFromGroup,
     })
 
-    await userEvent.click(screen.getByRole('button', { name: /remove.*friends/i }))
+    await user.click(screen.getByRole('button', { name: /remove.*friends/i }))
 
     expect(onRemoveFromGroup).toHaveBeenCalledWith('g1')
     expect(onRemoveFromGroup).toHaveBeenCalledTimes(1)
@@ -379,13 +381,14 @@ describe('ContactCard', () => {
   // (X2) An address opens the in-app composer rather than the OS mail client, and the row must
   // carry no mailto: link a CardDAV value could inject headers through.
   it('opens the composer when an address is clicked, with no mailto: link left', async () => {
+    const user = setupUser()
     const onWrite = vi.fn()
     setup({ onWrite })
 
     const addresses = await screen.findAllByTestId('card-address')
     expect(addresses[0]!.querySelector('a[href^="mailto:"]')).toBeNull()
 
-    await userEvent.click(screen.getByRole('button', { name: 'bruno@x.be' }))
+    await user.click(screen.getByRole('button', { name: 'bruno@x.be' }))
 
     expect(onWrite).toHaveBeenCalledWith('bruno@x.be')
   })

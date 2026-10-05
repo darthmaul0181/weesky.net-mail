@@ -7,6 +7,7 @@ import Toasts from '../../../components/Toasts'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import HelpTooltip from '../../../components/HelpTooltip'
 import ListLoadFailed from '../../../components/ListLoadFailed'
+import LoadingBlock from '../../../components/LoadingBlock'
 import FunnelIcon from '../../../icons/FunnelIcon'
 import { PlusIcon } from './ruleIcons'
 import { RuleEditorModal } from './RuleEditorModal'
@@ -86,7 +87,7 @@ export default function RulesPage() {
             <p className="rules-modal-desc">{t('rules.intro')}</p>
 
             {loading ? (
-              <div className="loading-center"><span className="spinner" /></div>
+              <LoadingBlock />
             ) : !ruleSet ? (
               <ListLoadFailed>{t('rules.loadFailedBody')}</ListLoadFailed>
             ) : ruleSet.kind === 'Advanced' ? (

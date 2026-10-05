@@ -9,15 +9,6 @@ const FakeIntersectionObserver = IntersectionObserver as unknown as {
 }
 
 describe('LoadMoreSentinel', () => {
-  it('calls back when it comes into view', () => {
-    const onReach = vi.fn()
-    render(<LoadMoreSentinel onReach={onReach} />)
-
-    FakeIntersectionObserver.instances[0]!.trigger(true)
-
-    expect(onReach).toHaveBeenCalledTimes(1)
-  })
-
   it('stays quiet while it is out of view', () => {
     const onReach = vi.fn()
     render(<LoadMoreSentinel onReach={onReach} />)

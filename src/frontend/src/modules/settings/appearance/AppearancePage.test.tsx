@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createTestQueryClient } from '../../../test-utils'
+import { createTestQueryClient, setupUser } from '../../../test-utils'
 import { ThemeProvider, PALETTE_IDS } from '../../../contexts/ThemeContext'
 import AppearancePage from './AppearancePage'
 
@@ -24,6 +23,9 @@ function renderPage(customPalette = '') {
   )
 }
 
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
+
 describe('AppearancePage', () => {
   beforeEach(() => { localStorage.clear(); setPreference.mockClear() })
 
@@ -42,11 +44,14 @@ describe('AppearancePage', () => {
     expect(localStorage.getItem('appearance_theme')).toBe('dark')
   })
 
-  it('changes the palette', () => {
+  it.each([
+    ['Sea breeze', 'classic'],
+    ['Plum & gold', 'plum'],
+  ])('changes the palette to %s', (label, id) => {
     renderPage()
-    fireEvent.click(screen.getByLabelText('Sea breeze'))
-    expect(document.documentElement.getAttribute('data-palette')).toBe('classic')
-    expect(localStorage.getItem('appearance_palette')).toBe('classic')
+    fireEvent.click(screen.getByLabelText(label))
+    expect(document.documentElement.getAttribute('data-palette')).toBe(id)
+    expect(localStorage.getItem('appearance_palette')).toBe(id)
   })
 
   // Selected by group rather than by a regex over every label, which had to grow with the list.
@@ -57,15 +62,6 @@ describe('AppearancePage', () => {
       .filter(r => (r as HTMLInputElement).name === 'palette') as HTMLInputElement[]
 
     expect(radios.map(r => r.value)).toEqual([...PALETTE_IDS])
-  })
-
-  it('changes to a new palette', () => {
-    renderPage()
-
-    fireEvent.click(screen.getByLabelText('Plum & gold'))
-
-    expect(document.documentElement.getAttribute('data-palette')).toBe('plum')
-    expect(localStorage.getItem('appearance_palette')).toBe('plum')
   })
 
   // Each thumbnail declares the palette it advertises, which is the only thing standing between
@@ -102,12 +98,14 @@ describe('AppearancePage', () => {
       })),
     })
 
-    const { container } = renderPage()
+    try {
+      const { container } = renderPage()
 
-    Array.from(container.querySelectorAll('.palette-preview'))
-      .forEach(p => expect(p.getAttribute('data-theme')).toBe('dark'))
-
-    Object.defineProperty(window, 'matchMedia', { writable: true, value: original })
+      Array.from(container.querySelectorAll('.palette-preview'))
+        .forEach(p => expect(p.getAttribute('data-theme')).toBe('dark'))
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { writable: true, value: original })
+    }
   })
 
   // The label already names the palette; a screen reader has no use for a picture of colours.
@@ -127,7 +125,7 @@ describe('AppearancePage', () => {
     expect(screen.getByRole('radio', { name: 'English' })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Français' })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Français' }))
+    await user.click(screen.getByRole('radio', { name: 'Français' }))
 
     expect(setPreference).toHaveBeenCalledWith('fr')
   })
@@ -202,7 +200,7 @@ describe('AppearancePage — my palette', () => {
   it('starts the editor from the palette in use', async () => {
     localStorage.setItem('appearance_palette', 'forest')
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
 
     expect(slider('Structure').value).toBe('159')
     expect(slider('Accent').value).toBe('71')
@@ -211,10 +209,10 @@ describe('AppearancePage — my palette', () => {
 
   it('saves the draft and selects it', async () => {
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
     fireEvent.change(slider('Accent'), { target: { value: '200' } })
-    await userEvent.click(screen.getByRole('radio', { name: 'Vivid' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('radio', { name: 'Vivid' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('ui.customPalette', '265,vivid,200,structure'))
     await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('custom'))
@@ -224,8 +222,8 @@ describe('AppearancePage — my palette', () => {
   it('keeps the editor open and the palette unchanged when saving fails', async () => {
     renderPage()
     mocks.setPreference.mockRejectedValue(new Error('offline'))
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Could not save your palette.')).toBeInTheDocument()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
@@ -234,7 +232,7 @@ describe('AppearancePage — my palette', () => {
 
   it('reopens the editor on the saved palette', async () => {
     renderPage('100,neutral,300')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Edit my palette' }))
 
     expect(slider('Structure').value).toBe('100')
     expect(screen.getByRole('radio', { name: 'Neutral' })).toBeChecked()
@@ -243,7 +241,7 @@ describe('AppearancePage — my palette', () => {
   // The preview shows the draft; the grid keeps showing what is saved.
   it('previews the draft, not the saved palette', async () => {
     renderPage('100,neutral,300')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Edit my palette' }))
     fireEvent.change(slider('Structure'), { target: { value: '10' } })
 
     const draft = screen.getByRole('dialog').querySelector<HTMLElement>('.palette-preview')!
@@ -254,7 +252,7 @@ describe('AppearancePage — my palette', () => {
 
   it('warns when the accent sits on the error red', async () => {
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
     expect(screen.queryByText(/close to the red used for errors/)).toBeNull()
 
     fireEvent.change(slider('Accent'), { target: { value: '27' } })
@@ -265,8 +263,8 @@ describe('AppearancePage — my palette', () => {
   it('locks Cancel while the save is in flight', async () => {
     renderPage()
     mocks.setPreference.mockReturnValue(new Promise(() => {}))
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
   })
@@ -288,8 +286,8 @@ describe('AppearancePage — my palette', () => {
   // Selecting `custom` with no stylesheet declared would leave every role token undefined.
   it('declares the palette before selecting it', async () => {
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(document.documentElement.getAttribute('data-palette')).toBe('custom'))
     expect(document.getElementById('custom-palette')).not.toBeNull()
@@ -297,7 +295,7 @@ describe('AppearancePage — my palette', () => {
 
   it('opens on the structure slider, which speaks in degrees', async () => {
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
 
     expect(slider('Structure')).toHaveFocus()
     expect(slider('Structure')).toHaveAttribute('aria-valuetext', '265°')
@@ -306,7 +304,7 @@ describe('AppearancePage — my palette', () => {
   // A slot that appears and disappears resizes the dialog, which re-centres under the dragging pointer.
   it('keeps the warning slot mounted and announces it politely', async () => {
     const { container } = renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
     const slot = container.ownerDocument.querySelector('.custom-palette-warning')
 
     expect(slot).toHaveAttribute('aria-live', 'polite')
@@ -318,36 +316,36 @@ describe('AppearancePage — my palette', () => {
 
   it('saves accent buttons when asked, and previews them in light mode only', async () => {
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
     expect(screen.getByRole('radiogroup', { name: 'Buttons in light mode' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('radio', { name: 'Accent' }))
+    await user.click(screen.getByRole('radio', { name: 'Accent' }))
 
     const [light, dark] = screen.getByRole('dialog').querySelectorAll<HTMLElement>('.palette-preview')
     expect(light!.style.getPropertyValue('--action-primary')).toBe(light!.style.getPropertyValue('--accent-unread'))
     expect(dark!.style.getPropertyValue('--action-primary')).toBe(dark!.style.getPropertyValue('--accent-unread'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('ui.customPalette', '265,muted,35,accent'))
   })
 
   it('starts from Slate with accent buttons, as Slate wears them', async () => {
     localStorage.setItem('appearance_palette', 'slate')
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'Create my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
 
     expect(screen.getByRole('radio', { name: 'Accent' })).toBeChecked()
   })
 
   it('reopens on the saved buttons choice', async () => {
     renderPage('100,neutral,300,accent')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit my palette' }))
+    await user.click(await screen.findByRole('button', { name: 'Edit my palette' }))
 
     expect(screen.getByRole('radio', { name: 'Accent' })).toBeChecked()
   })
 
   it('selects the saved palette like any other', async () => {
     renderPage('100,neutral,300')
-    await userEvent.click(await screen.findByRole('radio', { name: 'My palette' }))
+    await user.click(await screen.findByRole('radio', { name: 'My palette' }))
     expect(localStorage.getItem('appearance_palette')).toBe('custom')
   })
 })

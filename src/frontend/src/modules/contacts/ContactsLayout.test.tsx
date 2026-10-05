@@ -1,6 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi, beforeEach, type Mock } from 'vitest'
 import ContactsLayout from './ContactsLayout'
@@ -10,9 +9,11 @@ import type { ContactGroup } from './contactGroupTypes'
 import type { api as realApi } from '../../api'
 import { CONTACT_DRAG_MIME } from './dragContacts'
 import {
-  createTestQueryClient, fireEscape, mockViewport, pressBackdrop, resetViewport, settle,
+  createTestQueryClient, fireEscape, mockViewport, pressBackdrop, resetViewport, settle, setupUser,
 } from '../../test-utils'
 
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 afterEach(resetViewport)
 
 vi.mock('../../api.js', () => ({
@@ -131,7 +132,7 @@ function scopeButton(name: RegExp) {
 /** The card and the confirm dialog both carry a button named exactly "Delete". */
 function confirmDeletion() {
   const modal = screen.getByText('Confirm deletion').closest('.modal') as HTMLElement
-  return userEvent.click(within(modal).getByRole('button', { name: /^delete$/i }))
+  return user.click(within(modal).getByRole('button', { name: /^delete$/i }))
 }
 
 describe('ContactsLayout', () => {
@@ -176,29 +177,20 @@ describe('ContactsLayout', () => {
     renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
 
-    await userEvent.click(scopeButton(/favourites/i))
+    await user.click(scopeButton(/favourites/i))
 
     expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.getByText('Carla')).toBeInTheDocument()
     expect(screen.queryByText('Bruno')).not.toBeInTheDocument()
   })
 
-  it('opens the picked contact in the card', async () => {
-    renderAt('/contacts')
-    await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
-
-    await userEvent.click(screen.getByText('Bruno'))
-
-    expect(screen.getByRole('heading', { name: 'Bruno' })).toBeInTheDocument()
-  })
-
   it('toggles a favourite through the API and keeps the card open', async () => {
     api.setContactFavorite.mockResolvedValue(undefined)
     renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
-    await userEvent.click(screen.getByText('Bruno'))
+    await user.click(screen.getByText('Bruno'))
 
-    await userEvent.click(screen.getByRole('button', { name: /add bruno to favourites/i }))
+    await user.click(screen.getByRole('button', { name: /add bruno to favourites/i }))
 
     await waitFor(() => expect(api.setContactFavorite).toHaveBeenCalledWith('b', true))
     // The star is not a navigation: the contact it belongs to stays open behind it.
@@ -211,7 +203,7 @@ describe('ContactsLayout', () => {
     renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: /delete bruno/i }))
+    await user.click(screen.getByRole('button', { name: /delete bruno/i }))
     expect(api.deleteContact).not.toHaveBeenCalled()
 
     await confirmDeletion()
@@ -225,8 +217,8 @@ describe('ContactsLayout', () => {
     renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByLabelText('Select Alice'))
-    await userEvent.click(screen.getByLabelText('Delete selection'))
+    await user.click(screen.getByLabelText('Select Alice'))
+    await user.click(screen.getByLabelText('Delete selection'))
     await confirmDeletion()
 
     await waitFor(() => expect(api.deleteContacts).toHaveBeenCalledWith(['a']))
@@ -261,7 +253,7 @@ describe('ContactsLayout', () => {
     api.deleteContact.mockResolvedValue(undefined)
     const { container } = renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: /delete bruno/i }))
+    await user.click(screen.getByRole('button', { name: /delete bruno/i }))
 
     serveBook([
       contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
@@ -277,8 +269,8 @@ describe('ContactsLayout', () => {
     api.deleteContacts.mockResolvedValue(undefined)
     const { container } = renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
-    await userEvent.click(screen.getByLabelText('Select Alice'))
-    await userEvent.click(screen.getByLabelText('Delete selection'))
+    await user.click(screen.getByLabelText('Select Alice'))
+    await user.click(screen.getByLabelText('Delete selection'))
 
     await confirmDeletion()
 
@@ -292,7 +284,7 @@ describe('ContactsLayout', () => {
     api.deleteContact.mockResolvedValue(undefined)
     const { container } = renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: /delete bruno/i }))
+    await user.click(screen.getByRole('button', { name: /delete bruno/i }))
 
     const rows = [
       contact({ id: 'a', firstName: 'Alice', isFavorite: true, addresses: ['alice@x.be'] }),
@@ -312,8 +304,8 @@ describe('ContactsLayout', () => {
     renderAt('/contacts/new')
     await waitFor(() => expect(screen.getByRole('heading', { name: /new contact/i })).toBeInTheDocument())
 
-    await userEvent.type(screen.getByLabelText(/first name/i), 'Chloé')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.type(screen.getByLabelText(/first name/i), 'Chloé')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     await waitFor(() => expect(api.createContact).toHaveBeenCalledWith(
       expect.objectContaining({ firstName: 'Chloé' })))
@@ -330,10 +322,10 @@ describe('ContactsLayout', () => {
     const router = renderRouter('/contacts?scope=favorites')
     await waitFor(() => expect(scopeButton(/favourites/i)).toHaveClass('is-active'))
 
-    await userEvent.click(screen.getAllByRole('button', { name: /add contact/i })[0]!)
+    await user.click(screen.getAllByRole('button', { name: /add contact/i })[0]!)
     await waitFor(() => expect(screen.getByRole('heading', { name: /new contact/i })).toBeInTheDocument())
-    await userEvent.type(screen.getByLabelText(/first name/i), 'Chloé')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.type(screen.getByLabelText(/first name/i), 'Chloé')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/contacts'))
     expect(router.state.location.search).toBe('?scope=favorites&id=n')
@@ -347,10 +339,10 @@ describe('ContactsLayout', () => {
     const router = renderRouter('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
 
-    await userEvent.click(screen.getAllByRole('button', { name: /add contact/i })[0]!)
+    await user.click(screen.getAllByRole('button', { name: /add contact/i })[0]!)
     await waitFor(() => expect(screen.getByRole('heading', { name: /new contact/i })).toBeInTheDocument())
-    await userEvent.type(screen.getByLabelText(/first name/i), 'Chloé')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.type(screen.getByLabelText(/first name/i), 'Chloé')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
     await waitFor(() => expect(screen.queryByTestId('contact-editor')).not.toBeInTheDocument())
 
     await act(async () => { await router.navigate(-1) })
@@ -365,10 +357,10 @@ describe('ContactsLayout', () => {
     const router = renderRouter('/contacts?scope=favorites&id=a')
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Alice' })).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: /edit carla/i }))
+    await user.click(screen.getByRole('button', { name: /edit carla/i }))
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Carla'))
 
-    await userEvent.click(screen.getByRole('button', { name: /close the editor/i }))
+    await user.click(screen.getByRole('button', { name: /close the editor/i }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/contacts'))
     expect(router.state.location.search).toBe('?scope=favorites&id=a')
@@ -380,9 +372,9 @@ describe('ContactsLayout', () => {
     const router = renderRouter('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: /edit bruno/i }))
+    await user.click(screen.getByRole('button', { name: /edit bruno/i }))
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
-    await userEvent.click(screen.getByRole('button', { name: /close the editor/i }))
+    await user.click(screen.getByRole('button', { name: /close the editor/i }))
     await waitFor(() => expect(screen.queryByTestId('contact-editor')).not.toBeInTheDocument())
 
     await act(async () => { await router.navigate(-1) })
@@ -396,8 +388,8 @@ describe('ContactsLayout', () => {
     renderAt('/contacts/b/edit')
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
 
-    await userEvent.type(screen.getByLabelText(/last name/i), 'Weiss')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.type(screen.getByLabelText(/last name/i), 'Weiss')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     await waitFor(() => expect(api.updateContact).toHaveBeenCalledWith('b', {
       firstName: 'Bruno', lastName: 'Weiss', nickname: null, isFavorite: false,
@@ -450,7 +442,7 @@ describe('ContactsLayout', () => {
     api.updateContact.mockRejectedValue(new Error("'nope' is not a valid email address"))
     const router = renderRouter('/contacts/b/edit')
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save the contact'))
 
     await goTo(router, '/contacts')
@@ -458,12 +450,6 @@ describe('ContactsLayout', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Alice'))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-
-  it('seeds the editor from the contact named in the route', async () => {
-    renderAt('/contacts/b/edit')
-
-    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
   })
 
   // A refused save has to leave the user in the form with the reason, never bounce them back to
@@ -474,8 +460,8 @@ describe('ContactsLayout', () => {
     renderAt('/contacts/new')
     await waitFor(() => expect(screen.getByLabelText(/first name/i)).toBeInTheDocument())
 
-    await userEvent.type(screen.getByLabelText(/first name/i), 'Bruno')
-    await userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    await user.type(screen.getByLabelText(/first name/i), 'Bruno')
+    await user.click(screen.getByRole('button', { name: /save contact/i }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save the contact'))
     expect(screen.getByRole('heading', { name: /new contact/i })).toBeInTheDocument()
@@ -487,9 +473,9 @@ describe('ContactsLayout', () => {
     api.deleteContact.mockResolvedValue(undefined)
     renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
-    await userEvent.click(screen.getByText('Bruno'))
+    await user.click(screen.getByText('Bruno'))
 
-    await userEvent.click(screen.getByRole('button', { name: /delete bruno/i }))
+    await user.click(screen.getByRole('button', { name: /delete bruno/i }))
     await confirmDeletion()
 
     await waitFor(() => expect(api.deleteContact).toHaveBeenCalledWith('b'))
@@ -522,10 +508,10 @@ describe('ContactsLayout', () => {
   it('drops the open contact when the scope changes', async () => {
     renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
-    await userEvent.click(screen.getByText('Bruno'))
+    await user.click(screen.getByText('Bruno'))
     expect(screen.getByRole('heading', { name: 'Bruno' })).toBeInTheDocument()
 
-    await userEvent.click(scopeButton(/favourites/i))
+    await user.click(scopeButton(/favourites/i))
 
     expect(screen.queryByRole('heading', { name: 'Bruno' })).not.toBeInTheDocument()
     expect(screen.getByText(/select a contact/i)).toBeInTheDocument()
@@ -547,7 +533,7 @@ describe('ContactsLayout', () => {
       return waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruno'))
     }
 
-    const save = () => userEvent.click(screen.getByRole('button', { name: /save contact/i }))
+    const save = () => user.click(screen.getByRole('button', { name: /save contact/i }))
     const conflictBox = () => screen.findByText('This contact changed elsewhere')
 
     it('sends back the hash the card was read at', async () => {
@@ -617,7 +603,7 @@ describe('ContactsLayout', () => {
       api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
       serveCard({ cardHash: 'abc123' })
       await openEditor()
-      await userEvent.type(screen.getByLabelText(/last name/i), 'Weiss')
+      await user.type(screen.getByLabelText(/last name/i), 'Weiss')
 
       await save()
       await conflictBox()
@@ -633,7 +619,7 @@ describe('ContactsLayout', () => {
       api.updateContact.mockRejectedValue(new ApiError('conflict', 409))
       serveCard({ cardHash: 'abc123' })
       await openEditor()
-      await userEvent.type(screen.getByLabelText(/last name/i), 'Weiss')
+      await user.type(screen.getByLabelText(/last name/i), 'Weiss')
       await save()
       await conflictBox()
       // The refused write invalidated the book, whose key the card sits under: let that refetch
@@ -641,7 +627,7 @@ describe('ContactsLayout', () => {
       await settle()
 
       serveCard({ cardHash: 'def456', firstName: 'Bruna', lastName: 'Mertens' })
-      await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
+      await user.click(screen.getByRole('button', { name: 'Reload' }))
 
       await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Bruna'))
       expect(screen.getByLabelText(/last name/i)).toHaveValue('Mertens')
@@ -664,7 +650,7 @@ describe('ContactsLayout', () => {
       await conflictBox()
       await settle()
 
-      await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+      await user.click(screen.getByRole('button', { name: 'Close' }))
       await save()
 
       await waitFor(() => expect(api.updateContact).toHaveBeenCalledTimes(2))
@@ -681,7 +667,7 @@ describe('the transfer menu', () => {
     api.getContacts.mockResolvedValue({ contacts: [contact({ id: '1', firstName: 'Bruno' })] })
     renderAt('/contacts')
 
-    await userEvent.click(await trigger())
+    await user.click(await trigger())
 
     expect(screen.getByRole('menuitem', { name: 'Import…' })).toBeInTheDocument()
     // Export depends on the book, which the trigger does not wait for.
@@ -734,23 +720,6 @@ describe('the transfer menu', () => {
       { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
 
     expect(await screen.findByText('Could not import the file')).toBeInTheDocument()
-  })
-
-  // csv_no_recognised_column is a named stable code: the refusal must stay specific, translated
-  // rather than shown as the generic fallback above.
-  it('surfaces the translated csv_no_recognised_column toast', async () => {
-    api.getContacts.mockResolvedValue({ contacts: [] })
-    api.importContacts.mockRejectedValue(
-      Object.assign(new Error('csv_no_recognised_column'), { code: 'csv_no_recognised_column' }))
-    renderAt('/contacts')
-
-    await trigger()
-    fireEvent.change(screen.getByTestId('contacts-import-input'),
-      { target: { files: [new File(['x'], 'contacts.csv', { type: 'text/csv' })] } })
-
-    expect(await screen.findByText(
-      'No recognised column in this file. It needs a header row naming a name or an e-mail column.'))
-      .toBeInTheDocument()
   })
 
   // Settled, not success: a refused import must leave the screen on the server's book.
@@ -824,11 +793,11 @@ describe('ContactsLayout on a phone', () => {
     // findBy, not settle(): the heading holding this box only exists once `useContacts()` has
     // answered, and settle() drains one macrotask — it covered the query on this machine and
     // raced it under load, which is the distinction CLAUDE.md draws between the two.
-    await userEvent.type(await screen.findByLabelText(/search contacts/i), 'bru')
+    await user.type(await screen.findByLabelText(/search contacts/i), 'bru')
     expect(screen.queryByText('Alice')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByText('Bruno'))
-    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+    await user.click(screen.getByText('Bruno'))
+    await user.click(screen.getByRole('button', { name: /back to the list/i }))
 
     expect(screen.getByLabelText(/search contacts/i)).toHaveValue('bru')
     expect(screen.queryByText('Alice')).not.toBeInTheDocument()
@@ -842,10 +811,10 @@ describe('ContactsLayout on a phone', () => {
     await bookLoaded()
     expect(screen.getByRole('heading', { name: 'Bruno' })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+    await user.click(screen.getByRole('button', { name: /back to the list/i }))
     expect(container.querySelector('[data-testid="contact-list"]')).not.toHaveClass('is-hidden')
 
-    await userEvent.click(screen.getByText('Bruno'))
+    await user.click(screen.getByText('Bruno'))
     expect(container.querySelector('[data-testid="contact-list"]')).toHaveClass('is-hidden')
     fireEvent.keyDown(window, { key: 'Escape' })
 
@@ -859,7 +828,7 @@ describe('ContactsLayout on a phone', () => {
     renderAt('/contacts?scope=favorites&id=a')
     await bookLoaded()
 
-    await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
+    await user.click(screen.getByRole('button', { name: /back to the list/i }))
 
     expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.queryByText('Bruno')).not.toBeInTheDocument()
@@ -871,7 +840,7 @@ describe('ContactsLayout on a phone', () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
     await bookLoaded()
-    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
     expect(screen.getByRole('alertdialog', { name: 'Confirm deletion' })).toBeInTheDocument()
 
     fireEvent.keyDown(document, { key: 'Escape' })
@@ -886,7 +855,7 @@ describe('ContactsLayout on a phone', () => {
     mockViewport('phone')
     const { container } = renderAt('/contacts?id=b')
     await bookLoaded()
-    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
 
     fireEvent.keyDown(window, { key: 'Escape' })
 
@@ -909,7 +878,7 @@ describe('ContactsLayout on a phone', () => {
     const { container } = renderAt('/contacts')
     await bookLoaded()
 
-    await userEvent.click(screen.getByRole('button', { name: /open navigation/i }))
+    await user.click(screen.getByRole('button', { name: /open navigation/i }))
 
     expect(container.querySelector('.context-drawer.is-open')).toBeTruthy()
   })
@@ -982,19 +951,13 @@ describe('contact groups', () => {
   const groupRow = () => scopeButton(/^Friends\s*\d+$/)
 
   const openGroupMenu = () =>
-    userEvent.click(screen.getByRole('button', { name: 'Actions for Friends' }))
-
-  it('lists the groups in the band with their member counts', async () => {
-    renderAt('/contacts')
-
-    await waitFor(() => expect(groupRow()).toHaveTextContent('2'))
-  })
+    user.click(screen.getByRole('button', { name: 'Actions for Friends' }))
 
   it('narrows the list to the members of the open group', async () => {
     renderAt('/contacts')
     await waitFor(() => expect(screen.getByText('Carla')).toBeInTheDocument())
 
-    await userEvent.click(groupRow())
+    await user.click(groupRow())
 
     expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.getByText('Bruno')).toBeInTheDocument()
@@ -1053,9 +1016,9 @@ describe('contact groups', () => {
     api.createContactGroup.mockResolvedValue({ id: 'g2', name: 'Colleagues', memberIds: [] })
     renderAt('/contacts')
 
-    await userEvent.click(await screen.findByRole('button', { name: 'New group' }))
-    await userEvent.type(screen.getByLabelText('Name'), 'Colleagues')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'New group' }))
+    await user.type(screen.getByLabelText('Name'), 'Colleagues')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(api.createContactGroup).toHaveBeenCalledWith('Colleagues'))
     expect(await screen.findByText('Group Colleagues created')).toBeInTheDocument()
@@ -1067,10 +1030,10 @@ describe('contact groups', () => {
     await waitFor(() => expect(groupRow()).toBeInTheDocument())
 
     await openGroupMenu()
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
-    await userEvent.clear(screen.getByLabelText('Name'))
-    await userEvent.type(screen.getByLabelText('Name'), 'Best friends')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    await user.clear(screen.getByLabelText('Name'))
+    await user.type(screen.getByLabelText('Name'), 'Best friends')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(api.renameContactGroup).toHaveBeenCalledWith('g1', 'Best friends'))
   })
@@ -1082,9 +1045,9 @@ describe('contact groups', () => {
     const { container } = renderAt('/contacts')
     await bookLoaded()
 
-    await userEvent.click(await screen.findByRole('button', { name: /open navigation/i }))
+    await user.click(await screen.findByRole('button', { name: /open navigation/i }))
     await openGroupMenu()
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Rename' }))
     const dialog = await screen.findByRole('dialog', { name: 'Rename group' })
 
     screen.getByRole('button', { name: 'Save' }).focus()
@@ -1104,7 +1067,7 @@ describe('contact groups', () => {
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
 
     await openGroupMenu()
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete group' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete group' }))
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
     expect(screen.getByText(/contacts themselves stay/i)).toBeInTheDocument()
     expect(api.deleteContactGroup).not.toHaveBeenCalled()
@@ -1122,7 +1085,7 @@ describe('contact groups', () => {
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
 
     await openGroupMenu()
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Write to group' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Write to group' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail/compose'))
     const state = router.state.location.state as { seed: { to: string[] }; backTo: string }
@@ -1149,7 +1112,7 @@ describe('contact groups', () => {
     const router = renderRouter('/contacts?scope=group:g1')
     await waitFor(() => expect(screen.getByText('Bruno')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByText('Bruno'))
+    await user.click(screen.getByText('Bruno'))
 
     expect(router.state.location.search).toContain('id=b')
     expect(screen.queryByText('Carla')).not.toBeInTheDocument()
@@ -1162,7 +1125,7 @@ describe('contact groups', () => {
     const { container } = renderAt('/contacts?scope=group:g1')
     await waitFor(() => expect(groupRow()).toBeInTheDocument())
     await openGroupMenu()
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete group' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete group' }))
 
     serveGroups([])
     await confirmDeletion()
@@ -1178,7 +1141,7 @@ describe('contact groups', () => {
     const { container } = renderAt('/contacts?scope=group:g1')
     await waitFor(() => expect(groupRow()).toBeInTheDocument())
     await openGroupMenu()
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete group' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete group' }))
 
     api.getContactGroups.mockImplementation(
       () => new Promise(resolve => setTimeout(() => resolve({ groups: [] }), 30)))

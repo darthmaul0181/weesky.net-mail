@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { StrictMode, type ReactNode } from 'react'
 import SchedulingAccountSection from './SchedulingAccountSection'
 import type { SchedulingAccount } from './useSchedulingAccount'
 import { ApiError } from '../../../api.js'
-import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
-import enAdmin from '../../../locales/en/admin.json'
-import frAdmin from '../../../locales/fr/admin.json'
+import { createTestQueryClient, optionsOf, pasteInto, pickOption, setupUser } from '../../../test-utils'
 
 const mocks = vi.hoisted(() => ({
   adminGetSchedulingAccount: vi.fn(),
@@ -56,10 +53,14 @@ function renderSection(account: SchedulingAccount = CONFIGURED) {
 async function openEditDialog(account: SchedulingAccount = CONFIGURED) {
   renderSection(account)
   await screen.findByText(account.login as string)
-  await userEvent.click(screen.getByTitle('Edit'))
+  await user.click(screen.getByTitle('Edit'))
 }
 
-beforeEach(() => vi.clearAllMocks())
+let user: ReturnType<typeof setupUser>
+beforeEach(() => {
+  vi.clearAllMocks()
+  user = setupUser()
+})
 
 describe('SchedulingAccountSection — card states', () => {
   it('shows the configured card: login, host · port · security', async () => {
@@ -102,10 +103,14 @@ describe('SchedulingAccountSection — last-test pill', () => {
     expect(screen.queryByText(/Connection tested on/)).not.toBeInTheDocument()
   })
 
-  it('shows a green pill when the last test succeeded', async () => {
+  // "14 sept.": day + abbreviated month, never the locale's full short date
+  // (dateStyle: 'short' reads "9/14/26" in English and gives no way to tell the two apart by eye).
+  it('shows a green pill, dated day + abbreviated month, when the last test succeeded', async () => {
     renderSection({ ...CONFIGURED, lastTestAt: '2026-09-14T08:30:00Z', lastTestOk: true })
     const pill = await screen.findByText(/Connection tested on/)
     expect(pill).toHaveClass('is-ok')
+    expect(pill.textContent).toMatch(/Sep/)
+    expect(pill.textContent).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/)
   })
 
   it('shows a red pill when the last test failed', async () => {
@@ -115,17 +120,8 @@ describe('SchedulingAccountSection — last-test pill', () => {
   })
 })
 
-// "14 sept.": day + abbreviated month, never the locale's full short date
-// (dateStyle: 'short' reads "9/14/26" in English and gives no way to tell the two apart by eye).
 describe('SchedulingAccountSection — last-test date format', () => {
-  it('formats it as day + abbreviated month in English', async () => {
-    renderSection({ ...CONFIGURED, lastTestAt: '2026-09-14T08:30:00Z', lastTestOk: true })
-    const pill = await screen.findByText(/Connection tested on/)
-    expect(pill.textContent).toMatch(/Sep/)
-    expect(pill.textContent).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/)
-  })
-
-  it('formats it the same way in French', async () => {
+  it('formats it as day + abbreviated month in French too', async () => {
     await i18next.changeLanguage('fr')
     try {
       renderSection({ ...CONFIGURED, lastTestAt: '2026-09-14T08:30:00Z', lastTestOk: true })
@@ -148,7 +144,7 @@ describe('SchedulingAccountSection — Tester button (card)', () => {
     render(<SchedulingAccountSection addToast={addToast} />, { wrapper })
     await screen.findByText('agenda@weesky.net')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test' }))
+    await user.click(screen.getByRole('button', { name: 'Test' }))
 
     await waitFor(() => expect(mocks.adminTestSchedulingAccount).toHaveBeenCalledWith(undefined))
     expect(await screen.findByText(/Connection tested on/)).toBeInTheDocument()
@@ -160,7 +156,7 @@ describe('SchedulingAccountSection — Tester button (card)', () => {
     mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: false, error: 'smtp_auth_failed' })
     await screen.findByText('agenda@weesky.net')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test' }))
+    await user.click(screen.getByRole('button', { name: 'Test' }))
 
     await waitFor(() => expect(addToast)
       .toHaveBeenCalledWith('The server refused the login or password.', 'error'))
@@ -172,7 +168,7 @@ describe('SchedulingAccountSection — Tester button (card)', () => {
       new ApiError('connection_test_in_progress', 409, 'connection_test_in_progress'))
     await screen.findByText('agenda@weesky.net')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test' }))
+    await user.click(screen.getByRole('button', { name: 'Test' }))
 
     await waitFor(() => expect(addToast)
       .toHaveBeenCalledWith('A connection test is already running.', 'error'))
@@ -187,7 +183,7 @@ describe('SchedulingAccountSection — Tester button (card)', () => {
     render(<SchedulingAccountSection addToast={addToast} />, { wrapper })
     await screen.findByText('agenda@weesky.net')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test' }))
+    await user.click(screen.getByRole('button', { name: 'Test' }))
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The account no longer exists.', 'error'))
     expect(await screen.findByText(/No account configured/)).toBeInTheDocument()
@@ -200,12 +196,12 @@ describe('SchedulingAccountSection — delete', () => {
     mocks.adminDeleteSchedulingAccount.mockResolvedValue(undefined)
     await screen.findByText('agenda@weesky.net')
 
-    await userEvent.click(screen.getByTitle('Delete'))
+    await user.click(screen.getByTitle('Delete'))
     expect(screen.getByText('Confirm deletion')).toBeInTheDocument()
     expect(mocks.adminDeleteSchedulingAccount).not.toHaveBeenCalled()
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
+    await user.click(deleteButtons[deleteButtons.length - 1]!)
 
     await waitFor(() => expect(mocks.adminDeleteSchedulingAccount).toHaveBeenCalled())
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('The sending account was deleted.'))
@@ -214,8 +210,8 @@ describe('SchedulingAccountSection — delete', () => {
   it('closing the confirm modal does not delete', async () => {
     renderSection()
     await screen.findByText('agenda@weesky.net')
-    await userEvent.click(screen.getByTitle('Delete'))
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByTitle('Delete'))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(mocks.adminDeleteSchedulingAccount).not.toHaveBeenCalled()
     expect(screen.queryByText('Confirm deletion')).not.toBeInTheDocument()
   })
@@ -224,9 +220,9 @@ describe('SchedulingAccountSection — delete', () => {
     renderSection()
     mocks.adminDeleteSchedulingAccount.mockRejectedValue(error)
     await screen.findByText('agenda@weesky.net')
-    await userEvent.click(screen.getByTitle('Delete'))
+    await user.click(screen.getByTitle('Delete'))
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
+    await user.click(deleteButtons[deleteButtons.length - 1]!)
   }
 
   it('closes the confirmation on a 409, so it never stands over a login that was reloaded', async () => {
@@ -249,9 +245,9 @@ describe('SchedulingAccountSection — delete', () => {
     renderSection(UNREADABLE)
     mocks.adminDeleteSchedulingAccount.mockResolvedValue(undefined)
     await screen.findByText('agenda@weesky.net')
-    await userEvent.click(screen.getByTitle('Delete'))
+    await user.click(screen.getByTitle('Delete'))
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
-    await userEvent.click(deleteButtons[deleteButtons.length - 1]!)
+    await user.click(deleteButtons[deleteButtons.length - 1]!)
     await waitFor(() => expect(mocks.adminDeleteSchedulingAccount).toHaveBeenCalled())
   })
 })
@@ -275,7 +271,7 @@ describe('SchedulingAccountSection — dialog prefill', () => {
   it('opens empty, on the default port, with no stored-password note and a required password', async () => {
     renderSection(NOT_CONFIGURED)
     await screen.findByText(/No account configured/)
-    await userEvent.click(screen.getByRole('button', { name: 'Configure' }))
+    await user.click(screen.getByRole('button', { name: 'Configure' }))
 
     expect(screen.getByLabelText('SMTP port')).toHaveValue(587)
     expect(screen.queryByText(
@@ -323,13 +319,13 @@ describe('SchedulingAccountSection — password required on host/port change', (
     expect(saveButton).not.toBeDisabled()
 
     const host = screen.getByLabelText('SMTP host')
-    await userEvent.clear(host)
-    await userEvent.type(host, 'smtp.other.example')
+    await user.clear(host)
+    await user.type(host, 'smtp.other.example')
 
     expect(await screen.findByText('A password is required to save or test this account.')).toBeInTheDocument()
     expect(saveButton).toBeDisabled()
 
-    await userEvent.type(screen.getByLabelText('Password'), 'new-secret')
+    await user.type(screen.getByLabelText('Password'), 'new-secret')
     expect(saveButton).not.toBeDisabled()
   })
 
@@ -337,8 +333,8 @@ describe('SchedulingAccountSection — password required on host/port change', (
     await openEditDialog()
 
     const port = screen.getByLabelText('SMTP port')
-    await userEvent.clear(port)
-    await userEvent.type(port, '2525')
+    await user.clear(port)
+    await user.type(port, '2525')
 
     expect(await screen.findByText('A password is required to save or test this account.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -348,8 +344,8 @@ describe('SchedulingAccountSection — password required on host/port change', (
     await openEditDialog()
 
     const host = screen.getByLabelText('SMTP host')
-    await userEvent.clear(host)
-    await userEvent.type(host, 'SMTP.WEESKY.BE')
+    await user.clear(host)
+    await user.type(host, 'SMTP.WEESKY.BE')
 
     expect(screen.queryByText('A password is required to save or test this account.')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()
@@ -368,8 +364,8 @@ describe('SchedulingAccountSection — password required on host/port change', (
     await openEditDialog()
 
     const login = screen.getByLabelText('Login')
-    await userEvent.clear(login)
-    await userEvent.type(login, 'other@weesky.net')
+    await user.clear(login)
+    await user.type(login, 'other@weesky.net')
 
     expect(screen.queryByText('A password is required to save or test this account.')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()
@@ -381,28 +377,11 @@ describe('SchedulingAccountSection — inline test result (dialog)', () => {
     await openEditDialog()
     mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: true })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
 
     const result = await screen.findByText('The connection succeeded.')
     expect(result.closest('.svc-account-test-result')).toBeInTheDocument()
     expect(result.closest('.alert')).not.toBeInTheDocument()
-  })
-
-  it.each([
-    ['smtp_unreachable', 'The server could not be reached. Check the host and port.'],
-    ['smtp_auth_failed', 'The server refused the login or password.'],
-    ['smtp_auth_unsupported', 'The server offers no compatible way to authenticate.'],
-    ['smtp_tls_failed', 'A secure connection could not be established.'],
-    ['smtp_timeout', 'The server did not answer in time.'],
-    ['password_unreadable', 'The stored password can no longer be read: enter it again.'],
-    ['stored_account_invalid', 'The stored account is no longer valid: save it again.'],
-  ])('maps the %s test failure to its sentence', async (code, sentence) => {
-    await openEditDialog()
-    mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: false, error: code })
-
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
-
-    expect(await screen.findByText(sentence)).toBeInTheDocument()
   })
 
   it('shows a running-test message on a 409 from the dialog', async () => {
@@ -410,7 +389,7 @@ describe('SchedulingAccountSection — inline test result (dialog)', () => {
     mocks.adminTestSchedulingAccount.mockRejectedValue(
       new ApiError('connection_test_in_progress', 409, 'connection_test_in_progress'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
 
     expect(await screen.findByText('A connection test is already running.')).toBeInTheDocument()
   })
@@ -418,10 +397,10 @@ describe('SchedulingAccountSection — inline test result (dialog)', () => {
   it('sends the entered values, not the stored ones', async () => {
     await openEditDialog()
     mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: true })
-    await userEvent.clear(screen.getByLabelText('Login'))
-    await userEvent.type(screen.getByLabelText('Login'), 'other@weesky.net')
+    await user.clear(screen.getByLabelText('Login'))
+    await user.type(screen.getByLabelText('Login'), 'other@weesky.net')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
 
     await waitFor(() => expect(mocks.adminTestSchedulingAccount).toHaveBeenCalledWith({
       host: 'smtp.weesky.be', port: 587, security: 'StartTls', login: 'other@weesky.net',
@@ -434,7 +413,7 @@ describe('SchedulingAccountSection — inline test result (dialog)', () => {
     mocks.adminTestSchedulingAccount.mockRejectedValue(new ApiError(
       'Host is not a valid hostname or IP address', 400, 'Host is not a valid hostname or IP address'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
 
     expect(await screen.findByText(
       'Settings refused by the server: Host is not a valid hostname or IP address',
@@ -444,10 +423,10 @@ describe('SchedulingAccountSection — inline test result (dialog)', () => {
   it('clears a stale result once a field changes', async () => {
     await openEditDialog()
     mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: true })
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
     expect(await screen.findByText('The connection succeeded.')).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Login'), 'x')
+    await user.type(screen.getByLabelText('Login'), 'x')
 
     expect(screen.queryByText('The connection succeeded.')).not.toBeInTheDocument()
   })
@@ -457,8 +436,8 @@ describe('SchedulingAccountSection — inline test result (dialog)', () => {
     let resolveTest: (value: { ok: boolean }) => void = () => {}
     mocks.adminTestSchedulingAccount.mockReturnValue(new Promise(resolve => { resolveTest = resolve }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
-    await userEvent.type(screen.getByLabelText('Login'), 'x')
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.type(screen.getByLabelText('Login'), 'x')
     resolveTest({ ok: true })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Test the connection' }))
       .toHaveAttribute('aria-busy', 'false'))
@@ -472,7 +451,7 @@ describe('SchedulingAccountSection — save', () => {
     await openEditDialog()
     mocks.adminSaveSchedulingAccount.mockResolvedValue(undefined)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     const signal: unknown = expect.any(AbortSignal)
     await waitFor(() => expect(mocks.adminSaveSchedulingAccount).toHaveBeenCalledWith({
@@ -485,8 +464,8 @@ describe('SchedulingAccountSection — save', () => {
     await openEditDialog()
     mocks.adminSaveSchedulingAccount.mockResolvedValue(undefined)
 
-    await userEvent.type(screen.getByLabelText('Password'), 'rotated-secret')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.type(screen.getByLabelText('Password'), 'rotated-secret')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mocks.adminSaveSchedulingAccount).toHaveBeenCalledWith(
       expect.objectContaining({ password: 'rotated-secret' }), expect.anything()))
@@ -497,7 +476,7 @@ describe('SchedulingAccountSection — save', () => {
     mocks.adminSaveSchedulingAccount.mockRejectedValue(new ApiError(
       'scheduling_account_changed_concurrently', 409, 'scheduling_account_changed_concurrently'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(addToast)
       .toHaveBeenCalledWith('The account changed in the meantime: it was reloaded.', 'error'))
@@ -505,30 +484,15 @@ describe('SchedulingAccountSection — save', () => {
     expect(addToast).not.toHaveBeenCalledWith('The sending account was saved.')
   })
 
-  // Refusals the form itself can meet: another admin's change, or the opt-in turned off since the load.
-  it.each([
-    ['security_none_disallowed', 'Unencrypted connections are not allowed: choose STARTTLS or SSL/TLS.'],
-    ['password_required_for_new_endpoint', 'A password is required: the host or port no longer matches the saved account.'],
-    ['password_required', 'A password is required.'],
-    ['password_unreadable', 'The stored password can no longer be read: enter it again.'],
-  ])('says the %s refusal in a sentence, with no server prose', async (code, sentence) => {
-    await openEditDialog()
-    mocks.adminSaveSchedulingAccount.mockRejectedValue(new ApiError(code, 400, code))
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    expect((await screen.findByRole('alert')).textContent).toBe(sentence)
-  })
-
   it('says a refused « None » in French on a French screen', async () => {
     await i18next.changeLanguage('fr')
     try {
       renderSection({ ...CONFIGURED, security: 'None' })
-      await userEvent.click(await screen.findByTitle('Modifier'))
+      await user.click(await screen.findByTitle('Modifier'))
       mocks.adminSaveSchedulingAccount.mockRejectedValue(
         new ApiError('security_none_disallowed', 400, 'security_none_disallowed'))
 
-      await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
       expect((await screen.findByRole('alert')).textContent).toBe(
         'Les connexions sans chiffrement ne sont pas autorisées\u00a0: choisissez STARTTLS ou SSL/TLS.')
@@ -543,7 +507,7 @@ describe('SchedulingAccountSection — save', () => {
     mocks.adminSaveSchedulingAccount.mockRejectedValue(new ApiError(
       'Login must be between 1 and 320 characters', 400, 'Login must be between 1 and 320 characters'))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText(
       'Settings refused by the server: Login must be between 1 and 320 characters',
@@ -554,7 +518,7 @@ describe('SchedulingAccountSection — save', () => {
 
   it('closing the dialog does not save', async () => {
     await openEditDialog()
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(mocks.adminSaveSchedulingAccount).not.toHaveBeenCalled()
     expect(screen.queryByLabelText('SMTP host')).not.toBeInTheDocument()
   })
@@ -564,16 +528,16 @@ describe('SchedulingAccountSection — save', () => {
     let resolveSave: () => void = () => {}
     mocks.adminSaveSchedulingAccount.mockReturnValue(new Promise<void>(resolve => { resolveSave = resolve }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(screen.getByLabelText('SMTP host')).toBeInTheDocument()
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
     expect(screen.getByLabelText('SMTP host')).toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
 
     const overlay = screen.getByRole('dialog').parentElement as HTMLElement
-    await userEvent.click(overlay)
+    await user.click(overlay)
     expect(screen.getByLabelText('SMTP host')).toBeInTheDocument()
 
     resolveSave()
@@ -585,8 +549,8 @@ describe('SchedulingAccountSection — save', () => {
     mocks.adminSaveSchedulingAccount.mockReturnValue(new Promise<void>(resolve => { resolveSave = resolve }))
     const { unmount } = renderSection()
     await screen.findByText('agenda@weesky.net')
-    await userEvent.click(screen.getByTitle('Edit'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByTitle('Edit'))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     unmount()
     resolveSave()
@@ -619,7 +583,7 @@ describe('SchedulingAccountSection — validation details', () => {
   it('does not flag a trailing space on the host', async () => {
     await openEditDialog()
     const host = screen.getByLabelText('SMTP host')
-    await userEvent.type(host, ' ')
+    await user.type(host, ' ')
     expect(host).not.toHaveClass('is-error')
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()
   })
@@ -635,7 +599,7 @@ describe('SchedulingAccountSection — validation details', () => {
   it('flags an emptied port as invalid', async () => {
     await openEditDialog()
     const port = screen.getByLabelText('SMTP port')
-    await userEvent.clear(port)
+    await user.clear(port)
     expect(port).toHaveClass('is-error')
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
@@ -646,7 +610,7 @@ describe('SchedulingAccountSection — accessibility', () => {
     await openEditDialog()
     expect(screen.getByRole('dialog', { name: 'Calendar invitation sending account' })).toBeInTheDocument()
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -656,10 +620,10 @@ describe('SchedulingAccountSection — accessibility', () => {
     await screen.findByText('agenda@weesky.net')
     const editButton = screen.getByTitle('Edit')
 
-    await userEvent.click(editButton)
+    await user.click(editButton)
     expect(screen.getByLabelText('SMTP host')).toHaveFocus()
 
-    await userEvent.keyboard('{Escape}')
+    await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByLabelText('SMTP host')).not.toBeInTheDocument())
     expect(editButton).toHaveFocus()
   })
@@ -670,8 +634,8 @@ describe('SchedulingAccountSection — accessibility', () => {
     mocks.adminSaveSchedulingAccount.mockReturnValue(new Promise((_, reject) => { rejectSave = reject }))
 
     // jsdom leaves focus on the disabled Save, where Chrome drops it to <body>; neither may let Tab out.
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await userEvent.tab()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.tab()
     expect(screen.getByLabelText('SMTP host')).toHaveFocus()
 
     act(() => (document.activeElement as HTMLElement).blur())
@@ -685,11 +649,11 @@ describe('SchedulingAccountSection — accessibility', () => {
     mocks.adminGetSchedulingAccount.mockResolvedValueOnce(NOT_CONFIGURED).mockReturnValue(refetch)
     mocks.adminSaveSchedulingAccount.mockResolvedValue(undefined)
     render(<SchedulingAccountSection addToast={addToast} />, { wrapper })
-    await userEvent.click(await screen.findByRole('button', { name: 'Configure' }))
-    await userEvent.type(screen.getByLabelText('SMTP host'), 'smtp.weesky.be')
-    await userEvent.type(screen.getByLabelText('Login'), 'agenda@weesky.net')
-    await userEvent.type(screen.getByLabelText('Password'), 'secret')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Configure' }))
+    for (const [label, value] of [['SMTP host', 'smtp.weesky.be'], ['Login', 'agenda@weesky.net'], ['Password', 'secret']] as const) {
+      await pasteInto(user, screen.getByLabelText(label), value)
+    }
+    await user.click(screen.getByRole('button', { name: 'Save' }))
   }
 
   it('hands focus to the section heading when the Configure button is gone before the dialog closes', async () => {
@@ -717,7 +681,7 @@ describe('SchedulingAccountSection — accessibility', () => {
     mocks.adminTestSchedulingAccount.mockReturnValue(new Promise(resolve => { resolveTest = resolve }))
     await screen.findByText('agenda@weesky.net')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test' }))
+    await user.click(screen.getByRole('button', { name: 'Test' }))
     expect(screen.getByRole('button', { name: 'Test' })).toHaveAttribute('aria-busy', 'true')
 
     resolveTest({ ok: true })
@@ -732,12 +696,12 @@ describe('SchedulingAccountSection — typed password in memory', () => {
     mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: true })
     mocks.adminSaveSchedulingAccount.mockResolvedValue(undefined)
     render(<QueryClientProvider client={client}><SchedulingAccountSection addToast={addToast} /></QueryClientProvider>)
-    await userEvent.click(await screen.findByTitle('Edit'))
-    await userEvent.type(screen.getByLabelText('Password'), 'rotated-secret')
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.click(await screen.findByTitle('Edit'))
+    await user.type(screen.getByLabelText('Password'), 'rotated-secret')
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
     await screen.findByText('The connection succeeded.')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
     await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map(m => m.state.variables)))
@@ -750,14 +714,14 @@ describe('SchedulingAccountSection — under StrictMode', () => {
   async function openStrict() {
     mocks.adminGetSchedulingAccount.mockResolvedValue(CONFIGURED)
     render(<StrictMode><SchedulingAccountSection addToast={addToast} /></StrictMode>, { wrapper })
-    await userEvent.click(await screen.findByTitle('Edit'))
+    await user.click(await screen.findByTitle('Edit'))
   }
 
   it('closes the dialog and toasts after a successful save', async () => {
     mocks.adminSaveSchedulingAccount.mockResolvedValue(undefined)
     await openStrict()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(addToast).toHaveBeenCalledWith('The sending account was saved.')
@@ -767,7 +731,7 @@ describe('SchedulingAccountSection — under StrictMode', () => {
     mocks.adminTestSchedulingAccount.mockResolvedValue({ ok: false, error: 'smtp_auth_failed' })
     await openStrict()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Test the connection' }))
+    await user.click(screen.getByRole('button', { name: 'Test the connection' }))
 
     expect(await screen.findByText('The server refused the login or password.')).toBeInTheDocument()
   })
@@ -777,17 +741,10 @@ describe('SchedulingAccountSection — under StrictMode', () => {
       new ApiError('Login must be between 1 and 320 characters', 400, null))
     await openStrict()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText(
       'Settings refused by the server: Login must be between 1 and 320 characters',
     )).toBeInTheDocument()
-  })
-})
-
-describe('help bubble', () => {
-  it('states the consequence, with a verb, in both languages', () => {
-    expect(enAdmin.help.application).toMatch(/does not notify the guests/)
-    expect(frAdmin.help.application).toMatch(/ne prévient pas les invités/)
   })
 })

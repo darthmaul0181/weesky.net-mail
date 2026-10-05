@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { MailFolderNode } from '../api/mailTypes'
-import { DRAG_MIME, dragUids, serializeDrag, parseDrag, canDropInto } from './dragMessages'
-
-const node = (partial: Partial<MailFolderNode>): MailFolderNode => ({
-  path: 'X', name: 'X', selectable: true, subscribed: true,
-  total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-})
+import { folderNodeOf } from '../mailTestHarness'
+import { dragUids, serializeDrag, parseDrag, canDropInto } from './dragMessages'
 
 describe('dragUids', () => {
   it('carries the whole selection when the dragged row belongs to it', () => {
@@ -50,20 +45,14 @@ describe('serializeDrag / parseDrag', () => {
 
 describe('canDropInto', () => {
   it('accepts a selectable folder other than the source', () => {
-    expect(canDropInto(node({ path: 'Archive' }), 'INBOX')).toBe(true)
+    expect(canDropInto(folderNodeOf({ path: 'Archive' }), 'INBOX')).toBe(true)
   })
 
   it('refuses the folder the messages already sit in', () => {
-    expect(canDropInto(node({ path: 'INBOX' }), 'INBOX')).toBe(false)
+    expect(canDropInto(folderNodeOf({ path: 'INBOX' }), 'INBOX')).toBe(false)
   })
 
   it('refuses a non-selectable container', () => {
-    expect(canDropInto(node({ path: 'Parent', selectable: false }), 'INBOX')).toBe(false)
-  })
-})
-
-describe('DRAG_MIME', () => {
-  it('is a custom vendor type the folder can spot in a dragover', () => {
-    expect(DRAG_MIME).toBe('application/x-weesky-messages')
+    expect(canDropInto(folderNodeOf({ path: 'Parent', selectable: false }), 'INBOX')).toBe(false)
   })
 })

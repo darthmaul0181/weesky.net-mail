@@ -18,17 +18,11 @@ describe('Tooltip', () => {
     expect(screen.getByRole('tooltip')).toHaveClass('is-top-right')
   })
 
-  it('places the bubble below and to the left on request', () => {
-    render(<Tooltip content="x" placement="bottom-left"><span>trigger</span></Tooltip>)
+  // 'bottom-right' is for a trigger flush against the column's right edge: the bubble opens
+  // down-LEFT, the one direction the mail column's overflow:hidden cannot clip.
+  it.each(['bottom-left', 'bottom-right'] as const)('places the bubble %s on request', placement => {
+    render(<Tooltip content="x" placement={placement}><span>trigger</span></Tooltip>)
 
-    expect(screen.getByRole('tooltip')).toHaveClass('is-bottom-left')
-  })
-
-  // For a trigger flush against the column's right edge: the bubble opens down-LEFT,
-  // the one direction the mail column's overflow:hidden cannot clip.
-  it('places the bubble below and to the right on request', () => {
-    render(<Tooltip content="x" placement="bottom-right"><span>trigger</span></Tooltip>)
-
-    expect(screen.getByRole('tooltip')).toHaveClass('is-bottom-right')
+    expect(screen.getByRole('tooltip')).toHaveClass(`is-${placement}`)
   })
 })

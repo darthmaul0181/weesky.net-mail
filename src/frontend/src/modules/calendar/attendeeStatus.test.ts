@@ -11,6 +11,11 @@ describe('guestAnswerOf', () => {
     expect(guestAnswerOf('DECLINED', t)).toBe('guestAnswer.declined')
     expect(guestAnswerOf('NEEDS-ACTION', t)).toBe('guestAnswer.pending')
     expect(guestAnswerOf(undefined, t)).toBe('guestAnswer.pending')
+  })
+})
+
+describe('dotClassOf', () => {
+  it('colours a guest’s dot after the answer, pending for anything else', () => {
     expect(dotClassOf('DELEGATED')).toBe('is-pending')
     expect(dotClassOf('accepted')).toBe('is-accepted')
   })

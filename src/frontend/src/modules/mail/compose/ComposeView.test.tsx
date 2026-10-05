@@ -1,14 +1,13 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Profiler } from 'react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { mockViewport, resetViewport } from '../../../test-utils'
 import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
 import type { ComposeSeed } from './composeSeed'
 import type { EditorHandle } from './SquireEditor'
-import { createTestQueryClient, fireEscape, settle } from '../../../test-utils'
+import { createTestQueryClient, fireEscape, mockViewport, resetViewport, settle, waitFor } from '../../../test-utils'
 import { confirmLeave } from '../../../lib/leaveGuard'
 import type { api as realApi } from '../../../api'
 
@@ -138,6 +137,15 @@ const bruno = {
   addresses: ['bruno@x.be'],
 }
 
+/** A resumed draft, empty but for what a test names. */
+function draftSeed(over: Partial<ComposeSeed> = {}): ComposeSeed {
+  return {
+    action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
+    fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
+    draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {}, ...over,
+  }
+}
+
 const identityList = [
   { address: 'mick@weesky.be', displayName: 'Mick', isDefault: false, isPrimary: true, stale: false, labelIsCustom: false },
   { address: 'michel@weesky.be', displayName: 'Michel', isDefault: true, isPrimary: false, stale: false, labelIsCustom: true },
@@ -171,12 +179,14 @@ describe('a composer opened under a connected account', () => {
     mocks.uploadAttachment.mockResolvedValue({ id: 'id-1', fileName: 'a.txt', size: 4, contentType: 'text/plain' })
     renderCompose()
 
-    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'staged here' } })
-    await waitFor(() =>
-      expect(mocks.uploadAttachment).not.toHaveBeenCalled())
-
     // The user switches mailboxes while the draft is open; the composer must not follow.
     auth.activeAccountId = 'primary'
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'staged here' } })
+    attach()
+    await waitFor(() => expect(mocks.uploadAttachment).toHaveBeenCalledWith(
+      expect.any(File), expect.objectContaining({ accountId: 'linked-1' })))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove a.txt' }))
+    expect(mocks.deleteAttachment).toHaveBeenCalledWith('id-1', { accountId: 'linked-1' })
     addRecipient('To', 'a@b.c')
 
     fireEvent.click(sendButton())
@@ -207,6 +217,7 @@ describe('ComposeView', () => {
     expect(screen.getByText('New message')).toBeInTheDocument()
     expect(screen.getByText('Mick Weesky (mick@weesky.be)')).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'From' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'From identity' })).toBeNull()
     expect(screen.getByLabelText('To')).toHaveFocus()
     expect(screen.getByLabelText('Subject')).toBeInTheDocument()
     expect(sendButton()).toBeDisabled()
@@ -390,13 +401,6 @@ describe('ComposeView', () => {
     expect(editorState.commands).toContain('bold')
   })
 
-  it('keeps the 2c1 plain From while identities are still loading', () => {
-    renderCompose()
-
-    expect(screen.getByText('Mick Weesky (mick@weesky.be)')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'From identity' })).toBeNull()
-  })
-
   it('preselects the default identity and sends its address', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
     vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
@@ -502,12 +506,7 @@ describe('the priority row', () => {
     fireEvent.click(trigger())
     fireEvent.click(screen.getByRole('option', { name: label }))
   }
-  const draftSeed: ComposeSeed = {
-    action: 'draft', to: ['alice@ext.example'], cc: [], bcc: [],
-    subject: 'Half written', html: '<p>later</p>', text: null, fromAddress: null, attachments: [],
-    inReplyTo: null, references: [], draftRef: { folderPath: 'Drafts', uid: 41 },
-    nameHints: {}, priority: 'normal',
-  }
+  const halfWritten = draftSeed({ to: ['alice@ext.example'], subject: 'Half written', html: '<p>later</p>' })
 
   it('reveals the priority row from the link beside Cc and Bcc', () => {
     renderCompose()
@@ -529,17 +528,6 @@ describe('the priority row', () => {
 
     await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ priority: 'high' }), { accountId: 'primary' }))
-  })
-
-  it('sends normal when the row was never opened', async () => {
-    mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
-    renderCompose()
-
-    addRecipient('To', 'a@b.c')
-    fireEvent.click(sendButton())
-
-    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ priority: 'normal' }), { accountId: 'primary' }))
   })
 
   /** Folding the row away would take a live setting off the screen while it still rides the mail. */
@@ -592,7 +580,7 @@ describe('the priority row', () => {
   /** Same rule as a From-only edit: on a resumed draft the priority is the only change there is,
       and leaving without the guard would silently drop it. */
   it('arms the leave guard on a priority-only change to a resumed draft', async () => {
-    const { router } = renderCompose('INBOX', draftSeed)
+    const { router } = renderCompose('INBOX', halfWritten)
 
     fireEvent.click(screen.getByText('Priority'))
     pick('High')
@@ -618,7 +606,7 @@ describe('the priority row', () => {
   // The whole point of storing it on the draft: the resumed composer has to open on it and save
   // it back, or the setting is lost on the first round trip.
   it('opens a resumed draft on its stored priority and saves it back', async () => {
-    renderCompose('INBOX', { ...draftSeed, priority: 'high' })
+    renderCompose('INBOX', { ...halfWritten, priority: 'high' })
 
     expect(trigger()).toHaveTextContent('High')
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
@@ -899,23 +887,16 @@ describe('dropping files on the composer', () => {
 // Drafts turn `dirty` from "the form is non-empty" into "changed since open or the last save",
 // and give the leave dialog a third answer.
 describe('drafts in the composer', () => {
-  const draftSeed: ComposeSeed = {
-    action: 'draft',
-    to: ['alice@ext.example'], cc: [], bcc: [],
-    subject: 'Half written', html: '<p>later</p>', text: null,
-    fromAddress: null, attachments: [],
-    inReplyTo: null, references: [],
-    draftRef: { folderPath: 'Drafts', uid: 41 }, nameHints: {}, priority: 'normal',
-  }
+  const halfWritten = draftSeed({ to: ['alice@ext.example'], subject: 'Half written', html: '<p>later</p>' })
   const withParts: ComposeSeed = {
-    ...draftSeed,
+    ...halfWritten,
     attachments: [
       { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@x' },
       { id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf' },
     ],
   }
   // Nothing else on this seed is content the composer could add: the subject is all there is.
-  const subjectOnly: ComposeSeed = { ...draftSeed, to: [], subject: 'Only this', html: '' }
+  const subjectOnly = draftSeed({ subject: 'Only this' })
   const headerSave = () => screen.getByRole('button', { name: 'Save draft' })
 
   it('saves a draft and replaces it on the next save', async () => {
@@ -937,17 +918,10 @@ describe('drafts in the composer', () => {
 
   // The old rule was "the form is non-empty", which a resumed draft satisfies without a single
   // edit — and which no From pick could ever satisfy on its own.
-  it('a draft seed opens clean and a From-only change dirties it', async () => {
+  // That it opens clean is the clean-close test below.
+  it('a From-only change dirties a resumed draft', async () => {
     vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
-    const untouched = renderCompose('INBOX', draftSeed)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-
-    await waitFor(() => expect(untouched.router.state.location.pathname).toBe('/mail'))
-    expect(screen.queryByText('Save this draft?')).toBeNull()
-    cleanup()
-
-    const { router } = renderCompose('INBOX', draftSeed)
+    const { router } = renderCompose('INBOX', halfWritten)
     fireEvent.click(screen.getByRole('combobox', { name: 'From identity' }))
     fireEvent.click(screen.getByRole('option', { name: 'Mick Weesky (mick@weesky.be)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
@@ -1002,40 +976,21 @@ describe('drafts in the composer', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
   })
 
-  it('the leave dialog offers Save draft / Discard / Keep editing', async () => {
-    const kept = renderCompose('INBOX', withParts)
+  // Keep editing and Discard are walked above (the ✕ and Escape tests, and the seeded discard).
+  it('the leave dialog offers Save draft / Discard / Keep editing, and Save draft files and leaves', async () => {
+    const { router } = renderCompose('INBOX', withParts)
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-    let modal = await discardModal()
+    const modal = await discardModal()
     for (const name of ['Keep editing', 'Discard', 'Save draft']) {
       expect(within(modal).getByRole('button', { name })).toBeInTheDocument()
     }
-
-    fireEvent.click(within(modal).getByRole('button', { name: 'Keep editing' }))
-    await waitFor(() => expect(screen.queryByText('Save this draft?')).toBeNull())
-    expect(kept.router.state.location.pathname).toBe('/mail/compose')
-    expect(mocks.deleteAttachment).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-    modal = await discardModal()
     fireEvent.click(within(modal).getByRole('button', { name: 'Save draft' }))
 
     await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalled())
-    await waitFor(() => expect(kept.router.state.location.pathname).toBe('/mail'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
     // The saved draft holds its own bytes in IMAP, so the staged copies go on this path too.
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' })
-    expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1', { accountId: 'primary' })
-    cleanup()
-    mocks.deleteAttachment.mockClear()
-
-    const discarded = renderCompose('INBOX', withParts)
-    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Notes' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-    modal = await discardModal()
-    fireEvent.click(within(modal).getByRole('button', { name: 'Discard' }))
-
-    await waitFor(() => expect(discarded.router.state.location.pathname).toBe('/mail'))
     expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' })
     expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1', { accountId: 'primary' })
   })
@@ -1057,7 +1012,7 @@ describe('drafts in the composer', () => {
   // draft behind that the winner's cleanup never knew about.
   it('locks Send and Save draft against each other while either is in flight', async () => {
     mocks.saveDraft.mockReturnValue(new Promise(() => {}))
-    renderCompose('INBOX', draftSeed)
+    renderCompose('INBOX', halfWritten)
 
     fireEvent.click(headerSave())
 
@@ -1065,13 +1020,16 @@ describe('drafts in the composer', () => {
     expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
   })
 
-  // The composer is clean, but the tray still holds staged copies nothing else will release.
-  it('releases the staged copies when a clean composer is closed', async () => {
+  // The composer is clean, but the tray still holds staged copies nothing else will release. Clean
+  // with the identities loaded too: the old rule, "the form is non-empty", read a resumed draft as dirty.
+  it('closes a resumed draft without asking and releases its staged copies', async () => {
+    vi.mocked(useIdentities).mockReturnValue({ data: identityList } as never)
     const { router } = renderCompose('INBOX', withParts)
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
     expect(mocks.deleteAttachment).toHaveBeenCalledWith('i1', { accountId: 'primary' })
     expect(mocks.deleteAttachment).toHaveBeenCalledWith('a1', { accountId: 'primary' })
   })
@@ -1079,7 +1037,7 @@ describe('drafts in the composer', () => {
   // The sent copy makes the stored draft a duplicate of a message that already left.
   it('sending a resumed draft deletes it', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
-    const { router } = renderCompose('INBOX', draftSeed)
+    const { router } = renderCompose('INBOX', halfWritten)
 
     fireEvent.click(sendButton())
 
@@ -1092,7 +1050,7 @@ describe('drafts in the composer', () => {
   it('says so when the draft of a sent message could not be removed', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
     mocks.deleteMessages.mockRejectedValue(new Error('IMAP is down'))
-    const { onNotify, router } = renderCompose('INBOX', draftSeed)
+    const { onNotify, router } = renderCompose('INBOX', halfWritten)
 
     fireEvent.click(sendButton())
 
@@ -1102,7 +1060,7 @@ describe('drafts in the composer', () => {
   })
 
   it('says why the leave dialog locks Save draft on an invalid address', async () => {
-    renderCompose('INBOX', draftSeed)
+    renderCompose('INBOX', halfWritten)
 
     addRecipient('To', 'nope')
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
@@ -1114,7 +1072,7 @@ describe('drafts in the composer', () => {
 
   it('saving a resumed draft targets its own uid', async () => {
     mocks.saveDraft.mockResolvedValue({ uid: 42, folderPath: 'Drafts' })
-    renderCompose('INBOX', draftSeed)
+    renderCompose('INBOX', halfWritten)
 
     fireEvent.click(headerSave())
 
@@ -1303,12 +1261,6 @@ describe('plain text in the composer', () => {
   const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
   const textArea = () => screen.getByTestId<HTMLTextAreaElement>('compose-text-editor')
 
-  const draftSeed: ComposeSeed = {
-    action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
-    fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
-    draftRef: { folderPath: 'Drafts', uid: 3 }, nameHints: {},
-  }
-
   it('swaps the editor for a textarea and folds the toolbar away', () => {
     editorState.html = '<div>one</div><div>two</div>'
     renderCompose()
@@ -1349,7 +1301,7 @@ describe('plain text in the composer', () => {
   })
 
   it('opens a text draft in text mode', () => {
-    renderCompose('INBOX', { ...draftSeed, text: 'stored text' })
+    renderCompose('INBOX', draftSeed({ text: 'stored text' }))
 
     expect(textArea().value).toBe('stored text')
     expect(plainToggle()).toHaveAttribute('aria-pressed', 'true')
@@ -1371,12 +1323,6 @@ describe('plain text in the composer', () => {
 describe('what a plain-text switch costs', () => {
   const plainToggle = () => screen.getByRole('button', { name: 'Plain text' })
   const textArea = () => screen.getByTestId<HTMLTextAreaElement>('compose-text-editor')
-
-  const draftSeed: ComposeSeed = {
-    action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
-    fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
-    draftRef: { folderPath: 'Drafts', uid: 3 }, nameHints: {},
-  }
 
   it('asks before a switch that would cost formatting', () => {
     editorState.html = '<div><b>bold</b></div>'
@@ -1432,13 +1378,12 @@ describe('what a plain-text switch costs', () => {
   })
 
   it('moves an inline image into the tray on the switch', () => {
-    const seed: ComposeSeed = {
-      ...draftSeed,
+    const seed = draftSeed({
       html: '<div><img src="https://api.test.example/api/Mail/Attachments/i1/content"></div>',
       attachments: [
         { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@mail' },
       ],
-    }
+    })
     editorState.html = seed.html
     renderCompose('INBOX', seed)
 
@@ -1452,13 +1397,12 @@ describe('what a plain-text switch costs', () => {
   // twice and the recipient gets two copies of it.
   it('sends an adopted image once, not twice', async () => {
     mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
-    const seed: ComposeSeed = {
-      ...draftSeed,
+    const seed = draftSeed({
       html: '<div><img src="https://api.test.example/api/Mail/Attachments/i1/content"></div>',
       attachments: [
         { id: 'i1', fileName: 'logo.png', size: 3, contentType: 'image/png', contentId: 'logo@mail' },
       ],
-    }
+    })
     editorState.html = seed.html
     renderCompose('INBOX', seed)
     addRecipient('To', 'alice@x.be')
@@ -1653,12 +1597,7 @@ describe('inline images, staged-id lifetime', () => {
   // draft. An empty composer hides the bug — nothing there for `changed` to combine with.
   it('leaves a resumed draft clean when an inline upload is refused', async () => {
     mocks.uploadAttachment.mockRejectedValue(new Error('Too large'))
-    const seed: ComposeSeed = {
-      action: 'draft', to: [], cc: [], bcc: [], subject: '', html: '', text: null,
-      fromAddress: null, attachments: [], inReplyTo: null, references: [], priority: 'normal',
-      draftRef: { folderPath: 'Drafts', uid: 7 }, nameHints: {},
-    }
-    const { onNotify, router } = renderCompose('INBOX', seed)
+    const { onNotify, router } = renderCompose('INBOX', draftSeed())
 
     pasteImage()
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not insert the image', 'error'))
@@ -1671,12 +1610,7 @@ describe('inline images, staged-id lifetime', () => {
 
 // The account's chosen editor, read at mount — unlike captureRecipientsOf, which is read at send.
 describe('the default composing editor', () => {
-  const htmlDraft: ComposeSeed = {
-    action: 'draft', to: [], cc: [], bcc: [], subject: 'Half written',
-    html: '<p>saved</p>', text: null, fromAddress: null, attachments: [],
-    inReplyTo: null, references: [], draftRef: { folderPath: 'Drafts', uid: 41 },
-    nameHints: {}, priority: 'normal',
-  }
+  const htmlDraft = draftSeed({ subject: 'Half written', html: '<p>saved</p>' })
 
   it('opens a new message in the text editor when the account chose text', async () => {
     prefs = { 'mail.composeFormat': 'text' }
@@ -1727,31 +1661,17 @@ describe('a composer whose preferences cannot be loaded', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 
-  it('offers a way out of the composer route', async () => {
+  // The way out of the composer route lands wherever the form's own exits would.
+  it.each([
+    ['the folder it was opened from', 'Archive/2026', undefined, 'mail-view', '/mail?folder=Archive%2F2026'],
+    ['the contact card that opened it', undefined, '/contacts/c-1', 'contact-view', '/contacts/c-1'],
+  ])('closes back to %s, as the form does', async (_where, from, backTo, view, location) => {
     mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
-    const { router } = renderCompose('INBOX', undefined, '', { cold: true })
+    const { router } = renderCompose(from, undefined, '', { cold: true, backTo })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
-    expect(await screen.findByTestId('mail-view')).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/mail')
-  })
-
-  it('closes back to the folder it was opened from, as the form does', async () => {
-    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
-    const { router } = renderCompose('Archive/2026', undefined, '', { cold: true })
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
-    expect(await screen.findByTestId('mail-view')).toBeInTheDocument()
-    expect(router.state.location.search).toBe('?folder=Archive%2F2026')
-  })
-
-  it('closes back to the contact card that opened it', async () => {
-    mocks.getPreferences.mockRejectedValueOnce(new Error('down'))
-    const { router } = renderCompose(undefined, undefined, '', { cold: true, backTo: '/contacts/c-1' })
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
-    expect(await screen.findByTestId('contact-view')).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/contacts/c-1')
+    expect(await screen.findByTestId(view)).toBeInTheDocument()
+    expect(router.state.location.pathname + router.state.location.search).toBe(location)
   })
 })
 

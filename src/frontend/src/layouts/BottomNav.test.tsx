@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import AppRail from './AppRail'
 import BottomNav from './BottomNav'
-import { MODULES, SETTINGS_MODULE } from './modules'
+import { MODULES } from './modules'
 
 function names(container: HTMLElement) {
   return [...container.querySelectorAll('a')].map(a => a.getAttribute('href'))
@@ -20,7 +20,6 @@ describe('BottomNav', () => {
   it('covers every module plus settings', () => {
     const { container } = render(<MemoryRouter><BottomNav /></MemoryRouter>)
     expect(names(container)).toHaveLength(MODULES.length + 1)
-    expect(SETTINGS_MODULE.to).toBe('/settings')
   })
 
   it('labels each destination in text, not only in aria', () => {

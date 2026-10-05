@@ -1,9 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ComponentProps } from 'react'
 import ContactScopes from './ContactScopes'
 import { CONTACT_DRAG_MIME } from './dragContacts'
+import { setupUser } from '../../test-utils'
+
+let user: ReturnType<typeof setupUser>
+beforeEach(() => { user = setupUser() })
 
 /** Imitates dataTransfer: the types are readable while hovering, the value only on drop. */
 function dt() {
@@ -53,7 +56,7 @@ describe('ContactScopes', () => {
     const onScope = vi.fn()
     renderScopes({ onScope })
 
-    await userEvent.click(screen.getByRole('button', { name: /favourites/i }))
+    await user.click(screen.getByRole('button', { name: /favourites/i }))
 
     expect(onScope).toHaveBeenCalledWith('favorites')
   })
@@ -123,7 +126,7 @@ describe('the groups section', () => {
 
   /** DropdownMenu mounts its rows only while open, so every assertion about them opens it first. */
   async function openMenu(name: string) {
-    await userEvent.click(screen.getByRole('button', { name: `Actions for ${name}` }))
+    await user.click(screen.getByRole('button', { name: `Actions for ${name}` }))
   }
 
   // The « + » lives on the section heading, never in `.column-actions`: the first group is
@@ -133,7 +136,7 @@ describe('the groups section', () => {
     renderScopes({ onCreateGroup })
 
     expect(screen.getByText('Groups')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'New group' }))
+    await user.click(screen.getByRole('button', { name: 'New group' }))
 
     expect(onCreateGroup).toHaveBeenCalled()
   })
@@ -169,7 +172,7 @@ describe('the groups section', () => {
     expect(groupRow('Friends')).toHaveClass('is-active')
     expect(groupRow('Family')).not.toHaveClass('is-active')
 
-    await userEvent.click(groupRow('Family'))
+    await user.click(groupRow('Family'))
     expect(onScope).toHaveBeenCalledWith('group:g2')
   })
 
@@ -195,15 +198,15 @@ describe('the groups section', () => {
 
     await openMenu('Friends')
     const menu = screen.getByRole('menu')
-    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    await user.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
     expect(onRenameGroup).toHaveBeenCalledWith(friends)
 
     await openMenu('Friends')
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Write to group' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Write to group' }))
     expect(onWriteToGroup).toHaveBeenCalledWith(friends)
 
     await openMenu('Friends')
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete group' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete group' }))
     expect(onDeleteGroup).toHaveBeenCalledWith(friends)
   })
 

@@ -6,9 +6,10 @@ import { expectNoAxeViolations } from './a11y-test'
 import { createTestQueryClient, resetViewport } from './test-utils'
 import LoginPage from './pages/LoginPage'
 import MailLayout from './modules/mail/MailLayout'
-import type { MailFolderNode } from './modules/mail/api/mailTypes'
+import { folderNodeOf } from './modules/mail/mailTestHarness'
 import ContactsLayout from './modules/contacts/ContactsLayout'
 import type { Contact, ContactDetail } from './modules/contacts/contactTypes'
+import { contactOf } from './modules/contacts/contactTestHarness'
 import CalendarLayout from './modules/calendar/CalendarLayout'
 import EventEditor, { EDITOR_TITLE_ID } from './modules/calendar/EventEditor'
 import WeekView from './modules/calendar/WeekView'
@@ -95,15 +96,8 @@ describe('accessibility sweep', () => {
   // List and reader both on screen: the default desktop reading-pane arrangement puts them side
   // by side, which is what the brief asks this surface to be swept while showing.
   it('MailLayout — list and reader both on screen', async () => {
-    function folderNode(partial: Partial<MailFolderNode>): MailFolderNode {
-      return {
-        path: 'X', name: 'X', selectable: true, subscribed: true,
-        total: 0, unread: 0, uidValidity: 1, children: [],
-        ...partial,
-      }
-    }
     mocks.getMailFolders.mockResolvedValue([
-      folderNode({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+      folderNodeOf({ path: 'INBOX', specialUse: 'inbox' }),
     ])
     mocks.getMailMessages.mockResolvedValue({
       folderPath: 'INBOX', uidValidity: 1, total: 1, page: 0, pageSize: 30,
@@ -137,11 +131,6 @@ describe('accessibility sweep', () => {
   })
 
   it('ContactsLayout', async () => {
-    function contactOf(fields: Partial<Contact> & { id: string }): Contact {
-      return {
-        isFavorite: false, addresses: [], ...fields,
-      }
-    }
     function detailOf(row: Contact): ContactDetail {
       return {
         id: row.id, isFavorite: row.isFavorite, hasPhoto: false,

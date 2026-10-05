@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import PaneSplitter from './PaneSplitter'
 
@@ -34,6 +34,8 @@ function fireResize() {
 }
 
 describe('PaneSplitter', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
   it('is an accessible separator carrying its orientation', () => {
     const { separator } = renderSplitter({ orientation: 'horizontal' })
 
@@ -104,22 +106,14 @@ describe('PaneSplitter', () => {
     expect(onResize).toHaveBeenLastCalledWith(296)
   })
 
-  it('never nudges past the parent span minus the reserve', () => {
-    const { onResize, separator } = renderSplitter({ size: 670 })
+  // 680 is 1000 − reserve(320): a nudge from below lands on it, one from it stays put (never 696).
+  it.each([[670], [680]])('stops a nudge from %i at the ceiling rather than crushing the other pane', size => {
+    const { onResize, separator } = renderSplitter({ size })
     Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 1000 })
 
     fireEvent.keyDown(separator, { key: 'ArrowRight' })
 
-    expect(onResize).toHaveBeenLastCalledWith(680) // 1000 − reserve(320)
-  })
-
-  it('stays at the ceiling rather than crushing the other pane', () => {
-    const { onResize, separator } = renderSplitter({ size: 680 })
-    Object.defineProperty(separator.parentElement!, 'clientWidth', { value: 1000 })
-
-    fireEvent.keyDown(separator, { key: 'ArrowRight' })
-
-    expect(onResize).toHaveBeenLastCalledWith(680) // never 696
+    expect(onResize).toHaveBeenLastCalledWith(680)
   })
 
   // ceilingOf reads clientHeight, not clientWidth, on this axis — the vertical cases above
@@ -170,7 +164,6 @@ describe('PaneSplitter', () => {
     fireResize()
 
     expect(separator).toHaveAttribute('aria-valuemax', '680') // 1000 − reserve(320)
-    vi.unstubAllGlobals()
   })
 
   it('omits aria-valuemax again if a later resize takes the parent back to no layout', () => {
@@ -184,6 +177,5 @@ describe('PaneSplitter', () => {
     fireResize()
 
     expect(separator).not.toHaveAttribute('aria-valuemax')
-    vi.unstubAllGlobals()
   })
 })

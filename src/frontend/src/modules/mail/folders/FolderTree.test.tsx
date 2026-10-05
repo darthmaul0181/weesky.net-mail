@@ -1,23 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import i18next from 'i18next'
 import FolderTree from './FolderTree'
 import type { MailFolderNode } from '../api/mailTypes'
 import { DRAG_MIME, serializeDrag } from '../list/dragMessages'
-
-function node(partial: Partial<MailFolderNode>): MailFolderNode {
-  return {
-    path: 'X', name: 'X', selectable: true, subscribed: true,
-    total: 0, unread: 0, uidValidity: 1, children: [], ...partial,
-  }
-}
+import { folderNodeOf } from '../mailTestHarness'
 
 const tree: MailFolderNode[] = [
-  node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 }),
-  node({
+  folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 }),
+  folderNodeOf({
     path: 'Projects', name: 'Projects',
-    children: [node({ path: 'Projects/Alpha', name: 'Alpha', unread: 2 })],
+    children: [folderNodeOf({ path: 'Projects/Alpha', name: 'Alpha', unread: 2 })],
   }),
-  node({ path: 'Hidden', name: 'Hidden', subscribed: false }),
+  folderNodeOf({ path: 'Hidden', name: 'Hidden', subscribed: false }),
 ]
 
 describe('FolderTree', () => {
@@ -62,9 +57,9 @@ describe('FolderTree', () => {
   })
 
   it('starts with the inbox expanded', () => {
-    const withChild = [node({
+    const withChild = [folderNodeOf({
       path: 'INBOX', name: 'INBOX', specialUse: 'inbox',
-      children: [node({ path: 'INBOX/Sub', name: 'Sub' })],
+      children: [folderNodeOf({ path: 'INBOX/Sub', name: 'Sub' })],
     })]
 
     render(<FolderTree folders={withChild} selectedPath={null} onSelect={vi.fn()} />)
@@ -76,7 +71,7 @@ describe('FolderTree', () => {
     const onSelect = vi.fn()
     render(
       <FolderTree
-        folders={[node({ path: 'Container', name: 'Container', selectable: false })]}
+        folders={[folderNodeOf({ path: 'Container', name: 'Container', selectable: false })]}
         selectedPath={null}
         onSelect={onSelect}
       />)
@@ -88,10 +83,10 @@ describe('FolderTree', () => {
 
   it('orders well-known folders before ordinary ones', () => {
     const unordered = [
-      node({ path: 'Zebra', name: 'Zebra' }),
-      node({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
-      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-      node({ path: 'Alpha', name: 'Alpha' }),
+      folderNodeOf({ path: 'Zebra', name: 'Zebra' }),
+      folderNodeOf({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+      folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+      folderNodeOf({ path: 'Alpha', name: 'Alpha' }),
     ]
 
     render(<FolderTree folders={unordered} selectedPath={null} onSelect={vi.fn()} />)
@@ -106,8 +101,8 @@ describe('FolderTree', () => {
     const { container } = render(
       <FolderTree
         folders={[
-          node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-          node({ path: 'Alpha', name: 'Alpha' }),
+          folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+          folderNodeOf({ path: 'Alpha', name: 'Alpha' }),
         ]}
         selectedPath={null}
         onSelect={vi.fn()}
@@ -118,8 +113,8 @@ describe('FolderTree', () => {
 
   // A rule under nothing reads as a fault, and a mailbox with no folders of its own is common.
   it.each([
-    ['no folders of its own', [node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]],
-    ['no well-known folders', [node({ path: 'Alpha', name: 'Alpha' })]],
+    ['no folders of its own', [folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' })]],
+    ['no well-known folders', [folderNodeOf({ path: 'Alpha', name: 'Alpha' })]],
   ])('draws no rule when the mailbox has %s', (_, folders) => {
     const { container } = render(
       <FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
@@ -131,9 +126,9 @@ describe('FolderTree', () => {
     const { container } = render(
       <FolderTree
         folders={[
-          node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-          node({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
-          node({ path: 'Alpha', name: 'Alpha' }),
+          folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+          folderNodeOf({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+          folderNodeOf({ path: 'Alpha', name: 'Alpha' }),
         ]}
         selectedPath={null}
         onSelect={vi.fn()}
@@ -147,10 +142,10 @@ describe('FolderTree', () => {
     render(
       <FolderTree
         folders={[
-          node({ path: 'Zebra', name: 'Zebra' }),
-          node({ path: 'Éléments', name: 'Éléments' }),
-          node({ path: 'e-commerce', name: 'e-commerce' }),
-          node({ path: 'English', name: 'English' }),
+          folderNodeOf({ path: 'Zebra', name: 'Zebra' }),
+          folderNodeOf({ path: 'Éléments', name: 'Éléments' }),
+          folderNodeOf({ path: 'e-commerce', name: 'e-commerce' }),
+          folderNodeOf({ path: 'English', name: 'English' }),
         ]}
         selectedPath={null}
         onSelect={vi.fn()}
@@ -160,26 +155,23 @@ describe('FolderTree', () => {
       .toEqual(['e-commerce', 'Éléments', 'English', 'Zebra'])
   })
 
-  // M20: `sortFolders` orders by the UI language through `collator`; `localeCompare(undefined, …)`
-  // reads the browser's own language instead, so the two screens could disagree on one mailbox.
-  // This component must never call `localeCompare` itself, the same as `sortFolders`.
-  it('sorts with the same collator sortFolders uses, not localeCompare', () => {
-    const localeCompareSpy = vi.spyOn(String.prototype, 'localeCompare')
+  // M20: `sortFolders` orders by the UI language; `localeCompare(undefined, …)` reads the
+  // machine's own instead, so the two screens could disagree on one mailbox. Swedish files Å, Ä,
+  // Ö after Z, in that order — neither English's order nor the code points' (Ä before Å).
+  it("orders by the language the interface speaks, not the machine's", async () => {
+    await i18next.changeLanguage('sv')
     try {
       render(
         <FolderTree
-          folders={[
-            node({ path: 'Zebra', name: 'Zebra' }),
-            node({ path: 'Alpha', name: 'Alpha' }),
-          ]}
+          folders={['Zebra', 'Ärla', 'Örebro', 'Oslo', 'Åre'].map(name => folderNodeOf({ path: name }))}
           selectedPath={null}
           onSelect={vi.fn()}
         />)
 
-      expect(localeCompareSpy).not.toHaveBeenCalled()
-      expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['Alpha', 'Zebra'])
+      expect(screen.getAllByRole('button').map(b => b.textContent))
+        .toEqual(['Oslo', 'Zebra', 'Åre', 'Ärla', 'Örebro'])
     } finally {
-      localeCompareSpy.mockRestore()
+      await i18next.changeLanguage('en')
     }
   })
 
@@ -189,8 +181,8 @@ describe('FolderTree', () => {
   // say subscribed: true.
   it('always shows the inbox even when the server reports it unsubscribed', () => {
     const asDovecotReportsIt = [
-      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false, unread: 3 }),
-      node({ path: 'Sent', name: 'Sent', specialUse: 'sent', subscribed: true }),
+      folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false, unread: 3 }),
+      folderNodeOf({ path: 'Sent', name: 'Sent', specialUse: 'sent', subscribed: true }),
     ]
 
     render(<FolderTree folders={asDovecotReportsIt} selectedPath={null} onSelect={vi.fn()} />)
@@ -201,8 +193,8 @@ describe('FolderTree', () => {
 
   it('still hides an ordinary unsubscribed folder', () => {
     const folders = [
-      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false }),
-      node({ path: 'Projects', name: 'Projects', subscribed: false }),
+      folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false }),
+      folderNodeOf({ path: 'Projects', name: 'Projects', subscribed: false }),
     ]
 
     render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
@@ -217,10 +209,10 @@ describe('FolderTree', () => {
   // that reason — so filtering it on subscription contradicted a rule the product already made.
   it('shows a role-holding folder the server reports unsubscribed', () => {
     const asProximusReportsIt = [
-      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false }),
-      node({ path: 'SentMail', name: 'SentMail', specialUse: 'sent', subscribed: false }),
-      node({ path: 'Trash', name: 'Trash', specialUse: 'trash', subscribed: false }),
-      node({ path: 'Junk Mail', name: 'Junk Mail', specialUse: 'junk', subscribed: false }),
+      folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', subscribed: false }),
+      folderNodeOf({ path: 'SentMail', name: 'SentMail', specialUse: 'sent', subscribed: false }),
+      folderNodeOf({ path: 'Trash', name: 'Trash', specialUse: 'trash', subscribed: false }),
+      folderNodeOf({ path: 'Junk Mail', name: 'Junk Mail', specialUse: 'junk', subscribed: false }),
     ]
 
     render(<FolderTree folders={asProximusReportsIt} selectedPath={null} onSelect={vi.fn()} />)
@@ -235,9 +227,9 @@ describe('FolderTree', () => {
   // the two places where that prompt is noise — the live mailbox showed 8 unread in the trash.
   it('does not badge unread counts in the trash or the junk folder', () => {
     const folders = [
-      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 1 }),
-      node({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash', unread: 8 }),
-      node({ path: 'Junk', name: 'Junk', specialUse: 'junk', unread: 5 }),
+      folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 1 }),
+      folderNodeOf({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash', unread: 8 }),
+      folderNodeOf({ path: 'Junk', name: 'Junk', specialUse: 'junk', unread: 5 }),
     ]
 
     render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
@@ -253,7 +245,7 @@ describe('FolderTree', () => {
   // A draft is work left unfinished whether or not it was ever opened, so its badge counts them all.
   it('badges the drafts folder with its total, read drafts included', () => {
     const folders = [
-      node({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts', total: 3, unread: 0 }),
+      folderNodeOf({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts', total: 3, unread: 0 }),
     ]
 
     render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
@@ -264,7 +256,7 @@ describe('FolderTree', () => {
 
   it('shows no drafts badge when the folder is empty', () => {
     render(<FolderTree
-      folders={[node({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts', total: 0 })]}
+      folders={[folderNodeOf({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts', total: 0 })]}
       selectedPath={null}
       onSelect={vi.fn()}
     />)
@@ -278,8 +270,8 @@ describe('FolderTree', () => {
   // must carry both pieces of information — and only when a badge is actually rendered.
   it('exposes the unread count in the accessible name, but only where the badge is shown', () => {
     const folders = [
-      node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 }),
-      node({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash', unread: 8 }),
+      folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 }),
+      folderNodeOf({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash', unread: 8 }),
     ]
 
     render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
@@ -294,8 +286,8 @@ describe('FolderTree', () => {
   // real mailbox name must stay reachable: it lives in the button's title.
   it('shows the role label and keeps the real name as the tooltip', () => {
     const folders = [
-      node({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash' }),
-      node({ path: 'Perso', name: 'Perso' }),
+      folderNodeOf({ path: 'Deleted Items', name: 'Deleted Items', specialUse: 'trash' }),
+      folderNodeOf({ path: 'Perso', name: 'Perso' }),
     ]
 
     render(<FolderTree folders={folders} selectedPath={null} onSelect={vi.fn()} />)
@@ -308,9 +300,9 @@ describe('FolderTree', () => {
   })
 
   it('hides an unsubscribed child of a visible parent', () => {
-    const withHiddenChild = [node({
+    const withHiddenChild = [folderNodeOf({
       path: 'INBOX', name: 'INBOX', specialUse: 'inbox',
-      children: [node({ path: 'INBOX/Gone', name: 'Gone', subscribed: false })],
+      children: [folderNodeOf({ path: 'INBOX/Gone', name: 'Gone', subscribed: false })],
     })]
 
     render(<FolderTree folders={withHiddenChild} selectedPath={null} onSelect={vi.fn()} />)
@@ -321,9 +313,9 @@ describe('FolderTree', () => {
 
 describe('FolderTree as a drop target', () => {
   const dropTree: MailFolderNode[] = [
-    node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-    node({ path: 'Archive', name: 'Archive', specialUse: 'archive' }),
-    node({ path: 'Parent', name: 'Parent', selectable: false }),
+    folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+    folderNodeOf({ path: 'Archive', name: 'Archive', specialUse: 'archive' }),
+    folderNodeOf({ path: 'Parent', name: 'Parent', selectable: false }),
   ]
 
   const dt = (over: Partial<DataTransfer> = {}) => ({
@@ -404,11 +396,11 @@ describe('FolderTree as a drop target', () => {
 
 describe('FolderTree folder icons', () => {
   const iconTree: MailFolderNode[] = [
-    node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
-    node({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
-    node({
+    folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+    folderNodeOf({ path: 'Trash', name: 'Trash', specialUse: 'trash' }),
+    folderNodeOf({
       path: 'Projects', name: 'Projects',
-      children: [node({ path: 'Projects/Alpha', name: 'Alpha' })],
+      children: [folderNodeOf({ path: 'Projects/Alpha', name: 'Alpha' })],
     }),
   ]
 
@@ -459,7 +451,7 @@ describe('FolderTree folder icons', () => {
   it('leaves the row accessible name alone', () => {
     render(
       <FolderTree
-        folders={[node({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 })]}
+        folders={[folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox', unread: 4 })]}
         selectedPath="INBOX" onSelect={vi.fn()} showIcons />)
 
     expect(screen.getByRole('button', { name: 'Inbox, 4 unread' })).toBeInTheDocument()

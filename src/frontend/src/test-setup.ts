@@ -1,3 +1,4 @@
+import './test-polyfills'
 import { afterEach, beforeEach, vi } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createElement, type ReactNode } from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { APP_NAME_STORAGE_KEY, tabTitle, useTabTitle } from './useTabTitle'
 import { api } from '../api.js'
-import { settle } from '../test-utils'
+import { createTestQueryClient, settle } from '../test-utils'
 
 const auth = vi.hoisted(() => ({ activeAccount: null as { email: string } | null }))
 
@@ -15,7 +15,7 @@ vi.mock('../api.js', async importOriginal => ({
 }))
 
 function mount() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = createTestQueryClient()
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children)
   return renderHook(() => useTabTitle(), { wrapper })

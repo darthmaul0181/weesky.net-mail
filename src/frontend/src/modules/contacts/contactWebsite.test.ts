@@ -19,16 +19,8 @@ describe('websiteHref', () => {
     expect(websiteHref('example.com:8080')).toBe('https://example.com:8080/')
   })
 
-  it('refuses a javascript: URL', () => {
-    expect(websiteHref('javascript:alert(1)')).toBeNull()
-  })
-
-  it('refuses a data: URL', () => {
-    expect(websiteHref('data:text/html,x')).toBeNull()
-  })
-
-  it('refuses a mailto: URL', () => {
-    expect(websiteHref('mailto:a@b')).toBeNull()
+  it.each(['javascript:alert(1)', 'data:text/html,x', 'mailto:a@b'])('refuses the URL %s', url => {
+    expect(websiteHref(url)).toBeNull()
   })
 
   it('refuses a blank value', () => {

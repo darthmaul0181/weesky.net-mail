@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, render, renderHook, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useLayoutEffect } from 'react'
 import { MemoryRouter, useNavigate } from 'react-router'
 import ContextDrawer, { useContextDrawer } from './ContextDrawer'
 import DeleteConfirmModal from '../components/DeleteConfirmModal'
-import { changeViewport, mockViewport, resetViewport } from '../test-utils'
+import { changeViewport, mockViewport, resetViewport, setupUser } from '../test-utils'
 
 afterEach(resetViewport)
 
@@ -63,7 +62,7 @@ describe('ContextDrawer', () => {
     // answering Escape at all.
     onClose.mockClear()
 
-    await userEvent.keyboard('{Escape}')
+    await setupUser().keyboard('{Escape}')
 
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -83,7 +82,7 @@ describe('ContextDrawer', () => {
     )
     onClose.mockClear() // the route effect calls it once at mount, as it does above
 
-    await userEvent.keyboard('{Escape}')
+    await setupUser().keyboard('{Escape}')
 
     expect(onDialogClose).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
@@ -92,14 +91,15 @@ describe('ContextDrawer', () => {
   it('closes on a scrim click', async () => {
     const onClose = vi.fn()
     const { container } = drawer(true, onClose)
-    await userEvent.click(container.querySelector('.context-drawer-scrim')!)
-    expect(onClose).toHaveBeenCalled()
+    onClose.mockClear()
+    await setupUser().click(container.querySelector('.context-drawer-scrim')!)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('does not listen for Escape while closed', async () => {
     const onClose = vi.fn()
     drawer(false, onClose)
-    await userEvent.keyboard('{Escape}')
+    await setupUser().keyboard('{Escape}')
     expect(onClose).not.toHaveBeenCalled()
   })
 
@@ -112,14 +112,14 @@ describe('ContextDrawer', () => {
     const onClose = vi.fn()
     drawerWithNav(true, onClose)
     onClose.mockClear() // drop the mount-time call so only the navigation's call is asserted
-    await userEvent.click(screen.getByRole('button', { name: 'Navigate' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Navigate' }))
     expect(onClose).toHaveBeenCalled()
   })
 
   it('does not call onClose for a closed drawer on a route change', async () => {
     const onClose = vi.fn()
     drawerWithNav(false, onClose)
-    await userEvent.click(screen.getByRole('button', { name: 'Navigate' }))
+    await setupUser().click(screen.getByRole('button', { name: 'Navigate' }))
     expect(onClose).not.toHaveBeenCalled()
   })
 })

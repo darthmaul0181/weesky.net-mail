@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import VirtualDomainsTab from './VirtualDomainsTab'
 import type { AdminUser } from './adminTypes'
-import { createTestQueryClient, settle } from '../../../test-utils'
+import { createTestQueryClient, settle, setupUser } from '../../../test-utils'
+import { BOB, MOCK_USERS, MOCK_VIRTUAL_DOMAINS } from './adminTestFixtures'
 
 const mocks = vi.hoisted(() => ({
   getVirtualDomains: vi.fn(),
@@ -23,10 +23,10 @@ vi.mock('../../../api.js', () => ({
   },
 }))
 
-const user = (id: number, userName: string, fullName: string): AdminUser => ({
+const adminUser = (id: number, userName: string, fullName: string): AdminUser => ({
   id, userName, fullName, domainId: 'WSY', domainName: 'weesky.be', quotaMb: 1024, active: true, admin: false, lastLogins: [],
 })
-const users = [user(1, 'ada', 'Ada Lovelace'), user(2, 'grace', 'Grace Hopper'), user(3, 'alan', 'Alan Turing')]
+const users = [adminUser(1, 'ada', 'Ada Lovelace'), adminUser(2, 'grace', 'Grace Hopper'), adminUser(3, 'alan', 'Alan Turing')]
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = createTestQueryClient()
@@ -122,7 +122,7 @@ describe('VirtualDomainsTab', () => {
 
     fireEvent.keyDown(field(), { key: 'ArrowDown' })
     fireEvent.keyDown(option('ada@weesky.be'), { key: 'ArrowDown' })
-    await userEvent.keyboard('{Enter}')
+    await setupUser().keyboard('{Enter}')
 
     await waitFor(() => expect(mocks.addOwner).toHaveBeenCalledWith('d1', 2))
     // The picked match left with the list it was in; the box is still there and takes the focus.
@@ -149,7 +149,7 @@ describe('VirtualDomainsTab', () => {
     const remove = screen.getByTitle('Remove owner')
     remove.focus()
 
-    await userEvent.keyboard('{Enter}')
+    await setupUser().keyboard('{Enter}')
 
     await waitFor(() => expect(mocks.removeOwner).toHaveBeenCalledWith('d2', 1))
     expect(field()).toHaveFocus()
@@ -165,5 +165,150 @@ describe('VirtualDomainsTab', () => {
 
     expect(field()).toHaveValue('')
     expect(screen.queryByRole('button', { name: /ada@weesky\.be/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('VirtualDomainsTab — owners of the admin fixtures', () => {
+  let user: ReturnType<typeof setupUser>
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getUsers.mockResolvedValue(MOCK_USERS)
+    mocks.getVirtualDomains.mockResolvedValue(MOCK_VIRTUAL_DOMAINS)
+    user = setupUser()
+  })
+
+  async function renderLoaded(addToast = vi.fn()) {
+    render(<VirtualDomainsTab addToast={addToast} />, { wrapper })
+    await screen.findByText('extra.com')
+    return addToast
+  }
+
+  async function searchOrphan(term: string) {
+    await user.click(pencils()[1]!)
+    await user.type(field(), term)
+  }
+
+  it('loads once and does not reload on a re-render', async () => {
+    const addToast = vi.fn()
+    const { rerender } = render(<VirtualDomainsTab addToast={addToast} />, { wrapper })
+    await screen.findByText('extra.com')
+
+    rerender(<VirtualDomainsTab addToast={addToast} />)
+    await settle()
+
+    expect(mocks.getVirtualDomains).toHaveBeenCalledOnce()
+    expect(mocks.getUsers).toHaveBeenCalledOnce()
+  })
+
+  it('renders domain names after loading', async () => {
+    render(<VirtualDomainsTab addToast={vi.fn()} />, { wrapper })
+    expect(await screen.findByText('extra.com')).toBeInTheDocument()
+    expect(screen.getByText('orphan.net')).toBeInTheDocument()
+  })
+
+  it('renders owner email for owned domains', async () => {
+    render(<VirtualDomainsTab addToast={vi.fn()} />, { wrapper })
+    expect(await screen.findByText('alice@weesky.be')).toBeInTheDocument()
+  })
+
+  it('renders — for unowned domains', async () => {
+    await renderLoaded()
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('shows "No alias domains" when list is empty', async () => {
+    mocks.getVirtualDomains.mockResolvedValue([])
+    render(<VirtualDomainsTab addToast={vi.fn()} />, { wrapper })
+    expect(await screen.findByText('No virtual alias domains')).toBeInTheDocument()
+  })
+
+  it('offers only the users matching what is typed', async () => {
+    mocks.getUsers.mockResolvedValue([...MOCK_USERS, BOB])
+    await renderLoaded()
+    await searchOrphan('alice')
+    expect(await screen.findByRole('button', { name: /alice@weesky\.be/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /bob@weesky\.be/ })).not.toBeInTheDocument()
+  })
+
+  it('calls adminAddVirtualDomainOwner when a user is selected from dropdown', async () => {
+    mocks.addOwner.mockResolvedValue({ domainId: 'ORF', domainName: 'orphan.net', owners: [{ ownerId: 1, ownerEmail: 'alice@weesky.be' }] })
+    await renderLoaded()
+    await searchOrphan('alice')
+    const choice = await screen.findByRole('button', { name: /alice@weesky\.be/ })
+    // The press only holds the caret in the box; the click is what picks, so the keyboard can too.
+    fireEvent.click(choice)
+    await waitFor(() => expect(mocks.addOwner).toHaveBeenCalledWith('ORF', 1))
+  })
+
+  it('shows remove button only for owned domains', async () => {
+    await renderLoaded()
+    await user.click(pencils()[0]!)
+    expect(screen.getByTitle('Remove owner')).toBeInTheDocument()
+  })
+
+  it('does not show remove button for unowned domains', async () => {
+    await renderLoaded()
+    await user.click(pencils()[1]!)
+    expect(screen.queryByTitle('Remove owner')).not.toBeInTheDocument()
+  })
+
+  it('calls adminRemoveVirtualDomainOwner when Remove owner is clicked', async () => {
+    mocks.removeOwner.mockResolvedValue(null)
+    await renderLoaded()
+    await user.click(pencils()[0]!)
+    // The press only holds the caret in the box; the click is what removes, keyboard included.
+    fireEvent.click(screen.getByTitle('Remove owner'))
+    await waitFor(() => expect(mocks.removeOwner).toHaveBeenCalledWith('EXT', 1))
+  })
+
+  // Two surfaces, two Escapes: the list the search opened is the nearer one, and cancelling the
+  // whole edit on the key that dismisses it throws away the query with it.
+  it('closes the user list on Escape and cancels the edit only on the next one', async () => {
+    await renderLoaded()
+    await searchOrphan('alice')
+    const input = field()
+    await screen.findByRole('button', { name: /alice@weesky\.be/ })
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('button', { name: /alice@weesky\.be/ })).not.toBeInTheDocument()
+    expect(input).toBeInTheDocument()
+    expect(input).toHaveValue('alice')
+
+    await user.keyboard('{Escape}')
+
+    expect(input).not.toBeInTheDocument()
+  })
+
+  // Server prose never reaches the toast; the local fallback does — see apiErrorMessage.
+  it('shows the local fallback when add owner fails', async () => {
+    mocks.addOwner.mockRejectedValue(new Error('Domain not found'))
+    const addToast = await renderLoaded()
+    await searchOrphan('alice')
+    fireEvent.click(await screen.findByRole('button', { name: /alice@weesky\.be/ }))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to set owner', 'error'))
+  })
+
+  it('re-reads the virtual domains after a refused owner change', async () => {
+    mocks.addOwner.mockRejectedValue(new Error('Domain not found'))
+    await renderLoaded()
+    await searchOrphan('alice')
+    fireEvent.click(await screen.findByRole('button', { name: /alice@weesky\.be/ }))
+    await waitFor(() => expect(mocks.getVirtualDomains).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('orphan.net')).toBeInTheDocument()
+  })
+
+  it('draws the empty state when adminGetVirtualDomains answers null', async () => {
+    mocks.getVirtualDomains.mockResolvedValue(null)
+    render(<VirtualDomainsTab addToast={vi.fn()} />, { wrapper })
+    expect(await screen.findByText('No virtual alias domains')).toBeInTheDocument()
+    expect(screen.queryByText('extra.com')).not.toBeInTheDocument()
+  })
+
+  it('lists the virtual domains when only the users fail, naming the users', async () => {
+    mocks.getUsers.mockRejectedValue(new Error('Server error'))
+    const addToast = await renderLoaded()
+    await settle()
+    expect(addToast.mock.calls).toEqual([['Failed to load the account list', 'error']])
   })
 })
