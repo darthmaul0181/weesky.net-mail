@@ -143,7 +143,7 @@ ending with a check:
 ```
 weesky.net-mail/
 ├── install/                       # Everything a new deployment needs
-│   ├── install.sql                #   the 26 tables, the database, the MySQL account
+│   ├── install.sql                #   the database and its two MySQL accounts
 │   ├── README.md                  #   the five steps
 │   └── optional/                  #   OAuth mailboxes, calendar replies at delivery
 ├── src/
