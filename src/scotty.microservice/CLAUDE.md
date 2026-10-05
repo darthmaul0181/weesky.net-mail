@@ -171,7 +171,7 @@ else label = "Unknown";
 - Use **clean architecture**
 - **ALWAYS** Prefer record types for immutable data structures.
 - **ALWAYS** use ILogger with Structured logging to log, no string interpolation and no other logging methods.
-- Serilog writes two daily files (HTTP requests apart from the rest) at `Information`. Two categories are turned down in `Program.cs` and must stay down: `Microsoft.AspNetCore`, and `Microsoft.EntityFrameworkCore.Database.Command` — the latter logs **every executed statement** at `Information` and buried the log under SQL. `Warning` still surfaces command failures, which EF logs at `Error` under that same category.
+- Serilog writes two daily files (HTTP requests apart from the rest) at `Information`, or one console stream when `Logs:Output` is `console` (`LoggingConfiguration.Configure`). Two categories are turned down there and must stay down: `Microsoft.AspNetCore`, and `Microsoft.EntityFrameworkCore.Database.Command` — the latter logs **every executed statement** at `Information` and buried the log under SQL. `Warning` still surfaces command failures, which EF logs at `Error` under that same category.
 - **ALWAYS** use cancellation tokens for asynchronous methods.
 - **ALWAYS** use Data Transfer Objects (DTO) for API communication, validated with attributes.
 - **NEVER** use try-catch blocks solely to log and rethrow exceptions.

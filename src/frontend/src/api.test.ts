@@ -705,9 +705,9 @@ describe('mail endpoints', () => {
     mockFetch(200, { json: { total: 0, page: 0, pageSize: 50, results: [] } })
     const { api, API_BASE } = await import('./api.js')
 
-    // Guards the comparisons below against a silently undefined API_BASE (e.g. test.env not
-    // reaching import.meta.env), which would otherwise make every `${API_BASE}/...` assertion
-    // here pass vacuously against 'undefined/...'.
+    // Guards the comparisons below against a silently empty API_BASE (e.g. test-runtime-config.ts
+    // not loaded first), which would otherwise make every `${API_BASE}/...` assertion here pass
+    // vacuously against a relative '/api/...'.
     expect(API_BASE).toMatch(/^https:\/\//)
 
     await api.searchMessages({ folderPath: 'INBOX', allFolders: false, quick: 'hello' }, 0, 50)

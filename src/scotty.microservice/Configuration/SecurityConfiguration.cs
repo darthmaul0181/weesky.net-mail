@@ -78,7 +78,7 @@ internal static class SecurityConfiguration
         // frontend. Left empty, WithOrigins() refuses every cross-origin request and the webmail
         // dies with a CORS error in the console that reads like a network fault rather than a
         // missing variable. Refusing to start names the cause instead — same reason
-        // AddCredentialKeyRing refuses without STATE_DIRECTORY.
+        // StateDirectory.Resolve refuses without STATE_DIRECTORY.
         if (allowedOrigins.Length == 0)
         {
             throw new InvalidOperationException(
@@ -118,25 +118,29 @@ internal static class SecurityConfiguration
     /// The proxies are named in the environment rather than trusted by default, because the
     /// header is caller-supplied: a middleware that honours it from any peer hands anybody the
     /// ability to write their own partition key. The default known-proxy entries are cleared for
-    /// the same reason — trust here is only ever what the deployment spelled out.
+    /// the same reason — trust here is only ever what the deployment spelled out. A range
+    /// (KnownNetworks) serves a proxy whose address changes, a container's; one of length zero
+    /// would trust everyone and is refused.
     /// </summary>
     public static IServiceCollection AddProxyForwardedHeaders(
         this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment environment)
     {
-        var knownProxies = configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+        var knownProxies = (configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+            .Select(ParseProxy).ToList();
+        var knownNetworks = (configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+            .Select(ParseNetwork).ToList();
 
         // A proxy the configuration does not name makes the middleware drop the header silently:
         // the address stays the proxy's, the limiter goes back to one global bucket, and nothing
-        // says so. Refusing to start names the cause instead — as AddFrontendCors and
-        // AddCredentialKeyRing already do for their own silent failures.
-        if (knownProxies.Length == 0 && !environment.IsDevelopment())
+        // says so. Refusing to start names the cause instead.
+        if (knownProxies.Count == 0 && knownNetworks.Count == 0 && !environment.IsDevelopment())
         {
             throw new InvalidOperationException(
                 "No reverse proxy is configured. Set ForwardedHeaders__KnownProxies__0 in the service's " +
                 "EnvironmentFile to the address the proxy connects from — 127.0.0.1 when it runs on this " +
-                "host, plus ::1 if Kestrel listens on the IPv6 loopback. See " +
-                "install/README.md. Refusing to start rather than " +
-                "rate-limiting every account against one shared bucket.");
+                "host, plus ::1 if Kestrel listens on the IPv6 loopback — or ForwardedHeaders__KnownNetworks__0 " +
+                "to the range it connects from when that address changes. See install/README.md. Refusing to " +
+                "start rather than rate-limiting every account against one shared bucket.");
         }
 
         return services.Configure<ForwardedHeadersOptions>(options =>
@@ -149,14 +153,48 @@ internal static class SecurityConfiguration
 
             options.KnownProxies.Clear();
             options.KnownIPNetworks.Clear();
-            foreach (var proxy in knownProxies)
-            {
-                if (IPAddress.TryParse(proxy, out var address)) options.KnownProxies.Add(address);
-                else throw new InvalidOperationException(
-                    $"ForwardedHeaders:KnownProxies holds '{proxy}', which is not an IP address.");
-            }
+            foreach (var proxy in knownProxies) options.KnownProxies.Add(proxy);
+            foreach (var network in knownNetworks) options.KnownIPNetworks.Add(network);
         });
     }
+
+    private static IPAddress ParseProxy(string value) =>
+        IPAddress.TryParse(value, out var address)
+            ? address
+            : throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownProxies holds '{value}', which is not an IP address.");
+
+    private static System.Net.IPNetwork ParseNetwork(string value)
+    {
+        if (!System.Net.IPNetwork.TryParse(value, out var network))
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks holds '{value}', which is not a range. Write the range's " +
+                "first address and its length, such as 172.16.0.0/12 or fd00::/8.");
+        }
+
+        // .NET reads 10.1.2.3/8 as 10.0.0.0/8: refused, since it is a typo for either one.
+        if (!StartsItsRange(value, network))
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks holds '{value}', which does not start at its range's first " +
+                $"address. Write {network} for that range, or the address alone in KnownProxies.");
+        }
+
+        if (network.PrefixLength == 0)
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks holds '{value}', which trusts every address: any caller " +
+                "could then choose the address the login limiter counts. Name the proxy's own range.");
+        }
+
+        return network;
+    }
+
+    private static bool StartsItsRange(string value, System.Net.IPNetwork network) =>
+        value.Split('/') is [var address, _]
+        && IPAddress.TryParse(address, out var written)
+        && written.Equals(network.BaseAddress);
 
     /// <summary>
     /// Two policies. <c>login</c> bounds password guessing on the three endpoints that verify one
@@ -211,24 +249,13 @@ internal static class SecurityConfiguration
     /// <summary>
     /// The Data Protection key ring encrypts the IMAP credentials cookie, so it must survive
     /// restarts: losing it makes every live credentials cookie undecryptable and signs every user
-    /// out. systemd's StateDirectory= provides a directory outside the deployment path — which the
-    /// release chmod/chown walk recursively — and owned by the service user.
+    /// out. It lives in the state directory (<see cref="StateDirectory"/>).
     /// </summary>
     /// <returns>The key ring path, for the startup log line.</returns>
-    public static string AddCredentialKeyRing(this IServiceCollection services, IWebHostEnvironment environment)
+    public static string AddCredentialKeyRing(
+        this IServiceCollection services, IWebHostEnvironment environment, string stateDirectory)
     {
-        var stateDirectory = Environment.GetEnvironmentVariable("STATE_DIRECTORY")?.Split(':')[0];
-
-        if (string.IsNullOrEmpty(stateDirectory) && !environment.IsDevelopment())
-        {
-            throw new InvalidOperationException(
-                "STATE_DIRECTORY is not set. Add 'StateDirectory=scotty.microservice' to the systemd unit. " +
-                "Refusing to start rather than falling back to a key ring under the deployment directory.");
-        }
-
-        var keyRingPath = string.IsNullOrEmpty(stateDirectory)
-            ? Path.Combine(environment.ContentRootPath, "keys")   // development only
-            : Path.Combine(stateDirectory, "keys");
+        var keyRingPath = Path.Combine(stateDirectory, "keys");
 
         Directory.CreateDirectory(keyRingPath);
 

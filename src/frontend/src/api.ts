@@ -39,8 +39,9 @@ import type { ServerVersion } from './modules/settings/about/aboutTypes'
 import { LOGO_SIZES, type LogoSize } from './lib/appLogo'
 import { readStored, removeStored, writeStored } from './lib/safeStorage'
 import { anySignal, withTimeout } from './lib/withTimeout'
+import { configuredApiBase } from './lib/runtimeConfig'
 
-const BASE: string = import.meta.env.VITE_API_BASE
+const BASE: string = configuredApiBase
 const SESSION_KEY = 'sessionActive'
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'

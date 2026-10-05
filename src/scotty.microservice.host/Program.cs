@@ -1,18 +1,23 @@
 using weesky.Scotty.Microservice.Authentication.Middleware;
+using weesky.Scotty.Microservice.Authentication.Models;
 using weesky.Scotty.Microservice.Configuration;
 using weesky.Scotty.Microservice.Controllers;
 using weesky.Scotty.Providers.Weesky;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseScottyLogging();
+builder.Host.UseScottyLogging(builder.Configuration);
 
 // Read before anything is registered: the platform decides which directory answers for accounts,
 // aliases and admin rights, and a deployment that does not say refuses to start.
 var isWeesky = builder.Configuration.UsesWeeskyPlatform();
 
+var stateDirectory = StateDirectory.Resolve(builder.Environment);
+var sessionKey = SessionSigningKey.Resolve(builder.Configuration["TokenConstants:Key"], stateDirectory);
+
 builder.Services
     .AddScottyOptions(builder.Configuration)
+    .PostConfigure<TokenConstants>(constants => constants.Key = sessionKey.Key)
     .AddScottyDatabases(builder.Configuration)
     .AddMailServices()
     .AddRuleProviders()
@@ -30,7 +35,7 @@ else builder.Services.AddGenericPlatform(builder.Configuration);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<AttachmentSizeLimitFilter>();
 
-var keyRingPath = builder.Services.AddCredentialKeyRing(builder.Environment);
+var keyRingPath = builder.Services.AddCredentialKeyRing(builder.Environment, stateDirectory);
 
 var mvc = builder.Services
     .AddControllers(MvcFormatterConfiguration.ConfigureFormatters)
@@ -46,6 +51,8 @@ if (isWeesky) mvc.AddApplicationPart(typeof(WeeskyPlatform).Assembly);
 var app = builder.Build();
 
 app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
+if (sessionKey.GeneratedIn is not null)
+    app.Logger.LogInformation("New session signing key generated in {Path}", sessionKey.GeneratedIn);
 
 // First of all: everything downstream that reads the caller's address — the request log and the
 // login rate limiter above all — must see the client's, not the reverse proxy's.

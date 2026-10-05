@@ -35,7 +35,7 @@ public static class AuthorizationExtension
             {
                 var tokenConstants = tokenConstantsOptions.Value;
 
-                // Length is guaranteed by AddScottyOptions, which refuses to start on a short key.
+                // Length is guaranteed by AddScottyOptions, which refuses to start on a short key — configured or read from its file.
                 var key = Encoding.UTF8.GetBytes(tokenConstants.Key);
 
                 options.TokenValidationParameters = new TokenValidationParameters()

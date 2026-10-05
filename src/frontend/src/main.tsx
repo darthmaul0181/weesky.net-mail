@@ -20,20 +20,24 @@ import './styles/calendar.css'
 import App from './App'
 import { initI18n } from './lib/i18n'
 import { readLanguageMirror, resolveLocale } from './lib/locale'
+import { runtimeConfig, showConfigError } from './lib/runtimeConfig'
+
+const root = document.getElementById('root')!
 
 // Awaited before the first render, or the app paints its own keys; `.then`, not top-level await,
 // so the bundle needs no TLA target. The `.catch` covers a hashed chunk failing to load (a
 // redeploy under an open tab), which would otherwise leave every route a blank document.
-void initI18n(resolveLocale(undefined, readLanguageMirror(), navigator.languages))
+if ('error' in runtimeConfig) showConfigError(root, runtimeConfig.error)
+else void initI18n(resolveLocale(undefined, readLanguageMirror(), navigator.languages))
   .then(() => {
-    createRoot(document.getElementById('root')!).render(
+    createRoot(root).render(
       <StrictMode>
         <App />
       </StrictMode>,
     )
   })
   .catch(() => {
-    document.getElementById('root')!.innerHTML =
+    root.innerHTML =
       '<p style="padding:2rem;font:16px system-ui">Something went wrong loading the app. ' +
       '<button onclick="location.reload()">Reload</button></p>'
   })

@@ -28,14 +28,15 @@ public sealed class ForwardedHeadersConfigurationTests
         return environment.Object;
     }
 
-    private static IConfiguration Configuration(params string[] knownProxies)
-    {
-        var values = new Dictionary<string, string?>();
-        for (var i = 0; i < knownProxies.Length; i++)
-            values[$"ForwardedHeaders:KnownProxies:{i}"] = knownProxies[i];
+    private static IConfiguration Configuration(params string[] knownProxies) => List("KnownProxies", knownProxies);
 
-        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
-    }
+    private static IConfiguration Networks(params string[] knownNetworks) => List("KnownNetworks", knownNetworks);
+
+    private static IConfiguration List(string key, string[] entries) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(entries.Select((entry, i) =>
+                new KeyValuePair<string, string?>($"ForwardedHeaders:{key}:{i}", entry)))
+            .Build();
 
     private static ForwardedHeadersOptions Build(IConfiguration configuration, string environmentName)
     {
@@ -81,7 +82,7 @@ public sealed class ForwardedHeadersConfigurationTests
     /// <summary>
     /// The failure this refuses is silent: an unnamed proxy makes the middleware drop the header,
     /// the address stays the proxy's, and the limiter goes on answering 429 for everyone with
-    /// nothing in the log saying why. Same choice AddFrontendCors and AddCredentialKeyRing make.
+    /// nothing in the log saying why. Same choice AddFrontendCors and StateDirectory.Resolve make.
     /// </summary>
     [Fact]
     public void AddProxyForwardedHeaders_RefusesToStartOutsideDevelopmentWithNoProxyNamed()
@@ -90,6 +91,7 @@ public sealed class ForwardedHeadersConfigurationTests
             () => Build(Configuration(), Environments.Production));
 
         Assert.Contains("ForwardedHeaders__KnownProxies__0", error.Message);
+        Assert.Contains("ForwardedHeaders__KnownNetworks__0", error.Message);
     }
 
     [Fact]
@@ -100,5 +102,67 @@ public sealed class ForwardedHeadersConfigurationTests
         // Nothing sits in front of the dev server, so the connection address is already the client's.
         Assert.Empty(options.KnownProxies);
         Assert.Empty(options.KnownIPNetworks);
+    }
+
+    /// <summary>
+    /// A container's proxy gets a new address on every restart, inside its network's range: naming the
+    /// range is the only way to trust it without editing the settings each time.
+    /// </summary>
+    [Fact]
+    public void AddProxyForwardedHeaders_TrustsTheConfiguredRanges()
+    {
+        var options = Build(Networks("172.16.0.0/12", "fd00::/8"), Environments.Production);
+
+        Assert.Contains(System.Net.IPNetwork.Parse("172.16.0.0/12"), options.KnownIPNetworks);
+        Assert.Contains(System.Net.IPNetwork.Parse("fd00::/8"), options.KnownIPNetworks);
+        Assert.Empty(options.KnownProxies);
+        Assert.Equal(1, options.ForwardLimit);
+    }
+
+    [Theory]
+    [InlineData("172.16.0.0")]
+    [InlineData("172.16.0.0/33")]
+    [InlineData("not-a-range")]
+    [InlineData("10.1.2.3/8")]
+    public void AddProxyForwardedHeaders_RefusesToStartOnAMalformedRange(string range)
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Networks(range), Environments.Production));
+
+        Assert.Contains($"'{range}'", error.Message);
+    }
+
+    [Fact]
+    public void AddProxyForwardedHeaders_NamesTheRangeAMisplacedAddressMeant()
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Networks("10.1.2.3/8"), Environments.Production));
+
+        Assert.Contains("10.0.0.0/8", error.Message);
+    }
+
+    /// <summary>
+    /// A zero-length range trusts every address: any caller could then pick the address the login
+    /// limiter counts, which is the limiter switched off.
+    /// </summary>
+    [Theory]
+    [InlineData("0.0.0.0/0")]
+    [InlineData("::/0")]
+    public void AddProxyForwardedHeaders_RefusesARangeThatTrustsEveryone(string range)
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Networks(range), Environments.Production));
+
+        Assert.Contains($"'{range}'", error.Message);
+        Assert.Contains("every address", error.Message);
+    }
+
+    [Fact]
+    public void AddProxyForwardedHeaders_RefusesToStartOnAMalformedProxy()
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => Build(Configuration("proxy.local"), Environments.Production));
+
+        Assert.Contains("'proxy.local'", error.Message);
     }
 }

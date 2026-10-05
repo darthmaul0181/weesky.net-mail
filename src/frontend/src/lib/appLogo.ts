@@ -1,5 +1,6 @@
 import favicon32 from '../assets/favicon-32.png'
 import logo192 from '../assets/logo-192.png'
+import { configuredApiBase } from './runtimeConfig'
 import { readStored, writeStored } from './safeStorage'
 
 export const LOGO_SIZES = [32, 192, 512] as const
@@ -11,7 +12,7 @@ export const LOGO_MAX_BYTES: Record<LogoSize, number> = { 32: 16 * 1024, 192: 25
 
 const SCOTTY: LogoUrls = { 32: favicon32, 192: logo192, 512: '/icon-512.png' }
 const VERSION_KEY = 'app.logoVersion'
-const BASE: string = import.meta.env.VITE_API_BASE
+const BASE: string = configuredApiBase
 
 export function logoUrls(version: string): LogoUrls {
   if (!version) return SCOTTY

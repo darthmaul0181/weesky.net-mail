@@ -22,7 +22,7 @@ internal static class ApplicationServicesConfiguration
         // The signing key is the whole of this API's authentication, and a short one is not refused
         // by the handler — HMAC takes any length. Validated on start rather than on first use, so
         // a misconfigured deployment fails where an operator is watching instead of on a 500 the
-        // first user meets. Same refusal AddFrontendCors and AddCredentialKeyRing make.
+        // first user meets. Same refusal AddFrontendCors and StateDirectory.Resolve make.
         services.AddOptions<PlatformOptions>().Bind(configuration);
         services.AddOptions<TokenConstants>()
             .Bind(configuration.GetSection("TokenConstants"))
