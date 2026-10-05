@@ -149,10 +149,10 @@ describe('Extended rules slider', () => {
 // ── RulesPage — initial load ──────────────────────────────────
 
 describe('RulesPage — initial load', () => {
-  it('shows spinner while loading', () => {
+  it('announces the load while the rules are on their way', () => {
     vi.mocked(api.getRules).mockReturnValue(new Promise(() => {}))
     renderPage()
-    expect(document.querySelector('.loading-center')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
   })
 
   it('words a timed-out load in the reader’s language, not in the error’s', async () => {
@@ -209,7 +209,7 @@ describe('RulesPage — initial load', () => {
     rerender(<RulesPage />)
 
     expect(screen.queryByText('Primary Rule')).not.toBeInTheDocument()
-    expect(document.querySelector('.loading-center')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
     await act(async () => { linked.resolve(ruleSet('weesky', [])) })
   })
 

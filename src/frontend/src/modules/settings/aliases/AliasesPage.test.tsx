@@ -72,6 +72,12 @@ describe('AliasesPage', () => {
     expect(await screen.findByText('No aliases for this domain.')).toBeInTheDocument()
   })
 
+  it('announces the first load', () => {
+    mocks.getAliases.mockReturnValue(new Promise(() => {}))
+    renderPage()
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+  })
+
   it('shows an error alert when alias load fails', async () => {
     mocks.getAliases.mockRejectedValue(new Error('net'))
     renderPage()
@@ -85,9 +91,9 @@ describe('AliasesPage', () => {
     await screen.findByText('alias1')
     unmount()
 
-    const { container } = renderPage()
+    renderPage()
     expect(screen.getByText('alias1')).toBeInTheDocument()
-    expect(container.querySelector('.loading-center')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
     expect(mocks.getAliases).toHaveBeenCalledTimes(1)
   })
 
@@ -125,7 +131,7 @@ describe('AliasesPage', () => {
     act(() => { void queryClient.invalidateQueries({ queryKey: mailKeys.aliases('primary') }) })
     await settle()
 
-    expect(document.querySelector('.loading-center')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument()
     // The same DOM node, not a new one: a role="alert" only announces on insertion or a text
     // change, so this is what proves the refetch drew no second announcement.
     expect(screen.getByRole('alert')).toBe(banner)

@@ -890,13 +890,6 @@ body {
   to { transform: rotate(360deg); }
 }
 
-.loading-center {
-  display: flex;
-  justify-content: center;
-  padding: 48px;
-  color: var(--text-muted);
-}
-
 /* ── Admin page body ─────────────────────────────────────── */
 
 .admin-modal-body {
