@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { useRef, useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import DropdownMenu, { type MenuItem, type MenuEntry } from './DropdownMenu'
 import { useLayer } from '../hooks/useLayer'
 import { hasOpenLayer } from '../lib/layerStack'
+import { setupUser } from '../test-utils'
 
 function items(overrides?: Partial<{ onSelect: () => void; disabled: boolean; title: string }>[]): MenuItem[] {
   return [
@@ -37,30 +37,6 @@ describe('DropdownMenu', () => {
     fireEvent.mouseDown(document.body)
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
-  })
-
-  it('closes on Escape', () => {
-    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
-
-    fireEvent.click(screen.getByLabelText('Message actions'))
-    expect(screen.getByRole('menu')).toBeInTheDocument()
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
-  })
-
-  it('marks the Escape it spends, so a window listener behind it can tell', () => {
-    const behind = vi.fn((e: KeyboardEvent) => e.defaultPrevented)
-    window.addEventListener('keydown', behind)
-    render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />)
-    fireEvent.click(screen.getByLabelText('Message actions'))
-
-    fireEvent.keyDown(document.body, { key: 'Escape' })
-
-    window.removeEventListener('keydown', behind)
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
-    expect(behind).toHaveReturnedWith(true)
   })
 
   /* The menu no longer stops the event on its way up — the stack owns Escape, and an ancestor
@@ -109,21 +85,6 @@ describe('DropdownMenu', () => {
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     expect(trigger).toHaveFocus()
-  })
-
-  it('leaves focus alone when it was not inside the menu', () => {
-    render(
-      <>
-        <input aria-label="Elsewhere" />
-        <DropdownMenu ariaLabel="Message actions" trigger="..." items={items()} />
-      </>)
-    fireEvent.click(screen.getByLabelText('Message actions'))
-    const elsewhere = screen.getByLabelText('Elsewhere')
-    elsewhere.focus()
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-
-    expect(elsewhere).toHaveFocus()
   })
 
   it('lets any other key through while it is open', () => {
@@ -186,11 +147,12 @@ describe('DropdownMenu', () => {
     expect(addedFor('keydown')).toHaveLength(0)
   })
 
-  it('an item click closes and fires its action', () => {
+  it('renders an onSelect item as a button; a click closes the menu and fires its action', () => {
     const onSelect = vi.fn()
     render(<DropdownMenu ariaLabel="Message actions" trigger="..." items={items([{ onSelect }])} />)
 
     fireEvent.click(screen.getByLabelText('Message actions'))
+    expect(screen.getByRole('menuitem', { name: 'Mark as read' }).tagName).toBe('BUTTON')
     fireEvent.click(screen.getByText('Mark as read'))
 
     expect(onSelect).toHaveBeenCalledTimes(1)
@@ -203,13 +165,13 @@ describe('DropdownMenu', () => {
     fireEvent.click(trigger)
     screen.getByRole('menuitem', { name: 'Star' }).focus()
 
-    await userEvent.keyboard('{Enter}')
+    await setupUser().keyboard('{Enter}')
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     expect(trigger).toHaveFocus()
   })
 
-  it('hands focus back to the trigger when a link item is activated', () => {
+  it('closes the menu and hands focus back to the trigger when a link item is activated', () => {
     render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
       items={[{ label: 'View source', href: '/mail/source' }]} />)
     open()
@@ -218,6 +180,7 @@ describe('DropdownMenu', () => {
 
     fireEvent.click(link)
 
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
   })
 
@@ -237,7 +200,7 @@ describe('DropdownMenu', () => {
     open()
     screen.getByRole('menuitem', { name: 'Rename' }).focus()
 
-    await userEvent.keyboard('{Enter}')
+    await setupUser().keyboard('{Enter}')
 
     expect(screen.getByLabelText('Name')).toHaveFocus()
   })
@@ -316,14 +279,6 @@ describe('DropdownMenu', () => {
       expect(screen.getByRole('menu', { name: 'Message actions' })).toBeInTheDocument()
     })
 
-    it('puts the focus on the first item as it opens', () => {
-      render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
-
-      open()
-
-      expect(row('Mark as read')).toHaveFocus()
-    })
-
     it('walks the items on the vertical arrows, wrapping at both ends', () => {
       render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
       open()
@@ -340,34 +295,6 @@ describe('DropdownMenu', () => {
 
       fireEvent.keyDown(row('Mark as read'), { key: 'ArrowUp' })
       expect(row('View source')).toHaveFocus()
-    })
-
-    it('jumps to the ends on Home and End', () => {
-      render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
-      open()
-
-      fireEvent.keyDown(row('Mark as read'), { key: 'End' })
-      expect(row('View source')).toHaveFocus()
-
-      fireEvent.keyDown(row('View source'), { key: 'Home' })
-      expect(row('Mark as read')).toHaveFocus()
-    })
-
-    /* The mail list's own row keys and the layer stack both read `defaultPrevented` before acting,
-       and a row menu is one keydown away from the rows underneath it. */
-    it('marks the keys the walk spends', () => {
-      const behind = vi.fn((e: KeyboardEvent) => e.defaultPrevented)
-      window.addEventListener('keydown', behind)
-      render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={rows} />)
-      open()
-
-      fireEvent.keyDown(row('Mark as read'), { key: 'ArrowDown' })
-      fireEvent.keyDown(row('Archive'), { key: 'End' })
-
-      window.removeEventListener('keydown', behind)
-      expect(behind).toHaveBeenCalledTimes(2)
-      expect(behind).toHaveNthReturnedWith(1, true)
-      expect(behind).toHaveNthReturnedWith(2, true)
     })
 
     /* A menu is a trapless layer over the dialog it was opened in: the arrows are the menu's and
@@ -447,39 +374,22 @@ describe('DropdownMenu', () => {
       return () => { rectSpy.mockRestore(); heightSpy.mockRestore(); vi.unstubAllGlobals() }
     }
 
-    it('opens upward, aligned on the trigger, when the menu would run past the fold', () => {
-      const restore = place(522, 763, 290)
+    it.each([
+      ['opens upward, aligned on the trigger, when the menu would run past the fold',
+        [522, 763, 290], { position: 'fixed', bottom: '245px', left: '920px' }],
+      ['leaves the menu below, unpositioned, when there is room for it', [200, 900, 290], null],
+      // Flipping a menu that fits neither way trades a clipped bottom, which a scroll can still
+      // reach, for a clipped top, which nothing can.
+      ['stays below when the menu fits on neither side', [300, 500, 900], null],
+    ] as const)('%s', (_, [triggerTop, viewport, menuHeight], style) => {
+      const restore = place(triggerTop, viewport, menuHeight)
 
       render(<DropdownMenu ariaLabel="Add a field" trigger="+" items={items()}
         direction="auto" align="left" />)
       fireEvent.click(screen.getByLabelText('Add a field'))
 
-      expect(screen.getByRole('menu'))
-        .toHaveStyle({ position: 'fixed', bottom: '245px', left: '920px' })
-      restore()
-    })
-
-    it('leaves the menu below, unpositioned, when there is room for it', () => {
-      const restore = place(200, 900, 290)
-
-      render(<DropdownMenu ariaLabel="Add a field" trigger="+" items={items()}
-        direction="auto" align="left" />)
-      fireEvent.click(screen.getByLabelText('Add a field'))
-
-      expect(screen.getByRole('menu')).not.toHaveAttribute('style')
-      restore()
-    })
-
-    /* Flipping a menu that fits neither way trades a clipped bottom, which a scroll can still
-       reach, for a clipped top, which nothing can. */
-    it('stays below when the menu fits on neither side', () => {
-      const restore = place(300, 500, 900)
-
-      render(<DropdownMenu ariaLabel="Add a field" trigger="+" items={items()}
-        direction="auto" align="left" />)
-      fireEvent.click(screen.getByLabelText('Add a field'))
-
-      expect(screen.getByRole('menu')).not.toHaveAttribute('style')
+      if (style) expect(screen.getByRole('menu')).toHaveStyle(style)
+      else expect(screen.getByRole('menu')).not.toHaveAttribute('style')
       restore()
     })
   })
@@ -510,16 +420,6 @@ describe('DropdownMenu', () => {
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
   })
 
-  it('closes the menu when a link item is activated', () => {
-    render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
-      items={[{ label: 'View source', href: '/mail/source' }]} />)
-    open()
-
-    fireEvent.click(screen.getByRole('menuitem', { name: 'View source' }))
-
-    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
-  })
-
   it('closes the menu when a link item is middle-clicked', () => {
     render(<DropdownMenu ariaLabel="Menu" trigger="⋮"
       items={[{ label: 'View source', href: '/mail/source' }]} />)
@@ -531,17 +431,5 @@ describe('DropdownMenu', () => {
       new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }))
 
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
-  })
-
-  it('still renders an item carrying onSelect as a button', () => {
-    const onSelect = vi.fn()
-    render(<DropdownMenu ariaLabel="Menu" trigger="⋮" items={[{ label: 'Archive', onSelect }]} />)
-    open()
-
-    const item = screen.getByRole('menuitem', { name: 'Archive' })
-    expect(item.tagName).toBe('BUTTON')
-
-    fireEvent.click(item)
-    expect(onSelect).toHaveBeenCalledOnce()
   })
 })

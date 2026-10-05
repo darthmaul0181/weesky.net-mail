@@ -1,9 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { useRef, type FormEvent, type ReactNode } from 'react'
 import Modal from './Modal'
-import { fireEscape } from '../test-utils'
+import { fireEscape, setupUser } from '../test-utils'
 
 function backdrop(index = 0) {
   return screen.getAllByRole('presentation')[index]!
@@ -59,22 +58,11 @@ describe('Modal', () => {
     expect(screen.getByRole('button', { name: 'Close the editor' })).toBeInTheDocument()
   })
 
-  it('closes when the press starts and ends on the backdrop', () => {
-    const { onClose } = openModal()
-
-    fireEvent.mouseDown(backdrop())
-    fireEvent.mouseUp(backdrop())
-    fireEvent.click(backdrop())
-
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  // The trio above is built from individual fireEvent calls; this is the real pointer/mouse
-  // sequence a browser fires for one click, dispatched by userEvent rather than hand-assembled.
+  // The real pointer/mouse sequence a browser fires for one click, dispatched by userEvent.
   it('closes on a plain user click on the backdrop', async () => {
     const { onClose } = openModal()
 
-    await userEvent.click(backdrop())
+    await setupUser().click(backdrop())
 
     expect(onClose).toHaveBeenCalledTimes(1)
   })

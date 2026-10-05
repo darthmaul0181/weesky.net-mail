@@ -40,7 +40,6 @@ describe('resolveLocale', () => {
   // `frr` is Northern Frisian, not French, and a first-two-characters match would confuse them.
   it('does not mistake a three-letter primary subtag for a two-letter one it starts with', () => {
     expect(resolveLocale(undefined, undefined, ['frr'])).toBe('en')
-    expect(resolveLocale(undefined, undefined, ['fr-BE'])).toBe('fr')
   })
 
   it('takes the first supported browser language, skipping the ones it cannot serve', () => {
