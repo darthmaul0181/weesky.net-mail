@@ -25,7 +25,7 @@ builder.Services
     .AddProblemDetails();
 
 if (isWeesky) builder.Services.AddWeeskyPlatform(builder.Configuration);
-else builder.Services.AddGenericPlatform();
+else builder.Services.AddGenericPlatform(builder.Configuration);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<AttachmentSizeLimitFilter>();

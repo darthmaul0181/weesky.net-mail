@@ -114,12 +114,22 @@ public sealed class CapabilitiesControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var capabilities = Assert.IsType<CapabilitiesResponse>(ok.Value);
         Assert.Equal("generic", capabilities.Platform);
-        Assert.False(capabilities.Admin);
         Assert.False(capabilities.Aliases);
         Assert.False(capabilities.PasswordChange);
         Assert.False(capabilities.ProfileEditing);
         Assert.False(capabilities.StrictIdentities);
-        _accountInfo.Verify(a => a.GetAccountInfoAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetCapabilities_OnGeneric_AdminFollowsTheAccount(bool isAdmin)
+    {
+        _platform = new PlatformOptions { Platform = PlatformOptions.Generic };
+        _accountInfo.Setup(a => a.GetAccountInfoAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(Result.Success(new AccountInfo { UserId = 0, UserName = "john", IsAdmin = isAdmin }));
+
+        Assert.Equal(isAdmin, (await GetCapabilitiesAsync()).Admin);
     }
 
     [Fact]

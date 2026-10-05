@@ -58,7 +58,7 @@ public sealed class PlatformBootTests
         }
         else
         {
-            services.AddGenericPlatform();
+            services.AddGenericPlatform(configuration);
         }
 
         return services.BuildServiceProvider(validateScopes: true);

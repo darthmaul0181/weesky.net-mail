@@ -54,7 +54,7 @@ public sealed class CapabilitiesController(
 
         return Ok(new CapabilitiesResponse(
             Platform: isWeesky ? PlatformOptions.Weesky : PlatformOptions.Generic,
-            Admin: isWeesky && await IsAdminAsync(cancellationToken),
+            Admin: await IsAdminAsync(cancellationToken),
             Aliases: isWeesky,
             PasswordChange: isWeesky,
             ProfileEditing: isWeesky,
