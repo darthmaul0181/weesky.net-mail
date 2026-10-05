@@ -57,9 +57,11 @@ export function isVisible(folder: MailFolderNode): boolean {
 }
 
 // No unread prompt for trash or junk: nobody is behind on deleted mail, and a junk count advertises
-// what the filter was meant to spare.
-export function showsUnreadCount(folder: MailFolderNode): boolean {
-  return folder.specialUse !== 'trash' && folder.specialUse !== 'junk'
+// what the filter was meant to spare. A draft is unfinished work whether or not it was opened.
+function badgeCount(folder: MailFolderNode): number {
+  if (folder.specialUse === 'drafts') return folder.total ?? 0
+  if (folder.specialUse === 'trash' || folder.specialUse === 'junk') return 0
+  return folder.unread ?? 0
 }
 
 function FolderRow({
@@ -83,7 +85,7 @@ function FolderRow({
   const label = folder.specialUse ? roleLabel(folder.specialUse, t) : folder.name
   // Only when a badge is actually rendered does the accessible name grow a suffix — an unread
   // count on trash or junk never reaches the screen, so it must not reach assistive tech either.
-  const showsBadge = Boolean(folder.unread) && showsUnreadCount(folder)
+  const count = badgeCount(folder)
 
   // The source folder rides in the payload, but the browser withholds it until drop, so the
   // eligibility check during a hover reads the open folder instead — which is that same source.
@@ -140,9 +142,11 @@ function FolderRow({
           // The label and badge spans concatenate into the accessible name with no separator
           // ("Inbox4"), which is a real number losing its meaning, not a decorative artifact —
           // so instead of hiding the count from assistive tech, spell it out as words.
-          aria-label={showsBadge
-            ? t('folders.unreadAria', { label, count: folder.unread })
-            : undefined}
+          aria-label={count === 0
+            ? undefined
+            : folder.specialUse === 'drafts'
+              ? t('folders.draftsAria', { label, count })
+              : t('folders.unreadAria', { label, count })}
           // The role label replaces the name; the real mailbox name stays one hover away, so
           // the user never loses track of which physical folder they are looking at.
           title={folder.specialUse ? folder.name : undefined}
@@ -153,7 +157,7 @@ function FolderRow({
           {/* Decorative: the row is already named by its label, so it adds nothing to say. */}
           {showIcons && folderIcon(folder.specialUse)}
           <span className="folder-row-name">{label}</span>
-          {showsBadge ? <span className="folder-row-count">{folder.unread}</span> : null}
+          {count > 0 ? <span className="folder-row-count">{count}</span> : null}
         </button>
       </div>
 
