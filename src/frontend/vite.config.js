@@ -185,8 +185,6 @@ export default defineConfig(({ command, mode }) => {
       // falls outside the pattern.
       css: { include: [/src\/.*\.css/] },
       setupFiles: ['./src/test-setup.ts'],
-      // Reserved .test host; tests assert against the exported API_BASE, never this literal.
-      env: { VITE_API_BASE: 'https://api.example.test' },
       coverage: {
         provider: 'v8',
         reporter: ['text', 'cobertura'],

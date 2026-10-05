@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_API_BASE: string
+interface Window {
+  /** Set by /config.js, which index.html loads before the app's module. */
+  SCOTTY_CONFIG?: { apiBase?: unknown }
 }
 
 // Stamped by vite.config.js at build time.
