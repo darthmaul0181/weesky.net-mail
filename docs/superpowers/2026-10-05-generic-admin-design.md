@@ -113,8 +113,16 @@ pas.
 backend antérieur au champ, on montre la version weesky plutôt qu'un écran qui clignote.
 
 L'onglet ouvert par défaut est le premier onglet visible : Comptes en `weesky`, Domaines externes
-en `generic`. Si les capabilities arrivent après le premier rendu et masquent l'onglet actif,
-l'onglet affiché retombe sur le premier visible. Aucun onglet masqué ne reste affiché.
+en `generic`. Si l'onglet choisi n'est plus visible, l'écran retombe sur le premier visible : aucun
+onglet masqué ne reste affiché.
+
+**La page attend les capabilities.** Sans cette attente, un rechargement de `/settings/admin` en
+`generic` monterait l'onglet Comptes avant que la plateforme soit connue. Sa route n'existe pas en
+`generic` : l'utilisateur verrait une erreur 404 pendant un instant. `AuthContext` expose donc
+`capabilitiesLoaded`, qui passe à vrai une fois la réponse arrivée, qu'elle soit un succès ou un
+échec. Le gate `allowAdmin` répond `'wait'` tant que ce drapeau est faux. Un backend antérieur qui
+répond 404 donne `capabilitiesLoaded = true` avec `capabilities = null`, et la page montre alors la
+version weesky.
 
 ### 7. La documentation
 
@@ -142,4 +150,5 @@ Frontend :
 
 - `SettingsLayout` : entrée Administration visible avec un compte connecté actif ;
 - `AdminPage` : cinq onglets en `weesky` (et capabilities nulles), deux en `generic` ; onglet par
-  défaut ; repli quand l'onglet actif disparaît.
+  défaut ; repli quand l'onglet actif disparaît ;
+- `allowAdmin` : `'wait'` tant que les capabilities ne sont pas chargées.
