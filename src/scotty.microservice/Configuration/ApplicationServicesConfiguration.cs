@@ -42,6 +42,10 @@ internal static class ApplicationServicesConfiguration
                      && o.PoolMaxLifetimeMinutes > 0 && o.PoolMaxPerIdentity >= 0 && o.PoolMaxTotal >= 0,
                 "Mail: TimeoutSeconds, PoolHealthTimeoutSeconds and PoolMaxLifetimeMinutes must be positive; " +
                 "PoolIdleSeconds, PoolMaxPerIdentity and PoolMaxTotal must not be negative")
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.ImapHost) && !string.IsNullOrWhiteSpace(o.SmtpHost),
+                "Mail:ImapHost and Mail:SmtpHost must name your mail servers. Set Mail__ImapHost and " +
+                "Mail__SmtpHost — for example Mail__ImapHost=imap.example.net.")
             .ValidateOnStart();
         services.AddOptions<TrustedSenderOptions>().Bind(configuration.GetSection("TrustedSenders"));
         services.AddOptions<DavOptions>()

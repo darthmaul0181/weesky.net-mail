@@ -64,6 +64,18 @@ public sealed class FrontendSettingsTests : IDisposable
         Assert.Equal(host, settings.ApiHost);
     }
 
+    [Fact]
+    public void APath_IsResolvedOnce()
+    {
+        var roundabout = Path.Combine(dist.FullName, "..", dist.Name);
+
+        Assert.Equal(dist.FullName, Read(roundabout)!.Root);
+    }
+
+    [Fact]
+    public void AnInternationalHost_IsComparedInTheFormBrowsersSend()
+        => Assert.Equal("xn--bcher-kva.example", Read(dist.FullName, "https://bücher.example")!.ApiHost);
+
     [Theory]
     [InlineData("api.example.net")]
     [InlineData("ftp://api.example.net")]

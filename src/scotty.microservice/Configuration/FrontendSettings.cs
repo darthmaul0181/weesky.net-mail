@@ -11,8 +11,9 @@ public sealed record FrontendSettings(string Root, string ApiBase, string? ApiHo
 {
     public static FrontendSettings? Read(IConfiguration configuration)
     {
-        var root = configuration["Frontend:Path"];
-        if (string.IsNullOrWhiteSpace(root)) return null;
+        var configured = configuration["Frontend:Path"];
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+        var root = Path.GetFullPath(configured);
         if (!File.Exists(Path.Combine(root, "index.html")))
             throw new InvalidOperationException($"Frontend:Path is '{root}', which holds no index.html.");
 
@@ -28,6 +29,6 @@ public sealed record FrontendSettings(string Root, string ApiBase, string? ApiHo
                 "https://api.example.net, or leave it empty when one address serves both the pages and the API.");
         }
 
-        return new FrontendSettings(root, uri.GetLeftPart(UriPartial.Authority), uri.Host);
+        return new FrontendSettings(root, uri.GetLeftPart(UriPartial.Authority), uri.IdnHost);
     }
 }

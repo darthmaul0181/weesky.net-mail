@@ -87,7 +87,16 @@ internal static class LoggingConfiguration
             options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
                 diagnosticContext.Set("ClientIp", httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
 
-            options.GetLevel = (ctx, _, _) =>
-                ctx.Request.Path == "/health" ? LogEventLevel.Verbose : LogEventLevel.Information;
+            options.GetLevel = (ctx, _, _) => RequestLevel(ctx);
         });
+
+    /// <summary>
+    /// The probe, and the pages the Docker image serves: one page load fetches a dozen files, which
+    /// would bury the API's own lines. A page that fails still logs; elsewhere no page answers 2xx.
+    /// </summary>
+    internal static LogEventLevel RequestLevel(HttpContext context) =>
+        context.Request.Path == "/health"
+        || (FrontendHosting.IsPagePath(context.Request.Path) && context.Response.StatusCode < 400)
+            ? LogEventLevel.Verbose
+            : LogEventLevel.Information;
 }

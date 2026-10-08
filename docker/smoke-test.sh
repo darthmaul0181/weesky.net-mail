@@ -16,7 +16,7 @@ fail() { echo "::error::$*" >&2; exit 1; }
 cleanup() {
   echo "--- container log (last 60 lines) ---"
   docker logs "$RUN-app" 2>&1 | tail -n 60 || true
-  docker rm -fv "$RUN-app" "$RUN-db" >/dev/null 2>&1 || true
+  docker rm -fv "$RUN-app" "$RUN-bare" "$RUN-db" >/dev/null 2>&1 || true
   docker network rm "$RUN" >/dev/null 2>&1 || true
   rm -rf "$WORK"
 }
@@ -71,7 +71,23 @@ done
 
 if [ -n "$COMMIT" ]; then
   grep -q "commit $COMMIT" "$WORK/log" || fail "the API does not carry commit $COMMIT"
-  grep -rqF "$COMMIT" "$WORK/frontend/assets" || fail "the web app does not carry commit $COMMIT"
+  # As a whole string literal, the way the build stamps it: a bare 7-hex match could be chance.
+  grep -rqE "[\"'\`]$COMMIT[\"'\`]" "$WORK/frontend/assets" || fail "the web app does not carry commit $COMMIT"
 fi
+
+# Without its mail servers the image must refuse to start, never fall back on a built-in host.
+docker run -d --name "$RUN-bare" --network "$RUN" --read-only --tmpfs /tmp \
+  -e "ConnectionStrings__WebmailPreferencesDatabase=$DB;User=scotty_webmail;Password=app-secret" \
+  -e ForwardedHeaders__KnownNetworks__0=172.16.0.0/12 \
+  "$IMAGE" >/dev/null
+for _ in $(seq 30); do
+  [ "$(docker inspect -f '{{.State.Status}}' "$RUN-bare")" = exited ] && break
+  sleep 1
+done
+docker logs "$RUN-bare" > "$WORK/bare" 2>&1
+[ "$(docker inspect -f '{{.State.Status}}' "$RUN-bare")" = exited ] \
+  && grep -q 'Mail:ImapHost and Mail:SmtpHost' "$WORK/bare" \
+  || fail "the image started without Mail__ImapHost"
+docker rm -fv "$RUN-bare" >/dev/null
 
 echo "Smoke test passed: $IMAGE"
