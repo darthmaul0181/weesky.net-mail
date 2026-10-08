@@ -124,11 +124,15 @@ ending with a check:
 4. **Publish** both through your web server, on two addresses of the same domain
 5. **Sign in** with any mailbox's address and password — there is no account to create
 
+**With Docker**, one container serves the pages and the API: [`docker/README.md`](docker/README.md)
+takes you from an empty server to signing in, with a database and an HTTPS proxy you provide.
+
 ## Documentation
 
 | | |
 |---|---|
 | [`install/README.md`](install/README.md) | **Start here to deploy.** Five steps, with an example systemd unit and environment file |
+| [`docker/README.md`](docker/README.md) | **Or with Docker.** One container, its compose file and settings |
 | [`docs/README.md`](docs/README.md) | Where everything else lives |
 | [`docs/schema-notes.md`](docs/schema-notes.md) | Why the schema is shaped the way it is — read before changing a column or an index |
 | [`docs/known-issues/`](docs/known-issues) | Defects found, measured and deliberately left open |
@@ -142,6 +146,7 @@ ending with a check:
 
 ```
 weesky.net-mail/
+├── docker/                        # The Docker image: Dockerfile, compose file, settings, guide
 ├── install/                       # Everything a new deployment needs
 │   ├── install.sql                #   the database and its two MySQL accounts
 │   ├── adopt-existing-database.sql #  once, for a database installed before 1.3.0

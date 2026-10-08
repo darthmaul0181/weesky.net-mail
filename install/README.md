@@ -4,6 +4,8 @@ This guide installs Scotty on a Linux server. When you are done,
 your users open **https://mail.example.net**, sign in with their usual mail address and password,
 and find their mail, contacts and calendar.
 
+Prefer Docker? [`docker/README.md`](../docker/README.md) does the same in one container.
+
 There are five steps. Each one ends with a check: do not move on until it passes.
 
 1. [Build the application](#step-1--build-the-application)
