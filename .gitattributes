@@ -73,3 +73,8 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+###############################################################################
+# Shell scripts run inside Linux containers and on Linux runners: a CR breaks them.
+###############################################################################
+*.sh    text eol=lf

@@ -1,0 +1,18 @@
+# The build sends only what the image is made of. Everything else — tests, local keys,
+# .env files, build output — stays out of the context.
+**
+!docker/
+!src/Directory.Build.props
+!src/scotty.microservice/
+!src/scotty.microservice.host/
+!src/scotty.providers.weesky/
+!src/frontend/
+**/bin/
+**/obj/
+**/keys/
+**/TestResults/
+**/node_modules/
+**/dist/
+**/coverage/
+**/.env*
+src/scotty.microservice/scotty.microservice.Tests/
