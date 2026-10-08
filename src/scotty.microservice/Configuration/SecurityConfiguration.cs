@@ -70,21 +70,23 @@ internal static class SecurityConfiguration
     /// dev, and each gets its own list from the systemd unit's EnvironmentFile
     /// (<c>Cors__AllowedOrigins__0=…</c>). Locally they come from launchSettings.json.
     /// </summary>
-    public static IServiceCollection AddFrontendCors(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddFrontendCors(this IServiceCollection services, IConfiguration configuration,
+        FrontendSettings? frontend = null)
     {
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
-        // There is no valid configuration of this API with no origin: it exists to serve a browser
-        // frontend. Left empty, WithOrigins() refuses every cross-origin request and the webmail
-        // dies with a CORS error in the console that reads like a network fault rather than a
-        // missing variable. Refusing to start names the cause instead — same reason
-        // StateDirectory.Resolve refuses without STATE_DIRECTORY.
-        if (allowedOrigins.Length == 0)
+        // Without an origin the browser frontend, on an address of its own, dies with a CORS error
+        // that reads like a network fault rather than a missing variable, so the service refuses to
+        // start instead. The one exception is the Docker image's pages on the API's own address.
+        if (allowedOrigins.Length == 0 && frontend is not { ApiHost: null })
         {
-            throw new InvalidOperationException(
-                "No CORS origin is configured. Set Cors__AllowedOrigins__0 in the service's " +
-                "EnvironmentFile — for example Cors__AllowedOrigins__0=https://mail.example.net. " +
-                "Additional origins are Cors__AllowedOrigins__1, __2, and so on.");
+            throw new InvalidOperationException(frontend is null
+                ? "No CORS origin is configured. Set Cors__AllowedOrigins__0 in the service's " +
+                  "EnvironmentFile — for example Cors__AllowedOrigins__0=https://mail.example.net. " +
+                  "Additional origins are Cors__AllowedOrigins__1, __2, and so on."
+                : "No CORS origin is configured. Frontend:ApiBase sends the pages' calls to " +
+                  $"{frontend.ApiBase}, so name the pages' own address in Cors__AllowedOrigins__0 — " +
+                  "for example Cors__AllowedOrigins__0=https://mail.example.net.");
         }
 
         return services.AddCors(options =>

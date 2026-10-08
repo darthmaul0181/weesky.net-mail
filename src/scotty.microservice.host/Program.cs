@@ -34,7 +34,7 @@ builder.Services
     .AddRuleProviders()
     .AddRepositories()
     .AddScottyAuthentication()
-    .AddFrontendCors(builder.Configuration)
+    .AddFrontendCors(builder.Configuration, frontend)
     .AddProxyForwardedHeaders(builder.Configuration, builder.Environment)
     .AddRateLimiters()
     .AddApiDocumentation()
