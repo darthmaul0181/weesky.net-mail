@@ -4,6 +4,8 @@ This guide installs Scotty on a Linux server. When you are done,
 your users open **https://mail.example.net**, sign in with their usual mail address and password,
 and find their mail, contacts and calendar.
 
+Prefer Docker? [`docker/README.md`](../docker/README.md) does the same in one container.
+
 There are five steps. Each one ends with a check: do not move on until it passes.
 
 1. [Build the application](#step-1--build-the-application)
@@ -491,6 +493,7 @@ journalctl -u scotty.microservice -n 30
 | `TokenConstants:Key must be at least 32 bytes` | `TokenConstants__Key` is too short. Remove the line to let the service generate a key, or generate one with `openssl rand -base64 48` |
 | `No CORS origin is configured` | Fill in `Cors__AllowedOrigins__0` |
 | `No reverse proxy is configured` | Put back `ForwardedHeaders__KnownProxies__0=127.0.0.1` |
+| `Mail:ImapHost and Mail:SmtpHost must name your mail servers` | Fill in `Mail__ImapHost` and `Mail__SmtpHost` |
 | `'Platform' is missing`, or `Connection string 'Weesky:ConnectionStrings:MailUserAccountsDatabase' is missing` | Put back `Platform=generic` |
 | `'Generic:Administrators' holds '…', which is not an email address` | Fix that entry in `Generic__Administrators` |
 | `STATE_DIRECTORY is not set` | Start the service with `systemctl`, not by hand, and keep the `StateDirectory=` line of the service file |

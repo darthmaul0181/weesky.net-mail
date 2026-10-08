@@ -36,6 +36,20 @@ describe('AboutPage', () => {
     expect(await screen.findByText('Server 1.0.0-dev (f4e5d6c)')).toBeInTheDocument()
   })
 
+  it('names the Docker image when the server runs from one', async () => {
+    vi.mocked(api.getVersion).mockResolvedValue({ version: '1.4.0', commit: 'f4e5d6c', image: '1.0.0' })
+    renderPage()
+
+    expect(await screen.findByText('Docker image 1.0.0')).toBeInTheDocument()
+  })
+
+  it('has no image line for an installation without Docker', async () => {
+    renderPage()
+
+    await screen.findByText('Server 1.0.0-dev (f4e5d6c)')
+    expect(screen.queryByText(/Docker image/)).not.toBeInTheDocument()
+  })
+
   it('omits the parentheses when the server build carried no commit', async () => {
     vi.mocked(api.getVersion).mockResolvedValue({ version: '1.0.0' })
     renderPage()

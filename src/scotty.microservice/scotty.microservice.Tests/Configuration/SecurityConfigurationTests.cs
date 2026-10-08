@@ -45,4 +45,49 @@ public sealed class SecurityConfigurationTests
         // outright — the query fallback never runs because the header was already attached.
         Assert.Contains(IAccountConnectionResolver.HeaderName, policy.Headers);
     }
+
+    private static IServiceCollection Cors(FrontendSettings? frontend, params string[] origins) =>
+        new ServiceCollection().AddFrontendCors(
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(origins.Select((origin, i) =>
+                    new KeyValuePair<string, string?>($"Cors:AllowedOrigins:{i}", origin)))
+                .Build(),
+            frontend);
+
+    [Fact]
+    public void AddFrontendCors_StillRequiresAnOriginWithoutTheImagePages()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Cors(null));
+
+        Assert.StartsWith("No CORS origin is configured.", error.Message);
+    }
+
+    [Fact]
+    public void AddFrontendCors_NeedsNoOriginWhenOneAddressServesBoth()
+    {
+        using var provider = Cors(new FrontendSettings("/app/frontend", "", null)).BuildServiceProvider();
+
+        var policy = provider.GetRequiredService<IOptions<CorsOptions>>().Value.GetPolicy(SecurityConfiguration.CorsPolicy)!;
+        Assert.Empty(policy.Origins);
+    }
+
+    [Fact]
+    public void AddFrontendCors_RequiresThePagesOriginWhenTheApiHasItsOwnAddress()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Cors(new FrontendSettings("/app/frontend", "https://api.example.net", "api.example.net")));
+
+        Assert.Contains("Frontend:ApiBase", error.Message);
+        Assert.Contains("Cors__AllowedOrigins__0", error.Message);
+    }
+
+    [Fact]
+    public void AddFrontendCors_AcceptsThePagesOriginWithTwoAddresses()
+    {
+        using var provider = Cors(new FrontendSettings("/app/frontend", "https://api.example.net", "api.example.net"),
+            "https://mail.example.net").BuildServiceProvider();
+
+        var policy = provider.GetRequiredService<IOptions<CorsOptions>>().Value.GetPolicy(SecurityConfiguration.CorsPolicy)!;
+        Assert.Equal(new[] { "https://mail.example.net" }, policy.Origins);
+    }
 }

@@ -13,14 +13,16 @@ public sealed class DavOptionsTests
     /// The eager pass a real start runs, and nothing else: reading <c>IOptions.Value</c> would
     /// validate lazily, so dropping <c>ValidateOnStart</c> would leave the refusals below green
     /// while the service booted on a bad address and failed on the first request instead. The
-    /// signing key is set because <c>AddScottyOptions</c> validates it on start too, and an unset
-    /// one would make every case here throw for the wrong reason.
+    /// signing key and the mail servers are set because <c>AddScottyOptions</c> validates them on
+    /// start too, and unset ones would make every case here throw for the wrong reason.
     /// </summary>
     private static IServiceProvider Start(string? publicUrl)
     {
         var values = new Dictionary<string, string?>
         {
-            ["TokenConstants:Key"] = new string('k', 32)
+            ["TokenConstants:Key"] = new string('k', 32),
+            ["Mail:ImapHost"] = "imap.example.test",
+            ["Mail:SmtpHost"] = "smtp.example.test",
         };
         if (publicUrl is not null) values["Dav:PublicUrl"] = publicUrl;
 

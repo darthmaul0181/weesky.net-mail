@@ -3,6 +3,7 @@ using weesky.Scotty.Microservice.Authentication.Models;
 using weesky.Scotty.Microservice.Configuration;
 using weesky.Scotty.Microservice.Controllers;
 using weesky.Scotty.Microservice.Data;
+using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Providers.Weesky;
 
 if (args is ["migrate"])
@@ -13,6 +14,13 @@ if (args is ["migrate"])
     return;
 }
 
+if (args is ["healthcheck"])
+{
+    Environment.ExitCode = await HealthProbe.RunAsync(
+        Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS"), Console.Error);
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseScottyLogging(builder.Configuration);
@@ -20,6 +28,8 @@ builder.Host.UseScottyLogging(builder.Configuration);
 // Read before anything is registered: the platform decides which directory answers for accounts,
 // aliases and admin rights, and a deployment that does not say refuses to start.
 var isWeesky = builder.Configuration.UsesWeeskyPlatform();
+
+var frontend = FrontendSettings.Read(builder.Configuration);
 
 var stateDirectory = StateDirectory.Resolve(builder.Environment);
 var sessionKey = SessionSigningKey.Resolve(builder.Configuration["TokenConstants:Key"], stateDirectory);
@@ -32,7 +42,7 @@ builder.Services
     .AddRuleProviders()
     .AddRepositories()
     .AddScottyAuthentication()
-    .AddFrontendCors(builder.Configuration)
+    .AddFrontendCors(builder.Configuration, frontend)
     .AddProxyForwardedHeaders(builder.Configuration, builder.Environment)
     .AddRateLimiters()
     .AddApiDocumentation()
@@ -61,6 +71,9 @@ var app = builder.Build();
 
 SchemaMigrations.EnsureCurrent(app.Configuration, app.Logger);
 
+var version = ProductVersion.Current;
+app.Logger.LogInformation("Version {Version}, commit {Commit}, image {Image}",
+    version.Version, version.Commit ?? "none", version.Image ?? "none");
 app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
 if (sessionKey.GeneratedIn is not null)
     app.Logger.LogInformation("New session signing key generated in {Path}", sessionKey.GeneratedIn);
@@ -71,7 +84,8 @@ app.UseForwardedHeaders();
 
 app.UseScottyRequestLogging();
 app.UseExceptionHandler();
-app.UseSecurityHeaders();
+app.UseSecurityHeaders(frontend);
+app.UseFrontendHosting(frontend);
 
 if (app.Environment.IsDevelopment())
 {

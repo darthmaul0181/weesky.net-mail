@@ -1,0 +1,23 @@
+# Scotty webmail: one container. The database and the HTTPS proxy in front are yours —
+# docker/README.md walks through both. Settings go in .env, beside this file.
+services:
+  scotty:
+    image: ghcr.io/darthmaul0181/scotty-webmail:1
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Only this machine reaches it: visitors come through your HTTPS proxy.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - scotty-state:/var/lib/scotty
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  # The session signing key and the keys that encrypt stored secrets. Back it up.
+  scotty-state:

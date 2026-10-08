@@ -36,6 +36,8 @@ knowing before you start:
   produces no error while phones drift silently out of sync.
 - [`operations/contacts-vcard-backfill.md`](operations/contacts-vcard-backfill.md) — one-off, for
   deployments that held contacts before the vCard model existed.
+- [`operations/docker-image-release.md`](operations/docker-image-release.md) — for the repository's
+  owner, in French: how a Docker image is built as a candidate, tested, then published.
 
 ## Known issues
 

@@ -58,6 +58,7 @@ export default function AboutPage() {
       <p className="about-builds">
         <span>{webLine}</span>
         <span>{serverLine}</span>
+        {server?.image && <span>{`${t('about.image')} ${server.image}`}</span>}
         <span>{new Intl.DateTimeFormat(i18n.language, { dateStyle: 'long' }).format(built)}</span>
       </p>
 

@@ -47,7 +47,7 @@ public sealed class ApplicationServicesConfigurationTests
     [InlineData("PoolMaxTotal", "-1")]
     public void MailOptions_WithANonPositiveBudget_AreRefused(string key, string value)
     {
-        using var provider = BuildOptions(new Dictionary<string, string?> { [$"Mail:{key}"] = value });
+        using var provider = BuildOptions(new Dictionary<string, string?>(Servers) { [$"Mail:{key}"] = value });
 
         var error = Assert.Throws<OptionsValidationException>(
             () => provider.GetRequiredService<IOptions<MailOptions>>().Value);
@@ -75,10 +75,33 @@ public sealed class ApplicationServicesConfigurationTests
     [Fact]
     public void MailOptions_WithTheShippedValues_Validate()
     {
-        using var provider = BuildOptions(new Dictionary<string, string?> { ["Mail:TimeoutSeconds"] = "30" });
+        using var provider = BuildOptions(new Dictionary<string, string?>(Servers) { ["Mail:TimeoutSeconds"] = "30" });
 
         Assert.Equal(30, provider.GetRequiredService<IOptions<MailOptions>>().Value.TimeoutSeconds);
     }
+
+    /// <summary>
+    /// Without its servers the webmail cannot sign anyone in; worse, a value inherited from a
+    /// shipped default would send every password to someone else's server. Refused at start.
+    /// </summary>
+    [Theory]
+    [InlineData("ImapHost")]
+    [InlineData("SmtpHost")]
+    public void MailOptions_WithoutAServer_AreRefused(string key)
+    {
+        using var provider = BuildOptions(new Dictionary<string, string?>(Servers) { [$"Mail:{key}"] = " " });
+
+        var error = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IOptions<MailOptions>>().Value);
+
+        Assert.Contains($"Mail__{key}", error.Message);
+    }
+
+    private static readonly Dictionary<string, string?> Servers = new()
+    {
+        ["Mail:ImapHost"] = "imap.example.test",
+        ["Mail:SmtpHost"] = "smtp.example.test",
+    };
 
     private static ServiceProvider BuildOptions(Dictionary<string, string?> settings)
     {

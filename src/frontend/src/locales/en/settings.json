@@ -505,6 +505,7 @@
     "webApp": "Web app",
     "server": "Server",
     "serverUnavailable": "Server unavailable",
+    "image": "Docker image",
     "sourceCode": "Source code",
     "thirdParty": "Third-party components",
     "rights": "© {{year}} darthmaul0181 — AGPL-3.0"
