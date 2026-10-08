@@ -13,6 +13,13 @@ if (args is ["migrate"])
     return;
 }
 
+if (args is ["healthcheck"])
+{
+    Environment.ExitCode = await HealthProbe.RunAsync(
+        Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS"), Console.Error);
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseScottyLogging(builder.Configuration);
