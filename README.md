@@ -52,8 +52,9 @@ Invitations go out to guests and come back in; on the `weesky` platform, a guest
 
 **Mail rules** — the Sieve script your server already runs, edited from the browser over ManageSieve.
 
-**The interface** — English and French, light and dark, eight colour palettes, installable as an
-application, and usable on a phone.
+**The interface** — English and French, light and dark, eight colour palettes, an optional image of the
+day from Bing behind the login page and the reading pane, installable as an application, and usable on
+a phone.
 
 ## Two platforms
 

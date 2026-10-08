@@ -55,4 +55,22 @@ describe('LoginPage', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(message))
     expect(onLogin).not.toHaveBeenCalled()
   })
+
+  it('keeps the bundled background when there is no image of the day', () => {
+    const { container } = render(<LoginPage onLogin={vi.fn()} />)
+
+    expect(container.querySelector('.login-daily')).toBeNull()
+    expect(container.querySelector('.daily-credit')).toBeNull()
+  })
+
+  it('shows the image of the day behind the card, with its credit', () => {
+    const backdrop = { src: '/api/AppSettings/daily-image/v1?lang=en', title: 'Poulpe fiction', copyright: '© G. Barathieu' }
+    const { container } = render(<LoginPage onLogin={vi.fn()} backdrop={backdrop} />)
+
+    const photo = container.querySelector('img.login-daily')
+    expect(photo).toHaveAttribute('src', backdrop.src)
+    expect(photo).toHaveAttribute('alt', '')
+    expect(screen.getByText('Poulpe fiction')).toBeInTheDocument()
+    expect(screen.getByText('© G. Barathieu')).toBeInTheDocument()
+  })
 })

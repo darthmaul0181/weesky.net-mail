@@ -11,6 +11,7 @@ import { customPaletteOf, usePreferences } from '../../../hooks/usePreferences'
 import { PALETTE_SEEDS, type CustomPaletteDef } from '../../../lib/customPalette'
 import PalettePreview from './PalettePreview'
 import CustomPaletteEditor from './CustomPaletteEditor'
+import DailyImageSection from './DailyImageSection'
 
 const LANGUAGES = [
   { value: 'auto', labelKey: 'appearance.language.auto' as const },
@@ -169,6 +170,8 @@ export default function AppearancePage() {
           ))}
         </div>
       </section>
+
+      <DailyImageSection />
 
       {editing && (
         <CustomPaletteEditor initial={editing} onClose={() => setEditing(null)}

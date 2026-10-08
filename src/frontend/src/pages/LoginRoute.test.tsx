@@ -7,6 +7,7 @@ import LoginRoute from './LoginRoute'
 const auth = vi.hoisted(() => ({ isLoggedIn: false, syncFromSession: vi.fn() }))
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth }))
 vi.mock('../hooks/useTabTitle', () => ({ useTabTitle: () => {} }))
+vi.mock('../hooks/useDailyImage', () => ({ useDailyImage: () => null }))
 vi.mock('./LoginPage', () => ({
   default: ({ onLogin }: { onLogin: () => void }) =>
     <button type="button" onClick={() => { auth.isLoggedIn = true; onLogin() }}>Sign in</button>,

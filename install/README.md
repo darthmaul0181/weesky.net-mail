@@ -469,12 +469,15 @@ address book, with no error.
 
 ### Features configured by an administrator
 
-These two are configured from Settings › Administration, so you must sign in with an address listed
+These are configured from Settings › Administration, so you must sign in with an address listed
 in `Generic__Administrators`:
 
 - [Connecting Outlook and Office 365 mailboxes](optional/oauth-providers.md)
 - [Updating calendars as guests' replies arrive](optional/delivery-replies.md) — also needs your mail
   server to be Dovecot
+- **Image of the day** (Settings › Administration › Application): once switched on, the server downloads
+  one photo a day from `https://www.bing.com`, so it must be able to reach that address on port 443.
+  Switched off, it never does.
 
 ---
 

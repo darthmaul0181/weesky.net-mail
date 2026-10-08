@@ -24,6 +24,7 @@ export const PREFERENCE_KEYS = {
   calendarBirthdays: 'calendar.birthdays',
   firstDayOfWeek: 'calendar.firstDayOfWeek',
   customPalette: 'ui.customPalette',
+  dailyImage: 'ui.dailyImage',
 } as const
 
 export type Preferences = Record<string, string>
@@ -208,6 +209,16 @@ export function languageOf(preferences: Preferences): string {
 
 export function customPaletteOf(preferences: Preferences): CustomPaletteDef | null {
   return parseCustomPalette(preferences[PREFERENCE_KEYS.customPalette])
+}
+
+export type DailyImageStyle = 'none' | 'fullBleed' | 'postcard' | 'watermark'
+
+export const DAILY_IMAGE_STYLES: readonly DailyImageStyle[] = ['none', 'fullBleed', 'postcard', 'watermark']
+
+/** Falls back to 'none' — the plain empty pane — for an absent key or a value this build ignores. */
+export function dailyImageStyleOf(preferences: Preferences): DailyImageStyle {
+  const stored = preferences[PREFERENCE_KEYS.dailyImage] as DailyImageStyle
+  return DAILY_IMAGE_STYLES.includes(stored) ? stored : 'none'
 }
 
 export type FirstDayOfWeek = 'monday' | 'sunday'

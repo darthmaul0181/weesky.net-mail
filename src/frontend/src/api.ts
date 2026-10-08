@@ -3,6 +3,8 @@ import type { LoginResponse, Quota } from './types/account'
 import type { Capabilities } from './types/capabilities'
 import type { DavCredentials } from './types/dav'
 import type { AppSettings } from './hooks/useAppSettings'
+import type { DailyImageInfo } from './lib/dailyImage'
+import type { Locale } from './lib/locale'
 import type { Preferences } from './hooks/usePreferences'
 import type {
   AliasInfo, ApplyReplyArgs, ApplyReplyResponse, FolderRoleEntry, IdentityListResponse,
@@ -631,6 +633,9 @@ export const api = {
 
   getAppSettings: (options?: RequestOptions) =>
     request<AppSettings>('GET', '/api/AppSettings', undefined, options),
+
+  getDailyImage: (lang: Locale, options?: RequestOptions) =>
+    request<DailyImageInfo>('GET', `/api/AppSettings/daily-image?lang=${lang}`, undefined, options),
 
   // The running API's own version, for the About tab. Authenticated: an exact version is a
   // fingerprint, and only a signed-in user has a use for it.
