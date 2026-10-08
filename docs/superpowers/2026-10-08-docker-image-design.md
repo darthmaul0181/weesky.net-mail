@@ -157,7 +157,8 @@ l'hôte de la requête (`Host`, sans le port, sans tenir compte de la casse) à 
 `/health` répond sur tout hôte : le contrôle de santé interne appelle `127.0.0.1`.
 
 Conséquences documentées dans le guide : le proxy doit transmettre l'en-tête `Host` d'origine
-(sinon tout répond 404 dès la page d'accueil) ; `Dav__PublicUrl` est l'adresse de l'API ; les deux
+(sinon l'API ne reconnaît pas son adresse : les pages s'affichent, mais chaque appel `/api/…`
+répond 404 et la connexion échoue) ; `Dav__PublicUrl` est l'adresse de l'API ; les deux
 sous-domaines doivent partager le même domaine, car le cookie `SameSite=Strict` n'est pas envoyé
 entre deux sites (symptôme : la connexion semble réussir, puis chaque appel est refusé).
 

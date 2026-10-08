@@ -99,6 +99,9 @@ renews the certificates itself, and passes on the three headers without being to
 
 #### nginx, on this machine
 
+`http2 on;` needs nginx 1.25.1 or later; on an older one, remove that line and write
+`listen 443 ssl http2;` instead. With two addresses, the certificate must cover both.
+
 ```nginx
 server {
     listen 443 ssl;
@@ -201,7 +204,7 @@ docker compose up -d
 ```
 
 That is all: the new version updates its tables itself when it starts. Settings › About shows the
-running version, with the image's number on its last line.
+running version, the image's number on its own line under the server's.
 
 `docker-compose.yml` follows `:1`, every 1.x release. To stay on one exact version, write it
 instead, such as `ghcr.io/darthmaul0181/scotty-webmail:1.0.0`.
@@ -233,10 +236,12 @@ apply here too, `.env` being the settings file. And these are Docker's own:
 | You see | Do this |
 |---|---|
 | `restarting` in `docker compose ps`, and `Unable to connect to any of the specified MySQL hosts` in the log | The container cannot reach the database. Use an address it can reach (step 2), and let the database accept connections from Docker's network (step 1's `__HOST__`) |
-| Every address answers 404, even the home page | The proxy does not pass on the `Host` header (step 3) |
+| With two addresses, the sign-in page loads but signing in fails, and every `/api/…` call answers 404 | The proxy does not pass on the original `Host` header (step 3): the container cannot tell the API's address from the pages' |
 | Signing in seems to work, then every page asks again | The site is not on HTTPS, or the two addresses are on two different domains (step 3) |
 | Everyone is signed out after each update | The `scotty-state` volume is missing from `docker-compose.yml` |
 | `Access to the path '/var/lib/scotty/…' is denied` | A folder mounted there instead of the volume must belong to user 1654: `chown -R 1654:1654 <folder>` |
 | `Frontend:ApiBase holds '…'` | Write the API's address alone, such as `https://api.example.net`, without a path — or remove the line for one address |
 | `No CORS origin is configured. Frontend:ApiBase sends…` | With two addresses, add `Cors__AllowedOrigins__0` with the pages' address |
 | `No reverse proxy is configured` | Fill in `ForwardedHeaders__KnownNetworks__0` (step 3) |
+| `Mail:ImapHost and Mail:SmtpHost must name your mail servers` | Fill in `Mail__ImapHost` and `Mail__SmtpHost` in `.env` (step 2) |
+| `unhealthy` forever, though the log shows no error | `.env` sets `ASPNETCORE_URLS`: remove it, the image listens on 8080 |

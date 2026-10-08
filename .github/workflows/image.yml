@@ -41,6 +41,7 @@ jobs:
         id: meta
         run: |
           VERSION=$(tr -d '[:space:]' < docker/VERSION)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::docker/VERSION holds '$VERSION', not X.Y.Z"; exit 1; }
           # Only a commit already on master builds as a release: elsewhere the versions read -dev.
           if git merge-base --is-ancestor HEAD origin/master; then RELEASE=true; else RELEASE=false; fi
           {
@@ -60,6 +61,7 @@ jobs:
           load: true
           tags: scotty-webmail:test
           build-args: |
+            GIT_REVISION=${{ github.sha }}
             GIT_COMMIT=${{ steps.meta.outputs.commit }}
             RELEASE_BUILD=${{ steps.meta.outputs.release }}
             IMAGE_VERSION=${{ steps.meta.outputs.version }}
@@ -81,9 +83,15 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         env:
           VERSION: ${{ steps.meta.outputs.version }}
+        # A tag counts as free only on a definite "not found": a registry error must stop the run,
+        # never let a new candidate take the number of one already tested.
         run: |
           N=1
-          while docker buildx imagetools inspect "$IMAGE:$VERSION-rc.$N" >/dev/null 2>&1; do N=$((N + 1)); done
+          while OUT=$(docker buildx imagetools inspect "$IMAGE:$VERSION-rc.$N" 2>&1); do N=$((N + 1)); done
+          if ! grep -qiE 'not found|manifest unknown|name unknown' <<< "$OUT"; then
+            echo "::error::Could not read $IMAGE:$VERSION-rc.$N: $OUT"
+            exit 1
+          fi
           echo "tag=$VERSION-rc.$N" >> "$GITHUB_OUTPUT"
 
       # Both architectures, from the cache the test build filled; pushed only for a candidate.
@@ -99,7 +107,9 @@ jobs:
             index:org.opencontainers.image.revision=${{ github.sha }}
             index:org.opencontainers.image.version=${{ steps.meta.outputs.version }}
             index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:net.weesky.scotty.release-build=${{ steps.meta.outputs.release }}
           build-args: |
+            GIT_REVISION=${{ github.sha }}
             GIT_COMMIT=${{ steps.meta.outputs.commit }}
             RELEASE_BUILD=${{ steps.meta.outputs.release }}
             IMAGE_VERSION=${{ steps.meta.outputs.version }}
@@ -108,7 +118,11 @@ jobs:
 
       - name: Candidate published
         if: github.event_name == 'workflow_dispatch'
-        run: echo "::notice::Published $IMAGE:${{ steps.rc.outputs.tag }} from ${{ github.ref_name }} (${{ steps.meta.outputs.commit }})"
+        env:
+          TAG: ${{ steps.rc.outputs.tag }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ steps.meta.outputs.commit }}
+        run: echo "::notice::Published $IMAGE:$TAG from $BRANCH ($COMMIT)"
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'release'
@@ -139,10 +153,13 @@ jobs:
           MAJOR=${BASH_REMATCH[1]}
           MINOR=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}
           VERSION=${CANDIDATE%-rc.*}
-          REVISION=$(docker buildx imagetools inspect "$IMAGE:$CANDIDATE" --raw 2>/dev/null \
-            | jq -r '.annotations["org.opencontainers.image.revision"] // empty') \
-            || true
-          [ -n "$REVISION" ] || fail "$IMAGE:$CANDIDATE does not exist"
+          INDEX=$(docker buildx imagetools inspect "$IMAGE:$CANDIDATE" --raw 2>&1) \
+            || fail "$IMAGE:$CANDIDATE cannot be read: $INDEX"
+          REVISION=$(jq -r '.annotations["org.opencontainers.image.revision"] // empty' <<< "$INDEX")
+          [ -n "$REVISION" ] || fail "$CANDIDATE carries no revision annotation: it was not built by this workflow"
+          # Built off master, even if that branch was merged since, its versions read -dev.
+          [ "$(jq -r '.annotations["net.weesky.scotty.release-build"] // empty' <<< "$INDEX")" = true ] \
+            || fail "$CANDIDATE was built from ${REVISION::7} before it was on master: build a new candidate from master"
           git merge-base --is-ancestor "$REVISION" origin/master \
             || fail "$CANDIDATE was built from ${REVISION::7}, which is not on master: merge, then build a new candidate"
           [ "$(git show "$REVISION:docker/VERSION" | tr -d '[:space:]')" = "$VERSION" ] \
