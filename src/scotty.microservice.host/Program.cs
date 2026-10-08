@@ -21,6 +21,8 @@ builder.Host.UseScottyLogging(builder.Configuration);
 // aliases and admin rights, and a deployment that does not say refuses to start.
 var isWeesky = builder.Configuration.UsesWeeskyPlatform();
 
+var frontend = FrontendSettings.Read(builder.Configuration);
+
 var stateDirectory = StateDirectory.Resolve(builder.Environment);
 var sessionKey = SessionSigningKey.Resolve(builder.Configuration["TokenConstants:Key"], stateDirectory);
 
@@ -71,7 +73,8 @@ app.UseForwardedHeaders();
 
 app.UseScottyRequestLogging();
 app.UseExceptionHandler();
-app.UseSecurityHeaders();
+app.UseSecurityHeaders(frontend);
+app.UseFrontendHosting(frontend);
 
 if (app.Environment.IsDevelopment())
 {

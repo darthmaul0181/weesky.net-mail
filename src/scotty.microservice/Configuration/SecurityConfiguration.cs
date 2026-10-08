@@ -268,18 +268,20 @@ internal static class SecurityConfiguration
 
     /// <summary>
     /// This is an API: nothing it returns is meant to be rendered, framed or referred from. The
-    /// Swagger UI is the one page that is, so it gets the only policy that allows its own assets.
+    /// Swagger UI is one exception, with the only policy that allows its own assets; the web pages
+    /// the Docker image serves are the other, and carry no policy, as under Apache.
     /// </summary>
-    public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app) =>
+    public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app, FrontendSettings? frontend = null) =>
         app.Use(async (context, next) =>
         {
             var headers = context.Response.Headers;
             headers["X-Content-Type-Options"] = "nosniff";
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";
-            headers["Content-Security-Policy"] = context.Request.Path.StartsWithSegments("/swagger")
-                ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
-                : "default-src 'none'; frame-ancestors 'none'";
+            if (context.Request.Path.StartsWithSegments("/swagger"))
+                headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'";
+            else if (frontend is null || !FrontendHosting.IsPagePath(context.Request.Path))
+                headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
             await next();
         });
 }
