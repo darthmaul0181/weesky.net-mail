@@ -3,6 +3,7 @@ using weesky.Scotty.Microservice.Authentication.Models;
 using weesky.Scotty.Microservice.Configuration;
 using weesky.Scotty.Microservice.Controllers;
 using weesky.Scotty.Microservice.Data;
+using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Providers.Weesky;
 
 if (args is ["migrate"])
@@ -70,6 +71,9 @@ var app = builder.Build();
 
 SchemaMigrations.EnsureCurrent(app.Configuration, app.Logger);
 
+var version = ProductVersion.Current;
+app.Logger.LogInformation("Version {Version}, commit {Commit}, image {Image}",
+    version.Version, version.Commit ?? "none", version.Image ?? "none");
 app.Logger.LogInformation("Data Protection key ring: {KeyRingPath}", keyRingPath);
 if (sessionKey.GeneratedIn is not null)
     app.Logger.LogInformation("New session signing key generated in {Path}", sessionKey.GeneratedIn);

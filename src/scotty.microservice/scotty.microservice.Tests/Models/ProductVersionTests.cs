@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
+using weesky.Scotty.Microservice.Configuration;
 using weesky.Scotty.Microservice.Models;
 using Xunit;
 
@@ -13,6 +16,30 @@ public sealed class ProductVersionTests
     [Fact]
     public void Parse_LeavesTheCommitNullWhenTheBuildCarriedNone()
         => Assert.Equal(new ProductVersion("1.0.0", null), ProductVersion.Parse("1.0.0"));
+
+    [Fact]
+    public void Parse_KeepsTheImageNumberTheContainerCarries()
+        => Assert.Equal(new ProductVersion("1.4.0", "0a1b2c3", "1.0.0"),
+            ProductVersion.Parse("1.4.0+0a1b2c3d4e5f", " 1.0.0 "));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Parse_LeavesTheImageNullOutsideAContainer(string? image)
+        => Assert.Null(ProductVersion.Parse("1.4.0", image).Image);
+
+    [Fact]
+    public void Json_OmitsTheImageOutsideAContainer()
+    {
+        var json = new JsonOptions();
+        MvcFormatterConfiguration.ConfigureJson(json);
+
+        Assert.Equal("{\"version\":\"1.4.0\",\"commit\":\"0a1b2c3\"}",
+            JsonSerializer.Serialize(new ProductVersion("1.4.0", "0a1b2c3"), json.JsonSerializerOptions));
+        Assert.Contains("\"image\":\"1.0.0\"",
+            JsonSerializer.Serialize(new ProductVersion("1.4.0", "0a1b2c3", "1.0.0"), json.JsonSerializerOptions));
+    }
 
     [Fact]
     public void Current_IsReadFromTheMicroserviceVersionFile()

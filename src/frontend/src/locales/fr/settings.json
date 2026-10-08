@@ -504,6 +504,7 @@
   "about": {
     "webApp": "Application web",
     "server": "Serveur",
+    "image": "Image Docker",
     "serverUnavailable": "Serveur indisponible",
     "sourceCode": "Code source",
     "thirdParty": "Composants tiers",
