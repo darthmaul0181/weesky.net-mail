@@ -1254,6 +1254,108 @@
 .reader-fallback .reader-back { margin-right: 12px; }
 .reader-fallback .mail-empty { flex: 1; padding: 0; }
 
+/* ── Image of the day (empty reader) ─────────────────────── */
+
+.reader-daily {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.reader-daily > .reader-daily-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reader-daily-photo { animation: daily-fade-in 200ms ease-out; }
+
+.reader-daily.is-watermark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--surface) 60%, transparent);
+}
+
+/* Light text over a white pixel under a 60% dark veil is 3.6:1; 75% brings the worst case to 5.5. */
+[data-theme='dark'] .reader-daily.is-watermark::after {
+  background: color-mix(in oklab, var(--surface) 75%, transparent);
+}
+
+.reader-daily-label {
+  position: relative;
+  z-index: var(--z-raised);
+  margin: 0;
+  color: var(--text);
+}
+
+.reader-daily.is-full-bleed .reader-daily-label {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
+}
+
+.reader-daily-credit {
+  position: absolute;
+  bottom: 16px;
+  z-index: var(--z-raised);
+}
+
+.reader-daily.is-full-bleed .reader-daily-credit { left: 16px; }
+.reader-daily.is-watermark .reader-daily-credit { right: 16px; text-align: right; }
+
+/* Sized on the pane, not the window: the bottom reading pane is short. */
+.reader-daily.is-postcard {
+  container-type: size;
+  background: var(--surface-sunken);
+}
+
+.reader-daily.is-postcard .reader-daily-label { color: var(--text-muted); }
+
+.reader-daily-card {
+  margin: 0;
+  width: 100%;
+  max-width: 560px;
+  box-sizing: border-box;
+  padding: 10px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.reader-daily-card .reader-daily-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 60cqh;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.reader-daily-card figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.reader-daily-card figcaption span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 /* ── Attachment viewer modal ─────────────────────────────── */
 
 .attachment-viewer { max-width: min(900px, 92vw); }

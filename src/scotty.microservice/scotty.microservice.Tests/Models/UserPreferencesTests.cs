@@ -10,6 +10,7 @@ public sealed class UserPreferencesTests
     public void All_CarriesTheKeysTheClientOffers()
     {
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailPageSize);
+        Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.UiDailyImage);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowPreview);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailNotifySound);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailNotifyDesktop);
@@ -309,4 +310,19 @@ public sealed class UserPreferencesTests
     {
         Assert.Equal(valid, UserPreferences.IsValid(UserPreferences.CalendarFirstDayOfWeek, value));
     }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("fullBleed")]
+    [InlineData("postcard")]
+    [InlineData("watermark")]
+    public void IsValid_AcceptsEveryDailyImageStyle(string value)
+        => Assert.True(UserPreferences.IsValid(UserPreferences.UiDailyImage, value));
+
+    [Theory]
+    [InlineData("full-bleed")]
+    [InlineData("")]
+    [InlineData("Watermark")]
+    public void IsValid_RefusesAnyOtherDailyImageStyle(string value)
+        => Assert.False(UserPreferences.IsValid(UserPreferences.UiDailyImage, value));
 }

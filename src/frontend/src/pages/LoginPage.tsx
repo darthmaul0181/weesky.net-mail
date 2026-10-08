@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, markLoggedIn, ApiError } from '../api.js'
+import DailyImageCredit from '../components/DailyImageCredit'
+import type { DailyImage } from '../hooks/useDailyImage'
 
 interface LoginPageProps {
   onLogin: () => void
+  backdrop?: DailyImage | null
 }
 
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage({ onLogin, backdrop }: LoginPageProps) {
   const { t } = useTranslation('auth')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -33,6 +36,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="page-center">
+      {backdrop && <img className="login-daily" src={backdrop.src} alt="" />}
       <div className="card">
         {error && (
           <div className="alert alert-error" role="alert">
@@ -72,6 +76,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </button>
         </form>
       </div>
+      {backdrop && <DailyImageCredit image={backdrop} className="login-daily-credit" />}
     </div>
   )
 }

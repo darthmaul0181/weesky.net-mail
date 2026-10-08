@@ -138,6 +138,12 @@ internal static class ApplicationServicesConfiguration
             // token to wherever it points; a redirecting provider is a refusal, not a destination.
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
+        services.AddHttpClient(DailyImageService.ClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
+            // The image address is rebuilt on Bing's host; a redirect would send us wherever it says.
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        // Singleton is load-bearing: the day's image lives in this instance's memory.
+        services.AddSingleton<IDailyImageService, DailyImageService>();
+
         return services;
     }
 

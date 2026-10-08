@@ -977,6 +977,33 @@
             <response code="200">The file</response>
             <response code="401">Not authenticated</response>
         </member>
+        <member name="T:weesky.Scotty.Microservice.Controllers.DailyImageController">
+            <summary>
+            Bing's image of the day, served by the API so that browsers load nothing from elsewhere.
+            Anonymous: the login page shows it. Switched off, Bing is never asked.
+            </summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.DailyImageController.#ctor(weesky.Scotty.Microservice.Repositories.IAppSettingStore,weesky.Scotty.Microservice.Services.IDailyImageService)">
+            <summary>
+            Bing's image of the day, served by the API so that browsers load nothing from elsewhere.
+            Anonymous: the login page shows it. Switched off, Bing is never asked.
+            </summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.DailyImageController.GetDailyImage(System.String,System.Threading.CancellationToken)">
+            <summary>The current image's version and credit.</summary>
+            <param name="lang">interface language, en or fr: it picks Bing's market</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Version, title and copyright</response>
+            <response code="404">Switched off, or Bing has no image to give</response>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.DailyImageController.GetDailyImageFile(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>The photo. Its URL carries the version, so it may be cached for good.</summary>
+            <param name="version">the version the info route answered</param>
+            <param name="lang">interface language, en or fr</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">The JPEG</response>
+            <response code="404">Switched off, no image, or a version that is no longer current</response>
+        </member>
         <member name="T:weesky.Scotty.Microservice.Controllers.IdentitiesController">
              <summary>
              Curated sending identities — a webmail preference, not mail-server data. No IMAP session and

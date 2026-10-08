@@ -5,6 +5,7 @@ import {
   APP_SETTING_KEYS, installableOf, useAppSettings, useSetAppSetting,
 } from '../../../hooks/useAppSettings'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import DailyImageSection from './DailyImageSection'
 import DeliveryRepliesSection from './DeliveryRepliesSection'
 import LogoSection from './LogoSection'
 import SchedulingAccountSection from './SchedulingAccountSection'
@@ -127,6 +128,7 @@ export default function ApplicationTab({ addToast }: Props) {
       </button>
 
       <LogoSection addToast={addToast} />
+      <DailyImageSection addToast={addToast} />
       <SchedulingAccountSection addToast={addToast} />
       <DeliveryRepliesSection addToast={addToast} />
     </>

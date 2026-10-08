@@ -44,6 +44,7 @@ import { isCalendarType, isImageType } from './mediaType'
 import InvitationCard from './InvitationCard'
 import { bodyInlineParts, useInlineImages } from './useInlineImages'
 import { useCachedSummaryFlags, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
+import ReaderEmpty from './ReaderEmpty'
 
 interface Props {
   folderPath: string | null
@@ -187,7 +188,7 @@ export default function MessageReader(
     </div>
   )
 
-  if (uid === null) return <p className="mail-empty">{t('reader.selectMessage')}</p>
+  if (uid === null) return <ReaderEmpty />
   if (isLoading) return fallback(t('reader.loading'))
   if (isError || !data) return fallback(t('reader.loadFailed'))
 

@@ -5,6 +5,7 @@ import type { LogoSize } from '../lib/appLogo'
 /** The instance's settings (installable app, its name), not the account's; the read is anonymous,
  * so the login page uses it too. The backend fills every default: no copy here to drift. */
 export const APP_SETTING_KEYS = {
+  dailyImage: 'app.dailyImage',
   installable: 'app.installable',
   logo: 'app.logo',
   name: 'app.name',
@@ -48,6 +49,11 @@ export function useDeleteAppLogo() {
     mutationFn: () => api.deleteAppLogo(),
     onSettled: () => client.invalidateQueries({ queryKey }),
   })
+}
+
+/** Exactly 'true': an absent or malformed value never calls Bing. */
+export function dailyImageOf(settings: AppSettings): boolean {
+  return settings[APP_SETTING_KEYS.dailyImage] === 'true'
 }
 
 /** Exactly 'true': an absent or malformed value leaves the app discreet. */

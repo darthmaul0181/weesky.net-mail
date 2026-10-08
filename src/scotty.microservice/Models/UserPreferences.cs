@@ -53,6 +53,8 @@ public static class UserPreferences
     // ui., like the language: the palette is the account's, whichever device picks it.
     public const string UiCustomPalette = "ui.customPalette";
 
+    public const string UiDailyImage = "ui.dailyImage";
+
     public const string MailSwipeRight = "mail.swipeRight";
     public const string MailSwipeLeft = "mail.swipeLeft";
 
@@ -97,6 +99,7 @@ public static class UserPreferences
         new(MailSwipeLeft, "delete", SwipeActions),
         new(UiLanguage, "auto", ["auto", "en", "fr"]),
         new(UiCustomPalette, "", [], Validator: IsCustomPalette),
+        new(UiDailyImage, "none", ["none", "fullBleed", "postcard", "watermark"]),
         new(CalendarBirthdays, "on", ["on", "off"]),
         new(CalendarFirstDayOfWeek, "monday", ["monday", "sunday"]),
     ];

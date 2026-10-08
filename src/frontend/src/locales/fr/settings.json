@@ -54,6 +54,14 @@
       "default": "{{name}} (par défaut)",
       "enlarge": "Agrandir l’aperçu {{name}}"
     },
+    "dailyImage": {
+      "heading": "Image du jour",
+      "intro": "Affichée dans le panneau de lecture quand aucun message n’est ouvert.",
+      "none": "Aucune",
+      "fullBleed": "Plein cadre",
+      "postcard": "Carte postale",
+      "watermark": "Filigrane"
+    },
     "custom": {
       "name": "Ma palette",
       "create": "Créer ma palette",

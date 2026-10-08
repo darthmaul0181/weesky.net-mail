@@ -54,6 +54,14 @@
       "default": "{{name}} (default)",
       "enlarge": "Enlarge the {{name}} preview"
     },
+    "dailyImage": {
+      "heading": "Image of the day",
+      "intro": "Shown in the reading pane when no message is open.",
+      "none": "None",
+      "fullBleed": "Full bleed",
+      "postcard": "Postcard",
+      "watermark": "Watermark"
+    },
     "custom": {
       "name": "My palette",
       "create": "Create my palette",

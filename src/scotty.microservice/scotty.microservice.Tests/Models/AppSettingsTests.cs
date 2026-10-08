@@ -14,6 +14,7 @@ public sealed class AppSettingsTests
         Assert.Equal("false", values[AppSettings.Installable]);
         Assert.Equal("Scotty webmail", values[AppSettings.Name]);
         Assert.Equal("Scotty", values[AppSettings.ShortName]);
+        Assert.Equal("false", values[AppSettings.DailyImage]);
     }
 
     [Fact]

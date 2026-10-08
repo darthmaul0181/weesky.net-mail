@@ -9,6 +9,8 @@ internal sealed class StubHttpMessageHandler(params Func<HttpResponseMessage>[] 
 
     public List<string> Bodies { get; } = [];
 
+    public List<Uri?> Uris { get; } = [];
+
     public int Calls => _served;
 
     public static Func<HttpResponseMessage> Json(HttpStatusCode status, string body) =>
@@ -20,6 +22,7 @@ internal sealed class StubHttpMessageHandler(params Func<HttpResponseMessage>[] 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        Uris.Add(request.RequestUri);
         Bodies.Add(request.Content is null
             ? string.Empty
             : await request.Content.ReadAsStringAsync(cancellationToken));

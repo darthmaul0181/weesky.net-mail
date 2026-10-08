@@ -1,0 +1,164 @@
+<!doctype html>
+<!--
+  Probe: the image of the day — the login page and the three empty-reader variants (full bleed,
+  postcard, watermark). Real markup from LoginPage.tsx and ReaderEmpty.tsx, real class names, real
+  stylesheets in main.tsx's order. ?theme=dark draws the dark block; ?photo=<url> swaps the photo
+  (default: a Bing 1920x1080 of 2026-10-08, loaded straight from Bing since the dev server has no CSP).
+  #out reports, per case, how far the label, the credit and the postcard escape their pane
+  (0 = inside); the title becomes 'probe-done'.
+
+  WHAT IT FOUND (2026-10-08, Chrome, 1512 wide, palette night):
+    escape      0 on every edge of every case, both themes — label, credit, postcard card, login card.
+    contrast    worst case per text laid on the photo, composited over a white AND a black pixel:
+                light — login credit 12.93, full-bleed label 11.03 / credit 11.85, watermark label 5.95 / credit 14.72
+                dark  — login credit 9.40, full-bleed label 6.89 / credit 7.69, watermark label 5.43 / credit 11.07
+                The dark watermark label read ~3.6 under the first 60% veil; mail.css raises it to 75% in dark.
+    overlap     login short 420x360 with the alert: the credit meets the card. Under the first rule (credit at
+                --z-raised, later in the DOM) elementFromPoint in the overlap hit the credit, over Sign in; with the
+                credit at z 0 it hits the button. The case's own line reports the button's right edge — scroll the
+                case into view first, elementFromPoint sees only the viewport.
+    NOT measured: a 360px viewport — Chrome will not size its window that narrow. The 360 login case is a
+    360px box at desktop width; the phone block only narrows .page-center's padding, which adds room.
+-->
+<html lang="en" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- A page-repainting extension would otherwise recolour every case (CLAUDE.md, the contrast note). -->
+  <meta name="darkreader-lock" />
+  <title>Probe — image of the day</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font-family: var(--font); }
+    .case { margin-bottom: 24px; }
+    .case > h3 { font: 12px/1.4 ui-monospace, monospace; margin: 0 0 4px; color: #f0f; }
+    .pane { border: 1px dashed #f0f; overflow: hidden; background: var(--surface); }
+    .pane.right { width: 760px; height: 620px; }
+    .pane.bottom { width: 1100px; height: 300px; }
+    .login-box { width: 1024px; height: 640px; overflow: hidden; border: 1px dashed #f0f; position: relative; }
+    .login-box.phone { width: 360px; height: 640px; }
+    .login-box.short { width: 420px; height: 360px; }
+    .login-box .page-center { min-height: 100%; height: 100%; box-sizing: border-box; }
+    #out { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre; }
+  </style>
+</head>
+<body>
+<pre id="out">running…</pre>
+
+<template id="credit"><p class="daily-credit CLASS"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p></template>
+
+<div class="case"><h3>login 1024x640</h3>
+  <div class="login-box"><div class="page-center">
+    <img class="login-daily PHOTO" alt="" />
+    <div class="card"><form>
+      <div class="field"><input type="email" placeholder="Email address" /></div>
+      <div class="field"><input type="password" placeholder="Password" /></div>
+      <button class="btn btn-primary" type="button">Sign in</button>
+    </form></div>
+    <p class="daily-credit login-daily-credit"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p>
+  </div></div>
+</div>
+
+<div class="case"><h3>login phone 360x640</h3>
+  <div class="login-box phone"><div class="page-center">
+    <img class="login-daily PHOTO" alt="" />
+    <div class="card"><form>
+      <div class="field"><input type="email" placeholder="Email address" /></div>
+      <div class="field"><input type="password" placeholder="Password" /></div>
+      <button class="btn btn-primary" type="button">Sign in</button>
+    </form></div>
+    <p class="daily-credit login-daily-credit"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p>
+  </div></div>
+</div>
+
+<div class="case"><h3>login short 420x360, alert shown</h3>
+  <div class="login-box short"><div class="page-center">
+    <img class="login-daily PHOTO" alt="" />
+    <div class="card">
+      <div class="alert alert-error" role="alert">Invalid email address or password.</div>
+      <form>
+      <div class="field"><input type="email" placeholder="Email address" /></div>
+      <div class="field"><input type="password" placeholder="Password" /></div>
+      <button class="btn btn-primary" type="button">Sign in</button>
+    </form></div>
+    <p class="daily-credit login-daily-credit"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p>
+  </div></div>
+</div>
+
+<div class="case"><h3>full bleed — right pane 760x620</h3>
+  <div class="pane right"><div class="reader-daily is-full-bleed">
+    <img class="reader-daily-photo PHOTO" alt="" />
+    <p class="reader-daily-label">Select a message</p>
+    <p class="daily-credit reader-daily-credit"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p>
+  </div></div>
+</div>
+
+<div class="case"><h3>postcard — right pane 760x620</h3>
+  <div class="pane right"><div class="reader-daily is-postcard">
+    <p class="reader-daily-label">Select a message</p>
+    <figure class="reader-daily-card">
+      <img class="reader-daily-photo PHOTO" alt="" />
+      <figcaption><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></figcaption>
+    </figure>
+  </div></div>
+</div>
+
+<div class="case"><h3>watermark — right pane 760x620</h3>
+  <div class="pane right"><div class="reader-daily is-watermark">
+    <img class="reader-daily-photo PHOTO" alt="" />
+    <p class="reader-daily-label">Select a message</p>
+    <p class="daily-credit reader-daily-credit"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p>
+  </div></div>
+</div>
+
+<div class="case"><h3>postcard — bottom pane 1100x300</h3>
+  <div class="pane bottom"><div class="reader-daily is-postcard">
+    <p class="reader-daily-label">Select a message</p>
+    <figure class="reader-daily-card">
+      <img class="reader-daily-photo PHOTO" alt="" />
+      <figcaption><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></figcaption>
+    </figure>
+  </div></div>
+</div>
+
+<div class="case"><h3>full bleed — bottom pane 1100x300</h3>
+  <div class="pane bottom"><div class="reader-daily is-full-bleed">
+    <img class="reader-daily-photo PHOTO" alt="" />
+    <p class="reader-daily-label">Select a message</p>
+    <p class="daily-credit reader-daily-credit"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p>
+  </div></div>
+</div>
+
+<script type="module">
+  const params = new URLSearchParams(location.search)
+  if (params.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark'
+  const photo = params.get('photo')
+    ?? 'https://www.bing.com/th?id=OHR.MayotteOctopus_FR-FR2063163267_1920x1080.jpg'
+  const images = [...document.querySelectorAll('img.PHOTO')]
+  images.forEach(img => { img.src = photo })
+  await Promise.all(images.map(img => img.complete ? null : new Promise(r => { img.onload = img.onerror = r })))
+
+  // How far each box pokes out of its pane, per edge; 0 means inside.
+  const escape = (inner, outer) => {
+    const a = inner.getBoundingClientRect(), b = outer.getBoundingClientRect()
+    return [b.left - a.left, a.right - b.right, b.top - a.top, a.bottom - b.bottom].map(n => Math.max(0, Math.round(n * 10) / 10))
+  }
+  const lines = []
+  for (const c of document.querySelectorAll('.case')) {
+    const name = c.querySelector('h3').textContent
+    const pane = c.querySelector('.pane, .login-box')
+    const parts = ['.reader-daily-label', '.daily-credit', '.reader-daily-card', '.card']
+      .map(sel => [sel, c.querySelector(sel)]).filter(([, el]) => el)
+      .map(([sel, el]) => `${sel} ${el.getBoundingClientRect().width.toFixed(0)}x${el.getBoundingClientRect().height.toFixed(0)} escape[l,r,t,b]=${escape(el, pane).join(',')}`)
+    lines.push(`${name}\n  ${parts.join('\n  ')}`)
+  }
+  document.getElementById('out').textContent = `theme=${document.documentElement.dataset.theme}\n` + lines.join('\n')
+  document.title = 'probe-done'
+</script>
+</body>
+</html>

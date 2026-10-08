@@ -21,6 +21,7 @@ public static class AppSettings
     public const string Installable = "app.installable";
     public const string Name = "app.name";
     public const string ShortName = "app.shortName";
+    public const string DailyImage = "app.dailyImage";
 
     private static readonly string[] Booleans = ["true", "false"];
 
@@ -29,6 +30,8 @@ public static class AppSettings
         new(Installable, "false", 5, Booleans),
         new(Name, "Scotty webmail", 60),
         new(ShortName, "Scotty", 12),
+        // Off by default: switched on, the server calls Bing every day, which an admin decides.
+        new(DailyImage, "false", 5, Booleans),
     ];
 
     public static bool IsValid(string key, string value)
