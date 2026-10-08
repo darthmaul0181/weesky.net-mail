@@ -6,9 +6,9 @@ on:
     # pushes altogether — the ref type left undefined is the one excluded, and the whole pipeline
     # went silent for a branch push. The tag filter is there because the deploy pushes its release
     # tags itself and a tag ref carries no environment: it would build and deploy `dev` as v1.0.0.
-    # v* predates the split into web-v* and api-v*.
+    # v* predates the split into web-v* and api-v*; image-v* is the Docker image's (image.yml).
     branches: ['**']
-    tags-ignore: ['v*', 'web-v*', 'api-v*']
+    tags-ignore: ['v*', 'web-v*', 'api-v*', 'image-v*']
   workflow_dispatch:
 
 jobs:
@@ -72,7 +72,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           NUMBER=$(gh pr list --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // ""')
-          echo "number=$NUMBER" >> $GITHUB_OUTPUT
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
       - name: PR comment
         if: steps.pr.outputs.number != ''
         uses: marocchino/sticky-pull-request-comment@v3
@@ -117,7 +117,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           NUMBER=$(gh pr list --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // ""')
-          echo "number=$NUMBER" >> $GITHUB_OUTPUT
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
       - name: PR comment
         if: steps.pr.outputs.number != ''
         uses: marocchino/sticky-pull-request-comment@v3

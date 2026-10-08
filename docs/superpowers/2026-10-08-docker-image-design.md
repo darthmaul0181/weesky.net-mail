@@ -176,6 +176,8 @@ entre deux sites (symptôme : la connexion semble réussir, puis chaque appel es
 défaut). Code de sortie 0 si la réponse est 200, 1 sinon (erreur, refus de connexion ou délai de
 5 s dépassé), avec une ligne sur la sortie d'erreur qui dit pourquoi.
 
+Au démarrage, l'API écrit une ligne `Version …, commit …, image …` (`none` pour une valeur absente) : `docker compose logs` dit quelle image tourne, et le test de démarrage vérifie par elle que le numéro et le commit sont bien arrivés dans l'image.
+
 ### 7. Le numéro de l'image
 
 - `docker/VERSION` (départ : `1.0.0`) numérote l'image ; `src/frontend/VERSION` et
@@ -189,7 +191,7 @@ défaut). Code de sortie 0 si la réponse est 200, 1 sinon (erreur, refus de con
 
 ### 8. Le workflow `.github/workflows/image.yml`
 
-Image : `ghcr.io/darthmaul0181/scotty-webmail`. `deploy.yml` n'est pas modifié.
+Image : `ghcr.io/darthmaul0181/scotty-webmail`. `deploy.yml` ne change que d'une entrée : `image-v*` rejoint ses `tags-ignore`.
 
 ```
 ① push d'une branche qui modifie docker/, .dockerignore ou image.yml

@@ -1,0 +1,186 @@
+name: image
+
+# docker/README.md is the guide for users; docs/operations/docker-image-release.md is how a
+# release is made: a candidate from any branch, tested on a server, then promoted from master.
+on:
+  push:
+    branches: ['**']
+    paths: ['docker/**', '.dockerignore', '.github/workflows/image.yml']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'candidate: build, test and publish X.Y.Z-rc.N — release: promote a candidate'
+        type: choice
+        options: [candidate, release]
+        default: candidate
+      candidate:
+        description: 'release only: the candidate to promote, such as 1.0.0-rc.2'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/darthmaul0181/scotty-webmail
+
+jobs:
+  build:
+    if: github.event_name == 'push' || inputs.mode == 'candidate'
+    runs-on: ubuntu-latest
+    # Two candidates started together would otherwise pick the same rc number.
+    concurrency: image-${{ github.event_name == 'workflow_dispatch' && 'publish' || github.ref }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Describe the build
+        id: meta
+        run: |
+          VERSION=$(tr -d '[:space:]' < docker/VERSION)
+          # Only a commit already on master builds as a release: elsewhere the versions read -dev.
+          if git merge-base --is-ancestor HEAD origin/master; then RELEASE=true; else RELEASE=false; fi
+          {
+            echo "version=$VERSION"
+            echo "release=$RELEASE"
+            echo "commit=${GITHUB_SHA::7}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build for the start-up test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: scotty-webmail:test
+          build-args: |
+            GIT_COMMIT=${{ steps.meta.outputs.commit }}
+            RELEASE_BUILD=${{ steps.meta.outputs.release }}
+            IMAGE_VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start-up test
+        run: bash docker/smoke-test.sh scotty-webmail:test "${{ steps.meta.outputs.commit }}"
+
+      - uses: docker/login-action@v3
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Next candidate number
+        id: rc
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          N=1
+          while docker buildx imagetools inspect "$IMAGE:$VERSION-rc.$N" >/dev/null 2>&1; do N=$((N + 1)); done
+          echo "tag=$VERSION-rc.$N" >> "$GITHUB_OUTPUT"
+
+      # Both architectures, from the cache the test build filled; pushed only for a candidate.
+      - name: Build both architectures
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'workflow_dispatch' }}
+          tags: ${{ env.IMAGE }}:${{ steps.rc.outputs.tag || 'unpublished' }}
+          annotations: |
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          build-args: |
+            GIT_COMMIT=${{ steps.meta.outputs.commit }}
+            RELEASE_BUILD=${{ steps.meta.outputs.release }}
+            IMAGE_VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Candidate published
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "::notice::Published $IMAGE:${{ steps.rc.outputs.tag }} from ${{ github.ref_name }} (${{ steps.meta.outputs.commit }})"
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'release'
+    runs-on: ubuntu-latest
+    concurrency: image-publish
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Check the candidate
+        id: check
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          [[ "$CANDIDATE" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.[0-9]+$ ]] \
+            || fail "'$CANDIDATE' is not a candidate tag such as 1.0.0-rc.2"
+          MAJOR=${BASH_REMATCH[1]}
+          MINOR=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}
+          VERSION=${CANDIDATE%-rc.*}
+          REVISION=$(docker buildx imagetools inspect "$IMAGE:$CANDIDATE" --raw 2>/dev/null \
+            | jq -r '.annotations["org.opencontainers.image.revision"] // empty') \
+            || true
+          [ -n "$REVISION" ] || fail "$IMAGE:$CANDIDATE does not exist"
+          git merge-base --is-ancestor "$REVISION" origin/master \
+            || fail "$CANDIDATE was built from ${REVISION::7}, which is not on master: merge, then build a new candidate"
+          [ "$(git show "$REVISION:docker/VERSION" | tr -d '[:space:]')" = "$VERSION" ] \
+            || fail "docker/VERSION at ${REVISION::7} is not $VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/image-v$VERSION" >/dev/null; then
+            fail "image-v$VERSION already exists: raise docker/VERSION and build a new candidate"
+          fi
+          {
+            echo "version=$VERSION"
+            echo "revision=$REVISION"
+            echo "major=$MAJOR"
+            echo "minor=$MINOR"
+          } >> "$GITHUB_OUTPUT"
+
+      # The same image, byte for byte: new tags on the candidate, nothing rebuilt.
+      - name: Promote
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+          VERSION: ${{ steps.check.outputs.version }}
+          REVISION: ${{ steps.check.outputs.revision }}
+          MAJOR: ${{ steps.check.outputs.major }}
+          MINOR: ${{ steps.check.outputs.minor }}
+        run: |
+          docker buildx imagetools create \
+            --tag "$IMAGE:$VERSION" \
+            --tag "$IMAGE:$MINOR" \
+            --tag "$IMAGE:$MAJOR" \
+            --tag "$IMAGE:latest" \
+            --annotation "index:org.opencontainers.image.revision=$REVISION" \
+            --annotation "index:org.opencontainers.image.version=$VERSION" \
+            --annotation "index:org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            "$IMAGE:$CANDIDATE"
+
+      - name: Tag the release
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          REVISION: ${{ steps.check.outputs.revision }}
+        run: |
+          git tag "image-v$VERSION" "$REVISION"
+          git push origin "image-v$VERSION"
+          echo "::notice::Published $IMAGE:$VERSION (image-v$VERSION, ${REVISION::7})"
