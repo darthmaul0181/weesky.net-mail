@@ -3,8 +3,9 @@
 #   docker build -f docker/Dockerfile --build-arg IMAGE_VERSION=$(cat docker/VERSION) \
 #     --build-arg GIT_COMMIT=$(git rev-parse --short=7 HEAD) --build-arg GIT_REVISION=$(git rev-parse HEAD) .
 # docker/README.md is the guide; docker/smoke-test.sh checks an image the way CI does.
+# The base images are named by tag, not digest: each new build takes their latest fixes.
 
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS web
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS web
 ARG GIT_COMMIT=""
 ARG RELEASE_BUILD=false
 WORKDIR /src/frontend
@@ -13,7 +14,7 @@ RUN npm ci
 COPY src/frontend/ ./
 RUN GITHUB_SHA="$GIT_COMMIT" RELEASE_BUILD="$RELEASE_BUILD" npm run build -- --mode container
 
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS api
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS api
 ARG TARGETARCH
 ARG GIT_COMMIT=""
 ARG RELEASE_BUILD=false
@@ -34,7 +35,7 @@ RUN dotnet publish src/scotty.microservice.host/scotty.microservice.host.csproj 
  && rm -rf /out/app/alpine /out/app/arm64 /out/app/CodeCoverage /out/app/macos /out/app/ubuntu /out/app/x64 /out/app/x86 \
  && mkdir /out/state
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra@sha256:00e0ad6a7ef8c0c1391b87f05c7ac757a15740455688f2bfcd146a3f4b987efd
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra
 ARG IMAGE_VERSION
 ARG GIT_REVISION=""
 LABEL org.opencontainers.image.title="Scotty webmail" \

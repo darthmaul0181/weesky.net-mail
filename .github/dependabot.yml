@@ -1,8 +1,0 @@
-# Base-image security fixes arrive as pull requests; nothing published changes until a new
-# candidate is built, tested and released (docs/operations/docker-image-release.md).
-version: 2
-updates:
-  - package-ecosystem: docker
-    directory: /docker
-    schedule:
-      interval: weekly
