@@ -113,10 +113,31 @@ A side-by-side comparison is in
 
 ## Installing it
 
-Scotty installs on a Linux server with a MySQL or MariaDB database and a web server such as Apache
-or nginx, and connects to your mail service over IMAP and SMTP — your own server or a provider.
-[`install/README.md`](install/README.md) walks through the `generic` platform in five steps, each
-ending with a check:
+Scotty needs three things it does not bring: a **MySQL or MariaDB database**, the **mail service**
+it reads and sends through over IMAP and SMTP — your own server or a provider — and an **HTTPS
+address**. Both ways below install the `generic` platform, and both update their own tables when a
+new version starts: there is never any SQL to run by hand after the first install.
+
+### With Docker — the quickest
+
+One image, `ghcr.io/darthmaul0181/scotty-webmail`, serves the pages and the API, for `amd64` and
+`arm64`. Create the database once with [`install/install.sql`](install/install.sql), then:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/darthmaul0181/weesky.net-mail/master/docker/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/darthmaul0181/weesky.net-mail/master/docker/.env.example
+nano .env                 # the database, your mail servers, the administrators
+docker compose up -d
+```
+
+and point your HTTPS proxy — Caddy, Traefik, nginx — at port 8080. Updating is
+`docker compose pull && docker compose up -d`. [`docker/README.md`](docker/README.md) walks through
+the six steps, with each proxy's configuration and what to do when the container won't start.
+
+### From source, as a systemd service
+
+On a Linux server with a web server such as Apache or nginx.
+[`install/README.md`](install/README.md) walks through five steps, each ending with a check:
 
 1. **Build** the API and the web interface
 2. **Create** Scotty's database with `install/install.sql`
@@ -124,15 +145,12 @@ ending with a check:
 4. **Publish** both through your web server, on two addresses of the same domain
 5. **Sign in** with any mailbox's address and password — there is no account to create
 
-**With Docker**, one container serves the pages and the API: [`docker/README.md`](docker/README.md)
-takes you from an empty server to signing in, with a database and an HTTPS proxy you provide.
-
 ## Documentation
 
 | | |
 |---|---|
-| [`install/README.md`](install/README.md) | **Start here to deploy.** Five steps, with an example systemd unit and environment file |
-| [`docker/README.md`](docker/README.md) | **Or with Docker.** One container, its compose file and settings |
+| [`docker/README.md`](docker/README.md) | **Start here to deploy with Docker.** One container, its compose file and settings |
+| [`install/README.md`](install/README.md) | **Or from source.** Five steps, with an example systemd unit and environment file |
 | [`docs/README.md`](docs/README.md) | Where everything else lives |
 | [`docs/schema-notes.md`](docs/schema-notes.md) | Why the schema is shaped the way it is — read before changing a column or an index |
 | [`docs/known-issues/`](docs/known-issues) | Defects found, measured and deliberately left open |
