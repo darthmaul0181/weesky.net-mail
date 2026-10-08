@@ -29,6 +29,10 @@ construit les deux architectures, démarre l'image à côté d'une MariaDB jetab
 Une candidate construite depuis une autre branche que `master` sert à essayer ; elle ne pourra
 jamais être publiée. Ses versions web et serveur se terminent par `-dev`.
 
+Le bouton « Run workflow » n'apparaît que pour un workflow présent sur `master`. Tant qu'une
+modification de `image.yml` n'y est pas fusionnée, lancer la candidate en ligne de commande :
+`gh workflow run image.yml --ref <branche> -f mode=candidate`.
+
 ## 3. La tester
 
 Sur le serveur de test, dans le `docker-compose.yml` :
