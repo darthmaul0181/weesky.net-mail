@@ -65,5 +65,8 @@ connexion à GHCR : `docker pull ghcr.io/darthmaul0181/scotty-webmail:1.0.0`.
 
 ## Mises à jour de l'image de base
 
-Dependabot ouvre une PR quand Microsoft ou Node publient une nouvelle image de base. La fusionner
-ne publie rien : faire monter `docker/VERSION` d'un correctif, puis suivre les étapes 2 à 4.
+Le `Dockerfile` désigne ses images de base par leur étiquette (`aspnet:10.0-noble-chiseled-extra`),
+pas par une empreinte figée : chaque nouvelle candidate prend les derniers correctifs de Microsoft.
+Une image déjà publiée, elle, ne change jamais. Pour livrer ces correctifs, publier de temps en
+temps une version corrective, par exemple après le correctif mensuel de .NET (le deuxième mardi du
+mois) : faire monter `docker/VERSION` d'un correctif (`1.0.1`), fusionner, puis les étapes 2 à 4.

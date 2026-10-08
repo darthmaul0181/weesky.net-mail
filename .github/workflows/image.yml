@@ -58,6 +58,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           platforms: linux/amd64
+          pull: true
           load: true
           tags: scotty-webmail:test
           build-args: |
@@ -101,6 +102,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           platforms: linux/amd64,linux/arm64
+          pull: true
           push: ${{ github.event_name == 'workflow_dispatch' }}
           tags: ${{ env.IMAGE }}:${{ steps.rc.outputs.tag || 'unpublished' }}
           annotations: |

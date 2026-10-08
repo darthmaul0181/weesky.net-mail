@@ -63,8 +63,8 @@ Construite en trois étapes par `docker/Dockerfile`, contexte à la racine du d�
    dépendante du runtime, sans symboles ni ressources satellites). Ces deux étapes tournent sur
    l'architecture de la machine de build (`--platform=$BUILDPLATFORM`) : l'image `arm64` est
    compilée sans émulation ;
-3. l'image finale part de `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra`, épinglée
-   par son empreinte (digest) : Ubuntu réduit, sans shell ni gestionnaire de paquets, utilisateur
+3. l'image finale part de `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra`, désignée
+   par son étiquette (chaque construction prend les derniers correctifs) : Ubuntu réduit, sans shell ni gestionnaire de paquets, utilisateur
    non administrateur (`app`, uid 1654). La variante `-extra` embarque les fuseaux horaires et
    l'ICU, dont l'agenda a besoin.
 
@@ -231,9 +231,10 @@ Permissions : `contents: read` partout, `packages: write` pour ② et ③, `cont
 tag de ③. Les modes ② et ③ partagent un groupe de concurrence : deux candidates lancées ensemble
 ne prennent pas le même N. Cache de build GitHub Actions (`type=gha`).
 
-`.github/dependabot.yml` surveille l'image de base de `docker/Dockerfile` (chaque semaine) :
-Microsoft publie un correctif, une PR arrive ; le propriétaire fusionne, construit une candidate,
-teste et publie un numéro correctif. Aucune image publiée ne change sans sa décision.
+Les images de base sont désignées par leur étiquette, sans empreinte ni Dependabot (décision du
+2026-10-08) : chaque candidate prend les derniers correctifs, et la release publie la candidate
+testée sans la reconstruire. Le propriétaire publie de temps en temps une version corrective ;
+aucune image publiée ne change sans sa décision.
 
 ### 9. La documentation
 
