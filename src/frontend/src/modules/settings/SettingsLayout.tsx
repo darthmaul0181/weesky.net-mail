@@ -57,8 +57,6 @@ export default function SettingsLayout() {
   // One list, two readers: the rows below and the narrow bar's title. A second copy of the
   // labels would drift the day one of them is renamed.
   const items: NavItem[] = [
-    // First, and gated on nothing: on a phone, where the top bar is hidden, this row is the list.
-    { to: '/settings/whats-new', label: t('nav.whatsNew'), icon: <SparkleIcon size={16} />, unlisted: true },
     ...(isPrimary ? [{ to: '/settings/account', label: t('nav.account'), icon: <UserIcon size={16} />, end: true }] : []),
     { to: '/settings/appearance', label: t('nav.appearance'), icon: <DropletIcon size={16} />, anchor: 'settings:appearance' },
     // Not gated isPrimary: the secret, the address book and the calendars are the Scotty user's,
@@ -73,6 +71,8 @@ export default function SettingsLayout() {
     { to: '/settings/calendar', label: t('nav.general'), icon: <SlidersIcon size={16} />, group: 'calendar' },
     // Not gated isPrimary: administration is the deployment's, whichever mailbox is being read.
     ...(isAdmin && adminAvailable ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} />, group: 'application' as const }] : []),
+    // Gated on nothing: on a phone, where the top bar is hidden, this row is the list.
+    { to: '/settings/whats-new', label: t('nav.whatsNew'), icon: <SparkleIcon size={16} />, group: 'application', unlisted: true },
     // Last, and gated on nothing: every account reads the same product, on its own mailbox or an
     // attached one. It keeps its group open, so no group heading ever stands over nothing.
     { to: '/settings/about', label: t('nav.about'), icon: <InfoIcon size={16} />, group: 'application' },

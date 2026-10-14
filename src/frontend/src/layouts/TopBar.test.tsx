@@ -32,10 +32,16 @@ describe('TopBar', () => {
   })
 
   it('offers the novelties at the right of the bar', async () => {
+    mocks.getAppSettings.mockResolvedValue({ 'app.dailyImage': 'true' })
+    renderBar()
+    const button = await screen.findByRole('button', { name: /What's new/ })
+    expect(screen.getByRole('banner').lastElementChild).toContainElement(button)
+  })
+
+  it('offers no novelties when none is waiting', async () => {
     mocks.getAppSettings.mockResolvedValue({})
     renderBar()
-    const banner = screen.getByRole('banner')
-    expect(banner.lastElementChild).toContainElement(screen.getByRole('button', { name: /What's new/ }))
     await settle()
+    expect(screen.queryByRole('button', { name: /What's new/ })).toBeNull()
   })
 })

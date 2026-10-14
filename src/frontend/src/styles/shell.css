@@ -223,13 +223,12 @@
 .whats-new-item:not(.is-active) .whats-new-text h3 { color: var(--text-muted); }
 .whats-new-text p { margin: 0 0 8px; font-size: 13px; line-height: 1.4; color: var(--text-muted); }
 .whats-new-text .btn { padding: 6px 12px; font-size: 13px; }
-.whats-new-empty { margin: 0; padding: 14px 16px; border-top: 1px solid var(--list-separator); color: var(--text-muted); font-size: 13px; }
+.whats-new-empty { margin: 0; color: var(--text-muted); font-size: 13px; }
 .whats-new-all { display: block; padding: 12px 16px; border-top: 1px solid var(--list-separator); font-size: 13px; }
 
 /* The history page: the same rows, inside the page's own sections rather than a popover. */
 .settings-page .whats-new-list { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
 .settings-page .whats-new-item:first-child { border-top: 0; }
-.settings-page .whats-new-empty { padding: 0; border-top: 0; }
 
 /* ── Account block, at the foot of the folder column ──────────────────────── */
 /* It sits at the bottom of the screen, so its menu opens upward — inside the column, which is

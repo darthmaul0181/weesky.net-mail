@@ -8,10 +8,11 @@ import { useWhatsNew } from './useWhatsNew'
 
 const SHOWN = 10
 
-/** The sparkle at the right of the top bar: a dot while a novelty is unlisted, the list on click. */
+/** The sparkle at the right of the top bar: a dot while a novelty is unlisted, the list on click;
+    gone once no novelty is active, but never from under an open list. */
 export default function WhatsNewButton() {
   const { t } = useTranslation('whatsNew')
-  const { fresh, unlistedCount, markListed } = useWhatsNew()
+  const { fresh, active, unlistedCount, markListed } = useWhatsNew()
   const shown = fresh.slice(0, SHOWN)
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -23,6 +24,8 @@ export default function WhatsNewButton() {
     if (!open) markListed(shown.map(n => n.entry.id))
     setOpen(!open)
   }
+
+  if (active.length === 0 && !open) return null
 
   return (
     <div ref={rootRef} className="whats-new-root">
@@ -41,9 +44,7 @@ export default function WhatsNewButton() {
       {open && (
         <section className="whats-new-popover" aria-labelledby="whats-new-title">
           <h2 id="whats-new-title">{t('title')}</h2>
-          {shown.length > 0
-            ? <WhatsNewList novelties={shown} onShow={close} />
-            : <p className="whats-new-empty">{t('nothingFresh')}</p>}
+          <WhatsNewList novelties={shown} onShow={close} />
           <Link to="/settings/whats-new" className="whats-new-all" onClick={close}>{t('seeAll')}</Link>
         </section>
       )}

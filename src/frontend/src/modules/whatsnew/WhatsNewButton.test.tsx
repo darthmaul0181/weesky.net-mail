@@ -64,12 +64,14 @@ describe('WhatsNewButton', () => {
     expect(screen.queryByRole('heading', { name: 'Image of the day' })).toBeNull()
   })
 
-  it('says so when nothing came after the account joined', async () => {
-    const user = setupUser()
+  it('leaves the bar when nothing came after the account joined', () => {
     renderButton({ baseline: '9.9.9', items: [] })
-    await user.click(screen.getByRole('button', { name: "What's new" }))
-    expect(screen.getByText('Nothing new since you joined.')).toBeInTheDocument()
-    expect(mocks.markWhatsNew).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /What's new/ })).toBeNull()
+  })
+
+  it('leaves the bar once every novelty is seen', () => {
+    renderButton({ baseline: '0.0.0', items: [{ id: 'daily-image', firstShownAt: STAMP, seenAt: STAMP }] })
+    expect(screen.queryByRole('button', { name: /What's new/ })).toBeNull()
   })
 
   it('keeps a listed novelty in the list, dot out, until it is seen', async () => {

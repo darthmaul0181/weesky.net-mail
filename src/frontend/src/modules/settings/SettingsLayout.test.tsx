@@ -129,12 +129,11 @@ describe('settings section', () => {
     const nav = within(navElement)
     const links = (scope: HTMLElement) =>
       within(scope).getAllByRole('link').map(link => link.textContent)
-    // The ungrouped rows, What's new first: the history is read before any one setting.
-    expect(links(navElement).slice(0, 4)).toEqual(["What's new", 'Account', 'Appearance', 'Sync'])
+    expect(links(navElement).slice(0, 3)).toEqual(['Account', 'Appearance', 'Sync'])
     expect(links(nav.getByRole('group', { name: 'Mail' }))).toEqual(
       ['General', 'Connected accounts', 'Folders', 'Identities', 'Aliases', 'Rules'])
     expect(links(nav.getByRole('group', { name: 'Calendar' }))).toEqual(['General'])
-    expect(links(nav.getByRole('group', { name: 'Application' }))).toEqual(['About'])
+    expect(links(nav.getByRole('group', { name: 'Application' }))).toEqual(["What's new", 'About'])
     expect(nav.getByText('Account')).toBeInTheDocument()
     expect(nav.getByText('Appearance')).toBeInTheDocument()
     expect(nav.getByText('Sync')).toBeInTheDocument()

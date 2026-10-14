@@ -137,12 +137,13 @@ identifiants valides.
 - Nouveautés actives sans `first_shown_at` → un `PUT items` `shown` groupé.
 - **Icône du haut** (étoile scintillante, à droite de la barre) : point s'il reste une nouveauté
   active sans `listed_at`. L'ouvrir envoie `listed` pour les nouveautés actives affichées ; les points
-  du chemin restent.
+  du chemin restent. Elle disparaît quand plus aucune nouveauté n'est active (toutes vues ou
+  expirées), jamais tant que sa liste est ouverte.
 - **Liste** (planche A) : nouveautés applicables (`when` vrai, version > référence), plus récentes
   d'abord, dix au plus ; actives avec leur point et un bouton *Show me* plein, les autres estompées.
   *Show me* mène à `href` et fait défiler jusqu'à la cible. Pied : *See all* → `/settings/whats-new`.
 - **Page `/settings/whats-new`** : l'historique complet, groupé par version. Sur téléphone (sans barre
-  du haut), c'est la ligne *What's new* en tête des réglages, avec son point ; le point de la liste
+  du haut), c'est la ligne *What's new* du groupe *Application*, juste avant *About*, avec son point ; le point de la liste
   se pose sur l'onglet *Settings* de la barre du bas.
 - **Arrivée** : la cible visible à au moins 50 % (IntersectionObserver) → `seen`. Le cadre et
   l'étiquette restent jusqu'à ce que l'utilisateur quitte la page ; absents à la visite suivante.
