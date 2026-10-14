@@ -20,6 +20,11 @@
   --pane-item-active-bg: #d9f4ff;
   --pane-item-active-fg: #002d48;
   --accent-unread: #0070b0;
+  /* What's new dots: -chrome on the bars; --new-dot falls under 3:1 on the hovered --rail-item, and coral keeps that dot off the rail's own blue. */
+  --new-dot: #2183ba;
+  --new-dot-chrome: #f55830;
+  --new-tag-bg: #147bb2;
+  --new-tag-fg: #ffffff;
 
   /* Message list and reader */
   --list-row-hover: #ecf2f7;
@@ -71,6 +76,10 @@
   --pane-item-active-bg: #07293a;
   --pane-item-active-fg: #e8ecee;
   --accent-unread: #2eb1ef;
+  --new-dot: #2eb1ef;
+  --new-dot-chrome: #2eb1ef;
+  --new-tag-bg: #077cad;
+  --new-tag-fg: #ffffff;
 
   /* Message list and reader */
   --list-row-hover: #202529;

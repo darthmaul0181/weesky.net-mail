@@ -7,5 +7,6 @@ import contacts from './contacts.json'
 import errors from './errors.json'
 import mail from './mail.json'
 import settings from './settings.json'
+import whatsNew from './whatsNew.json'
 
-export default { admin, auth, calendar, common, compose, contacts, errors, mail, settings }
+export default { admin, auth, calendar, common, compose, contacts, errors, mail, settings, whatsNew }

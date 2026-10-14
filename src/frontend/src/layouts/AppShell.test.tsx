@@ -7,7 +7,14 @@ import { createTestQueryClient, withQueryClient } from '../test-utils'
 vi.mock('../modules/mail/notify/useMailNotifications', () => ({ useMailNotifications: () => {} }))
 vi.mock('../hooks/useTabTitle', () => ({ useTabTitle: () => {} }))
 vi.mock('../modules/mail/notify/useFaviconBadge', () => ({ useFaviconBadge: () => {} }))
-vi.mock('../api.js', () => ({ api: { getAppSettings: vi.fn().mockResolvedValue({}) } }))
+vi.mock('../api.js', () => ({
+  api: {
+    getAppSettings: vi.fn().mockResolvedValue({}),
+    getWhatsNew: vi.fn().mockResolvedValue({ baseline: '0.0.0', items: [] }),
+    markWhatsNew: vi.fn().mockResolvedValue(null),
+    setWhatsNewBaseline: vi.fn().mockResolvedValue(null),
+  },
+}))
 
 const { default: AppShell } = await import('./AppShell')
 
@@ -15,6 +22,7 @@ const { default: AppShell } = await import('./AppShell')
 function renderAt(path: string) {
   const client = createTestQueryClient()
   client.setQueryData(['appSettings'], {})
+  client.setQueryData(['whatsNew'], { baseline: '0.0.0', items: [] })
   return render(<MemoryRouter initialEntries={[path]}><AppShell /></MemoryRouter>, { wrapper: withQueryClient(client) })
 }
 

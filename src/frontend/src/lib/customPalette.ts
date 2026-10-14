@@ -13,6 +13,9 @@ export interface CustomPaletteTokens { light: TokenSet; dark: TokenSet }
 const PATTERN = /^(0|[1-9]\d{0,2}),(neutral|muted|vivid),(0|[1-9]\d{0,2})(?:,(structure|accent)(?:,[^,]+)*)?$/
 const WHITE = '#ffffff'
 const DANGER_HUE = 27
+// Built-in precedent (classic gold, azure and indigo coral): a chrome dot in the bar's own hue reads as a tint of it.
+const WARM_HUES = [85, 35]
+const NEAR_HUE = 30
 
 export function parseCustomPalette(value: string | null | undefined): CustomPaletteDef | null {
   const match = PATTERN.exec(value ?? '')
@@ -83,6 +86,20 @@ function solve(L: number, C: number, h: number, step: number, ok: (c: string) =>
   return colour
 }
 
+const clears = (grounds: readonly string[]) => (c: string) => grounds.every(g => contrast(c, g) >= 3)
+
+/** One colour where it clears 3:1 on the pale columns and the bars alike; else the bars get a lighter one. */
+function newDots(L: number, C: number, hues: { dot: number; chrome: number }, step: number, grounds: { pale: string[]; bars: string[] }) {
+  const dot = solve(L, C, hues.dot, step, clears(grounds.pale))
+  const reuse = hues.chrome === hues.dot && clears(grounds.bars)(dot)
+  return { dot, chrome: reuse ? dot : solve(L, C, hues.chrome, Math.abs(step), clears(grounds.bars)) }
+}
+
+function chromeHueOf(accent: number, structure: number, intensity: Intensity): number {
+  if (intensity === 'neutral' || hueGap(accent, structure) >= NEAR_HUE) return accent
+  return WARM_HUES.reduce((best, h) => hueGap(h, structure) > hueGap(best, structure) ? h : best)
+}
+
 const STRUCTURE: Record<Intensity, { L: number; C: number; tint: number }> = {
   neutral: { L: 0.27, C: 0.012, tint: 0.004 },
   muted: { L: 0.30, C: 0.06, tint: 0.008 },
@@ -114,17 +131,21 @@ export function generateCustomPalette({ structure: hs, intensity, accent: ha, bu
   const surface = oklch(0.99, t / 2, hs), foldersHover = oklch(0.895, t * 2.6, hs)
   const topbar = solve(s.L, s.C, hs, -0.01, c => contrast(WHITE, c) >= 7)
   const selected = mix(surface, accentLight, 0.11), separator = oklch(0.915, t, hs)
+  const foldersBg = oklch(0.925, t * 2.2, hs), railItem = mix(topbar, WHITE, 0.11)
+  const lightDots = newDots(0.6, 0.16, { dot: ha, chrome: chromeHueOf(ha, hs, intensity) }, -0.01,
+    { pale: [foldersBg, surface, selected], bars: [topbar, railItem] })
   const action = buttons === 'accent' ? accentLight : topbar
   const light: TokenSet = {
-    '--bg': oklch(0.958, t, hs), '--folders-bg': oklch(0.925, t * 2.2, hs), '--folders-item-hover': foldersHover,
+    '--bg': oklch(0.958, t, hs), '--folders-bg': foldersBg, '--folders-item-hover': foldersHover,
     '--surface': surface, '--surface-raised': surface, '--surface-sunken': oklch(0.948, t, hs),
     '--border': oklch(0.885, t * 1.2, hs), '--text': oklch(0.2, t * 1.5, hs),
     '--text-muted': solve(0.5, t * 2, hs, -0.01, c => contrast(c, foldersHover) >= 4.6),
     '--topbar-bg': topbar, '--topbar-fg': WHITE, '--rail-bg': topbar,
-    '--rail-fg': mix(topbar, WHITE, 0.74), '--rail-item': mix(topbar, WHITE, 0.11),
+    '--rail-fg': mix(topbar, WHITE, 0.74), '--rail-item': railItem,
     '--rail-item-active': railActiveLight, '--rail-item-active-fg': inkOn(railActiveLight, ha),
     '--pane-item-hover': oklch(0.935, t, hs), '--pane-item-active-bg': selected, '--pane-item-active-fg': topbar,
-    '--accent-unread': accentLight,
+    '--accent-unread': accentLight, '--new-dot': lightDots.dot, '--new-dot-chrome': lightDots.chrome,
+    '--new-tag-bg': accentLight, '--new-tag-fg': WHITE,
     '--list-row-hover': oklch(0.948, t, hs), '--list-row-selected-bg': selected, '--list-row-selected-fg': topbar,
     '--list-separator': separator, '--badge-count-bg': accentLight, '--badge-count-fg': WHITE,
     '--reader-header-border': separator,
@@ -139,16 +160,19 @@ export function generateCustomPalette({ structure: hs, intensity, accent: ha, bu
   const darkTop = oklch(0.16, Math.min(s.C * 0.5, 0.04), hs)
   const darkInk = inkOn(accentDark, ha), darkSelected = mix(darkSurface, accentDark, 0.16)
   const darkSelectedFg = oklch(0.93, 0.03, ha)
+  const darkRailItem = mix(darkTop, WHITE, 0.07)
+  const darkDots = newDots(0.7, 0.14, { dot: ha, chrome: ha }, 0.01, { pale: [bg, darkSurface, darkSelected], bars: [darkTop, darkRailItem] })
   const dark: TokenSet = {
     '--bg': bg, '--folders-bg': bg, '--folders-item-hover': raised,
     '--surface': darkSurface, '--surface-raised': raised, '--surface-sunken': oklch(0.205, dt, hs),
     '--border': border, '--text': text,
     '--text-muted': solve(0.7, 0.01, hs, 0.01, c => contrast(c, raised) >= 4.6),
     '--topbar-bg': darkTop, '--topbar-fg': text, '--rail-bg': darkTop,
-    '--rail-fg': oklch(0.76, 0.02, hs), '--rail-item': mix(darkTop, WHITE, 0.07),
+    '--rail-fg': oklch(0.76, 0.02, hs), '--rail-item': darkRailItem,
     '--rail-item-active': accentDark, '--rail-item-active-fg': darkInk,
     '--pane-item-hover': raised, '--pane-item-active-bg': darkSelected, '--pane-item-active-fg': darkSelectedFg,
-    '--accent-unread': accentDark,
+    '--accent-unread': accentDark, '--new-dot': darkDots.dot, '--new-dot-chrome': darkDots.chrome,
+    '--new-tag-bg': accentLight, '--new-tag-fg': WHITE,
     '--list-row-hover': raised, '--list-row-selected-bg': darkSelected, '--list-row-selected-fg': darkSelectedFg,
     '--list-separator': border, '--badge-count-bg': accentDark, '--badge-count-fg': darkInk,
     '--reader-header-border': border,

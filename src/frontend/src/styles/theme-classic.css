@@ -23,6 +23,11 @@
   --pane-item-active-bg: #c6d6f0;
   --pane-item-active-fg: #25397a;
   --accent-unread: #3450a3;
+  /* What's new dots: -chrome on the bars; one colour cannot clear 3:1 on both a mid-blue bar and a pale column. */
+  --new-dot: #3450a3;
+  --new-dot-chrome: #f6ba00;
+  --new-tag-bg: #3450a3;
+  --new-tag-fg: #ffffff;
 
   /* Message list and reader */
   --list-row-hover: #f0f2f5;
@@ -76,6 +81,10 @@
   --pane-item-active-bg: #33405c;
   --pane-item-active-fg: #bcd2ec;
   --accent-unread: #84aad8;
+  --new-dot: #84aad8;
+  --new-dot-chrome: #84aad8;
+  --new-tag-bg: #5276a1;
+  --new-tag-fg: #ffffff;
 
   /* Message list and reader */
   --list-row-hover: #2f3849;

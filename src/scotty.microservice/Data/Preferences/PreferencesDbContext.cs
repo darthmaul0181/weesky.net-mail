@@ -51,7 +51,8 @@ public class PreferencesDbContext : DbContext
     {
         modelBuilder.Entity<FolderRoleOverride>().HasKey(o => new { o.UserId, o.AccountId, o.Role });
         modelBuilder.Entity<UserPreference>().HasKey(p => new { p.UserId, p.PreferenceKey });
-        // No relation edge on these four, unlike the five per-account tables below: none of them
+        modelBuilder.Entity<WhatsNewItem>().HasKey(i => new { i.UserId, i.ItemId });
+        // No relation edge on these four, unlike the six per-account tables below: none of them
         // belongs to anyone, so there is nothing to order ahead of users.
         modelBuilder.Entity<AppSetting>().HasKey(s => s.SettingKey);
         modelBuilder.Entity<AppLogoImage>().HasKey(l => l.Size);
@@ -96,7 +97,7 @@ public class PreferencesDbContext : DbContext
         modelBuilder.Entity<WebmailUser>().HasKey(u => u.Id);
         modelBuilder.Entity<WebmailUser>().HasIndex(u => u.Email).IsUnique();
 
-        // Same mechanism as ContactEmail -> Contact above: each of these five tables carries a real
+        // Same mechanism as ContactEmail -> Contact above: each of these six tables carries a real
         // fk_..._user ON DELETE CASCADE to users(id) in the schema, but without a declared edge EF
         // has nothing to order their INSERTs against theirs, and falls back to alphabetical table
         // name — every one of them sorts before "users". Declared without navigation, same as above.
@@ -114,6 +115,11 @@ public class PreferencesDbContext : DbContext
             .HasOne<WebmailUser>()
             .WithMany()
             .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<WhatsNewItem>()
+            .HasOne<WebmailUser>()
+            .WithMany()
+            .HasForeignKey(i => i.UserId)
             .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<SendingIdentity>()
             .HasOne<WebmailUser>()
@@ -229,6 +235,8 @@ public class PreferencesDbContext : DbContext
     public DbSet<FolderRoleOverride> FolderRoleOverrides { get; set; }
 
     public DbSet<UserPreference> UserPreferences { get; set; }
+
+    public DbSet<WhatsNewItem> WhatsNewItems { get; set; }
 
     public DbSet<AppSetting> AppSettings { get; set; }
 

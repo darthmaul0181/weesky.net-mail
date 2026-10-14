@@ -28,7 +28,7 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
 
         Assert.Equal(Shipped, SchemaMigrations.Apply(connection));
 
-        Assert.Equal(27 + 1, await CountTablesAsync(connection));   // + schema_migrations
+        Assert.Equal(28 + 1, await CountTablesAsync(connection));   // + schema_migrations
         Assert.Empty(SchemaMigrations.Pending(connection));
     }
 
@@ -151,10 +151,59 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
               ('a', 'ui.dailyImage', 'watermark'), ('b', 'ui.dailyImage', 'postcard'), ('a', 'ui.other', 'watermark');
             """, connection);
 
-        SchemaMigrations.Apply(connection);
+        SchemaMigrations.Apply(connection, [.. SchemaMigrations.Embedded.Take(2)]);
 
         Assert.Equal("a:ui.dailyImage=fullBleed,a:ui.other=watermark,b:ui.dailyImage=postcard", await ScalarAsync(connection,
             "SELECT GROUP_CONCAT(user_id, ':', preference_key, '=', preference_value ORDER BY user_id, preference_key) FROM user_preferences"));
+    }
+
+    [SkippableFact]
+    public async Task Migration0003_GivesExistingAccountsTheWholeCatalogueAndLaterOnesNone()
+    {
+        Skip.If(db.Unavailable, "Docker is not running");
+        var connection = await db.NewDatabaseAsync();
+        SchemaMigrations.Apply(connection, [.. SchemaMigrations.Embedded.Take(2)]);
+        await db.ExecuteAsync(
+            "INSERT INTO users (id, email, security_stamp, creation_date) VALUES ('a', 'a@x', 's', UTC_TIMESTAMP());", connection);
+
+        SchemaMigrations.Apply(connection);
+        await db.ExecuteAsync(
+            "INSERT INTO users (id, email, security_stamp, creation_date) VALUES ('b', 'b@x', 's', UTC_TIMESTAMP());", connection);
+
+        Assert.Equal("a=0.0.0", await ScalarAsync(connection,
+            "SELECT GROUP_CONCAT(user_id, '=', preference_value ORDER BY user_id) FROM user_preferences WHERE preference_key = 'whatsNew.baseline'"));
+    }
+
+    [SkippableFact]
+    public async Task Migration0003_RunsAgainAfterAFailureHalfwayThrough()
+    {
+        Skip.If(db.Unavailable, "Docker is not running");
+        var connection = await db.NewDatabaseAsync();
+        SchemaMigrations.Apply(connection);
+        await db.ExecuteAsync(
+            "INSERT INTO users (id, email, security_stamp, creation_date) VALUES ('a', 'a@x', 's', UTC_TIMESTAMP());", connection);
+        var script = SchemaMigrations.Embedded.Single(s => s.Name == "0003_whats_new.sql").Contents;
+
+        await db.ExecuteAsync(script, connection);
+        await db.ExecuteAsync(script, connection);
+
+        Assert.Equal(1L, await ScalarAsync(connection,
+            "SELECT COUNT(*) FROM user_preferences WHERE preference_key = 'whatsNew.baseline'"));
+    }
+
+    [SkippableFact]
+    public async Task WhatsNewItems_LeaveWithTheirAccount()
+    {
+        Skip.If(db.Unavailable, "Docker is not running");
+        var connection = await db.NewDatabaseAsync();
+        SchemaMigrations.Apply(connection);
+        await db.ExecuteAsync("""
+            INSERT INTO users (id, email, security_stamp, creation_date) VALUES ('a', 'a@x', 's', UTC_TIMESTAMP());
+            INSERT INTO whats_new_items (user_id, item_id, first_shown_at) VALUES ('a', 'daily-image', UTC_TIMESTAMP());
+            DELETE FROM users WHERE id = 'a';
+            """, connection);
+
+        Assert.Equal(0L, await ScalarAsync(connection, "SELECT COUNT(*) FROM whats_new_items"));
     }
 
     [SkippableFact]

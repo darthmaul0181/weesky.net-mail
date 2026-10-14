@@ -14,6 +14,7 @@ import type {
   StagedAttachmentInfo,
 } from './modules/mail/api/mailTypes'
 import type { SearchCriteria } from './modules/mail/list/searchCriteria'
+import type { WhatsNewMark, WhatsNewState } from './modules/whatsnew/types'
 import type {
   Contact, ContactDetail, ContactDraft, ContactImportReport, ContactListResponse,
 } from './modules/contacts/contactTypes'
@@ -652,6 +653,17 @@ export const api = {
   },
 
   deleteAppLogo: () => request<null>('DELETE', '/api/AppSettings/logo'),
+
+  // ── What's new ────────────────────────────────────────────────────────────
+
+  getWhatsNew: (options?: RequestOptions) =>
+    request<WhatsNewState>('GET', '/api/WhatsNew', undefined, options),
+
+  markWhatsNew: (ids: string[], state: WhatsNewMark) =>
+    request<null>('PUT', '/api/WhatsNew/items', { ids, state }),
+
+  setWhatsNewBaseline: (version: string) =>
+    request<null>('PUT', '/api/WhatsNew/baseline', { version }),
 }
 
 /** The attachment download URL, encoded in one place. A subresource fetch cannot carry a header,

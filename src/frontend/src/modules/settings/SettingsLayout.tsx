@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../../contexts/AuthContext'
 import IdentityMenu from '../../layouts/IdentityMenu'
 import ContextDrawer, { DrawerToggle, useContextDrawer } from '../../layouts/ContextDrawer'
+import WhatsNewDot from '../whatsnew/WhatsNewDot'
 // Each row wears the icon its own page's title wears — the site's trigger/title continuity rule.
 // Changing one without the other is what the rule exists to prevent.
 import UserIcon from '../../icons/UserIcon'
@@ -17,6 +18,7 @@ import FunnelIcon from '../../icons/FunnelIcon'
 import ShieldIcon from '../../icons/ShieldIcon'
 import RefreshIcon from '../../icons/RefreshIcon'
 import InfoIcon from '../../icons/InfoIcon'
+import SparkleIcon from '../../icons/SparkleIcon'
 
 function paneClass({ isActive }: { isActive: boolean }) {
   return isActive ? 'pane-item is-active' : 'pane-item'
@@ -31,6 +33,9 @@ interface NavItem {
   icon: ReactNode
   end?: boolean
   group?: NavGroup
+  anchor?: string
+  /** The row's dot also stands for the list: lit while a fresh novelty was never listed. */
+  unlisted?: boolean
 }
 
 export default function SettingsLayout() {
@@ -53,7 +58,7 @@ export default function SettingsLayout() {
   // labels would drift the day one of them is renamed.
   const items: NavItem[] = [
     ...(isPrimary ? [{ to: '/settings/account', label: t('nav.account'), icon: <UserIcon size={16} />, end: true }] : []),
-    { to: '/settings/appearance', label: t('nav.appearance'), icon: <DropletIcon size={16} /> },
+    { to: '/settings/appearance', label: t('nav.appearance'), icon: <DropletIcon size={16} />, anchor: 'settings:appearance' },
     // Not gated isPrimary: the secret, the address book and the calendars are the Scotty user's,
     // whichever mailbox is being read. Ungrouped: it syncs the calendars and the address book alike.
     ...(davAvailable ? [{ to: '/settings/sync', label: t('nav.sync'), icon: <RefreshIcon size={16} /> }] : []),
@@ -66,6 +71,8 @@ export default function SettingsLayout() {
     { to: '/settings/calendar', label: t('nav.general'), icon: <SlidersIcon size={16} />, group: 'calendar' },
     // Not gated isPrimary: administration is the deployment's, whichever mailbox is being read.
     ...(isAdmin && adminAvailable ? [{ to: '/settings/admin', label: t('nav.admin'), icon: <ShieldIcon size={16} />, group: 'application' as const }] : []),
+    // Gated on nothing: on a phone, where the top bar is hidden, this row is the list.
+    { to: '/settings/whats-new', label: t('nav.whatsNew'), icon: <SparkleIcon size={16} />, group: 'application', unlisted: true },
     // Last, and gated on nothing: every account reads the same product, on its own mailbox or an
     // attached one. It keeps its group open, so no group heading ever stands over nothing.
     { to: '/settings/about', label: t('nav.about'), icon: <InfoIcon size={16} />, group: 'application' },
@@ -79,7 +86,9 @@ export default function SettingsLayout() {
     : section.group ? `${t(`nav.${section.group}`)} · ${section.label}` : section.label
 
   const link = (item: NavItem) => (
-    <NavLink key={item.to} to={item.to} end={item.end} className={paneClass}>{item.icon}{item.label}</NavLink>
+    <NavLink key={item.to} to={item.to} end={item.end} className={paneClass}>
+      {item.icon}{item.label}<WhatsNewDot anchor={item.anchor} unlisted={item.unlisted} />
+    </NavLink>
   )
 
   const nav = (

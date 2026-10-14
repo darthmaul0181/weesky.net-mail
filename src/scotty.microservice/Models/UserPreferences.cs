@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using weesky.Scotty.Microservice.Data.Preferences;
+using weesky.Scotty.Microservice.Models.WhatsNew;
 
 namespace weesky.Scotty.Microservice.Models;
 
@@ -63,6 +64,8 @@ public static class UserPreferences
 
     public const string CalendarFirstDayOfWeek = "calendar.firstDayOfWeek";
 
+    public const string WhatsNewBaseline = "whatsNew.baseline";
+
     private static readonly string[] Booleans = ["true", "false"];
     private static readonly string[] SwipeActions = ["none", "seen", "flag", "archive", "delete"];
     // [0-9], not \d: .NET's \d is any Unicode digit, which int.Parse would then throw on.
@@ -102,10 +105,13 @@ public static class UserPreferences
         new(UiDailyImage, "none", ["none", "fullBleed", "postcard"]),
         new(CalendarBirthdays, "on", ["on", "off"]),
         new(CalendarFirstDayOfWeek, "monday", ["monday", "sunday"]),
+        // Written once, by PUT /api/WhatsNew/baseline: the web version an account is signalled from.
+        // Empty is "none yet", the default a new account reads.
+        new(WhatsNewBaseline, "", [], Validator: v => v.Length == 0 || WhatsNewRules.IsVersion(v)),
     ];
 
     /// <summary>Keys whose change has effects beyond the row: set through their own route, never PUT /api/Preferences.</summary>
-    public static bool IsManaged(string key) => key == CalendarBirthdays;
+    public static bool IsManaged(string key) => key is CalendarBirthdays or WhatsNewBaseline;
 
     public static bool IsValid(string key, string value)
     {

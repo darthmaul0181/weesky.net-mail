@@ -1,0 +1,17 @@
+{
+  "button": "What's new",
+  "buttonCount_one": "What's new, {{count}} new",
+  "buttonCount_other": "What's new, {{count}} new",
+  "title": "What's new",
+  "new": "New",
+  "showMe": "Show me",
+  "seeAll": "See all",
+  "nothingAtAll": "Nothing to show yet.",
+  "version": "Version {{version}}",
+  "items": {
+    "daily-image": {
+      "title": "Image of the day",
+      "body": "Bing's photo of the day can now fill the reading pane when no message is open."
+    }
+  }
+}

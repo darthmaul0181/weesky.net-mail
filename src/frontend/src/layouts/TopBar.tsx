@@ -1,8 +1,10 @@
 import { useAppLogo } from '../hooks/useAppLogo'
 import { PRODUCT } from '../lib/product'
+import WhatsNewButton from '../modules/whatsnew/WhatsNewButton'
 
-/** Brand only; the logo is the administrator's. The product name is text, so it takes the palette's
- * foregrounds; the administrator's application name names the tab and the installed app, never this. */
+/** The brand, and the novelties at the far right; the logo is the administrator's. The product name
+ * is text, so it takes the palette's foregrounds; the administrator's application name names the tab
+ * and the installed app, never this. */
 export default function TopBar() {
   const logo = useAppLogo()
   return (
@@ -13,6 +15,7 @@ export default function TopBar() {
           {PRODUCT.name} <span className="topbar-name-kind">{PRODUCT.kind}</span>
         </span>
       </div>
+      <WhatsNewButton />
     </header>
   )
 }
