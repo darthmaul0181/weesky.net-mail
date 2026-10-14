@@ -1,17 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { createTestQueryClient, setupUser } from '../../../test-utils'
+import { MemoryRouter } from 'react-router'
+import { createTestQueryClient, setupUser, withQueryClient } from '../../../test-utils'
 import DailyImageSection from './DailyImageSection'
 
-const mocks = vi.hoisted(() => ({ getPreferences: vi.fn(), setPreference: vi.fn(), getAppSettings: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  getPreferences: vi.fn(), setPreference: vi.fn(), getAppSettings: vi.fn(), getWhatsNew: vi.fn(),
+}))
 vi.mock('../../../api.js', () => ({ api: mocks }))
 
 function renderSection(enabled: boolean, style = 'none') {
   mocks.getAppSettings.mockResolvedValue({ 'app.dailyImage': String(enabled) })
   mocks.getPreferences.mockResolvedValue({ 'ui.dailyImage': style })
   mocks.setPreference.mockResolvedValue(null)
-  return render(<QueryClientProvider client={createTestQueryClient()}><DailyImageSection /></QueryClientProvider>)
+  mocks.getWhatsNew.mockResolvedValue({ baseline: '0.0.0', items: [] })
+  // A router: the section is a what's-new target, which reads the location Show me arrives with.
+  return render(<MemoryRouter><DailyImageSection /></MemoryRouter>, { wrapper: withQueryClient(createTestQueryClient()) })
 }
 
 beforeEach(() => vi.clearAllMocks())

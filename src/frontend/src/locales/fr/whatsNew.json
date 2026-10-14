@@ -1,0 +1,18 @@
+{
+  "button": "Nouveautés",
+  "buttonCount_one": "Nouveautés, {{count}} nouvelle",
+  "buttonCount_other": "Nouveautés, {{count}} nouvelles",
+  "title": "Nouveautés",
+  "new": "Nouveau",
+  "showMe": "Me montrer",
+  "seeAll": "Tout voir",
+  "nothingFresh": "Rien de neuf depuis votre arrivée.",
+  "nothingAtAll": "Rien à montrer pour l’instant.",
+  "version": "Version {{version}}",
+  "items": {
+    "daily-image": {
+      "title": "Image du jour",
+      "body": "La photo du jour de Bing peut désormais remplir le panneau de lecture quand aucun message n’est ouvert."
+    }
+  }
+}

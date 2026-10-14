@@ -3,6 +3,7 @@ import { PALETTE_IDS } from '../contexts/ThemeContext'
 import html from '../../index.html?raw'
 import mainSource from '../main.tsx?raw'
 import { CUSTOM_PALETTE_CSS_KEY, CUSTOM_PALETTE_STYLE_ID } from '../lib/customPaletteStyle'
+import { contrast } from '../lib/customPalette'
 
 const modules = import.meta.glob('./theme-*.css', { query: '?raw', import: 'default', eager: true })
 const files = Object.keys(modules).map(path => path.replace('./', ''))
@@ -17,6 +18,19 @@ function tokensIn(css: string, selector: string): string[] {
   return [...body.matchAll(/(--[\w-]+)\s*:/g)].map(m => m[1]!).sort()
 }
 
+function valuesIn(css: string, selector: string): Record<string, string> {
+  const at = css.indexOf(`${selector} {`)
+  if (at < 0) return {}
+  const body = css.slice(at, css.indexOf('}', at)).replace(/\/\*[\s\S]*?\*\//g, '')
+  return Object.fromEntries([...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(m => [m[1]!, m[2]!.trim()]))
+}
+
+/** --new-dot also draws the novelty's frame, which sits on the page ground. */
+const DOT_GROUNDS = {
+  '--new-dot': ['--folders-bg', '--surface', '--pane-item-active-bg', '--bg'],
+  '--new-dot-chrome': ['--rail-bg', '--topbar-bg', '--rail-item'],
+} as const
+
 function blocks(file: string) {
   const css = modules[`./${file}`]!
   const id = idOf(file)
@@ -25,6 +39,15 @@ function blocks(file: string) {
     light: tokensIn(css, `[data-palette='${id}']`),
     dark: tokensIn(css, `[data-palette='${id}'][data-theme='dark']`),
   }
+}
+
+/** The dark block inherits whatever it leaves out, as the cascade does. */
+function modesOf(file: string) {
+  const css = modules[`./${file}`]!
+  const id = idOf(file)
+  const light = valuesIn(css, `[data-palette='${id}']`)
+  const dark = { ...light, ...valuesIn(css, `[data-palette='${id}'][data-theme='dark']`) }
+  return [['light', light], ['dark', dark]] as const
 }
 
 const reference = blocks('theme-night.css')
@@ -51,6 +74,18 @@ describe('the palette stylesheets', () => {
 
   it.each(files)('%s declares every role in its dark block', file => {
     expect(blocks(file).dark).toEqual(reference.dark)
+  })
+
+  it.each(files)('%s keeps the new dots at 3:1 on every ground they sit on', file => {
+    for (const [mode, tokens] of modesOf(file))
+      for (const [dot, grounds] of Object.entries(DOT_GROUNDS))
+        for (const ground of grounds)
+          expect(contrast(tokens[dot]!, tokens[ground]!), `${mode} ${dot} on ${ground}`).toBeGreaterThanOrEqual(3)
+  })
+
+  it.each(files)('%s keeps the New tag at 4.5:1', file => {
+    for (const [mode, tokens] of modesOf(file))
+      expect(contrast(tokens['--new-tag-fg']!, tokens['--new-tag-bg']!), mode).toBeGreaterThanOrEqual(4.5)
   })
 })
 

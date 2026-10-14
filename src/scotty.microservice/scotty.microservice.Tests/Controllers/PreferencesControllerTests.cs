@@ -111,6 +111,16 @@ public sealed class PreferencesControllerTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task Set_RefusesTheWhatsNewBaselineWhichHasItsOwnRoute()
+    {
+        var result = await CreateController().SetPreference(
+            new SetPreferenceRequest { Key = UserPreferences.WhatsNewBaseline, Value = "0.0.0" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _store.Verify(s => s.SetAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Theory]
     [InlineData("en", 1)]
     [InlineData("fr", 1)]

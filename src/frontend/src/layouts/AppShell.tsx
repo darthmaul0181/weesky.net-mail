@@ -2,6 +2,7 @@ import { Outlet, useMatch, useSearchParams } from 'react-router'
 import { useFaviconBadge } from '../modules/mail/notify/useFaviconBadge'
 import { useMailNotifications } from '../modules/mail/notify/useMailNotifications'
 import { useTabTitle } from '../hooks/useTabTitle'
+import { useWhatsNewSync } from '../modules/whatsnew/useWhatsNew'
 import AppRail from './AppRail'
 import BottomNav from './BottomNav'
 import TopBar from './TopBar'
@@ -12,6 +13,7 @@ export default function AppShell() {
   // Same reason: the tab names the mailbox from every section, not only the mail one.
   useTabTitle()
   useFaviconBadge()
+  useWhatsNewSync()
   // Composing, writing a contact and filling an event are full-screen tasks with their own action
   // bars, and a tab bar under a software keyboard serves nobody. Separate calls, never `a() ||
   // b()`: a short-circuit would make the later useMatch a conditional hook.

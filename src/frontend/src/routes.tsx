@@ -29,6 +29,7 @@ const AdminPage = lazy(() => import('./modules/settings/admin/AdminPage'))
 const MessageSourceView = lazy(() => import('./modules/mail/source/MessageSourceView'))
 const SyncPage = lazy(() => import('./modules/settings/sync/SyncPage'))
 const AboutPage = lazy(() => import('./modules/settings/about/AboutPage'))
+const WhatsNewPage = lazy(() => import('./modules/whatsnew/WhatsNewPage'))
 
 // Keyed per module: a navigation is a transition, which keeps a revealed boundary on the previous
 // module until the next chunk lands. A boundary of its own blanks at once, as v6 did.
@@ -94,6 +95,7 @@ export const routes: RouteObject[] = [
                   { path: 'system-folders', element: <Navigate to="/settings/folders" replace /> },
                   { path: 'identities', element: loaded('identities', IdentitiesPage) },
                   { path: 'about', element: loaded('about', AboutPage) },
+                  { path: 'whats-new', element: loaded('whats-new', WhatsNewPage) },
                   { path: 'sync', element: loaded('sync', SyncPage) },
                   {
                     element: <Gate allow={allowSieve} redirect="/settings/mail" />,

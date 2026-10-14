@@ -6,6 +6,9 @@
   --rail-item:#2b4d3a; --rail-item-active:#d99a2b; --rail-item-active-fg:#1a1205;
   --pane-item-hover:#eaeee5; --pane-item-active-bg:#fbf2df; --pane-item-active-fg:#1e3a2b;
   --accent-unread:#b8791a;
+  /* What's new dots: -chrome on the bars; --new-dot falls under 3:1 on the hovered --rail-item. */
+  --new-dot:#b8791a; --new-dot-chrome:#ca8a32;
+  --new-tag-bg:#a2680a; --new-tag-fg:#ffffff;
   --list-row-hover:#eef1ea; --list-row-selected-bg:#fbf2df; --list-row-selected-fg:#1e3a2b;
   --list-separator:#e6ebe0; --badge-count-bg:#b8791a; --badge-count-fg:#ffffff;
   --reader-header-border:#e6ebe0; --quote-text:#7c8676;
@@ -26,6 +29,8 @@
   --rail-item:#1c2a20; --rail-item-active:#e0a63f; --rail-item-active-fg:#191204;
   --pane-item-hover:#212a23; --pane-item-active-bg:#2a2418; --pane-item-active-fg:#f2ecdc;
   --accent-unread:#e0a63f;
+  --new-dot:#e0a63f; --new-dot-chrome:#e0a63f;
+  --new-tag-bg:#996b08; --new-tag-fg:#ffffff;
   --list-row-hover:#212a23; --list-row-selected-bg:#2a2418; --list-row-selected-fg:#f2ecdc;
   --list-separator:#2b352d; --badge-count-bg:#e0a63f; --badge-count-fg:#191204;
   --reader-header-border:#2b352d; --quote-text:#869080;

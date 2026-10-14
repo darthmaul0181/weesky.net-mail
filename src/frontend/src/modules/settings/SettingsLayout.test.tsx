@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   getDavCredentials: vi.fn(),
   getVersion: vi.fn(() => Promise.resolve({ version: '1.0.0-dev', commit: 'f4e5d6c' })),
   getAppSettings: vi.fn(() => Promise.resolve({})),
+  getWhatsNew: vi.fn(() => Promise.resolve({ baseline: '0.0.0', items: [] })),
+  markWhatsNew: vi.fn(() => Promise.resolve(null)),
 }))
 
 vi.mock('../../api.js', () => ({
@@ -42,6 +44,8 @@ vi.mock('../../api.js', () => ({
     getDavCredentials: mocks.getDavCredentials,
     getVersion: mocks.getVersion,
     getAppSettings: mocks.getAppSettings,
+    getWhatsNew: mocks.getWhatsNew,
+    markWhatsNew: mocks.markWhatsNew,
   },
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
@@ -121,9 +125,12 @@ describe('settings section', () => {
   it('shows the nav without Administration for non-admins', async () => {
     mocks.getAccount.mockResolvedValue({ ...baseAccount, isAdmin: false })
     renderAt('/settings/account')
-    const nav = within(await screen.findByRole('navigation', { name: 'Settings' }))
+    const navElement = await screen.findByRole('navigation', { name: 'Settings' })
+    const nav = within(navElement)
     const links = (scope: HTMLElement) =>
       within(scope).getAllByRole('link').map(link => link.textContent)
+    // The ungrouped rows, What's new first: the history is read before any one setting.
+    expect(links(navElement).slice(0, 4)).toEqual(["What's new", 'Account', 'Appearance', 'Sync'])
     expect(links(nav.getByRole('group', { name: 'Mail' }))).toEqual(
       ['General', 'Connected accounts', 'Folders', 'Identities', 'Aliases', 'Rules'])
     expect(links(nav.getByRole('group', { name: 'Calendar' }))).toEqual(['General'])
@@ -140,6 +147,7 @@ describe('settings section', () => {
   // Walked route by route rather than asserted per page, because the five pages that had drifted
   // each looked perfectly fine on their own — only the set showed the rule was not being kept.
   it.each([
+    ['/settings/whats-new', "What's new"],
     ['/settings/account', 'Account'],
     ['/settings/mail', 'General'],
     ['/settings/calendar', 'General'],

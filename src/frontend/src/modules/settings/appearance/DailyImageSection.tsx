@@ -4,6 +4,7 @@ import {
   DAILY_IMAGE_STYLES, PREFERENCE_KEYS, dailyImageStyleOf, usePreferences, useSetPreference,
   type DailyImageStyle,
 } from '../../../hooks/usePreferences'
+import WhatsNewTarget from '../../whatsnew/WhatsNewTarget'
 
 /** Shown only while the admin offers the image of the day; a choice stored before stays stored. */
 export default function DailyImageSection() {
@@ -25,23 +26,25 @@ export default function DailyImageSection() {
   }
 
   return (
-    <section className="account-section">
-      <h2 id="daily-image-heading">{t('appearance.dailyImage.heading')}</h2>
-      <p className="svc-account-section-intro">{t('appearance.dailyImage.intro')}</p>
-      <div className="seg" role="radiogroup" aria-labelledby="daily-image-heading">
-        {DAILY_IMAGE_STYLES.map(style => (
-          <label key={style}>
-            <input
-              type="radio"
-              name="daily-image"
-              value={style}
-              checked={current === style}
-              onChange={() => setPreference.mutate({ key: PREFERENCE_KEYS.dailyImage, value: style })}
-            />
-            {labelOf(style)}
-          </label>
-        ))}
-      </div>
-    </section>
+    <WhatsNewTarget id="appearance:daily-image" className="account-section">
+      <section>
+        <h2 id="daily-image-heading">{t('appearance.dailyImage.heading')}</h2>
+        <p className="svc-account-section-intro">{t('appearance.dailyImage.intro')}</p>
+        <div className="seg" role="radiogroup" aria-labelledby="daily-image-heading">
+          {DAILY_IMAGE_STYLES.map(style => (
+            <label key={style}>
+              <input
+                type="radio"
+                name="daily-image"
+                value={style}
+                checked={current === style}
+                onChange={() => setPreference.mutate({ key: PREFERENCE_KEYS.dailyImage, value: style })}
+              />
+              {labelOf(style)}
+            </label>
+          ))}
+        </div>
+      </section>
+    </WhatsNewTarget>
   )
 }

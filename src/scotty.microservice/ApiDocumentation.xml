@@ -1756,6 +1756,41 @@
             <response code="204">No longer trusted, whether it was or not</response>
             <response code="401">Not authenticated</response>
         </member>
+        <member name="T:weesky.Scotty.Microservice.Controllers.WhatsNewController">
+            <summary>
+            The caller's progress through the web app's novelties. The catalogue lives in the web app; this
+            side stores ids it has validated, three stamps per id and a baseline version written once.
+            </summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.WhatsNewController.#ctor(weesky.Scotty.Microservice.Repositories.IWhatsNewStore)">
+            <summary>
+            The caller's progress through the web app's novelties. The catalogue lives in the web app; this
+            side stores ids it has validated, three stamps per id and a baseline version written once.
+            </summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.WhatsNewController.GetWhatsNew(System.Threading.CancellationToken)">
+            <summary>The baseline and every novelty the account has a row for.</summary>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="200">Baseline (absent until written) and stamps</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.WhatsNewController.MarkItems(weesky.Scotty.Microservice.Models.WhatsNew.MarkWhatsNewRequest,System.Threading.CancellationToken)">
+            <summary>Stamps one state on a batch of novelties; a stamp already set is kept.</summary>
+            <param name="request">ids (1 to 50) and the state to stamp</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Stamped</response>
+            <response code="400">Missing ids or state, a malformed id, or too many ids</response>
+            <response code="401">Not authenticated</response>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Controllers.WhatsNewController.SetBaseline(weesky.Scotty.Microservice.Models.WhatsNew.SetWhatsNewBaselineRequest,System.Threading.CancellationToken)">
+            <summary>Writes the version from which novelties are signalled, once per account.</summary>
+            <param name="request">the web app's version</param>
+            <param name="cancellationToken">cancellation token</param>
+            <response code="204">Written</response>
+            <response code="400">Malformed version</response>
+            <response code="401">Not authenticated</response>
+            <response code="409">The account already has a baseline</response>
+        </member>
         <member name="T:weesky.Scotty.Microservice.Data.Preferences.AccountScope">
             <summary>
             The <c>account_id</c> sentinel of the per-account preference tables. A nullable column cannot
@@ -1983,6 +2018,13 @@
             <summary>
             PBKDF2 salt of the key encrypting this user's connected-account passwords. Null until the
             first login after the migration generates one; never leaves the backend.
+            </summary>
+        </member>
+        <member name="T:weesky.Scotty.Microservice.Data.Preferences.WhatsNewItem">
+            <summary>
+            What an account has done with one novelty of the web app's catalogue. The server knows no
+            catalogue: an id it never heard of is stored like any other, and the web app ignores rows whose
+            id it no longer ships.
             </summary>
         </member>
         <member name="T:weesky.Scotty.Microservice.Models.AccountInfo">
@@ -3568,6 +3610,67 @@
             still one the registry accepts.
             </summary>
         </member>
+        <member name="T:weesky.Scotty.Microservice.Models.WhatsNew.MarkWhatsNewRequest">
+            <summary>Body of PUT /api/WhatsNew/items.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Models.WhatsNew.MarkWhatsNewRequest.#ctor(System.Collections.Generic.IReadOnlyList{System.String},System.Nullable{weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewMark})">
+            <summary>Body of PUT /api/WhatsNew/items.</summary>
+        </member>
+        <member name="T:weesky.Scotty.Microservice.Models.WhatsNew.SetWhatsNewBaselineRequest">
+            <summary>Body of PUT /api/WhatsNew/baseline.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Models.WhatsNew.SetWhatsNewBaselineRequest.#ctor(System.String)">
+            <summary>Body of PUT /api/WhatsNew/baseline.</summary>
+        </member>
+        <member name="T:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewItemState">
+            <summary>One novelty's stamps, in UTC.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewItemState.#ctor(System.String,System.Nullable{System.DateTime},System.Nullable{System.DateTime},System.Nullable{System.DateTime})">
+            <summary>One novelty's stamps, in UTC.</summary>
+        </member>
+        <member name="T:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewMark">
+            <summary>What the web app reports about a novelty: its dot showed, its list was opened, it was reached.</summary>
+        </member>
+        <member name="T:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewResponse">
+            <summary>Answer of GET /api/WhatsNew.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewResponse.#ctor(System.String,System.Collections.Generic.IReadOnlyList{weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewItemState})">
+            <summary>Answer of GET /api/WhatsNew.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewRules.RefuseIds(System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>The refusal for a batch of ids, or null when every id is acceptable.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewRules.Id">
+            <remarks>
+            Pattern:<br/>
+            <code>^[a-z0-9-]{1,64}\\z</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at the beginning of the string.<br/>
+            ○ Match a character in the set [\-0-9a-z] atomically at least 1 and at most 64 times.<br/>
+            ○ Match if at the end of the string.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewRules.Version">
+            <remarks>
+            Pattern:<br/>
+            <code>^[0-9]{1,5}\\.[0-9]{1,5}\\.[0-9]{1,5}(-dev)?\\z</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at the beginning of the string.<br/>
+            ○ Match a character in the set [0-9] atomically at least 1 and at most 5 times.<br/>
+            ○ Match '.'.<br/>
+            ○ Match a character in the set [0-9] atomically at least 1 and at most 5 times.<br/>
+            ○ Match '.'.<br/>
+            ○ Match a character in the set [0-9] greedily at least 1 and at most 5 times.<br/>
+            ○ Optional (greedy).<br/>
+                ○ 1st capture group.<br/>
+                    ○ Match the string "-dev".<br/>
+            ○ Match if at the end of the string.<br/>
+            </code>
+            </remarks>
+        </member>
         <member name="T:weesky.Scotty.Microservice.Platform.Generic.ClaimsAccountInfoProvider">
             <summary>
             The account as the token describes it, and nothing more: there is no directory to read a numeric
@@ -3988,6 +4091,18 @@
         <member name="M:weesky.Scotty.Microservice.Repositories.IWebmailUserStore.DeleteByEmailAsync(System.String,System.Threading.CancellationToken)">
             <summary>Removes the account's row if present (0 rows = success). The FK cascade removes preferences.</summary>
         </member>
+        <member name="T:weesky.Scotty.Microservice.Repositories.IWhatsNewStore">
+            <summary>
+            Per-account state of the web app's novelties. Ids are opaque here: the caller validates them,
+            and the catalogue lives in the web app.
+            </summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Repositories.IWhatsNewStore.MarkAsync(System.Guid,System.Collections.Generic.IReadOnlyCollection{System.String},weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewMark,System.Threading.CancellationToken)">
+            <summary>Stamps the mark on every id where it is still empty, creating missing rows.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Repositories.IWhatsNewStore.SetBaselineAsync(System.Guid,System.String,System.Threading.CancellationToken)">
+            <summary>Writes the baseline if the account has none. False when it already had one.</summary>
+        </member>
         <member name="T:weesky.Scotty.Microservice.Repositories.MailFolderRepository">
             <summary>
             Folder access over IMAP. Every method runs against the request's shared session, so a
@@ -4075,6 +4190,15 @@
             What actually bounds the table. The retention sweep deletes after the fact and bounds
             nothing in the meantime; this refuses the row that would exceed the ceiling.
             </summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Repositories.WhatsNewItemStamps.Stamp(weesky.Scotty.Microservice.Data.Preferences.WhatsNewItem,weesky.Scotty.Microservice.Models.WhatsNew.WhatsNewMark,System.DateTime)">
+            <summary>Every mark means the novelty was on screen, so each one also starts the expiry.</summary>
+        </member>
+        <member name="T:weesky.Scotty.Microservice.Repositories.WhatsNewState">
+            <summary>An account's baseline and the rows it has for each novelty.</summary>
+        </member>
+        <member name="M:weesky.Scotty.Microservice.Repositories.WhatsNewState.#ctor(System.String,System.Collections.Generic.IReadOnlyList{weesky.Scotty.Microservice.Data.Preferences.WhatsNewItem})">
+            <summary>An account's baseline and the rows it has for each novelty.</summary>
         </member>
         <member name="T:weesky.Scotty.Microservice.RuleProviders.IRuleProvider">
             <summary>

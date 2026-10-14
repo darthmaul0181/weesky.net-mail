@@ -1,6 +1,7 @@
 {
   "nav": {
     "label": "Settings",
+    "whatsNew": "What's new",
     "mail": "Mail",
     "calendar": "Calendar",
     "application": "Application",

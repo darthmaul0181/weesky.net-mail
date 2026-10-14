@@ -59,6 +59,47 @@
 
 .rail-spacer { flex: 1; }
 
+/* A novelty passes through here. Ringed in the ground's own colour so it reads as cut out of the
+   icon; the ring follows the hovered fill. Chrome dots wear --new-dot-chrome (3:1 on the bars). */
+.rail-item { position: relative; }
+.new-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--new-dot-chrome);
+  box-shadow: 0 0 0 2px var(--rail-bg);
+}
+.rail-item:hover .new-dot { box-shadow: 0 0 0 2px var(--rail-item); }
+/* On the active item the coral fill would swallow a coral dot: it takes the item's ink instead. */
+.rail-item.is-active .new-dot,
+.bottom-nav-item.is-active .new-dot {
+  background: var(--rail-item-active-fg);
+  box-shadow: 0 0 0 2px var(--rail-item-active);
+}
+/* On the pale columns the darker --new-dot is the one clearing 3:1. */
+.pane-item .new-dot { position: static; margin-left: auto; flex: none; background: var(--new-dot); box-shadow: none; }
+
+.whats-new-target { position: relative; }
+.whats-new-target.is-new {
+  border-radius: var(--radius-lg);
+  outline: 2px solid var(--new-dot);
+  outline-offset: 10px;
+}
+.new-tag {
+  position: absolute;
+  top: -20px;
+  right: -6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--new-tag-bg);
+  color: var(--new-tag-fg);
+}
+
 /* Phone only. The media block below is what shows it; here it is simply absent. */
 .app-bottom-nav { display: none; }
 
@@ -135,6 +176,60 @@
   color: var(--topbar-fg);
 }
 .topbar-name-kind { font-weight: 300; color: var(--rail-fg); }
+
+/* ── What's new, at the right of the top bar ───────────────────────────────────────── */
+.whats-new-root { position: relative; }
+.whats-new-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--rail-fg);
+  cursor: pointer;
+}
+.whats-new-button:hover,
+.whats-new-button[aria-expanded='true'] { background: var(--rail-item); color: var(--topbar-fg); }
+.whats-new-button .new-dot { top: 4px; right: 4px; box-shadow: 0 0 0 2px var(--topbar-bg); }
+.whats-new-button:hover .new-dot,
+.whats-new-button[aria-expanded='true'] .new-dot { box-shadow: 0 0 0 2px var(--rail-item); }
+
+/* The popover hangs off the button like .dropdown-menu off its trigger, on the same layer. */
+.whats-new-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-menu);
+  width: min(380px, calc(100vw - 24px));
+  padding: 16px 0 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+.whats-new-popover h2 { margin: 0 16px 12px; font-size: 16px; font-weight: 600; }
+.whats-new-list { list-style: none; margin: 0; padding: 0; }
+.whats-new-item { display: flex; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--list-separator); }
+.whats-new-item .new-dot { position: static; flex: none; margin-top: 6px; background: var(--new-dot); box-shadow: none; }
+/* 16 + 9 + 12: a row without a dot keeps its text in line with the rows that carry one. */
+.whats-new-item:not(.is-active) { padding-left: 37px; }
+.whats-new-text h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+/* A novelty already met is faded by its ink, never by opacity, which would fade its button too. */
+.whats-new-item:not(.is-active) .whats-new-text h3 { color: var(--text-muted); }
+.whats-new-text p { margin: 0 0 8px; font-size: 13px; line-height: 1.4; color: var(--text-muted); }
+.whats-new-text .btn { padding: 6px 12px; font-size: 13px; }
+.whats-new-empty { margin: 0; padding: 14px 16px; border-top: 1px solid var(--list-separator); color: var(--text-muted); font-size: 13px; }
+.whats-new-all { display: block; padding: 12px 16px; border-top: 1px solid var(--list-separator); font-size: 13px; }
+
+/* The history page: the same rows, inside the page's own sections rather than a popover. */
+.settings-page .whats-new-list { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.settings-page .whats-new-item:first-child { border-top: 0; }
+.settings-page .whats-new-empty { padding: 0; border-top: 0; }
 
 /* ── Account block, at the foot of the folder column ──────────────────────── */
 /* It sits at the bottom of the screen, so its menu opens upward — inside the column, which is
@@ -1290,6 +1385,7 @@ a.dropdown-item { text-decoration: none; }
   }
 
   .bottom-nav-item {
+    position: relative;
     flex: 1;
     min-width: 0;
     min-height: 56px;
@@ -1311,6 +1407,9 @@ a.dropdown-item { text-decoration: none; }
     background: var(--rail-item-active);
     color: var(--rail-item-active-fg);
   }
+
+  /* At the corner of the 22px glyph, which the column centres. */
+  .bottom-nav-item .new-dot { top: 4px; right: calc(50% - 16px); }
 
   .bottom-nav-label {
     max-width: 100%;

@@ -68,6 +68,8 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailComposeFormat, "", false)]
     [InlineData(UserPreferences.MailShowFolderIcons, "true", true)]
     [InlineData(UserPreferences.MailShowFolderIcons, "on", false)]
+    [InlineData(UserPreferences.WhatsNewBaseline, "2.4.0-dev", true)]
+    [InlineData(UserPreferences.WhatsNewBaseline, "2.4", false)]
     public void IsValid_AcceptsOnlyTheOfferedValues(string key, string value, bool expected)
     {
         Assert.Equal(expected, UserPreferences.IsValid(key, value));

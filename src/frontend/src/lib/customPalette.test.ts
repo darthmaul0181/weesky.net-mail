@@ -64,7 +64,7 @@ describe('generateCustomPalette', () => {
 
   // A role missing here falls back to whatever the cascade holds, silently.
   it('declares exactly the roles night declares, in both modes', () => {
-    expect(rolesIn("[data-palette='night']")).toHaveLength(43)
+    expect(rolesIn("[data-palette='night']")).toHaveLength(47)
     expect(Object.keys(sample.light).sort()).toEqual(rolesIn("[data-palette='night']"))
     expect(Object.keys(sample.dark).sort()).toEqual(rolesIn("[data-palette='night'][data-theme='dark']"))
   })
@@ -103,9 +103,12 @@ describe('generateCustomPalette', () => {
             at('--rail-fg', '--rail-bg', 4.5)
             at('--rail-item-active-fg', '--rail-item-active', 4.5)
             at('--badge-count-fg', '--badge-count-bg', 4.5)
+            at('--new-tag-fg', '--new-tag-bg', 4.5)
             at('--list-row-selected-fg', '--list-row-selected-bg', 4.5)
             at('--pane-item-active-fg', '--pane-item-active-bg', 4.5)
             at('--accent-unread', '--surface', 3)
+            for (const ground of ['--folders-bg', '--surface', '--pane-item-active-bg', '--bg'] as const) at('--new-dot', ground, 3)
+            for (const ground of ['--rail-bg', '--topbar-bg', '--rail-item'] as const) at('--new-dot-chrome', ground, 3)
             at('--action-primary-fg', '--action-primary', mode === 'light' ? 4.5 : 2.8)
             if (mode === 'light') at('--action-primary-fg', '--accent-unread', 4.5)
             if (mode === 'dark')
@@ -140,6 +143,17 @@ describe('generateCustomPalette', () => {
           expect(alt.light['--action-primary']).toBe(alt.light['--accent-unread'])
           expect(alt.dark).toEqual(own.dark)
         }
+  })
+
+  // A chrome dot in the bar's own hue reads as a tint of the rail: classic, azure and indigo went warm for it.
+  it('turns the light chrome dot warm when the accent shares the structure hue', () => {
+    const warm = (hex: string) => parseInt(hex.slice(1, 3), 16) > parseInt(hex.slice(5, 7), 16)
+    for (const intensity of ['muted', 'vivid'] as const)
+      for (let hue = 0; hue < 360; hue += 30) {
+        const { light } = generateCustomPalette({ structure: hue, intensity, accent: hue + 10, buttons: 'structure' })
+        expect(warm(light['--new-dot-chrome']!), `${hue},${intensity}`).toBe(true)
+      }
+    expect(warm(generateCustomPalette(PALETTE_SEEDS.slate).light['--new-dot-chrome']!)).toBe(false)
   })
 
   it('keeps white on the primary action in both modes', () => {
