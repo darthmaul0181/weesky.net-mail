@@ -211,9 +211,9 @@ export function customPaletteOf(preferences: Preferences): CustomPaletteDef | nu
   return parseCustomPalette(preferences[PREFERENCE_KEYS.customPalette])
 }
 
-export type DailyImageStyle = 'none' | 'fullBleed' | 'postcard' | 'watermark'
+export type DailyImageStyle = 'none' | 'fullBleed' | 'postcard'
 
-export const DAILY_IMAGE_STYLES: readonly DailyImageStyle[] = ['none', 'fullBleed', 'postcard', 'watermark']
+export const DAILY_IMAGE_STYLES: readonly DailyImageStyle[] = ['none', 'fullBleed', 'postcard']
 
 /** Falls back to 'none' — the plain empty pane — for an absent key or a value this build ignores. */
 export function dailyImageStyleOf(preferences: Preferences): DailyImageStyle {

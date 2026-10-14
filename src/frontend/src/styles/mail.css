@@ -1279,15 +1279,12 @@
 
 .reader-daily-photo { animation: daily-fade-in 200ms ease-out; }
 
-.reader-daily.is-watermark::after {
+/* Dark veils the whole photo instead of pilling the label: a bright photo in a dark UI glares.
+   Light text over a white pixel under a 60% dark veil is 3.6:1; 75% brings the worst case to 5.5. */
+[data-theme='dark'] .reader-daily.is-full-bleed::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: color-mix(in oklab, var(--surface) 60%, transparent);
-}
-
-/* Light text over a white pixel under a 60% dark veil is 3.6:1; 75% brings the worst case to 5.5. */
-[data-theme='dark'] .reader-daily.is-watermark::after {
   background: color-mix(in oklab, var(--surface) 75%, transparent);
 }
 
@@ -1304,6 +1301,8 @@
   background: color-mix(in oklab, var(--surface) 82%, transparent);
 }
 
+[data-theme='dark'] .reader-daily.is-full-bleed .reader-daily-label { padding: 0; background: none; }
+
 .reader-daily-credit {
   position: absolute;
   bottom: 16px;
@@ -1311,7 +1310,7 @@
 }
 
 .reader-daily.is-full-bleed .reader-daily-credit { left: 16px; }
-.reader-daily.is-watermark .reader-daily-credit { right: 16px; text-align: right; }
+[data-theme='dark'] .reader-daily.is-full-bleed .reader-daily-credit { left: auto; right: 16px; text-align: right; }
 
 /* Sized on the pane, not the window: the bottom reading pane is short. */
 .reader-daily.is-postcard {

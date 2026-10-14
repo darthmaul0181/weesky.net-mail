@@ -59,8 +59,7 @@
       "intro": "Shown in the reading pane when no message is open.",
       "none": "None",
       "fullBleed": "Full bleed",
-      "postcard": "Postcard",
-      "watermark": "Watermark"
+      "postcard": "Postcard"
     },
     "custom": {
       "name": "My palette",

@@ -17,12 +17,12 @@ function renderSection(enabled: boolean, style = 'none') {
 beforeEach(() => vi.clearAllMocks())
 
 describe('DailyImageSection (Appearance)', () => {
-  it('offers the four choices, the stored one checked', async () => {
+  it('offers the three choices, the stored one checked', async () => {
     renderSection(true, 'postcard')
 
     await waitFor(() => expect(screen.getByRole('radio', { name: 'Postcard' })).toBeChecked())
     expect(screen.getAllByRole('radio').map(r => r.getAttribute('value')))
-      .toEqual(['none', 'fullBleed', 'postcard', 'watermark'])
+      .toEqual(['none', 'fullBleed', 'postcard'])
     expect(screen.getByText('Shown in the reading pane when no message is open.')).toBeInTheDocument()
   })
 
@@ -30,13 +30,13 @@ describe('DailyImageSection (Appearance)', () => {
     const user = setupUser()
     renderSection(true)
 
-    await user.click(await screen.findByRole('radio', { name: 'Watermark' }))
+    await user.click(await screen.findByRole('radio', { name: 'Full bleed' }))
 
-    expect(mocks.setPreference).toHaveBeenCalledWith('ui.dailyImage', 'watermark')
+    expect(mocks.setPreference).toHaveBeenCalledWith('ui.dailyImage', 'fullBleed')
   })
 
   it('hides the section while the admin left the feature off, keeping the stored choice', async () => {
-    renderSection(false, 'watermark')
+    renderSection(false, 'postcard')
 
     await waitFor(() => expect(mocks.getAppSettings).toHaveBeenCalled())
     expect(screen.queryByRole('radiogroup')).toBeNull()

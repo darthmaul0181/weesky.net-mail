@@ -59,8 +59,7 @@
       "intro": "Affichée dans le panneau de lecture quand aucun message n’est ouvert.",
       "none": "Aucune",
       "fullBleed": "Plein cadre",
-      "postcard": "Carte postale",
-      "watermark": "Filigrane"
+      "postcard": "Carte postale"
     },
     "custom": {
       "name": "Ma palette",

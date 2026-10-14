@@ -99,7 +99,7 @@ public static class UserPreferences
         new(MailSwipeLeft, "delete", SwipeActions),
         new(UiLanguage, "auto", ["auto", "en", "fr"]),
         new(UiCustomPalette, "", [], Validator: IsCustomPalette),
-        new(UiDailyImage, "none", ["none", "fullBleed", "postcard", "watermark"]),
+        new(UiDailyImage, "none", ["none", "fullBleed", "postcard"]),
         new(CalendarBirthdays, "on", ["on", "off"]),
         new(CalendarFirstDayOfWeek, "monday", ["monday", "sunday"]),
     ];

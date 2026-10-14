@@ -26,7 +26,7 @@ public sealed class SchemaMigrationsEntryPointsTests(MariaDbFixture db)
             () => SchemaMigrations.EnsureCurrent(Settings(connection), NullLogger.Instance));
 
         Assert.Equal(
-            "Schema is behind: 0001_initial.sql not applied. Run `scotty.microservice migrate`, " +
+            $"Schema is behind: {string.Join(", ", SchemaMigrations.Embedded.Select(s => s.Name))} not applied. Run `scotty.microservice migrate`, " +
             "or set ConnectionStrings__WebmailSchema.", error.Message);
     }
 

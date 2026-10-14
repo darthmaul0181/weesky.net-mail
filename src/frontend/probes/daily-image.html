@@ -1,7 +1,8 @@
 <!doctype html>
 <!--
-  Probe: the image of the day — the login page and the three empty-reader variants (full bleed,
-  postcard, watermark). Real markup from LoginPage.tsx and ReaderEmpty.tsx, real class names, real
+  Probe: the image of the day — the login page and the two empty-reader variants (full bleed,
+  postcard). Full bleed is drawn as the former watermark under ?theme=dark (2026-10-14).
+  Real markup from LoginPage.tsx and ReaderEmpty.tsx, real class names, real
   stylesheets in main.tsx's order. ?theme=dark draws the dark block; ?photo=<url> swaps the photo
   (default: a Bing 1920x1080 of 2026-10-08, loaded straight from Bing since the dev server has no CSP).
   #out reports, per case, how far the label, the credit and the postcard escape their pane
@@ -105,14 +106,6 @@
       <img class="reader-daily-photo PHOTO" alt="" />
       <figcaption><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></figcaption>
     </figure>
-  </div></div>
-</div>
-
-<div class="case"><h3>watermark — right pane 760x620</h3>
-  <div class="pane right"><div class="reader-daily is-watermark">
-    <img class="reader-daily-photo PHOTO" alt="" />
-    <p class="reader-daily-label">Select a message</p>
-    <p class="daily-credit reader-daily-credit"><strong>Poulpe fiction</strong><span>Poulpe en position défensive, Mayotte, océan Indien (© Gabriel Barathieu/Minden Pictures)</span></p>
   </div></div>
 </div>
 

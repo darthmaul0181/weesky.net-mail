@@ -12,6 +12,8 @@ namespace weesky.Scotty.Microservice.Tests.Data;
 [Collection(nameof(MariaDbCollection))]
 public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
 {
+    private static readonly string[] Shipped = [.. SchemaMigrations.Embedded.Select(s => s.Name)];
+
     private static readonly IReadOnlyList<SqlScript> TwoScripts =
     [
         SchemaMigrations.Embedded[0],
@@ -24,7 +26,7 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
         Skip.If(db.Unavailable, "Docker is not running");
         var connection = await db.NewDatabaseAsync();
 
-        Assert.Equal(["0001_initial.sql"], SchemaMigrations.Apply(connection));
+        Assert.Equal(Shipped, SchemaMigrations.Apply(connection));
 
         Assert.Equal(27 + 1, await CountTablesAsync(connection));   // + schema_migrations
         Assert.Empty(SchemaMigrations.Pending(connection));
@@ -57,13 +59,13 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
         var root = await db.NewDatabaseAsync();
         var readOnly = await db.NewReadOnlyUserAsync(new MySqlConnectionStringBuilder(root).Database);
 
-        Assert.Equal(["0001_initial.sql"], SchemaMigrations.Pending(readOnly));
+        Assert.Equal(Shipped, SchemaMigrations.Pending(readOnly));
         Assert.Equal(0, await CountTablesAsync(root));
     }
 
     /// <summary>
     /// The owner's databases were created by the old install.sql and are adopted by hand: the journal
-    /// table and its one row are written by the bootstrap script, then nothing must run again.
+    /// table and its one row are written by the bootstrap script, then only the later scripts run.
     /// </summary>
     [SkippableFact]
     public async Task Pending_TrustsAJournalWrittenByTheBootstrapScript()
@@ -73,8 +75,8 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
         await db.ExecuteAsync(SchemaMigrations.Embedded[0].Contents, connection);
         await db.ExecuteAsync(await File.ReadAllTextAsync(AdoptionScriptPath()), connection);
 
-        Assert.Empty(SchemaMigrations.Pending(connection));
-        Assert.Empty(SchemaMigrations.Apply(connection));
+        Assert.Equal(Shipped[1..], SchemaMigrations.Pending(connection));
+        Assert.Equal(Shipped[1..], SchemaMigrations.Apply(connection));
     }
 
     /// <summary>
@@ -93,7 +95,7 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
         await db.ExecuteAsync(adoption, connection);
         await db.ExecuteAsync(adoption, connection);
 
-        Assert.Empty(SchemaMigrations.Pending(connection));
+        Assert.Equal(Shipped[1..], SchemaMigrations.Pending(connection));
         Assert.Equal(1L, await ScalarAsync(connection, "SELECT COUNT(*) FROM schema_migrations"));
     }
 
@@ -133,7 +135,26 @@ public sealed class SchemaMigrationsDatabaseTests(MariaDbFixture db)
             Task.Run(() => SchemaMigrations.Apply(connection)),
             Task.Run(() => SchemaMigrations.Apply(connection)));
 
-        Assert.Equal(["0001_initial.sql"], applied.SelectMany(names => names));
+        Assert.Equal(Shipped, applied.SelectMany(names => names).Order());
+    }
+
+    [SkippableFact]
+    public async Task Migration0002_MovesAStoredWatermarkToFullBleedAndNothingElse()
+    {
+        Skip.If(db.Unavailable, "Docker is not running");
+        var connection = await db.NewDatabaseAsync();
+        SchemaMigrations.Apply(connection, [SchemaMigrations.Embedded[0]]);
+        await db.ExecuteAsync("""
+            INSERT INTO users (id, email, security_stamp, creation_date) VALUES
+              ('a', 'a@x', 's', UTC_TIMESTAMP()), ('b', 'b@x', 's', UTC_TIMESTAMP());
+            INSERT INTO user_preferences (user_id, preference_key, preference_value) VALUES
+              ('a', 'ui.dailyImage', 'watermark'), ('b', 'ui.dailyImage', 'postcard'), ('a', 'ui.other', 'watermark');
+            """, connection);
+
+        SchemaMigrations.Apply(connection);
+
+        Assert.Equal("a:ui.dailyImage=fullBleed,a:ui.other=watermark,b:ui.dailyImage=postcard", await ScalarAsync(connection,
+            "SELECT GROUP_CONCAT(user_id, ':', preference_key, '=', preference_value ORDER BY user_id, preference_key) FROM user_preferences"));
     }
 
     [SkippableFact]

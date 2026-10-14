@@ -315,7 +315,6 @@ public sealed class UserPreferencesTests
     [InlineData("none")]
     [InlineData("fullBleed")]
     [InlineData("postcard")]
-    [InlineData("watermark")]
     public void IsValid_AcceptsEveryDailyImageStyle(string value)
         => Assert.True(UserPreferences.IsValid(UserPreferences.UiDailyImage, value));
 
@@ -323,6 +322,7 @@ public sealed class UserPreferencesTests
     [InlineData("full-bleed")]
     [InlineData("")]
     [InlineData("Watermark")]
+    [InlineData("watermark")]
     public void IsValid_RefusesAnyOtherDailyImageStyle(string value)
         => Assert.False(UserPreferences.IsValid(UserPreferences.UiDailyImage, value));
 }
