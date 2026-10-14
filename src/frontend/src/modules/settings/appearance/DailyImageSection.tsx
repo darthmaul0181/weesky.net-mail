@@ -21,7 +21,6 @@ export default function DailyImageSection() {
       case 'none': return t('appearance.dailyImage.none')
       case 'fullBleed': return t('appearance.dailyImage.fullBleed')
       case 'postcard': return t('appearance.dailyImage.postcard')
-      case 'watermark': return t('appearance.dailyImage.watermark')
     }
   }
 

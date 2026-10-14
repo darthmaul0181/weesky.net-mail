@@ -39,7 +39,6 @@ describe('ReaderEmpty', () => {
   it.each([
     ['fullBleed', 'is-full-bleed'],
     ['postcard', 'is-postcard'],
-    ['watermark', 'is-watermark'],
   ])('draws the %s variant with the photo and its credit', async (style, className) => {
     const { container } = renderPane(style)
 
@@ -52,7 +51,7 @@ describe('ReaderEmpty', () => {
 
   it('stays the plain text while no image is available', async () => {
     mocks.getDailyImage.mockRejectedValue(new Error('404'))
-    const { container } = renderPane('watermark')
+    const { container } = renderPane('fullBleed')
 
     await waitFor(() => expect(mocks.getDailyImage).toHaveBeenCalled())
     expect(screen.getByText('Select a message')).toHaveClass('mail-empty')
@@ -60,7 +59,7 @@ describe('ReaderEmpty', () => {
   })
 
   it('falls back to the text when the admin switches the feature off', async () => {
-    const { client, container } = renderPane('watermark')
+    const { client, container } = renderPane('fullBleed')
     await waitFor(() => expect(container.querySelector('.reader-daily')).not.toBeNull())
 
     act(() => { client.setQueryData(['appSettings'], { 'app.dailyImage': 'false' }) })

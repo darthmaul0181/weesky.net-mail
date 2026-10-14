@@ -6,7 +6,6 @@ import { dailyImageStyleOf, usePreferences, type DailyImageStyle } from '../../.
 const VARIANT_CLASS: Record<Exclude<DailyImageStyle, 'none'>, string> = {
   fullBleed: 'is-full-bleed',
   postcard: 'is-postcard',
-  watermark: 'is-watermark',
 }
 
 /** The reading pane with no message open: the plain text, or the image of the day as the user chose. */
