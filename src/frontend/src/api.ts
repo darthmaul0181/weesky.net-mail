@@ -9,7 +9,7 @@ import type { Preferences } from './hooks/usePreferences'
 import type {
   AliasInfo, ApplyReplyArgs, ApplyReplyResponse, FolderRoleEntry, IdentityListResponse,
   IdentityWrite, InvitationResponse, MailFlagName, MailFolderNode, MailFolderPage,
-  MailMessageDetail, MailMessageSource, MailSearchPage, OpenedDraft, PreparedQuote, QuotePurpose,
+  MailExportFormat, MailMessageDetail, MailMessageSource, MailSearchPage, OpenedDraft, PreparedQuote, QuotePurpose,
   RespondInvitationArgs, SaveDraftArgs, SavedDraft, SendMessageArgs, SendMessageResult,
   StagedAttachmentInfo,
 } from './modules/mail/api/mailTypes'
@@ -208,9 +208,12 @@ export async function requestBlob(
   }
 
   const disposition = res.headers?.get?.('content-disposition') ?? ''
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+  // filename* first: the plain one is ASP.NET's ASCII fallback, every accent an underscore. Only
+  // the starred one is percent-encoded; decoding the plain one throws on a literal "100%".
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1]
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1]
 
-  return { blob: await res.blob(), fileName: match?.[1] ? decodeURIComponent(match[1]) : 'attachment' }
+  return { blob: await res.blob(), fileName: star ? decodeURIComponent(star) : plain ?? 'attachment' }
 }
 
 export const api = {
@@ -511,6 +514,9 @@ export const api = {
     request<InvitationResponse>('POST', '/api/Calendar/Invitations/Respond', body, options),
   applyInvitationReply: (body: ApplyReplyArgs, options?: RequestOptions) =>
     request<ApplyReplyResponse>('POST', '/api/Calendar/Invitations/ApplyReply', body, options),
+
+  exportMessage: (folder: string, uid: number, format: MailExportFormat, options?: RequestOptions) =>
+    requestBlob(`/api/Mail/Messages/Export?folder=${encodeURIComponent(folder)}&uid=${uid}&format=${format}`, options),
 
   getMessageSource: (folder: string, uid: number, options?: RequestOptions) =>
     request<MailMessageSource>('GET', `/api/Mail/Messages/Source?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined,

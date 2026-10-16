@@ -3,6 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import type { MenuEntry } from '../../../components/DropdownMenu'
 import ReaderActions from './ReaderActions'
 
+// The dot reads the novelties through a query; its own behaviour is WhatsNewDot's test.
+vi.mock('../../whatsnew/WhatsNewDot', () => ({ default: () => null }))
+
 const noop = () => {}
 // Every prop with a default, so a render only spells out what the case is about.
 const base = {

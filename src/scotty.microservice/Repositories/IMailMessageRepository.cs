@@ -43,4 +43,7 @@ public interface IMailMessageRepository
 
     /// <summary>The message as it arrived, capped at <paramref name="maxBytes"/> octets.</summary>
     Task<Result<MailMessageSource>> GetSourceAsync(User user, MailAccountConnection connection, string folderPath, uint uid, int maxBytes, CancellationToken cancellationToken);
+
+    /// <summary>The whole message as it arrived, named after its subject, for saving as a file.</summary>
+    Task<Result<MailAttachmentContent>> GetRawMessageAsync(User user, MailAccountConnection connection, string folderPath, uint uid, CancellationToken cancellationToken);
 }

@@ -162,6 +162,19 @@ public sealed class MailMessageRepositoryTests
     }
 
     [Fact]
+    public async Task GetRawMessageAsync_DelegatesToTheRequestSession()
+    {
+        var (repo, sessions, session) = CreateSut();
+        session.Setup(s => s.GetRawMessageAsync("INBOX", 42u, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(Result.Success(new MailAttachmentContent { FileName = "Report.eml" }));
+
+        var result = await repo.GetRawMessageAsync(Alice, Conn, "INBOX", 42, CancellationToken.None);
+
+        Assert.Equal("Report.eml", result.Value.FileName);
+        sessions.Verify(f => f.GetAsync(It.IsAny<MailAccountConnection>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task MessageReads_ThrowWhenUserIsNull()
     {
         var (repo, sessions, _) = CreateSut();
@@ -170,6 +183,8 @@ public sealed class MailMessageRepositoryTests
             () => repo.GetAsync(null!, Conn, "INBOX", 1, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => repo.GetAttachmentAsync(null!, Conn, "INBOX", 1, "2", CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => repo.GetRawMessageAsync(null!, Conn, "INBOX", 1, CancellationToken.None));
     }
 
     [Fact]

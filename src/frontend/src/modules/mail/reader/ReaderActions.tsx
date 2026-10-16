@@ -12,6 +12,7 @@ import ReplyAllIcon from '../../../icons/ReplyAllIcon'
 import StarIcon from '../../../icons/StarIcon'
 import SunIcon from '../../../icons/SunIcon'
 import TrashIcon from '../../../icons/TrashIcon'
+import WhatsNewDot from '../../whatsnew/WhatsNewDot'
 
 interface Props {
   showColourToggle: boolean
@@ -103,7 +104,7 @@ export default function ReaderActions({
           direction="up"
           ariaLabel={t('reader.messageActions')}
           className="actionbar-item"
-          trigger={<><KebabIcon size={21} /><span className="actionbar-label">{t('reader.bar.more')}</span></>}
+          trigger={<><KebabIcon size={21} /><WhatsNewDot anchor="reader:kebab" /><span className="actionbar-label">{t('reader.bar.more')}</span></>}
           items={menuItems}
         />
       </>
@@ -156,7 +157,7 @@ export default function ReaderActions({
       <DropdownMenu
         ariaLabel={t('reader.messageActions')}
         className="action-btn"
-        trigger={<KebabIcon size={18} />}
+        trigger={<><KebabIcon size={18} /><WhatsNewDot anchor="reader:kebab" /></>}
         items={menuItems}
       />
     </div>

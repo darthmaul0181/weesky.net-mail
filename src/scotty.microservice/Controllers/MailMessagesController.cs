@@ -208,17 +208,15 @@ public sealed class MailMessagesController(
         var result = await messages.GetAttachmentAsync(
             AuthenticatedUser, connection, folder, uid, part ?? string.Empty, cancellationToken);
 
-        if (result.IsFailure)
-        {
-            var status = IsMissing(result.Error)
-                ? StatusCodes.Status404NotFound
-                : StatusCodes.Status502BadGateway;
-
-            return StatusCode(status, ResultEnveloppe.CreateErrorEnveloppe(result.Error));
-        }
+        if (result.IsFailure) return FileFailure(result.Error);
 
         return File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
     }
+
+    /// <summary>A file read that failed: gone is 404, anything the mail server said is 502.</summary>
+    private ObjectResult FileFailure(string error) =>
+        StatusCode(IsMissing(error) ? StatusCodes.Status404NotFound : StatusCodes.Status502BadGateway,
+            ResultEnveloppe.CreateErrorEnveloppe(error));
 
     /// <summary>
     /// The message as it arrived: the headers worth distilling plus the verbatim RFC822 bytes,
@@ -259,6 +257,65 @@ public sealed class MailMessagesController(
         }
 
         return FromResult(result, errorStatusCode: StatusCodes.Status502BadGateway);
+    }
+
+    /// <summary>
+    /// The whole message as a file to save: the bytes as they arrived (.eml), or converted to
+    /// Outlook's format (.msg), named after its subject.
+    /// </summary>
+    /// <param name="folder">full folder path</param>
+    /// <param name="uid">message UID, valid only for the folder's current UidValidity</param>
+    /// <param name="format"><c>eml</c> or <c>msg</c></param>
+    /// <param name="cancellationToken">cancellation token</param>
+    /// <response code="200">The file</response>
+    /// <response code="400">The folder or the UID is missing, or the format is neither eml nor msg</response>
+    /// <response code="401">Not authenticated, or the mail credentials are no longer available</response>
+    /// <response code="404">No message with that UID in that folder</response>
+    /// <response code="409">The connected account's stored credentials no longer decrypt</response>
+    /// <response code="500">The message could not be converted to the Outlook format</response>
+    /// <response code="502">The mail server could not be reached</response>
+    [HttpGet("Messages/Export")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult> ExportMessage(
+        [FromQuery] string folder,
+        [FromQuery] uint uid,
+        [FromQuery] MailExportFormat? format,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return BadRequestEnveloppe("A folder is required");
+        if (uid == 0) return BadRequestEnveloppe("A message UID is required");
+        // Null when absent; the binder also parses a number into any enum value, defined or not.
+        if (format is not { } chosen || !Enum.IsDefined(chosen)) return BadRequestEnveloppe("The format must be eml or msg");
+
+        var resolution = await TryResolveAsync(cancellationToken);
+        if (resolution.Failed(out var error, out var connection)) return error;
+
+        var result = await messages.GetRawMessageAsync(AuthenticatedUser, connection, folder, uid, cancellationToken);
+        if (result.IsFailure) return FileFailure(result.Error);
+
+        var file = result.Value;
+        if (chosen == MailExportFormat.Msg)
+        {
+            using var eml = file.Content;
+            try
+            {
+                file = MailMessageExport.ToMsg(file);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to convert message {Uid} in {Folder} to MSG", uid, folder);
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    ResultEnveloppe.CreateErrorEnveloppe("Unable to convert the message"));
+            }
+        }
+
+        return File(file.Content, file.ContentType, file.FileName);
     }
 
     /// <summary>

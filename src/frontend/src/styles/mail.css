@@ -270,6 +270,14 @@
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
+/* A dialog's radio and its caption: the calendar import's targets, the message's save formats. */
+:is(.import-modes, .save-format) > label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+
+/* The save dialog's two formats, each a radio over the line saying what it is for. */
+.save-formats { display: flex; flex-direction: column; gap: 10px; }
+.save-format > label { font-weight: 600; }
+.save-format > .setting-hint { margin-left: 22px; }
+
 /* Bounded: the settings column is as wide as the window, which left a folder name and its
    actions half a screen apart. */
 .folder-list {

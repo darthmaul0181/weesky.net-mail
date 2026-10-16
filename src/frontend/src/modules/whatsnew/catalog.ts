@@ -29,4 +29,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     href: '/settings/appearance',
     when: ({ appSettings }) => dailyImageOf(appSettings),
   },
+  {
+    id: 'save-message', version: '2.5.0',
+    // No Show me: the target is a dialog behind an open message's menu, which no link can reach.
+    path: ['rail:mail', 'reader:kebab', 'reader:save'], target: 'reader:save-message',
+  },
 ]

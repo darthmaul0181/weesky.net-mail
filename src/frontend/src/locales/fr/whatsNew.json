@@ -12,6 +12,10 @@
     "daily-image": {
       "title": "Image du jour",
       "body": "La photo du jour de Bing peut désormais remplir le panneau de lecture quand aucun message n’est ouvert."
+    },
+    "save-message": {
+      "title": "Enregistrer un message en fichier",
+      "body": "Enregistrer… dans le menu d’un message le télécharge en EML, lisible par tous les clients mail, ou en MSG pour Outlook."
     }
   }
 }

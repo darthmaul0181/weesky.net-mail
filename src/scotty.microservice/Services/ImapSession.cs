@@ -188,6 +188,9 @@ internal sealed class ImapSession : IImapSession
     public Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken) =>
         _messages.GetAttachmentAsync(folderPath, uid, partSpecifier, cancellationToken);
 
+    public Task<Result<MailAttachmentContent>> GetRawMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>
+        _messages.GetRawMessageAsync(folderPath, uid, cancellationToken);
+
     public const string TargetNotSelectable = "target_not_selectable";
 
     /// <summary>

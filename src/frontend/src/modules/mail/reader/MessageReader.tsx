@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
-import { mailAttachmentUrl, requestBlob } from '../../../api.js'
+import { api, mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { downloadBlob } from '../../../lib/downloadBlob'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useTheme } from '../../../contexts/ThemeContext'
@@ -15,6 +15,7 @@ import PencilIcon from '../../../icons/PencilIcon'
 import ChevronDownIcon from '../../../icons/ChevronDownIcon'
 import ImageOffIcon from '../../../icons/ImageOffIcon'
 import CodeIcon from '../../../icons/CodeIcon'
+import DownloadIcon from '../../../icons/DownloadIcon'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
 import {
   useAccountId, useAliases, useDeleteMessages, useFolders, useIdentities, useMessage,
@@ -22,7 +23,7 @@ import {
 } from '../queries'
 import { useRoleActions } from '../useRoleActions'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
-import type { MailAttachmentInfo, SpecialUse } from '../api/mailTypes'
+import type { MailAttachmentInfo, MailExportFormat, SpecialUse } from '../api/mailTypes'
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import MoveMessagesModal from '../MoveMessagesModal'
 import {
@@ -45,6 +46,8 @@ import InvitationCard from './InvitationCard'
 import { bodyInlineParts, useInlineImages } from './useInlineImages'
 import { useCachedSummaryFlags, useMarkSeenOnOpen } from './useMarkSeenOnOpen'
 import ReaderEmpty from './ReaderEmpty'
+import SaveMessageModal from './SaveMessageModal'
+import WhatsNewDot from '../../whatsnew/WhatsNewDot'
 
 interface Props {
   folderPath: string | null
@@ -84,6 +87,7 @@ export default function MessageReader(
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [picker, setPicker] = useState<{ mode: 'move' | 'copy' } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [saveOpen, setSaveOpen] = useState(false)
   const [viewed, setViewed] = useState<MailAttachmentInfo | null>(null)
   // The guarded write means a committed render always has frozenNarrow.key === readerKey — the
   // mismatched render it corrects is discarded before commit — so no committed render pairs a
@@ -96,6 +100,7 @@ export default function MessageReader(
     setDetailsOpen(false)
     setPicker(null)
     setConfirmDelete(false)
+    setSaveOpen(false)
     setViewed(null)
   }
   const narrow = frozenNarrow.value
@@ -203,6 +208,11 @@ export default function MessageReader(
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
   const spamOn = !!preferences && showSpamScoreOf(preferences)
 
+  async function saveAs(format: MailExportFormat) {
+    const file = await api.exportMessage(folderPath!, uid!, format, { accountId })
+    downloadBlob(file.blob, file.fileName)
+  }
+
   async function download(part: string, fileName: string) {
     setDownloadError(null)
     try {
@@ -283,6 +293,11 @@ export default function MessageReader(
     label: t('reader.viewSource'),
     icon: <CodeIcon size={18} />,
     href: `/mail/source?folder=${encodeURIComponent(folderPath!)}&uid=${uid}`,
+  }, {
+    label: t('reader.save'),
+    node: <>{t('reader.save')}<WhatsNewDot anchor="reader:save" /></>,
+    icon: <DownloadIcon size={18} />,
+    onSelect: () => setSaveOpen(true),
   })
 
   const readerActions = (
@@ -404,6 +419,8 @@ export default function MessageReader(
           onClose={() => setPicker(null)}
         />
       )}
+
+      {saveOpen && <SaveMessageModal onSave={saveAs} onClose={() => setSaveOpen(false)} />}
 
       {/* Only inside the trash: everywhere else deleting is a move, and the trash is the undo. */}
       {confirmDelete && (
