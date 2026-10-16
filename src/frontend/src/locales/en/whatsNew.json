@@ -12,6 +12,10 @@
     "daily-image": {
       "title": "Image of the day",
       "body": "Bing's photo of the day can now fill the reading pane when no message is open."
+    },
+    "save-message": {
+      "title": "Save a message as a file",
+      "body": "Save… in a message’s menu downloads it as EML, readable by every mail client, or as MSG for Outlook."
     }
   }
 }

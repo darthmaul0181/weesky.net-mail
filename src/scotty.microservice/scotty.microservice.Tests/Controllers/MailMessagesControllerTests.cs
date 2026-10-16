@@ -429,6 +429,115 @@ public sealed class MailMessagesControllerTests
         Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
     }
 
+    // ── Export ──────────────────────────────────────────────────────────
+
+    private void RawMessageIs(string subject)
+    {
+        var message = new MimeKit.MimeMessage { Subject = subject, Body = new MimeKit.TextPart("plain") { Text = "Hi" } };
+        message.From.Add(new MimeKit.MailboxAddress("Alice", "alice@weesky.be"));
+        var stream = new MemoryStream();
+        message.WriteTo(stream);
+        stream.Position = 0;
+        _messages.Setup(m => m.GetRawMessageAsync(It.IsAny<User>(), Conn, "INBOX", 42u, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(new MailAttachmentContent
+                 {
+                     Content = stream,
+                     FileName = subject + ".eml",
+                     ContentType = "message/rfc822"
+                 }));
+    }
+
+    [Fact]
+    public async Task ExportMessage_ServesTheMessageAsItArrivedForEml()
+    {
+        RawMessageIs("Report");
+
+        var result = await CreateController().ExportMessage("INBOX", 42, MailExportFormat.Eml, CancellationToken.None);
+
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Equal("message/rfc822", file.ContentType);
+        Assert.Equal("Report.eml", file.FileDownloadName);
+        using var read = new StreamReader(file.FileStream);
+        Assert.Contains("Subject: Report", read.ReadToEnd());
+    }
+
+    [Fact]
+    public async Task ExportMessage_ConvertsToAnOutlookFileForMsg()
+    {
+        RawMessageIs("Report");
+
+        var result = await CreateController().ExportMessage("INBOX", 42, MailExportFormat.Msg, CancellationToken.None);
+
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Equal("application/vnd.ms-outlook", file.ContentType);
+        Assert.Equal("Report.msg", file.FileDownloadName);
+        var header = new byte[8];
+        file.FileStream.ReadExactly(header);
+        Assert.Equal(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 }, header);
+    }
+
+    [Fact]
+    public async Task ExportMessage_Returns400ForABlankFolder()
+    {
+        var result = await CreateController().ExportMessage(" ", 42, MailExportFormat.Eml, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Theory]
+    [InlineData(42u, 7)]
+    [InlineData(42u, null)]
+    [InlineData(0u, 0)]
+    public async Task ExportMessage_Returns400WithoutAUidOrADefinedFormat(uint uid, int? format)
+    {
+        var result = await CreateController().ExportMessage("INBOX", uid, (MailExportFormat?)format, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        _messages.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ExportMessage_Returns500WhenTheConversionFails()
+    {
+        _messages.Setup(m => m.GetRawMessageAsync(It.IsAny<User>(), Conn, "INBOX", 42u, It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Success(new MailAttachmentContent { Content = new UnreadableStream(), FileName = "x.eml" }));
+
+        var result = await CreateController().ExportMessage("INBOX", 42, MailExportFormat.Msg, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status500InternalServerError, status.StatusCode);
+    }
+
+    private sealed class UnreadableStream : MemoryStream
+    {
+        public override int Read(byte[] buffer, int offset, int count) => throw new IOException("unreadable");
+        public override int Read(Span<byte> buffer) => throw new IOException("unreadable");
+    }
+
+    [Fact]
+    public async Task ExportMessage_Returns404WhenTheMessageIsGone()
+    {
+        _messages.Setup(m => m.GetRawMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<MailAttachmentContent>(ImapSession.MessageNotFound));
+
+        var result = await CreateController().ExportMessage("INBOX", 42, MailExportFormat.Msg, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status404NotFound, status.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExportMessage_Returns502ForAnyOtherFailure()
+    {
+        _messages.Setup(m => m.GetRawMessageAsync(It.IsAny<User>(), It.IsAny<MailAccountConnection>(), It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(Result.Failure<MailAttachmentContent>("Unable to read the message"));
+
+        var result = await CreateController().ExportMessage("INBOX", 42, MailExportFormat.Eml, CancellationToken.None);
+
+        var status = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status502BadGateway, status.StatusCode);
+    }
+
     // ── Flags ───────────────────────────────────────────────────────────
 
     [Fact]

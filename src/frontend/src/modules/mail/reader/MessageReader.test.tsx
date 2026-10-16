@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   copyMessages: vi.fn(),
   deleteMessages: vi.fn(),
   requestBlob: vi.fn(),
+  exportMessage: vi.fn(),
   mailAttachmentUrl: vi.fn((folder: string, uid: number, part: string) =>
     `/api/Mail/Messages/Attachment?folder=${folder}&uid=${uid}&part=${part}`),
   getIdentities: vi.fn(),
@@ -61,6 +62,7 @@ vi.mock('../../../api.js', () => ({
     getContacts: mocks.getContacts,
     respondInvitation: mocks.respondInvitation,
     getCalendars: mocks.getCalendars,
+    exportMessage: mocks.exportMessage,
   },
   ApiError: mocks.ApiError,
   requestBlob: mocks.requestBlob,
@@ -681,6 +683,53 @@ describe('MessageReader', () => {
     const link = screen.getByRole('menuitem', { name: 'View source' })
     expect(link).toHaveAttribute('href', '/mail/source?folder=INBOX&uid=2')
     expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  describe('saving the message as a file', () => {
+    async function openSave() {
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Save…' }))
+      return screen.findByRole('dialog', { name: 'Save the message' })
+    }
+
+    beforeEach(() => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      globalThis.URL.createObjectURL = vi.fn(() => 'blob:x')
+      globalThis.URL.revokeObjectURL = vi.fn()
+    })
+
+    it('sits right under View source', async () => {
+      render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+      fireEvent.click(screen.getByRole('button', { name: 'Message actions' }))
+
+      const names = screen.getAllByRole('menuitem').map(item => item.textContent)
+      expect(names.indexOf('Save…')).toBe(names.indexOf('View source') + 1)
+    })
+
+    it('downloads the format chosen, from the mailbox on screen, under the server name', async () => {
+      auth.activeAccountId = 'linked-1'
+      mocks.exportMessage.mockResolvedValue({ blob: new Blob(['x']), fileName: 'Re facture.msg' })
+      const dialog = await openSave()
+
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'MSG' }))
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(mocks.exportMessage).toHaveBeenCalledWith('INBOX', 2, 'msg', { accountId: 'linked-1' })
+      expect(globalThis.URL.createObjectURL).toHaveBeenCalled()
+    })
+
+    it('says so in the dialog when the server refuses', async () => {
+      mocks.exportMessage.mockRejectedValue(new Error('Message not found'))
+      const dialog = await openSave()
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not save the message')
+    })
   })
 
   it('percent-encodes a folder path carrying the hierarchy separator', async () => {

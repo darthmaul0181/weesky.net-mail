@@ -350,6 +350,9 @@ export interface OpenedDraft {
   priority: MailPriority
 }
 
+/** A saved message: the bytes as they arrived, or Outlook's own file. */
+export type MailExportFormat = 'eml' | 'msg'
+
 /** A message as it arrived. `source` is capped; `totalBytes` is what the whole message weighs. */
 export interface MailMessageSource {
   subject: string

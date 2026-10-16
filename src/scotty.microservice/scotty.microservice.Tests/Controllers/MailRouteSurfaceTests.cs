@@ -49,6 +49,7 @@ public sealed class MailRouteSurfaceTests
         ["POST api/Mail/Send"] = [200, 400, 401, 404, 409, 502],
         ["POST api/Mail/Drafts"] = [200, 400, 401, 404, 409, 502],
         ["POST api/Mail/Drafts/Open"] = [200, 400, 401, 404, 409, 502],
+        ["GET api/Mail/Messages/Export"] = [200, 400, 401, 404, 409, 500, 502],
     };
 
     [Fact]

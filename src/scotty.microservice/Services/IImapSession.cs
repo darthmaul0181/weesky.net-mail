@@ -128,4 +128,7 @@ public interface IImapSession : IAsyncDisposable
     /// mostly base64 nobody reads, and the headers sit at the head of the file.
     /// </summary>
     Task<Result<MailMessageSource>> GetMessageSourceAsync(string folderPath, uint uid, int maxBytes, CancellationToken cancellationToken);
+
+    /// <summary>The whole message as it arrived, named after its subject, for saving as a file.</summary>
+    Task<Result<MailAttachmentContent>> GetRawMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken);
 }

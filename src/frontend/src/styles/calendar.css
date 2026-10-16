@@ -463,7 +463,6 @@
 /* Inside a `.field-h`, so the pair lines up with every other row's control without this file
    restating the label column's width. */
 .import-modes { display: flex; flex-wrap: wrap; gap: 6px 16px; }
-.import-modes > label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
 /* Six buckets do not fit a row: three by two, the counters keeping their own skin. */
 .import-counters.is-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
 

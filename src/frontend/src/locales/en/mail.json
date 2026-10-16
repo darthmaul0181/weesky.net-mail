@@ -224,6 +224,17 @@
     "messageActions": "Message actions",
     "editAsNew": "Edit as new",
     "viewSource": "View source",
+    "save": "Save…",
+    "saveDialog": {
+      "title": "Save the message",
+      "format": "Format",
+      "eml": "EML",
+      "emlHint": "The message as it arrived, opened by every mail client.",
+      "msg": "MSG",
+      "msgHint": "For Outlook. A signed message loses its signature there.",
+      "submit": "Save",
+      "failed": "Could not save the message"
+    },
     "blockSenderImages": "Block sender's images",
     "matchTheme": "Match my theme",
     "originalColours": "Original colours",

@@ -224,6 +224,17 @@
     "messageActions": "Actions du message",
     "editAsNew": "Modifier comme nouveau",
     "viewSource": "Afficher la source",
+    "save": "Enregistrer…",
+    "saveDialog": {
+      "title": "Enregistrer le message",
+      "format": "Format",
+      "eml": "EML",
+      "emlHint": "Le message tel qu’il est arrivé, lisible par tous les clients mail.",
+      "msg": "MSG",
+      "msgHint": "Pour Outlook. Un message signé y perd sa signature.",
+      "submit": "Enregistrer",
+      "failed": "Impossible d’enregistrer le message"
+    },
     "blockSenderImages": "Bloquer les images de cet expéditeur",
     "matchTheme": "Adapter à mon thème",
     "originalColours": "Couleurs d’origine",

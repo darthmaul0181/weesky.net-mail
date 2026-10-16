@@ -1,12 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { matchRoutes } from 'react-router'
 import en from '../../locales/en'
 import fr from '../../locales/fr'
 import { WEB_VERSION } from '../../lib/appVersion'
 import { routes } from '../../routes'
-import { WHATS_NEW } from './catalog'
+import type * as Catalog from './catalog'
 import { compareVersions } from './version'
 
+const { WHATS_NEW } = await vi.importActual<typeof Catalog>('./catalog')
 const SOURCES = import.meta.glob('/src/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true })
 const code = Object.entries(SOURCES).filter(([path]) => !path.includes('.test.') && !path.endsWith('/catalog.ts')).map(([, s]) => s).join('\n')
 const carried = new Set([...code.matchAll(/anchor[=:]\s*["']([a-z0-9-]+:[a-z0-9-]+)["']/g)].map(m => m[1]))

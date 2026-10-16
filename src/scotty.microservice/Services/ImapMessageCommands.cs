@@ -690,6 +690,32 @@ internal sealed class ImapMessageCommands(
             ex => logger.LogError(ex, "Failed to read the source of {Uid} in {Folder}", uid, folderPath),
             ImapSession.MessageSentinel);
 
+    public Task<Result<MailAttachmentContent>> GetRawMessageAsync(string folderPath, uint uid, CancellationToken cancellationToken) =>
+        session.ExecuteAsync(cancellationToken, async () =>
+        {
+            var folder = await client.GetFolderAsync(folderPath, cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+            var uniqueId = new UniqueId(folder.UidValidity, uid);
+            var summaries = await folder.FetchAsync(new[] { uniqueId }, MessageSummaryItems.Envelope, cancellationToken);
+            var envelope = summaries.FirstOrDefault()?.Envelope;
+            if (envelope == null) return Result.Failure<MailAttachmentContent>(ImapSession.MessageNotFound);
+
+            // The bytes as stored, never MimeKit's re-serialisation: a signature covers them exactly.
+            // Already materialised and seekable (see GetAttachmentAsync), so handed on, not copied.
+            var raw = await folder.GetStreamAsync(uniqueId, cancellationToken);
+
+            return Result.Success(new MailAttachmentContent
+            {
+                Content = raw,
+                FileName = MailMessageExport.FileNameOf(envelope.Subject) + ".eml",
+                ContentType = "message/rfc822"
+            });
+        },
+            "Unable to read the message",
+            ex => logger.LogError(ex, "Failed to read raw message {Uid} in {Folder}", uid, folderPath),
+            ImapSession.FolderOrMessageSentinel);
+
     public Task<Result<MailAttachmentContent>> GetAttachmentAsync(string folderPath, uint uid, string partSpecifier, CancellationToken cancellationToken) =>
         session.ExecuteAsync(cancellationToken, async () =>
         {

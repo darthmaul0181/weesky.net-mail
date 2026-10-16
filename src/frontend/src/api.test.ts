@@ -847,6 +847,21 @@ describe('requestBlob', () => {
     expect(result.blob).toBeInstanceOf(Blob)
   })
 
+  // ASP.NET writes both; the plain one has every non-ASCII character replaced by an underscore.
+  it('prefers the UTF-8 file name to its ASCII fallback', async () => {
+    mockBlobFetch({ disposition: `attachment; filename="R_union d'_t_.eml"; filename*=UTF-8''R%C3%A9union%20d%27%C3%A9t%C3%A9.eml` })
+    const { requestBlob } = await import('./api.js')
+
+    expect((await requestBlob('/x')).fileName).toBe("Réunion d'été.eml")
+  })
+
+  it('reads a plain file name as written', async () => {
+    mockBlobFetch({ disposition: 'attachment; filename="100% done.eml"' })
+    const { requestBlob } = await import('./api.js')
+
+    expect((await requestBlob('/x')).fileName).toBe('100% done.eml')
+  })
+
   it('falls back to a default file name', async () => {
     mockBlobFetch({ disposition: null })
     const { requestBlob } = await import('./api.js')
