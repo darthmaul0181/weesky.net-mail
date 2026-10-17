@@ -93,13 +93,15 @@ export default function SettingsLayout() {
 
   const nav = (
     <nav className="context-pane" aria-label={t('nav.label')}>
-      {items.filter(item => !item.group).map(link)}
-      {GROUPS.map(group => (
-        <div key={group} className="pane-group" role="group" aria-labelledby={`settings-nav-${group}`}>
-          <span id={`settings-nav-${group}`} className="pane-group-label">{t(`nav.${group}`)}</span>
-          {items.filter(item => item.group === group).map(link)}
-        </div>
-      ))}
+      <div className="context-pane-scroll">
+        {items.filter(item => !item.group).map(link)}
+        {GROUPS.map(group => (
+          <div key={group} className="pane-group" role="group" aria-labelledby={`settings-nav-${group}`}>
+            <span id={`settings-nav-${group}`} className="pane-group-label">{t(`nav.${group}`)}</span>
+            {items.filter(item => item.group === group).map(link)}
+          </div>
+        ))}
+      </div>
       {/* Switching mailbox from settings: the same menu the folder column carries. */}
       <div className="settings-nav-foot"><IdentityMenu /></div>
     </nav>
