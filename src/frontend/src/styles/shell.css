@@ -467,12 +467,15 @@ a.dropdown-item { text-decoration: none; }
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
   padding: 14px 10px;
   border-right: 1px solid var(--border);
   /* Same surface as the mail folder column: both are the second band of the L. */
   background: var(--folders-bg);
 }
+
+.context-pane-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 
 .pane-item {
   display: flex;
@@ -513,7 +516,8 @@ a.dropdown-item { text-decoration: none; }
 /* The account block again at the foot of its column, so a user deep in settings can change
    mailbox without going back to the mail view. */
 .settings-nav-foot {
-  margin-top: auto;
+  flex: none;
+  margin-top: 2px;
   display: flex;
   align-items: center;
   padding-top: 8px;
@@ -1067,6 +1071,7 @@ a.dropdown-item { text-decoration: none; }
 .contacts-list-scroll,
 .contacts-scopes-scroll,
 .calendar-sidebar-scroll,
+.context-pane-scroll,
 .alias-scroll-area {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
@@ -1077,6 +1082,7 @@ a.dropdown-item { text-decoration: none; }
 .contacts-list-scroll:hover,
 .contacts-scopes-scroll:hover,
 .calendar-sidebar-scroll:hover,
+.context-pane-scroll:hover,
 .alias-scroll-area:hover { scrollbar-color: color-mix(in oklab, var(--text) 28%, transparent) transparent; }
 
 .mail-folders-scroll::-webkit-scrollbar,
@@ -1084,6 +1090,7 @@ a.dropdown-item { text-decoration: none; }
 .contacts-list-scroll::-webkit-scrollbar,
 .contacts-scopes-scroll::-webkit-scrollbar,
 .calendar-sidebar-scroll::-webkit-scrollbar,
+.context-pane-scroll::-webkit-scrollbar,
 .alias-scroll-area::-webkit-scrollbar { width: 8px; }
 
 .mail-folders-scroll::-webkit-scrollbar-track,
@@ -1091,6 +1098,7 @@ a.dropdown-item { text-decoration: none; }
 .contacts-list-scroll::-webkit-scrollbar-track,
 .contacts-scopes-scroll::-webkit-scrollbar-track,
 .calendar-sidebar-scroll::-webkit-scrollbar-track,
+.context-pane-scroll::-webkit-scrollbar-track,
 .alias-scroll-area::-webkit-scrollbar-track { background: transparent; }
 
 .mail-folders-scroll::-webkit-scrollbar-thumb,
@@ -1098,6 +1106,7 @@ a.dropdown-item { text-decoration: none; }
 .contacts-list-scroll::-webkit-scrollbar-thumb,
 .contacts-scopes-scroll::-webkit-scrollbar-thumb,
 .calendar-sidebar-scroll::-webkit-scrollbar-thumb,
+.context-pane-scroll::-webkit-scrollbar-thumb,
 .alias-scroll-area::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 
 .mail-folders-scroll:hover::-webkit-scrollbar-thumb,
@@ -1105,6 +1114,7 @@ a.dropdown-item { text-decoration: none; }
 .contacts-list-scroll:hover::-webkit-scrollbar-thumb,
 .contacts-scopes-scroll:hover::-webkit-scrollbar-thumb,
 .calendar-sidebar-scroll:hover::-webkit-scrollbar-thumb,
+.context-pane-scroll:hover::-webkit-scrollbar-thumb,
 .alias-scroll-area:hover::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--text) 28%, transparent); }
 
 /* ── About ────────────────────────────────────────────────────────────────────
