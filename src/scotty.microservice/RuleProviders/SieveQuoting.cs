@@ -36,6 +36,23 @@ internal static class SieveQuoting
 
     private static bool HasControlCharacter(string? value) => value is not null && value.Any(char.IsControl);
 
+    /// <summary>
+    /// A Sieve size-test number (RFC 5228 §5.9): digits, optionally suffixed with K/M/G. Shared so
+    /// neither provider can emit <c>size :over</c>/<c>:under</c> with a value the other refused —
+    /// unvalidated, it is interpolated into the script unquoted, so anything not shaped like a
+    /// number is a script-injection point, not merely a display glitch.
+    /// </summary>
+    public static bool IsValidSize(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        var trimmed = s.Trim();
+        if (trimmed.Length == 0) return false;
+        var suffix = trimmed[^1];
+        var digits = suffix is 'K' or 'M' or 'G' or 'k' or 'm' or 'g' ? trimmed[..^1] : trimmed;
+        return long.TryParse(digits, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var v) && v >= 0;
+    }
+
     public static string Quote(string s)
     {
         var sb = new StringBuilder(s.Length + 2);

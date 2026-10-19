@@ -200,7 +200,7 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
 
         if (string.IsNullOrEmpty(c.Value)) return Result.Failure("Condition value is required");
 
-        if (isSize && !IsValidSize(c.Value)) return Result.Failure($"Invalid size value: {c.Value}");
+        if (isSize && !SieveQuoting.IsValidSize(c.Value)) return Result.Failure($"Invalid size value: {c.Value}");
         return Result.Success();
     }
 
@@ -222,16 +222,6 @@ internal sealed class WeeskyRuleProvider : IRuleProvider
         return Result.Success();
     }
 
-    private static bool IsValidSize(string s)
-    {
-        if (string.IsNullOrEmpty(s)) return false;
-        var trimmed = s.Trim();
-        var suffix = trimmed[^1];
-        var digits = suffix is 'K' or 'M' or 'G' or 'k' or 'm' or 'g'
-            ? trimmed[..^1]
-            : trimmed;
-        return long.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var v) && v >= 0;
-    }
 
     // ---------- Emission ----------
 
