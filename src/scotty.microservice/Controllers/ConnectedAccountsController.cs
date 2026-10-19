@@ -474,8 +474,13 @@ public sealed class ConnectedAccountsController(
     /// than rebuilt from the incoming request — and spelled once for the three actions.</summary>
     private string RedirectUri => options.CurrentValue.OAuthRedirectUri;
 
+    /// <summary>Requires an http(s) scheme explicitly: on Linux, Uri.TryCreate(UriKind.Absolute)
+    /// accepts a bare "/path" as a file URI, which Windows refuses — a platform split a relative
+    /// OAuthRedirectUri must not survive.</summary>
     private string? CallbackPath =>
-        Uri.TryCreate(RedirectUri, UriKind.Absolute, out var uri) ? uri.AbsolutePath : null;
+        Uri.TryCreate(RedirectUri, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? uri.AbsolutePath : null;
 
     /// <summary>
     /// access_type=offline is Google's refresh-token opt-in; Microsoft ignores it and grants one
