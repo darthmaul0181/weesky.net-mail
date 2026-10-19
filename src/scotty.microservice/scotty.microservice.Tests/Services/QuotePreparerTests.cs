@@ -91,6 +91,26 @@ public sealed class QuotePreparerTests : IDisposable
         Assert.Empty(result.Value.Attachments);
     }
 
+    // The compose editor renders the quote in its own live DOM, not behind the reader's
+    // "show images" gate: a surviving remote src would fetch the original sender's tracker
+    // the instant the draft opens.
+    [Fact]
+    public async Task ARemoteImage_IsDroppedRatherThanCarriedIntoTheQuote()
+    {
+        var builder = new BodyBuilder
+        {
+            HtmlBody = "<p>Hi</p><img src=\"https://tracker.example/pixel.png\">",
+        };
+        var message = new MimeMessage { Body = builder.ToMessageBody() };
+
+        var result = await _preparer.PrepareAsync("acc", message, QuotePurpose.Reply, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.DoesNotContain("tracker.example", result.Value.QuotableHtml);
+        Assert.DoesNotContain("<img", result.Value.QuotableHtml);
+        Assert.Empty(result.Value.Attachments);
+    }
+
     [Fact]
     public async Task ACidWithNoMatchingImagePart_LosesItsImg()
     {

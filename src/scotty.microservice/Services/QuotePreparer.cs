@@ -9,10 +9,13 @@ using weesky.Scotty.Microservice.Models.Mail;
 namespace weesky.Scotty.Microservice.Services;
 
 /// <summary>
-/// One pass over the original: the raw body goes through the OUTGOING policy (it is about to be
-/// sent again, not displayed), then every cid the body references is staged as an inline part and
-/// its src rewritten to the staged-content URL. The invariant is a quotableHtml with no cid: left.
-/// Forward and EditAsNew re-stage the real attachments too — server-side, never via the browser.
+/// One pass over the original: the raw body goes through the OUTGOING policy, then every cid the
+/// body references is staged as an inline part and its src rewritten to the staged-content URL. A
+/// remaining remote (http/https) image is dropped rather than carried through — the quote lands in
+/// the compose editor's live DOM, not behind the reader's "show images" gate, so keeping it would
+/// fetch the original sender's tracker the instant the draft opens, before any consent. The
+/// invariant is a quotableHtml with no cid: and no remote img src left. Forward and EditAsNew
+/// re-stage the real attachments too — server-side, never via the browser.
 /// </summary>
 internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAttachmentStore staged) : IQuotePreparer
 {
@@ -42,7 +45,7 @@ internal sealed class QuotePreparer(IOutgoingMailSanitizer sanitizer, IStagedAtt
             foreach (var img in document.Body!.QuerySelectorAll("img").ToList())
             {
                 var src = img.GetAttribute("src") ?? string.Empty;
-                if (!src.StartsWith("cid:", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!src.StartsWith("cid:", StringComparison.OrdinalIgnoreCase)) { img.Remove(); continue; }
 
                 var contentId = src[4..];
                 if (!stagedByCid.TryGetValue(contentId, out var info))
