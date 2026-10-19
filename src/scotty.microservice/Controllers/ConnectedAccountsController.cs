@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using MimeKit;
+using weesky.Scotty.Microservice.Authentication;
 using weesky.Scotty.Microservice.Data.Preferences;
 using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Microservice.Models.ConnectedAccounts;
@@ -320,6 +321,7 @@ public sealed class ConnectedAccountsController(
         }
 
         var handshake = handshakes.Start(AuthenticatedUser.WebmailUid, domain.Id, request.AccountId);
+        Response.WriteOAuthBinding(handshake.State, CallbackPath, OAuthHandshakeStore.Lifetime);
         return Ok(new OAuthStartResponse(AuthorizationUrl(provider, handshake), handshake.State));
     }
 
@@ -327,7 +329,8 @@ public sealed class ConnectedAccountsController(
     /// Where the provider sends the browser back. Anonymous by necessity: this is a cross-site
     /// top-level navigation and both session cookies are SameSite=Strict, so nothing here can
     /// identify the caller. It therefore writes nothing — it exchanges the code and parks the
-    /// result for the same-site Complete call that follows.
+    /// result for the same-site Complete call that follows — and refuses a browser that does not
+    /// hold the Lax binding cookie Start set, the one proof it is the browser that began.
     /// </summary>
     /// <param name="code">the authorization code, exchanged server-side and never forwarded</param>
     /// <param name="state">the handle minted at Start</param>
@@ -343,6 +346,9 @@ public sealed class ConnectedAccountsController(
     {
         if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
             return BackToSettings(state: null);
+
+        if (!Request.HoldsOAuthBinding(state)) return BackToSettings(state: null);
+        Response.ClearOAuthBinding(state, CallbackPath);
 
         if (handshakes.Find(state) is not { } handshake) return BackToSettings(state: null);
 
@@ -462,6 +468,8 @@ public sealed class ConnectedAccountsController(
     /// <summary>Registered with the provider byte for byte, which is why it is configured rather
     /// than rebuilt from the incoming request — and spelled once for the three actions.</summary>
     private string RedirectUri => options.CurrentValue.OAuthRedirectUri;
+
+    private string CallbackPath => new Uri(RedirectUri).AbsolutePath;
 
     /// <summary>
     /// access_type=offline is Google's refresh-token opt-in; Microsoft ignores it and grants one

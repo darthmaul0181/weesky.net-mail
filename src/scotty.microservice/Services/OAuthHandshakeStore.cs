@@ -9,7 +9,7 @@ internal sealed class OAuthHandshakeStore(IMemoryCache cache) : IOAuthHandshakeS
 {
     /// <summary>Long enough for a real sign-in with a second factor, short enough that an
     /// abandoned consent is not a live entry an hour later.</summary>
-    private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
 
     public OAuthHandshake Start(Guid userId, Guid domainId, Guid? accountId)
     {

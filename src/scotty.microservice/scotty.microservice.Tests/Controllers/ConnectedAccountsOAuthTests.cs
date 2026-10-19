@@ -63,7 +63,7 @@ public sealed class ConnectedAccountsOAuthTests
     }
 
     private ConnectedAccountsController CreateController(
-        bool withCookie = true, ILogger<ConnectedAccountsController>? logger = null)
+        bool withCookie = true, ILogger<ConnectedAccountsController>? logger = null, bool bound = false)
     {
         var mailOptions = TestConnections.HomeOptions();
         mailOptions.WebmailBaseUrl = WebmailBaseUrl;
@@ -79,8 +79,12 @@ public sealed class ConnectedAccountsOAuthTests
             ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext("alice", "weesky.be", Uid)
         };
 
-        if (withCookie)
-            controller.Request.Headers.Cookie = $"MailCredentials={IssueCookie()}";
+        string[] cookies =
+        [
+            .. withCookie ? [$"MailCredentials={IssueCookie()}"] : Array.Empty<string>(),
+            .. bound ? [$"scotty_oauth_{State}=1"] : Array.Empty<string>()
+        ];
+        if (cookies.Length > 0) controller.Request.Headers.Cookie = string.Join("; ", cookies);
         return controller;
     }
 
@@ -298,6 +302,23 @@ public sealed class ConnectedAccountsOAuthTests
         Assert.Contains(Uri.EscapeDataString(RedirectUri), response.AuthorizationUrl);
     }
 
+    [Fact]
+    public async Task OAuthStart_BindsTheConsentToThisBrowserWithALaxCookieScopedToTheCallback()
+    {
+        var domain = await CreateOAuthDomainAsync();
+        _handshakes.Setup(h => h.Start(Uid, domain.Id, null)).Returns(Handshake(domain.Id));
+        var controller = CreateController();
+
+        await controller.OAuthStart(new OAuthStartRequest(domain.Id, null), CancellationToken.None);
+
+        var cookie = Assert.Single(controller.Response.Headers.SetCookie.ToArray(),
+            c => c!.StartsWith($"scotty_oauth_{State}=", StringComparison.Ordinal))!.ToLowerInvariant();
+        Assert.Contains("samesite=lax", cookie);
+        Assert.Contains("httponly", cookie);
+        Assert.Contains("secure", cookie);
+        Assert.Contains("path=/api/connectedaccounts/oauth/callback", cookie);
+    }
+
     // The mirror of the UpdatePassword guard: a Password row must not come back holding a token
     // its own auth_mode would replay as a password.
     [Fact]
@@ -353,6 +374,22 @@ public sealed class ConnectedAccountsOAuthTests
         AssertNeverAttached();
     }
 
+    // The consent-phishing case: a valid state minted by another user, consented in a browser
+    // that never started it. Exchanging would park the victim's mailbox under that user's state.
+    [Fact]
+    public async Task OAuthCallback_FromABrowserThatDidNotStartTheConsent_NeverExchanges()
+    {
+        var domain = await CreateOAuthDomainAsync();
+        _handshakes.Setup(h => h.Find(State)).Returns(Handshake(domain.Id));
+
+        var redirect = Assert.IsType<RedirectResult>(await CreateController(withCookie: false)
+            .OAuthCallback("code-abc", State, error: null, CancellationToken.None));
+
+        Assert.Equal($"{WebmailBaseUrl}/settings/accounts?oauthError=1", redirect.Url);
+        AssertNeverExchanged();
+        AssertNeverAttached();
+    }
+
     [Fact]
     public async Task OAuthCallback_OnAGoodState_ExchangesAttachesAndCarriesTheState()
     {
@@ -365,7 +402,7 @@ public sealed class ConnectedAccountsOAuthTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(tokens));
 
-        var redirect = Assert.IsType<RedirectResult>(await CreateController(withCookie: false)
+        var redirect = Assert.IsType<RedirectResult>(await CreateController(withCookie: false, bound: true)
             .OAuthCallback("code-abc", State, error: null, CancellationToken.None));
 
         // The exact URL Packet 4 resumes from: the state travels back, the code never does.
@@ -387,7 +424,7 @@ public sealed class ConnectedAccountsOAuthTests
                 It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(Tokens("not-a-jwt")));
 
-        var redirect = Assert.IsType<RedirectResult>(await CreateController(withCookie: false)
+        var redirect = Assert.IsType<RedirectResult>(await CreateController(withCookie: false, bound: true)
             .OAuthCallback("code-abc", State, error: null, CancellationToken.None));
 
         Assert.Contains("oauthError=1", redirect.Url);
@@ -407,7 +444,7 @@ public sealed class ConnectedAccountsOAuthTests
                 It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(tokens));
 
-        var redirect = Assert.IsType<RedirectResult>(await CreateController(withCookie: false)
+        var redirect = Assert.IsType<RedirectResult>(await CreateController(withCookie: false, bound: true)
             .OAuthCallback("code-abc", State, error: null, CancellationToken.None));
 
         Assert.Contains($"oauthState={State}", redirect.Url);
