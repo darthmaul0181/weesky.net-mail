@@ -382,6 +382,11 @@ internal sealed class RainloopRuleProvider : IRuleProvider
         };
         if (type == null) return Result.Failure<RainloopCondition>($"Unsupported operator for Rainloop: {c.Operator}");
 
+        // Interpolated unquoted into "size :over/:under <value>" below — an unvalidated value is
+        // a script-injection point, not merely a display glitch.
+        if (field == "Size" && !SieveQuoting.IsValidSize(c.Value))
+            return Result.Failure<RainloopCondition>($"Invalid size value: {c.Value}");
+
         return Result.Success(new RainloopCondition
         {
             Field = field,
@@ -427,8 +432,13 @@ internal sealed class RainloopRuleProvider : IRuleProvider
 
         if (!rule.Enabled)
         {
+            // A condition or action value may legitimately contain "*/" (a folder named
+            // "Work*/Archive", a subject fragment): emitted as-is, it would close this comment
+            // early and spill the rest of the disabled body as live Sieve.
+            var body = new StringBuilder();
+            EmitSieveBody(body, rule, filter);
             sb.Append("/* @Filter is disabled\r\n");
-            EmitSieveBody(sb, rule, filter);
+            sb.Append(body.ToString().Replace("*/", "* /", StringComparison.Ordinal));
             sb.Append("\r\n*/\r\n");
         }
         else

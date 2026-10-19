@@ -264,6 +264,33 @@ public sealed class RainloopRuleProviderTests
             "fileinto instruction should be inside the /* @Filter is disabled ... */ block");
     }
 
+    // A folder named "Work*/Archive" is a legal fileinto target. Emitted verbatim inside the
+    // "/* @Filter is disabled ... */" wrapper, its own "*/" would close the comment early and
+    // spill the rest of the disabled rule's Sieve as live code.
+    [Fact]
+    public void Compile_DisabledRuleWhoseValueContainsCommentTerminator_StaysInsideTheComment()
+    {
+        var rule = new SieveRule
+        {
+            Name = "Off",
+            Enabled = false,
+            Conditions = { Cond(SieveConditionField.Subject, SieveConditionOperator.Contains, "[Off]") },
+            Actions = { Act(SieveActionType.FileInto, "Work*/Archive") }
+        };
+
+        var script = _sut.Compile(new[] { rule }).Value;
+
+        var disabledStart = script.IndexOf("/* @Filter is disabled", StringComparison.Ordinal);
+        var disabledEnd = script.IndexOf("*/", disabledStart + 1, StringComparison.Ordinal);
+        var archivePos = script.IndexOf("Archive", StringComparison.Ordinal);
+
+        Assert.True(disabledStart >= 0);
+        // Without the fix, the folder name's own "*/" closes the comment right after "Work",
+        // leaving "Archive\";" outside it — exactly the spill this guards against.
+        Assert.True(archivePos > disabledStart && archivePos < disabledEnd,
+            "the whole disabled action, including the text after its own \"*/\", must stay inside the comment");
+    }
+
     [Fact]
     public void RoundTrip_DisabledRule_PreservesEnabledFalse()
     {
@@ -644,6 +671,44 @@ public sealed class RainloopRuleProviderTests
 
         Assert.True(result.IsFailure);
         Assert.Contains("CurrentHour", result.Error);
+    }
+
+    // An unvalidated size lands unquoted in "size :over/:under <value>": refusing it here is a
+    // script-injection guard, not merely a display one.
+    [Theory]
+    [InlineData("")]
+    [InlineData("10KB")]
+    [InlineData("abc")]
+    [InlineData("10 { fileinto \"Inbox\"; } if true")]
+    public void CanRepresent_InvalidSizeValue_Fails(string value)
+    {
+        var rule = new SieveRule
+        {
+            Name = "size-test",
+            Conditions = { Cond(SieveConditionField.Size, SieveConditionOperator.Larger, value) },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.CanRepresent(rule);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("size", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Compile_InvalidSizeValue_Fails()
+    {
+        var rule = new SieveRule
+        {
+            Name = "size-test",
+            Conditions = { Cond(SieveConditionField.Size, SieveConditionOperator.Larger, "abc") },
+            Actions = { Act(SieveActionType.Discard) }
+        };
+
+        var result = _sut.Compile(new[] { rule });
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("size", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     // ----- Parse edge cases -----
