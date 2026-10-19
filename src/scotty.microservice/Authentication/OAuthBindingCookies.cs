@@ -5,13 +5,13 @@ namespace weesky.Scotty.Microservice.Authentication;
 /// webmail user, not the browser: a user could hand their own authorization URL to somebody else
 /// and collect that person's mailbox at Complete. Lax, because the provider's redirect is a
 /// cross-site top-level GET, which Strict would strip; one cookie per state, so two consents in
-/// two tabs never overwrite each other's.
+/// two tabs never overwrite each other's. Scoped to the redirect URI's own path rather than the
+/// request's, so a proxy prefix still matches.
 /// </summary>
 internal static class OAuthBindingCookies
 {
     private const string Prefix = "scotty_oauth_";
 
-    /// <param name="callbackPath">the redirect URI's own path, so a proxy prefix still matches</param>
     public static void WriteOAuthBinding(
         this HttpResponse response, string state, string callbackPath, TimeSpan lifetime) =>
         response.Cookies.Append(Prefix + state, "1",

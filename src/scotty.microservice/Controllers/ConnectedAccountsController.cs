@@ -319,9 +319,14 @@ public sealed class ConnectedAccountsController(
                 domain.Name, domain.Id);
             return BadRequestEnveloppe(ConnectedAccountErrors.ProviderConfigIncomplete);
         }
+        if (CallbackPath is not { } callbackPath)
+        {
+            logger.LogError("Mail:OAuthRedirectUri is not an absolute URL; no consent can start");
+            return BadRequestEnveloppe(ConnectedAccountErrors.ProviderConfigIncomplete);
+        }
 
         var handshake = handshakes.Start(AuthenticatedUser.WebmailUid, domain.Id, request.AccountId);
-        Response.WriteOAuthBinding(handshake.State, CallbackPath, OAuthHandshakeStore.Lifetime);
+        Response.WriteOAuthBinding(handshake.State, callbackPath, OAuthHandshakeStore.Lifetime);
         return Ok(new OAuthStartResponse(AuthorizationUrl(provider, handshake), handshake.State));
     }
 
@@ -348,7 +353,7 @@ public sealed class ConnectedAccountsController(
             return BackToSettings(state: null);
 
         if (!Request.HoldsOAuthBinding(state)) return BackToSettings(state: null);
-        Response.ClearOAuthBinding(state, CallbackPath);
+        if (CallbackPath is { } callbackPath) Response.ClearOAuthBinding(state, callbackPath);
 
         if (handshakes.Find(state) is not { } handshake) return BackToSettings(state: null);
 
@@ -469,7 +474,8 @@ public sealed class ConnectedAccountsController(
     /// than rebuilt from the incoming request — and spelled once for the three actions.</summary>
     private string RedirectUri => options.CurrentValue.OAuthRedirectUri;
 
-    private string CallbackPath => new Uri(RedirectUri).AbsolutePath;
+    private string? CallbackPath =>
+        Uri.TryCreate(RedirectUri, UriKind.Absolute, out var uri) ? uri.AbsolutePath : null;
 
     /// <summary>
     /// access_type=offline is Google's refresh-token opt-in; Microsoft ignores it and grants one

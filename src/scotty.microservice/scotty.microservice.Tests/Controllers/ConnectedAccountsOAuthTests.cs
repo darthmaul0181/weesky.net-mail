@@ -63,11 +63,12 @@ public sealed class ConnectedAccountsOAuthTests
     }
 
     private ConnectedAccountsController CreateController(
-        bool withCookie = true, ILogger<ConnectedAccountsController>? logger = null, bool bound = false)
+        bool withCookie = true, ILogger<ConnectedAccountsController>? logger = null, bool bound = false,
+        string redirectUri = RedirectUri)
     {
         var mailOptions = TestConnections.HomeOptions();
         mailOptions.WebmailBaseUrl = WebmailBaseUrl;
-        mailOptions.OAuthRedirectUri = RedirectUri;
+        mailOptions.OAuthRedirectUri = redirectUri;
         var monitor = new Mock<IOptionsMonitor<MailOptions>>();
         monitor.Setup(m => m.CurrentValue).Returns(mailOptions);
 
@@ -192,6 +193,32 @@ public sealed class ConnectedAccountsOAuthTests
         var logger = new Mock<ILogger<ConnectedAccountsController>>();
 
         var result = await CreateController(logger: logger.Object).OAuthStart(
+            new OAuthStartRequest(domain.Id, null), CancellationToken.None);
+
+        var refused = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(
+            ConnectedAccountErrors.ProviderConfigIncomplete,
+            Assert.IsType<ResultEnveloppe>(refused.Value).Message);
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+        _handshakes.Verify(
+            h => h.Start(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid?>()), Times.Never);
+    }
+
+    // The server-side half of the same misconfiguration: without an absolute redirect URI there is
+    // no callback path to bind to, and the provider would refuse the consent anyway.
+    [Theory]
+    [InlineData("")]
+    [InlineData("/api/ConnectedAccounts/OAuth/Callback")]
+    public async Task OAuthStart_WithoutAnAbsoluteRedirectUri_LogsTheAdminErrorAndStaysGeneric(string redirectUri)
+    {
+        var domain = await CreateOAuthDomainAsync();
+        var logger = new Mock<ILogger<ConnectedAccountsController>>();
+
+        var result = await CreateController(logger: logger.Object, redirectUri: redirectUri).OAuthStart(
             new OAuthStartRequest(domain.Id, null), CancellationToken.None);
 
         var refused = Assert.IsType<BadRequestObjectResult>(result.Result);
