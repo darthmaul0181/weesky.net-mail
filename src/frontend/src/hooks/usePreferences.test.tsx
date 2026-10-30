@@ -4,7 +4,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import {
   BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
   languageOf, notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf,
-  firstDayOfWeekOf, showFolderIconsOf, showPreviewOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
+  avatarColorOf, firstDayOfWeekOf, showAvatarsOf, showFolderIconsOf, showPreviewOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
 import { createTestQueryClient, withQueryClient } from '../test-utils'
 
@@ -42,6 +42,20 @@ describe('usePreferences', () => {
     await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith(PREFERENCE_KEYS.pageSize, '10'))
     await waitFor(() =>
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['mail'] }))
+  })
+
+  // A 404 answered while avatars were off is cached as "no picture" for a day.
+  it('forgets the cached pictures when the avatars switch is saved, and only then', async () => {
+    mocks.setPreference.mockResolvedValue(undefined)
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useSetPreference(), { wrapper })
+
+    result.current.mutate({ key: PREFERENCE_KEYS.pageSize, value: '10' })
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['mail'] }))
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['avatar'] })
+
+    result.current.mutate({ key: PREFERENCE_KEYS.showAvatars, value: 'true' })
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['avatar'] }))
   })
 
   it('leaves the caches alone when the write fails', async () => {
@@ -202,6 +216,22 @@ describe('trustContactsOf', () => {
     expect(trustContactsOf({})).toBe(false)
     expect(trustContactsOf({ 'mail.trustContacts': 'true' })).toBe(true)
     expect(trustContactsOf({ 'mail.trustContacts': 'garbage' })).toBe(false)
+  })
+})
+
+describe('showAvatarsOf', () => {
+  it('is on only for the exact string true', () => {
+    expect(showAvatarsOf({})).toBe(false)
+    expect(showAvatarsOf({ 'mail.showAvatars': 'true' })).toBe(true)
+    expect(showAvatarsOf({ 'mail.showAvatars': 'TRUE' })).toBe(false)
+  })
+})
+
+describe('avatarColorOf', () => {
+  it('falls back to mono unless sender is stored', () => {
+    expect(avatarColorOf({})).toBe('mono')
+    expect(avatarColorOf({ 'mail.avatarColor': 'rainbow' })).toBe('mono')
+    expect(avatarColorOf({ 'mail.avatarColor': 'sender' })).toBe('sender')
   })
 })
 

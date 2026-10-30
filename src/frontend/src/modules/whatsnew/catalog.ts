@@ -34,4 +34,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     // No Show me: the target is a dialog behind an open message's menu, which no link can reach.
     path: ['rail:mail', 'reader:kebab', 'reader:save'], target: 'reader:save-message',
   },
+  {
+    id: 'sender-avatars', version: '2.6.0',
+    path: ['rail:settings', 'settings:mail'], target: 'mail:show-avatars',
+    href: '/settings/mail',
+  },
 ]

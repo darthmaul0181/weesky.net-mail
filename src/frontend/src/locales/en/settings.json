@@ -118,6 +118,19 @@
       "on": "Folder icons are shown",
       "off": "Folder icons are hidden"
     },
+    "avatars": {
+      "label": "Show sender avatars",
+      "hint": "Show a picture or the initials of the sender at the left of each message. The sender's address is checked against Gravatar through the server.",
+      "on": "Sender avatars are shown",
+      "off": "Sender avatars are hidden"
+    },
+    "avatarColor": {
+      "label": "Avatar colours",
+      "hint": "Monochrome uses the theme's colours. One colour per sender gives each sender their own colour.",
+      "mono": "Monochrome",
+      "sender": "One colour per sender",
+      "toast": "Avatar colours: {{mode}}"
+    },
     "rowActions": {
       "label": "Quick actions on a message",
       "hint": "The icons a message row offers on hover. Everything here stays available from the toolbar once messages are selected.",

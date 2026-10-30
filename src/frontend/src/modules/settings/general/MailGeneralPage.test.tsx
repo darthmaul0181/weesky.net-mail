@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { MemoryRouter } from 'react-router'
 import MailGeneralPage from './MailGeneralPage'
 import { createTestQueryClient, optionsOf, pickOption } from '../../../test-utils'
 
@@ -22,7 +23,7 @@ vi.mock('../../../modules/mail/notify/channels', () => ({
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = createTestQueryClient()
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return <QueryClientProvider client={client}><MemoryRouter>{children}</MemoryRouter></QueryClientProvider>
 }
 
 function renderPage(preferences: Record<string, string> =
@@ -308,6 +309,65 @@ describe('MailGeneralPage', () => {
 
     expect(await screen.findByLabelText('Sound on new mail')).toBeInTheDocument()
     expect(screen.getByText('Plays a short chime when mail reaches the inbox.')).toBeInTheDocument()
+  })
+})
+
+describe('sender avatars', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('saves the switch as a string the backend accepts', async () => {
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Show sender avatars'))
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('mail.showAvatars', 'true'))
+  })
+
+  it('says the address is checked against Gravatar', async () => {
+    renderPage()
+    await screen.findByLabelText('Show sender avatars')
+
+    expect(screen.getByText(/Gravatar/)).toBeInTheDocument()
+  })
+
+  it('puts the colour row under the switch, indented and covered while it is off', async () => {
+    renderPage()
+    const box = await screen.findByLabelText('Avatar colours')
+    const row = box.closest('.field-h')
+
+    expect(row).toHaveClass('is-setting', 'is-child', 'is-covered')
+    expect(box).toBeDisabled()
+    expect(screen.getByLabelText('Show sender avatars').closest('.field-h')?.nextElementSibling).toBe(row)
+  })
+
+  it('enables the colour row once avatars are on', async () => {
+    renderPage({ 'mail.showAvatars': 'true' })
+    const box = await screen.findByLabelText('Avatar colours')
+
+    expect(box.closest('.field-h')).not.toHaveClass('is-covered')
+    expect(box).toBeEnabled()
+    expect(await optionsOf(box)).toEqual(['Monochrome', 'One colour per sender'])
+  })
+
+  it('saves the chosen colour mode', async () => {
+    renderPage({ 'mail.showAvatars': 'true' })
+
+    await pickOption(await screen.findByLabelText('Avatar colours'), 'One colour per sender')
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('mail.avatarColor', 'sender'))
+  })
+
+  it('keeps the stored colour, untouched, once avatars are switched off', async () => {
+    renderPage({ 'mail.showAvatars': 'true', 'mail.avatarColor': 'sender' })
+    const box = await screen.findByLabelText('Avatar colours')
+    mocks.getPreferences.mockResolvedValue({ 'mail.showAvatars': 'false', 'mail.avatarColor': 'sender' })
+
+    fireEvent.click(screen.getByLabelText('Show sender avatars'))
+
+    await waitFor(() => expect(mocks.setPreference).toHaveBeenCalledWith('mail.showAvatars', 'false'))
+    await waitFor(() => expect(box.closest('.field-h')).toHaveClass('is-covered'))
+    expect(box).toHaveTextContent('One colour per sender')
+    expect(mocks.setPreference.mock.calls.filter(([key]) => key === 'mail.avatarColor')).toEqual([])
   })
 })
 

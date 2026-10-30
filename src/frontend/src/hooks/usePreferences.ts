@@ -16,6 +16,8 @@ export const PREFERENCE_KEYS = {
   composeFormat: 'mail.composeFormat',
   showFolderIcons: 'mail.showFolderIcons',
   groupConversations: 'mail.groupConversations',
+  showAvatars: 'mail.showAvatars',
+  avatarColor: 'mail.avatarColor',
   swipeRight: 'mail.swipeRight',
   swipeLeft: 'mail.swipeLeft',
   captureRecipients: 'contacts.captureRecipients',
@@ -59,8 +61,10 @@ export function useSetPreference() {
     onError: (_error, _variables, context) => {
       if (context?.previous) client.setQueryData(queryKey, context.previous)
     },
-    onSuccess: () => {
+    onSuccess: (_data, { key }) => {
       void client.invalidateQueries({ queryKey })
+      // The server answers 404 while avatars are off, which each cached as "no picture".
+      if (key === PREFERENCE_KEYS.showAvatars) void client.invalidateQueries({ queryKey: ['avatar'] })
       // The page size is part of what a message page *is*, so every cached page was computed
       // under the old value and has to go.
       void client.invalidateQueries({ queryKey: ['mail'] })
@@ -209,6 +213,18 @@ export function languageOf(preferences: Preferences): string {
 
 export function customPaletteOf(preferences: Preferences): CustomPaletteDef | null {
   return parseCustomPalette(preferences[PREFERENCE_KEYS.customPalette])
+}
+
+/** How a sender avatar is coloured: the theme's single tone, or one hue per sender. */
+export type AvatarColor = 'mono' | 'sender'
+
+/** Off unless explicitly on — each avatar asks the server about the sender's address. */
+export function showAvatarsOf(preferences: Preferences): boolean {
+  return preferences[PREFERENCE_KEYS.showAvatars] === 'true'
+}
+
+export function avatarColorOf(preferences: Preferences): AvatarColor {
+  return preferences[PREFERENCE_KEYS.avatarColor] === 'sender' ? 'sender' : 'mono'
 }
 
 export type DailyImageStyle = 'none' | 'fullBleed' | 'postcard'

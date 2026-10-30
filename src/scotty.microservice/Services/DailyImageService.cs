@@ -59,7 +59,7 @@ internal sealed class DailyImageService(
             using var archive = await client.GetAsync(
                 BingArchive.MetadataUrl(market), HttpCompletionOption.ResponseHeadersRead, token);
             if (archive.StatusCode != HttpStatusCode.OK) return Refused(market, "archive not answered with 200");
-            var json = await ReadCappedAsync(archive.Content, BingArchive.MaxMetadataBytes, token);
+            var json = await archive.Content.ReadCappedAsync(BingArchive.MaxMetadataBytes, token);
             if (json is null) return Refused(market, "archive too large");
 
             var entry = BingArchive.Parse(Encoding.UTF8.GetString(json), clock.GetUtcNow());
@@ -69,7 +69,7 @@ internal sealed class DailyImageService(
                 entry.Value.ImageUrl, HttpCompletionOption.ResponseHeadersRead, token);
             if (image.StatusCode != HttpStatusCode.OK || image.Content.Headers.ContentType?.MediaType != "image/jpeg")
                 return Refused(market, "image not a JPEG answered with 200");
-            var bytes = await ReadCappedAsync(image.Content, BingArchive.MaxImageBytes, token);
+            var bytes = await image.Content.ReadCappedAsync(BingArchive.MaxImageBytes, token);
             if (bytes is null) return Refused(market, "image too large");
 
             var e = entry.Value;
@@ -88,24 +88,6 @@ internal sealed class DailyImageService(
     {
         logger.LogWarning("Image of the day refused for {Market}: {Reason}", market, reason);
         return null;
-    }
-
-    // The declared length is checked first, the stream still counted: a server may omit or lie about it.
-    private static async Task<byte[]?> ReadCappedAsync(HttpContent content, int max, CancellationToken cancellationToken)
-    {
-        if (content.Headers.ContentLength > max) return null;
-
-        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        int read;
-        while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
-        {
-            if (buffer.Length + read > max) return null;
-            buffer.Write(chunk, 0, read);
-        }
-
-        return buffer.ToArray();
     }
 
     private sealed record SlotState(DailyImage? Current, DateTimeOffset RetryAfter);

@@ -16,6 +16,10 @@
     "save-message": {
       "title": "Enregistrer un message en fichier",
       "body": "Enregistrer… dans le menu d’un message le télécharge en EML, lisible par tous les clients mail, ou en MSG pour Outlook."
+    },
+    "sender-avatars": {
+      "title": "Avatars des expéditeurs",
+      "body": "La liste des messages peut désormais afficher la photo de chaque expéditeur, ou ses initiales, à côté du message. À activer dans Paramètres > Mail."
     }
   }
 }

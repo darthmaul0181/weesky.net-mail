@@ -93,6 +93,9 @@
   outline: 2px solid var(--new-dot);
   outline-offset: 10px;
 }
+/* Settings rows stand 12px apart, the ring's whole reach: it touched both neighbours and the pill
+   sat 8px into the row above (probes/whats-new-frame.html). */
+.whats-new-target.setting-group.is-new { margin-block: 24px; }
 .new-tag {
   position: absolute;
   top: -20px;

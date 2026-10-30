@@ -203,6 +203,29 @@ public sealed class UserPreferencesTests
         Assert.Equal("false", effective[UserPreferences.MailShowFolderIcons]);
     }
 
+    [Fact]
+    public void Effective_GivesAvatarDefaults()
+    {
+        var effective = UserPreferences.Effective([]);
+
+        Assert.Equal("false", effective[UserPreferences.MailShowAvatars]);
+        Assert.Equal("mono", effective[UserPreferences.MailAvatarColor]);
+    }
+
+    [Theory]
+    [InlineData(UserPreferences.MailShowAvatars, "true", true)]
+    [InlineData(UserPreferences.MailShowAvatars, "false", true)]
+    [InlineData(UserPreferences.MailShowAvatars, "yes", false)]
+    [InlineData(UserPreferences.MailShowAvatars, "", false)]
+    [InlineData(UserPreferences.MailAvatarColor, "mono", true)]
+    [InlineData(UserPreferences.MailAvatarColor, "sender", true)]
+    [InlineData(UserPreferences.MailAvatarColor, "Sender", false)]
+    [InlineData(UserPreferences.MailAvatarColor, "", false)]
+    public void IsValid_AcceptsOnlyRegisteredAvatarValues(string key, string value, bool expected)
+    {
+        Assert.Equal(expected, UserPreferences.IsValid(key, value));
+    }
+
     [Theory]
     [InlineData("contacts.captureRecipients")]
     [InlineData("mail.trustContacts")]

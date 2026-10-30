@@ -62,7 +62,7 @@ export default function SettingsLayout() {
     // Not gated isPrimary: the secret, the address book and the calendars are the Scotty user's,
     // whichever mailbox is being read. Ungrouped: it syncs the calendars and the address book alike.
     ...(davAvailable ? [{ to: '/settings/sync', label: t('nav.sync'), icon: <RefreshIcon size={16} /> }] : []),
-    { to: '/settings/mail', label: t('nav.general'), icon: <SlidersIcon size={16} />, group: 'mail' },
+    { to: '/settings/mail', label: t('nav.general'), icon: <SlidersIcon size={16} />, group: 'mail', anchor: 'settings:mail' },
     { to: '/settings/accounts', label: t('nav.accounts'), icon: <PersonPlusIcon size={16} />, group: 'mail' },
     { to: '/settings/folders', label: t('nav.folders'), icon: <FolderIcon size={16} />, group: 'mail' },
     { to: '/settings/identities', label: t('nav.identities'), icon: <MailIcon size={16} />, group: 'mail' },

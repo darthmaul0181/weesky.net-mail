@@ -144,6 +144,12 @@ internal static class ApplicationServicesConfiguration
         // Singleton is load-bearing: the day's image lives in this instance's memory.
         services.AddSingleton<IDailyImageService, DailyImageService>();
 
+        services.AddHttpClient(GravatarService.ClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
+            // The avatar URL is built on gravatar.com; a redirect would send the lookup wherever it says.
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        // Singleton is load-bearing: the cache and the in-flight lookups live in this instance.
+        services.AddSingleton<IAvatarService, GravatarService>();
+
         return services;
     }
 

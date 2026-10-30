@@ -5,6 +5,7 @@ import { MemoryRouter, createMemoryRouter, RouterProvider, useLocation } from 'r
 import { useRef, useState, type ReactNode } from 'react'
 import { createTestQueryClient, mockViewport, resetViewport, settle, setupUser } from '../../../test-utils'
 import type { MailFolderNode, MailFolderPage } from '../api/mailTypes'
+import { contactOf } from '../../contacts/contactTestHarness'
 import type { Contact } from '../../contacts/contactTypes'
 import { folderNodeOf } from '../mailTestHarness'
 import { mailKeys } from '../queries'
@@ -833,10 +834,9 @@ describe('MessageReader', () => {
   describe('images of a contact', () => {
     // Seeded uncanonical on purpose: the API answers canonical addresses, so the membership test
     // has to canonicalise what it reads rather than trust the cache to hold that form.
-    const inBook: Contact[] = [{
-      id: 'c1', firstName: 'Alice',
-      isFavorite: false, addresses: [detail.fromAddress.toUpperCase()],
-    }]
+    const inBook: Contact[] = [contactOf({
+      id: 'c1', firstName: 'Alice', addresses: [detail.fromAddress.toUpperCase()],
+    })]
 
     beforeEach(() => { mocks.getMailMessage.mockResolvedValue(blocked) })
 

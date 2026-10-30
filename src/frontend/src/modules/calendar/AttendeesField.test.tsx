@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { contactOf } from '../contacts/contactTestHarness'
 import type { Contact } from '../contacts/contactTypes'
 import AttendeesField from './AttendeesField'
 import { setupUser } from '../../test-utils'
@@ -8,8 +9,8 @@ let user: ReturnType<typeof setupUser>
 beforeEach(() => { user = setupUser() })
 
 const contacts: Contact[] = [
-  { id: 'c1', firstName: 'Marc', isFavorite: false, addresses: ['marc@example.org'] },
-  { id: 'c2', firstName: 'Julie', lastName: 'Martin', isFavorite: false, addresses: ['julie@example.net'] },
+  contactOf({ id: 'c1', firstName: 'Marc', addresses: ['marc@example.org'] }),
+  contactOf({ id: 'c2', firstName: 'Julie', lastName: 'Martin', addresses: ['julie@example.net'] }),
 ]
 vi.mock('../contacts/queries', () => ({ useContacts: () => ({ data: contacts }) }))
 

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { capturable, splitFullName } from './captureModel'
+import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
 
 function contact(id: string, addresses: string[]): Contact {
-  return { id, isFavorite: false, addresses }
+  return contactOf({ id, addresses })
 }
 
 describe('splitFullName', () => {

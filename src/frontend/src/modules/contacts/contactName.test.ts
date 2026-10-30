@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
+import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
 
 function contact(fields: Partial<Contact> = {}): Contact {
-  return {
-    id: 'c1',
-    isFavorite: false, addresses: [], ...fields,
-  }
+  return contactOf({ id: 'c1', ...fields })
 }
 
 describe('displayNameOf', () => {

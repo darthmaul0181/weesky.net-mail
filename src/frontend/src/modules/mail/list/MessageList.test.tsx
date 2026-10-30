@@ -50,6 +50,7 @@ vi.mock('../queries', () => ({
 // The list is tested against the shape it consumes, not against the network: what the hook
 // puts on the wire is useMessageList's own test.
 vi.mock('./useMessageList', () => ({ useMessageList: mocks.useMessageList }))
+vi.mock('./avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: () => null }))
 
 // The DOM lib type has no `instances` static — that's the test double's addition.
 const IntersectionObserver = globalThis.IntersectionObserver as unknown as {
@@ -843,6 +844,38 @@ describe('the preferences it obeys', () => {
     await vi.waitFor(() =>
       expect(container.querySelectorAll('.message-row-preview')).toHaveLength(0))
     expect(screen.queryByText('Merci pour l’envoi')).not.toBeInTheDocument()
+  })
+})
+
+describe('the sender avatars', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.folders = roleTree
+    mocks.useMessageList.mockReturnValue(pagedState())
+  })
+
+  it('draws none before the preferences answer', async () => {
+    mocks.getPreferences.mockReturnValue(new Promise(() => {}))
+    const { container } = renderList()
+
+    await screen.findByText('Re: facture')
+    expect(container.querySelector('.message-row-avatar')).toBeNull()
+  })
+
+  it('draws one per row in the stored colour once they are on', async () => {
+    const { container } = renderList({}, { 'mail.showAvatars': 'true', 'mail.avatarColor': 'sender' })
+
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.message-row-avatar.is-sender')).toHaveLength(2))
+    expect(within(rowOf(/alice/i)).getAllByRole('gridcell')).toHaveLength(4)
+  })
+
+  it('draws none when the setting is off', async () => {
+    const { container } = renderList({}, { 'mail.showAvatars': 'false', 'mail.showPreview': 'false' })
+
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.message-row-preview')).toHaveLength(0))
+    expect(container.querySelector('.message-row-avatar')).toBeNull()
   })
 })
 

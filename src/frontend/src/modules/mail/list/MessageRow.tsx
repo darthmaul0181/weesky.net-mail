@@ -3,7 +3,7 @@ import type {
   CSSProperties, DragEvent, HTMLAttributes, KeyboardEvent, ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { RowAction, SwipeAction } from '../../../hooks/usePreferences'
+import type { AvatarColor, RowAction, SwipeAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary } from '../api/mailTypes'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import BanIcon from '../../../icons/BanIcon'
@@ -15,6 +15,7 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import SwipeActionIcon from '../SwipeActionIcon'
+import SenderAvatar from './avatar/SenderAvatarView'
 import { formatListDate } from './formatDate'
 import { useLongPress } from '../../../hooks/useLongPress'
 import { useSwipe, type SwipeSide } from '../../../hooks/useSwipe'
@@ -123,6 +124,8 @@ export interface MessageRowProps {
   deleteLabel: string
   swipeRight: SwipeAction
   swipeLeft: SwipeAction
+  /** The colour of the person's avatar, `null` when avatars are off. */
+  avatar: AvatarColor | null
   on: RowCallbacks
 }
 
@@ -133,7 +136,7 @@ const NO_ACTIONS: readonly RowAction[] = []
 function MessageRow({
   message, members, groupKey, expanded, member, rowIndex, ariaRow, wide, drafts, crossFolder,
   today, showsPreview, rowActions, checked, open, leaving, dragging, archiveOff, archiveReason,
-  junkOff, junkReason, trashOff, trashReason, deleteLabel, swipeRight, swipeLeft, on,
+  junkOff, junkReason, trashOff, trashReason, deleteLabel, swipeRight, swipeLeft, avatar, on,
 }: MessageRowProps) {
   const { t } = useTranslation('mail')
   const thread = members !== undefined
@@ -148,12 +151,15 @@ function MessageRow({
   if (unread) classes.push('is-unread')
   if (open) classes.push('is-selected')
   if (dragging) classes.push('is-dragging')
+  if (avatar) classes.push('has-avatar')
 
   const from = drafts
     ? (message.to.length > 0
         ? message.to.map(a => a.name || a.address).join(', ')
         : t('list.noRecipient'))
     : (message.fromName || message.fromAddress)
+  const person = drafts ? message.to[0] : { name: message.fromName, address: message.fromAddress }
+  const avatarBox = avatar && <SenderAvatar name={person?.name} address={person?.address} color={avatar} />
   const subject = message.subject || t('list.noSubject')
   const when = formatListDate(message.date, today)
   const seenLabel = t(unread ? 'toolbar.markRead' : 'toolbar.markUnread')
@@ -375,6 +381,7 @@ function MessageRow({
         aria-label={label}
         onKeyDown={onRowKey}
       >
+        {avatarBox}
         {wide ? (
           <>
             {unread && <span className="message-row-unread-dot" />}

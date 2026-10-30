@@ -1,4 +1,7 @@
+using System.Net;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -89,5 +92,35 @@ public sealed class SecurityConfigurationTests
 
         var policy = provider.GetRequiredService<IOptions<CorsOptions>>().Value.GetPolicy(SecurityConfiguration.CorsPolicy)!;
         Assert.Equal(new[] { "https://mail.example.net" }, policy.Origins);
+    }
+    private static DefaultHttpContext Caller(params Claim[] claims)
+    {
+        var context = new DefaultHttpContext();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
+        return context;
+    }
+
+    [Fact]
+    public void AvatarsPartition_KeysOnTheWholeMailbox()
+    {
+        var alice = Caller(new Claim(ClaimTypes.Upn, "alice"), new Claim(ClaimTypes.Dns, "weesky.be"));
+        var namesake = Caller(new Claim(ClaimTypes.Upn, "alice"), new Claim(ClaimTypes.Dns, "example.org"));
+
+        Assert.Equal("alice@weesky.be", SecurityConfiguration.AvatarsPartitionOf(alice));
+        Assert.NotEqual(SecurityConfiguration.AvatarsPartitionOf(alice), SecurityConfiguration.AvatarsPartitionOf(namesake));
+    }
+
+    [Theory]
+    [InlineData("alice", null)]
+    [InlineData(null, "weesky.be")]
+    [InlineData(null, null)]
+    public void AvatarsPartition_FallsBackToTheAddressWithoutBothClaims(string? upn, string? dns)
+    {
+        List<Claim> claims = [];
+        if (upn is not null) claims.Add(new Claim(ClaimTypes.Upn, upn));
+        if (dns is not null) claims.Add(new Claim(ClaimTypes.Dns, dns));
+
+        Assert.Equal("203.0.113.7", SecurityConfiguration.AvatarsPartitionOf(Caller([.. claims])));
     }
 }
