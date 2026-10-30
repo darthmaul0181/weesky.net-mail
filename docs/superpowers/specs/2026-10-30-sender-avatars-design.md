@@ -13,7 +13,7 @@ Let a reader recognise a sender at a glance. Each message row can show a 40 px a
 
 ## Non-goals
 
-- BIMI logos, favicons, any other image source.
+- Favicons, any other image source. BIMI logos came later: see [2026-10-30-bimi-logos-design.md](2026-10-30-bimi-logos-design.md).
 - An avatar in the reader header, the composer or the contacts module.
 - Uploading an avatar for an arbitrary address.
 

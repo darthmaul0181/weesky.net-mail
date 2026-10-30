@@ -20,6 +20,10 @@
     "sender-avatars": {
       "title": "Avatars des expéditeurs",
       "body": "La liste des messages peut désormais afficher la photo de chaque expéditeur, ou ses initiales, à côté du message. À activer dans Paramètres > Mail."
+    },
+    "bimi-logos": {
+      "title": "Logos de marque comme avatars",
+      "body": "Quand un message passe la vérification d’authenticité de l’expéditeur, son avatar peut désormais être le logo de la marque. Il suit le même réglage dans Paramètres > Mail."
     }
   }
 }

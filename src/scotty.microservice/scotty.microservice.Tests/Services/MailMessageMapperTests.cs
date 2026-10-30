@@ -77,6 +77,30 @@ public sealed class MailMessageMapperTests
         Assert.Equal(MailPriority.Normal, summary.Priority);
     }
 
+    [Fact]
+    public void FillSummary_ReadsTheBimiHintOffTheFetchedHeaders()
+    {
+        var headers = new HeaderList
+        {
+            new Header("Authentication-Results", "mx.weesky.net; dmarc=pass header.from=example.com"),
+            new Header("BIMI-Selector", "v=BIMI1; s=news;"),
+        };
+
+        var summary = MailMessageMapper.FillSummary(new MailMessageSummary(), FakeSummary(headers));
+
+        Assert.Equal("example.com", summary.BimiDomain);
+        Assert.Equal("news", summary.BimiSelector);
+    }
+
+    [Fact]
+    public void FillSummary_HasNoBimiHintWithoutTheHeaders()
+    {
+        var summary = MailMessageMapper.FillSummary(new MailMessageSummary(), FakeSummary(new HeaderList()));
+
+        Assert.Null(summary.BimiDomain);
+        Assert.Null(summary.BimiSelector);
+    }
+
     // ── Address info conversion ──────────────────────────────────────
 
     [Fact]

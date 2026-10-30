@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using weesky.Scotty.Microservice.Configuration;
 using weesky.Scotty.Microservice.Models.Mail;
 using weesky.Scotty.Microservice.Services;
+using weesky.Scotty.Microservice.Services.Bimi;
 using Xunit;
 
 namespace weesky.Scotty.Microservice.Tests.Configuration;
@@ -59,6 +60,31 @@ public sealed class MailServicesRegistrationTests
         Assert.Same(
             scope.ServiceProvider.GetRequiredService<RequestIdentity>(),
             scope.ServiceProvider.GetRequiredService<IRequestIdentity>());
+    }
+
+    [Fact]
+    public async Task TheBimiClientDialsOnlyCheckedAddressesWithoutRedirectOrProxy()
+    {
+        await using var provider = Register().BuildServiceProvider();
+
+        var handler = provider.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(BimiLogoService.ClientName);
+        while (handler is DelegatingHandler { InnerHandler: { } inner }) handler = inner;
+        var sockets = Assert.IsType<SocketsHttpHandler>(handler);
+        Assert.False(sockets.AllowAutoRedirect);
+        Assert.False(sockets.UseProxy);
+        Assert.Equal(typeof(PublicOnlyConnect).GetMethod(nameof(PublicOnlyConnect.ConnectAsync), [typeof(SocketsHttpConnectionContext), typeof(CancellationToken)]),
+            sockets.ConnectCallback?.Method);
+        Assert.Equal(TimeSpan.FromSeconds(5), provider.GetRequiredService<IHttpClientFactory>().CreateClient(BimiLogoService.ClientName).Timeout);
+    }
+
+    [Fact]
+    public async Task TheBimiServiceResolvesWithItsRealCollaborators()
+    {
+        await using var provider = Register().BuildServiceProvider();
+
+        Assert.IsType<BimiLogoService>(provider.GetRequiredService<IBimiLogoService>());
+        Assert.IsType<DnsClientTxtResolver>(provider.GetRequiredService<IDnsTxtResolver>());
+        Assert.IsType<SvgSkiaRasterizer>(provider.GetRequiredService<ISvgRasterizer>());
     }
 
     private sealed class StaticOptionsMonitor(MailOptions value) : IOptionsMonitor<MailOptions>

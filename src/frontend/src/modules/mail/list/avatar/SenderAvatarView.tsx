@@ -9,11 +9,13 @@ interface Props {
   name?: string
   address?: string
   color: AvatarColor
+  bimiDomain?: string
+  bimiSelector?: string
 }
 
-export default function SenderAvatar({ name, address, color }: Props) {
+export default function SenderAvatar({ name, address, color, bimiDomain, bimiSelector }: Props) {
   const [ref, inView] = useInView<HTMLDivElement>(ROWS_AHEAD_MARGIN, '.mail-list-scroll')
-  const url = useSenderAvatarUrl(address, inView)
+  const url = useSenderAvatarUrl(address, inView, bimiDomain ? { domain: bimiDomain, selector: bimiSelector } : undefined)
   const style = color === 'sender' ? { '--avatar-h': avatarHue(address) } as CSSProperties : undefined
 
   return (

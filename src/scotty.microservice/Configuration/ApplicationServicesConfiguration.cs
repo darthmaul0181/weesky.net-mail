@@ -7,6 +7,7 @@ using weesky.Scotty.Microservice.Repositories;
 using weesky.Scotty.Microservice.RuleProviders;
 using weesky.Scotty.Microservice.RuleProviders.Rainloop;
 using weesky.Scotty.Microservice.Services;
+using weesky.Scotty.Microservice.Services.Bimi;
 using weesky.Scotty.Microservice.Services.Calendar.Delivery;
 using weesky.Scotty.Microservice.Services.Calendar.Invitations;
 using weesky.Scotty.Microservice.Services.Calendar.Scheduling;
@@ -149,6 +150,20 @@ internal static class ApplicationServicesConfiguration
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         // Singleton is load-bearing: the cache and the in-flight lookups live in this instance.
         services.AddSingleton<IAvatarService, GravatarService>();
+
+        // The logo URL comes from the sender's DNS: no automatic redirect (BimiLogoService follows at most two
+        // by hand, re-validating each hop), no proxy (it would resolve the host itself), and the connect
+        // callback dials only the public addresses it has just checked.
+        services.AddHttpClient(BimiLogoService.ClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseProxy = false,
+                ConnectCallback = PublicOnlyConnect.ConnectAsync,
+            });
+        services.AddSingleton<IDnsTxtResolver, DnsClientTxtResolver>();
+        services.AddSingleton<ISvgRasterizer, SvgSkiaRasterizer>();
+        services.AddSingleton<IBimiLogoService, BimiLogoService>();
 
         return services;
     }

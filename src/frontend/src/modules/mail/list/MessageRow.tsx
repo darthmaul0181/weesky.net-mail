@@ -159,7 +159,8 @@ function MessageRow({
         : t('list.noRecipient'))
     : (message.fromName || message.fromAddress)
   const person = drafts ? message.to[0] : { name: message.fromName, address: message.fromAddress }
-  const avatarBox = avatar && <SenderAvatar name={person?.name} address={person?.address} color={avatar} />
+  const avatarBox = avatar && <SenderAvatar name={person?.name} address={person?.address} color={avatar}
+    bimiDomain={drafts ? undefined : message.bimiDomain} bimiSelector={drafts ? undefined : message.bimiSelector} />
   const subject = message.subject || t('list.noSubject')
   const when = formatListDate(message.date, today)
   const seenLabel = t(unread ? 'toolbar.markRead' : 'toolbar.markUnread')

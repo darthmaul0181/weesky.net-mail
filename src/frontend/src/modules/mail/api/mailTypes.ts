@@ -39,6 +39,9 @@ export interface MailMessageSummary {
   size: number
   preview: string
   priority: MailPriority
+  /** DMARC-verified sender domain and the message's BIMI-Selector; both absent when there is no BIMI hint. */
+  bimiDomain?: string
+  bimiSelector?: string
 }
 
 /** One conversation of a grouped page: its messages, newest first. */

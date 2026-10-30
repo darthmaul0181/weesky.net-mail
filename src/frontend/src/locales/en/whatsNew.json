@@ -20,6 +20,10 @@
     "sender-avatars": {
       "title": "Sender avatars",
       "body": "The message list can now show each sender’s picture, or their initials, next to the message. Turn it on in Settings > Mail."
+    },
+    "bimi-logos": {
+      "title": "Brand logos as sender avatars",
+      "body": "When a message passes the sender authenticity check, its avatar can now be the sender’s brand logo. It follows the same setting in Settings > Mail."
     }
   }
 }
