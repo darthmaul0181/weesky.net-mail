@@ -126,7 +126,7 @@
     },
     "avatarColor": {
       "label": "Avatar colours",
-      "hint": "Monochrome uses the theme's colours. One colour per sender gives each sender their own colour.",
+      "hint": "Monochrome uses the theme's accent colour. One colour per sender gives each sender their own colour.",
       "mono": "Monochrome",
       "sender": "One colour per sender",
       "toast": "Avatar colours: {{mode}}"

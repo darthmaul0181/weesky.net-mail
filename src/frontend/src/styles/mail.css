@@ -438,7 +438,12 @@
 }
 .message-row-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .message-row-avatar.is-photo { background: var(--folders-bg); }
-.message-row-avatar.is-mono { background: var(--folders-bg); color: var(--pane-item-active-fg); }
+/* The accent tinted into the surface and into the ink: 4.7:1 or more in the sixteen palette/mode
+   combinations (avatarContrast.test.ts reads the theme files). */
+.message-row-avatar.is-mono {
+  background: color-mix(in srgb, var(--action-primary) 26%, var(--surface));
+  color: color-mix(in srgb, var(--action-primary) 55%, var(--text));
+}
 .message-row-avatar.is-sender {
   --avatar-s: 55%;
   --avatar-bg-l: 88%;

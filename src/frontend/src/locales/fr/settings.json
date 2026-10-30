@@ -126,7 +126,7 @@
     },
     "avatarColor": {
       "label": "Couleurs des avatars",
-      "hint": "Monochrome reprend les couleurs du thème. Une couleur par expéditeur donne à chacun sa propre couleur.",
+      "hint": "Monochrome reprend la couleur d’accent du thème. Une couleur par expéditeur donne à chacun sa propre couleur.",
       "mono": "Monochrome",
       "sender": "Une couleur par expéditeur",
       "toast": "Couleurs des avatars : {{mode}}"
