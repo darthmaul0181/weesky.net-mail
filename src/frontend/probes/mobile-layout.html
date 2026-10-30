@@ -334,7 +334,7 @@
     function measure() {
       const stage = document.getElementById('stage')
       const floor = touchFloor()
-      const report = CASES.map(({ name, html, touch, overlap, height, contrast, escape }) => {
+      const report = CASES.map(({ name, html, touch, overlap, height, width, contrast, escape }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
         // Only what is actually drawn: a control a query hides has no box, and counting its 0px
@@ -444,6 +444,12 @@
           // question the width metrics above cannot ask. -1 means the selector matched nothing.
           ...(height
             ? { height: Math.round(stage.querySelector(height)?.getBoundingClientRect().height ?? -1) }
+            : {}),
+          // `width: 'a, b'` reports each listed selector's first match's box width, -1 for no match:
+          // the squeeze of a flex line's items, which `clipped` reads as clean while one of them is 0.
+          ...(width
+            ? { width: Object.fromEntries(width.split(',').map(sel => sel.trim()).map(sel =>
+              [sel, Math.round(stage.querySelector(sel)?.getBoundingClientRect().width ?? -1)])) }
             : {}),
           // `contrast: selector` reports EVERY match's ratio against the background it is actually
           // painted on, both themes in one run — the case is drawn twice, since a token can be
@@ -804,6 +810,97 @@
       ['thread-row-expanded-360', 360],
       ['thread-row-expanded-320 (read at 320x640)', 320],
     ]) CASES.push({ name, html: threadRow(width), touch: '.thread-toggle, .message-row-thread-count' })
+
+    // The sender avatar, MessageRow's markup with and without it, in both skins and with the
+    // preview on: the first child of the content cell, `has-avatar` on the row, `aria-hidden`. Read
+    // `height` (the row's own box) across the `-off`/`-on` pairs — the spec allows the narrow row 6px
+    // at most and the wide one none — and `clipped`, which must stay 0. `escape` holds the avatar,
+    // the subject and the preview inside the row, `overlap` the avatar against the checkbox that
+    // takes its place (`has-selection` reveals it): `intersect` must be true, the box centred on the avatar. The narrow pair is drawn LOADED like `row-360`, so the
+    // top line still has to fit its dot, badges and date in the 28px the avatar takes from it.
+    // `thread` adds the head's count and toggle to that line — the tightest line the avatar
+    // shortens, read at 320 and under touch emulation too. No rule enlarges the toggle under touch:
+    // it stays 26x26 and reads `undersized`, as it does on the avatar-less thread rows above.
+    // `width` reads the sender and the two badges, which that line squeezes first.
+    // `actions: false` is an account with `mail.rowActions` empty: no cluster, `--row-actions:0`.
+    const avatarRow = ({ width, wide, avatar, member = false, thread = false, actions = true, draft = true }) => {
+      const box = avatar ? '<div class="message-row-avatar is-sender" aria-hidden="true" style="--avatar-h:212">AM</div>' : ''
+      const toggle = `
+                    <span class="message-row-thread-count" title="2 messages in this conversation">2</span>
+                    <button type="button" class="row-btn thread-toggle" aria-expanded="false" aria-label="Expand conversation">
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7.5 4.5l6 5.5-6 5.5"/></svg>
+                    </button>`
+      const content = wide ? `
+                  ${box}
+                  <span class="message-row-unread-dot"></span>
+                  <span class="message-row-draft">Draft</span>
+                  <span class="message-row-priority is-high">HIGH</span>
+                  <span class="message-row-from">Alice Martin</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                  <span class="message-row-line">Re: facture du mois de juillet<span class="message-row-line-preview"> — Merci pour l’envoi, je regarde ça dès demain matin</span></span>
+                  <span class="message-row-date">18 Jul</span>` : `
+                  ${box}
+                  <div class="message-row-top">
+                    <span class="message-row-unread-dot"></span>${draft ? `
+                    <span class="message-row-draft">Draft</span>` : ''}
+                    <span class="message-row-priority is-high">HIGH</span>
+                    <span class="message-row-from">Alice Martin</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24"><path d="M8 8v8"/></svg>
+                    <span class="message-row-date">18 Jul</span>${thread ? toggle : ''}
+                  </div>
+                  <div class="message-row-subject">Re: facture du mois de juillet, la version corrigée</div>
+                  <div class="message-row-preview">Merci pour l’envoi, je regarde ça dès demain matin</div>`
+      const flag = `
+                <div class="message-row-flag" role="gridcell">
+                  <button class="row-btn row-star">★</button>
+                </div>`
+      const cells = `
+                <div class="message-row-actions" role="gridcell">${actions ? `
+                  <div class="message-row-cluster">
+                    <button class="row-btn">S</button>
+                    <button class="row-btn">A</button>
+                    <button class="row-btn">J</button>
+                    <button class="row-btn is-danger">D</button>
+                  </div>` : ''}</div>`
+      const classes = ['message-row', wide && 'is-line', member && 'is-thread-member', 'is-unread', avatar && 'has-avatar']
+      return `
+      <div class="mail-list" style="width:${width}px">
+        <div class="mail-list-scroll">
+          <div class="message-list has-selection" role="grid" aria-label="Messages" aria-rowcount="1">
+            <div class="message-row-slot" role="presentation">
+              <div role="row" aria-rowindex="1" class="${classes.filter(Boolean).join(' ')}" style="--row-actions:${actions ? 4 : 0}">
+                <div class="message-row-select" role="gridcell">
+                  <input type="checkbox" class="message-row-check" />
+                </div>
+                <div class="message-row-content" role="gridcell" tabindex="-1"
+                     aria-label="${thread ? '2 messages in this conversation. ' : ''}Unread. Draft. High priority. Alice Martin: Re: facture du mois de juillet, 18 Jul">${content}
+                </div>${wide ? cells + flag : flag + cells}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`
+    }
+    for (const [name, options] of [
+      ['avatar-narrow-off-360', { width: 360, wide: false, avatar: false }],
+      ['avatar-narrow-on-360', { width: 360, wide: false, avatar: true }],
+      ['avatar-member-on-360', { width: 360, wide: false, avatar: true, member: true }],
+      ['avatar-wide-off-1024 (read at 1024x768)', { width: 1000, wide: true, avatar: false }],
+      ['avatar-wide-on-1024 (read at 1024x768)', { width: 1000, wide: true, avatar: true }],
+      ['avatar-thread-head-on-360', { width: 360, wide: false, avatar: true, thread: true }],
+      ['avatar-thread-head-on-320 (read at 320x640)', { width: 320, wide: false, avatar: true, thread: true }],
+      ['avatar-thread-head-high-on-360', { width: 360, wide: false, avatar: true, thread: true, draft: false }],
+      ['avatar-thread-head-high-on-320 (read at 320x640)', { width: 320, wide: false, avatar: true, thread: true, draft: false }],
+      ['avatar-thread-head-off-320 (read at 320x640)', { width: 320, wide: false, avatar: false, thread: true }],
+      ['avatar-loaded-on-320 (read at 320x640)', { width: 320, wide: false, avatar: true }],
+      ['avatar-no-actions-on-360', { width: 360, wide: false, avatar: true, actions: false }],
+    ]) CASES.push({
+      name, html: avatarRow(options), height: '.message-row',
+      ...(options.thread ? { touch: '.thread-toggle, .message-row-thread-count' } : {}),
+      ...(options.wide ? {} : { width: '.message-row-from, .message-row-draft, .message-row-priority' }),
+      escape: ['.message-row-avatar, .message-row-subject, .message-row-preview, .message-row-line', '.message-row'],
+      overlap: ['.message-row-avatar', '.message-row-check'],
+    })
 
     // The one mechanism in this repo that can catch this, and no unit test can stand in for it:
     // jsdom computes no layout. `.mail-list` carries `container-type: inline-size`, and MessageList

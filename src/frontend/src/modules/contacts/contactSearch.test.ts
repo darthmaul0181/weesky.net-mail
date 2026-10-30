@@ -3,14 +3,10 @@ import {
   compareContacts, filterContacts, groupOptionsOf, matches, suggestionsFor,
 } from './contactSearch'
 import type { GroupOption } from './contactSearch'
-import type { Contact } from './contactTypes'
+import { contactOf } from './contactTestHarness'
 import type { ContactGroup } from './contactGroupTypes'
 
-function contact(fields: Partial<Contact> & { id: string }): Contact {
-  return {
-    isFavorite: false, addresses: [], ...fields,
-  }
-}
+const contact = contactOf
 
 const bruno = contact({
   id: 'b', firstName: 'Bruno', lastName: 'Mertens', nickname: 'bru',

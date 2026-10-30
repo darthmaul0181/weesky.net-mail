@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ContactsTransfer from './ContactsTransfer'
+import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
 import { createTestQueryClient, setupUser } from '../../test-utils'
 
@@ -26,7 +27,7 @@ const { ApiError } = await import('../../api.js') as unknown as {
 }
 
 const book: Contact[] = [
-  { id: '1', firstName: 'Bruno', isFavorite: false, addresses: [] },
+  contactOf({ id: '1', firstName: 'Bruno' }),
 ]
 
 function renderTransfer(contacts: Contact[] | undefined, onError = vi.fn()) {

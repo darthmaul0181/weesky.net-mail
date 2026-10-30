@@ -1,5 +1,6 @@
-import { skipToken, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { queryOptions, skipToken, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '../../api.js'
+import { canonicalAddress } from '../../lib/canonicalAddress'
 import { useAccountId } from '../../hooks/useAccountId'
 import { compareContacts } from './contactSearch'
 import type { Contact, ContactDraft, ContactListResponse } from './contactTypes'
@@ -15,6 +16,8 @@ export const contactKeys = {
       keys, so react-query has nothing old left to serve while it refetches. */
   photo: (accountId: string, id: string, cardHash: string) =>
     ['contacts', accountId, id, 'photo', cardHash] as const,
+  /** The list carries no card hash, so a mail sender's picture is refreshed by invalidation alone. */
+  avatar: (accountId: string, id: string) => ['contacts', accountId, id, 'avatar'] as const,
 }
 
 export const contactGroupKeys = {
@@ -34,6 +37,25 @@ function invalidateBook(queryClient: QueryClient, accountId: string) {
 const sortBook = (data: ContactListResponse): Contact[] => [...data.contacts].sort(compareContacts)
 const groupsOf = (data: ContactGroupsResponse): ContactGroup[] => data.groups
 
+/** Memoised on the cached response itself, which every observer shares, so ten rows build one map. */
+const photoIdMaps = new WeakMap<ContactListResponse, Map<string, string>>()
+const photoIdsOf = (data: ContactListResponse): Map<string, string> => {
+  let ids = photoIdMaps.get(data)
+  if (!ids) {
+    ids = new Map()
+    for (const contact of data.contacts.filter(c => c.hasPhoto))
+      for (const address of contact.addresses) ids.set(canonicalAddress(address), contact.id)
+    photoIdMaps.set(data, ids)
+  }
+  return ids
+}
+
+const bookQuery = (accountId: string) => queryOptions({
+  queryKey: contactKeys.all(accountId),
+  queryFn: () => api.getContacts(),
+  staleTime: 5 * 60_000,
+})
+
 /** The whole book, sorted in `select` once for every reader; the reader passes false when its
  * contact-trust setting is off. `ContactTile`'s memo rests on the default `structuralSharing`,
  * which keeps an untouched contact's identity across a refetch. */
@@ -41,10 +63,19 @@ export function useContacts(enabled = true) {
   const accountId = useAccountId()
 
   return useQuery({
-    queryKey: contactKeys.all(accountId),
-    queryFn: () => api.getContacts(),
-    staleTime: 5 * 60_000,
+    ...bookQuery(accountId),
     select: sortBook,
+    enabled,
+  })
+}
+
+/** The id of the pictured contact holding each canonical address. */
+export function useContactPhotoIds(enabled = true) {
+  const accountId = useAccountId()
+
+  return useQuery({
+    ...bookQuery(accountId),
+    select: photoIdsOf,
     enabled,
   })
 }

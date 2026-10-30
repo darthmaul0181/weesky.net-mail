@@ -118,6 +118,19 @@
       "on": "Les icônes de dossier sont affichées",
       "off": "Les icônes de dossier sont masquées"
     },
+    "avatars": {
+      "label": "Afficher les avatars des expéditeurs",
+      "hint": "Affiche une photo ou les initiales de l’expéditeur à gauche de chaque message. L’adresse de l’expéditeur est vérifiée auprès de Gravatar par l’intermédiaire du serveur.",
+      "on": "Les avatars des expéditeurs sont affichés",
+      "off": "Les avatars des expéditeurs sont masqués"
+    },
+    "avatarColor": {
+      "label": "Couleurs des avatars",
+      "hint": "Monochrome reprend la couleur d’accent du thème. Une couleur par expéditeur donne à chacun sa propre couleur.",
+      "mono": "Monochrome",
+      "sender": "Une couleur par expéditeur",
+      "toast": "Couleurs des avatars : {{mode}}"
+    },
     "rowActions": {
       "label": "Actions rapides sur un message",
       "hint": "Les icônes proposées au survol d’un message. Tout ce qui figure ici reste accessible depuis la barre d’outils une fois des messages sélectionnés.",

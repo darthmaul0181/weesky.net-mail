@@ -193,19 +193,25 @@ internal static class SecurityConfiguration
         return network;
     }
 
+    /// <summary>The signed-in mailbox, so two accounts sharing a local part do not share a bucket; the address otherwise.</summary>
+    internal static string AvatarsPartitionOf(HttpContext context) =>
+        context.User.MailboxOf() ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
     private static bool StartsItsRange(string value, System.Net.IPNetwork network) =>
         value.Split('/') is [var address, _]
         && IPAddress.TryParse(address, out var written)
         && written.Equals(network.BaseAddress);
 
     /// <summary>
-    /// Two policies. <c>login</c> bounds password guessing on the three endpoints that verify one
+    /// Three policies. <c>login</c> bounds password guessing on the three endpoints that verify one
     /// (the login itself, attaching a mailbox, re-entering an attached mailbox's password),
     /// partitioned by the caller's address — which only means anything once
     /// <see cref="AddProxyForwardedHeaders"/> has put the real one there. <c>delivery</c> bounds
     /// the concurrency of the mail server's door: every legitimate call comes from one address, so
     /// a per-address window would be one global bucket anyone could drain (spec 5e3, décision 13);
     /// what this protects is the process, 503 past 8 in flight and 16 queued, and it says so.
+    /// <c>avatars</c> bounds each reader's Gravatar lookups, partitioned on the signed-in account so
+    /// readers behind one address do not share a bucket.
     /// </summary>
     public static IServiceCollection AddRateLimiters(this IServiceCollection services) =>
         services.AddRateLimiter(options =>
@@ -219,6 +225,16 @@ internal static class SecurityConfiguration
                     {
                         Window = TimeSpan.FromMinutes(1),
                         PermitLimit = 5,
+                        QueueLimit = 0
+                    }));
+
+            options.AddPolicy(AvatarsPolicy, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: AvatarsPartitionOf(context),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        Window = TimeSpan.FromMinutes(1),
+                        PermitLimit = 600,
                         QueueLimit = 0
                     }));
 
@@ -247,6 +263,8 @@ internal static class SecurityConfiguration
         });
 
     public const string DeliveryPolicy = "delivery";
+
+    public const string AvatarsPolicy = "avatars";
 
     /// <summary>
     /// The Data Protection key ring encrypts the IMAP credentials cookie, so it must survive

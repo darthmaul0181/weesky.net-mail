@@ -104,6 +104,12 @@ export class ApiError extends Error {
   }
 }
 
+/** A rejection handler turning a 404 into `null`: the resource has no image, which is an answer. */
+export function nullOn404(error: unknown): null {
+  if (error instanceof ApiError && error.status === 404) return null
+  throw error
+}
+
 interface ErrorEnvelope { message: string; code: string | null }
 
 /** Our envelope carries `message` (`Message` from an older writer); ASP.NET's ProblemDetails, `title`. */
@@ -257,6 +263,9 @@ export const api = {
   // origin, which an image element cannot send.
   getContactPhoto: (id: string) =>
     requestBlob(`/api/Contacts/${id}/Photo`).then(({ blob }) => blob),
+
+  getAvatar: (address: string): Promise<Blob | null> =>
+    requestBlob(`/api/Avatars?address=${encodeURIComponent(address)}`).then(({ blob }) => blob, nullOn404),
 
   createContact: (contact: ContactDraft) =>
     request<Contact>('POST', '/api/Contacts', contact),

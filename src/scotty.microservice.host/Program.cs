@@ -94,8 +94,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(SecurityConfiguration.CorsPolicy);
-app.UseRateLimiter();
 app.UseAuthentication();
+// After authentication: the avatars policy partitions on the signed-in account.
+app.UseRateLimiter();
 
 // After authentication so the principal exists, before authorization so a renewal still
 // happens on a request that authorization will go on to reject for other reasons.

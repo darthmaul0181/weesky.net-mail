@@ -3,6 +3,10 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import MessageRow, { rowUidsOf } from './MessageRow'
 import type { RowCallbacks } from './MessageRow'
 import type { MailMessageSummary } from '../api/mailTypes'
+import type { AvatarColor } from '../../../hooks/usePreferences'
+import { avatarHue } from './avatar/senderAvatar'
+
+vi.mock('./avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: () => null }))
 
 /**
  * The memo contract, which only makes sense at this level: what the list must hand a row for one
@@ -42,7 +46,7 @@ function props(over: Partial<Parameters<typeof MessageRow>[0]> = {}) {
     leaving: false, dragging: false, archiveOff: false, archiveReason: 'no archive',
     junkOff: false, junkReason: 'no junk', trashOff: false, trashReason: 'no trash',
     deleteLabel: 'Delete', swipeRight: 'seen' as const, swipeLeft: 'delete' as const,
-    on: callbacks(), ...over,
+    avatar: null as AvatarColor | null, on: callbacks(), ...over,
   }
 }
 
@@ -106,5 +110,48 @@ describe('MessageRow', () => {
     const one = message()
     expect(rowUidsOf(one)).toEqual([2])
     expect(rowUidsOf(one, [message({ uid: 30 }), message({ uid: 10 })])).toEqual([30, 10])
+  })
+
+  describe('the sender avatar', () => {
+    const avatar = () => document.querySelector<HTMLElement>('.message-row-avatar')
+
+    it('draws none while the setting is off', () => {
+      render(<MessageRow {...props({ avatar: null })} />)
+      expect(avatar()).toBeNull()
+    })
+
+    it.each([false, true])('draws the sender’s initials first in the content cell (wide: %s)', wide => {
+      render(<MessageRow {...props({ avatar: 'mono', wide })} />)
+      const content = document.querySelector('.message-row-content')!
+      expect(content.firstElementChild).toBe(avatar())
+      expect(avatar()).toHaveTextContent('AM')
+      expect(avatar()).toHaveClass('is-mono')
+      expect(screen.getByRole('row')).toHaveClass('has-avatar')
+    })
+
+    it('shows the first recipient in a drafts folder', () => {
+      const draft = message({ to: [{ name: 'Bob Durand', address: 'bob@x.be' }, { name: 'Zoé', address: 'z@x.be' }] })
+      render(<MessageRow {...props({ message: draft, drafts: true, avatar: 'sender' })} />)
+      expect(avatar()).toHaveTextContent('BD')
+      expect(avatar()!.style.getPropertyValue('--avatar-h')).toBe(String(avatarHue('bob@x.be')))
+    })
+
+    it('a collapsed conversation head shows its own sender', () => {
+      const head = message({ uid: 30, fromName: 'Carla Rossi', fromAddress: 'carla@x.be' })
+      const members = [head, message({ uid: 10 })]
+      render(<MessageRow {...props({ message: head, members, groupKey: 10, avatar: 'mono' })} />)
+      expect(avatar()).toHaveTextContent('CR')
+    })
+
+    it.each([false, true])('keeps four cells and the same name (wide: %s)', wide => {
+      const { unmount } = render(<MessageRow {...props({ wide })} />)
+      const label = screen.getByRole('gridcell', { name: /facture/ }).getAttribute('aria-label')
+      unmount()
+
+      render(<MessageRow {...props({ wide, avatar: 'sender' })} />)
+
+      expect(within(screen.getByRole('row')).getAllByRole('gridcell')).toHaveLength(4)
+      expect(screen.getByRole('gridcell', { name: /facture/ }).getAttribute('aria-label')).toBe(label)
+    })
   })
 })

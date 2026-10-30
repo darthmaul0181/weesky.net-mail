@@ -35,6 +35,8 @@ public static class UserPreferences
     public const string MailRowActions = "mail.rowActions";
     public const string MailComposeFormat = "mail.composeFormat";
     public const string MailShowFolderIcons = "mail.showFolderIcons";
+    public const string MailShowAvatars = "mail.showAvatars";
+    public const string MailAvatarColor = "mail.avatarColor";
     public const string MailGroupConversations = "mail.groupConversations";
 
     // contacts., not mail.: the preference governs a write to the address book. The trigger is a
@@ -92,6 +94,9 @@ public static class UserPreferences
         // Off by default: the folder column has never carried icons, so an account that never
         // opens the setting sees exactly what it saw yesterday.
         new(MailShowFolderIcons, "false", Booleans),
+        // Off by default: a new setting changes nothing for an account that never opens it.
+        new(MailShowAvatars, "false", Booleans),
+        new(MailAvatarColor, "mono", ["mono", "sender"]),
         // Off by default: the list has always been flat, so an account that never opens the
         // setting sees exactly what it saw yesterday.
         new(MailGroupConversations, "false", Booleans),

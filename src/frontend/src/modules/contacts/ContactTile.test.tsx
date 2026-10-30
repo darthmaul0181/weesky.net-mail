@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ContactTile from './ContactTile'
 import type { ContactTileProps, TileCallbacks } from './ContactTile'
+import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
 
 /**
@@ -10,10 +11,8 @@ import type { Contact } from './contactTypes'
  * asserted in `ContactList.test.tsx`, where the tiles ship the way they are drawn.
  */
 
-const contact = (over: Partial<Contact> = {}): Contact => ({
-  id: 'a', firstName: 'Alice', lastName: 'Dupont', isFavorite: false,
-  addresses: ['alice@x.be'], ...over,
-})
+const contact = (over: Partial<Contact> = {}): Contact =>
+  contactOf({ id: 'a', firstName: 'Alice', lastName: 'Dupont', addresses: ['alice@x.be'], ...over })
 
 function callbacks(): TileCallbacks {
   return {

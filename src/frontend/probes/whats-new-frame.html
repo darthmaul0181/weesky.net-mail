@@ -1,0 +1,99 @@
+<!doctype html>
+<!--
+  Probe: the What's new frame around the sender-avatar rows of Settings › Mail › General
+  (MailGeneralPage's `WhatsNewTarget id="mail:show-avatars"`, held in its `is-new` state). Real
+  stylesheets in main.tsx's order, the rows restated from ToggleRow and MenuSelect with their real
+  class names. The frame is the target's 2px outline at a 10px offset, and the "New" pill hangs at
+  top: -20px; #out reports, per viewport, the gap from the row above's box to the frame and to the
+  pill, and from the frame to the row below (negative = overlap, 0 = touching). Title 'probe-done'.
+  Drive it at 1280x800 and 360x640 with device-metric emulation (mobile-layout.html's header says why).
+
+  WHAT IT FOUND (2026-10-30, Edge 156 headless, 1280, 1024, 360 and 320 wide): frameTop 0, pillTop -8,
+  frameBottom 0 — the ring touched both rows and the pill sat 8px into the one above. With
+  `.setting-group.is-new { margin-block: 24px }`: 12 / 4 / 12 at all four widths.
+-->
+<html lang="en" data-palette="night" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="darkreader-lock" />
+  <title>Probe — What's new frame</title>
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/theme-night.css" />
+  <link rel="stylesheet" href="/src/index.css" />
+  <link rel="stylesheet" href="/src/styles/modal.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+  <link rel="stylesheet" href="/src/styles/mail.css" />
+  <style>
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+    #out { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre; margin: 0; padding: 8px; }
+  </style>
+</head>
+<body>
+<div class="settings-content">
+  <section class="account-section">
+    <h2>Message list</h2>
+    <div class="field-h is-setting" id="above">
+      <span class="setting-label">
+        <label for="show-folder-icons">Folder icons</label>
+        <span class="setting-hint">Show an icon beside each folder in the mail column.</span>
+      </span>
+      <label class="toggle-switch"><input id="show-folder-icons" type="checkbox" /><span class="toggle-track"></span></label>
+    </div>
+
+    <div class="whats-new-target setting-group is-new" id="target">
+      <div class="field-h is-setting">
+        <span class="setting-label">
+          <label for="show-avatars">Show sender avatars</label>
+          <span class="setting-hint">Show a picture or the initials of the sender at the left of each message. The sender's address is checked against Gravatar through the server.</span>
+        </span>
+        <label class="toggle-switch"><input id="show-avatars" type="checkbox" checked /><span class="toggle-track"></span></label>
+      </div>
+      <div class="field-h is-setting is-child">
+        <span class="setting-label">
+          <label for="avatar-color">Avatar colours</label>
+          <span class="setting-hint">Monochrome uses the theme's colours. One colour per sender gives each sender their own colour.</span>
+        </span>
+        <div class="select-root">
+          <button type="button" id="avatar-color" class="menu-select" aria-haspopup="listbox">
+            <span class="menu-select-value">
+              <span class="menu-select-name">Monochrome</span>
+              <span class="menu-select-sizer" data-label="Monochrome" aria-hidden="true"></span>
+              <span class="menu-select-sizer" data-label="One colour per sender" aria-hidden="true"></span>
+            </span>
+          </button>
+        </div>
+      </div>
+      <span class="new-tag">New</span>
+    </div>
+
+    <div class="field-h is-setting is-stacked" id="below">
+      <span class="setting-label">
+        <span>Quick actions on a message</span>
+        <span class="setting-hint">The icons a message row offers on hover. Everything here stays available from the toolbar once messages are selected.</span>
+      </span>
+      <div class="action-chips"><button type="button" class="action-chip is-on">Mark read</button></div>
+    </div>
+  </section>
+</div>
+<pre id="out">running…</pre>
+<script>
+  const box = el => el.getBoundingClientRect()
+  const target = document.getElementById('target')
+  const ring = parseFloat(getComputedStyle(target).outlineOffset) + parseFloat(getComputedStyle(target).outlineWidth)
+  const above = box(document.getElementById('above'))
+  const below = box(document.getElementById('below'))
+  const frame = box(target)
+  const pill = box(target.querySelector('.new-tag'))
+  const round = n => Math.round(n * 10) / 10
+  document.getElementById('out').textContent = JSON.stringify({
+    viewport: `${innerWidth}x${innerHeight}`,
+    frameTop: round(frame.top - ring - above.bottom),
+    pillTop: round(pill.top - above.bottom),
+    frameBottom: round(below.top - (frame.bottom + ring)),
+    pillRight: round(innerWidth - pill.right),
+  })
+  document.title = 'probe-done'
+</script>
+</body>
+</html>

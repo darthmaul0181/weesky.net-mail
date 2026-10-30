@@ -13,6 +13,8 @@ export interface Contact {
   isFavorite: boolean
   /** Ordered; `[0]` is the primary address. There is no separate flag to keep in step with it. */
   addresses: string[]
+  /** Whether `GET /api/Contacts/{id}/Photo` answers a picture. */
+  hasPhoto: boolean
 }
 
 /** One line of a family, as `GET /api/Contacts/{id}` answers it. Ordered for display by the

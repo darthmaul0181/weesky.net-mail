@@ -7,10 +7,10 @@ import ToggleRow from '../../../components/ToggleRow'
 import { useToasts } from '../../../hooks/useToasts'
 import {
   ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, SWIPE_ACTIONS, alwaysShowImagesOf,
-  captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf,
-  notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showFolderIconsOf, showPreviewOf,
-  showSpamScoreOf, swipeActionOf, trustContactsOf,
-  type ComposeFormat, type ReadingPane, type RowAction, type SwipeAction,
+  avatarColorOf, captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf,
+  notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showAvatarsOf, showFolderIconsOf,
+  showPreviewOf, showSpamScoreOf, swipeActionOf, trustContactsOf,
+  type AvatarColor, type ComposeFormat, type ReadingPane, type RowAction, type SwipeAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
@@ -20,6 +20,7 @@ import JunkIcon from '../../../icons/JunkIcon'
 import MailOpenIcon from '../../../icons/MailOpenIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import SwipeActionIcon from '../../mail/SwipeActionIcon'
+import WhatsNewTarget from '../../whatsnew/WhatsNewTarget'
 import PreferencePage from './PreferencePage'
 import { useSavePreference } from './useSavePreference'
 
@@ -37,6 +38,8 @@ const ROW_ACTION_CHOICES = [
   { value: 'junk', labelKey: 'general.rowActions.junk', Icon: JunkIcon },
   { value: 'delete', labelKey: 'general.rowActions.delete', Icon: TrashIcon },
 ] as const satisfies { value: RowAction; labelKey: string; Icon: ComponentType<{ size?: number }> }[]
+
+const AVATAR_COLORS: readonly AvatarColor[] = ['mono', 'sender']
 
 const READING_PANES = [
   { value: 'right', labelKey: 'general.readingPane.right', toastKey: 'general.readingPane.rightToast' },
@@ -90,6 +93,14 @@ function swipeLabel(action: SwipeAction, t: TFunction<'settings'>): string {
     case 'flag': return t('general.swipe.flag')
     case 'archive': return t('general.swipe.archive')
     case 'delete': return t('general.swipe.delete')
+  }
+}
+
+/** Literal keys, one per mode: the missing-key guard cannot read a key held in a variable. */
+function avatarColorLabel(mode: AvatarColor, t: TFunction<'settings'>): string {
+  switch (mode) {
+    case 'mono': return t('general.avatarColor.mono')
+    case 'sender': return t('general.avatarColor.sender')
   }
 }
 
@@ -225,6 +236,33 @@ export default function MailGeneralPage() {
               onChange={on => void save(PREFERENCE_KEYS.showFolderIcons, String(on),
                 t(on ? 'general.folderIcons.on' : 'general.folderIcons.off'))}
             />
+
+            <WhatsNewTarget id="mail:show-avatars" className="setting-group">
+              <ToggleRow
+                id="show-avatars"
+                label={t('general.avatars.label')}
+                hint={t('general.avatars.hint')}
+                checked={showAvatarsOf(preferences)}
+                disabled={saving}
+                onChange={on => void save(PREFERENCE_KEYS.showAvatars, String(on),
+                  t(on ? 'general.avatars.on' : 'general.avatars.off'))}
+              />
+
+              <div className={`field-h is-setting is-child${showAvatarsOf(preferences) ? '' : ' is-covered'}`}>
+                <span className="setting-label">
+                  <label htmlFor="avatar-color">{t('general.avatarColor.label')}</label>
+                  <span className="setting-hint">{t('general.avatarColor.hint')}</span>
+                </span>
+                <MenuSelect
+                  id="avatar-color"
+                  value={avatarColorOf(preferences)}
+                  disabled={saving || !showAvatarsOf(preferences)}
+                  onChange={mode => void save(PREFERENCE_KEYS.avatarColor, mode,
+                    t('general.avatarColor.toast', { mode: avatarColorLabel(mode, t) }))}
+                  options={AVATAR_COLORS.map(mode => ({ value: mode, label: avatarColorLabel(mode, t) }))}
+                />
+              </div>
+            </WhatsNewTarget>
 
             <div className="field-h is-setting is-stacked">
               <span className="setting-label">

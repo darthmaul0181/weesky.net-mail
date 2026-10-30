@@ -14,48 +14,6 @@ public sealed class DailyImageServiceTests
     private static readonly byte[] Jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
     private readonly MutableTimeProvider _clock = new() { Now = new DateTimeOffset(2026, 10, 8, 9, 0, 0, TimeSpan.Zero) };
 
-    private sealed class Factory(HttpMessageHandler handler) : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
-    }
-
-    private sealed class LambdaHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send)
-        : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            send(request, cancellationToken);
-    }
-
-    // A content whose length is unknown up front, the case where only counting the stream protects us.
-    private sealed class UnsizedContent(byte[] bytes) : HttpContent
-    {
-        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
-            stream.WriteAsync(bytes).AsTask();
-
-        protected override bool TryComputeLength(out long length)
-        {
-            length = 0;
-            return false;
-        }
-    }
-
-    // A body the test controls read by read: a stall, or a connection dropped mid-body.
-    private sealed class ScriptedStream(Func<CancellationToken, Task<int>> read) : Stream
-    {
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-            new(read(cancellationToken));
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-        public override void Flush() { }
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-    }
-
     private static Func<HttpResponseMessage> JpegBody(Func<CancellationToken, Task<int>> read) => () =>
     {
         var content = new StreamContent(new ScriptedStream(read));
@@ -64,7 +22,7 @@ public sealed class DailyImageServiceTests
     };
 
     private DailyImageService Create(HttpMessageHandler handler) =>
-        new(new Factory(handler), _clock, NullLogger<DailyImageService>.Instance);
+        new(new StubHttpClientFactory(handler), _clock, NullLogger<DailyImageService>.Instance);
 
     private static Func<HttpResponseMessage> ArchiveOk(string hash = "baeeb03654162a2eaa1439de2eee4b89", string start = "202610072200") =>
         StubHttpMessageHandler.Json(HttpStatusCode.OK, BingArchiveTests.Archive(hash: hash, start: start));
@@ -194,7 +152,7 @@ public sealed class DailyImageServiceTests
     public async Task Get_TreatsATimeoutAsAFailure()
     {
         var calls = 0;
-        var handler = new LambdaHandler((_, _) =>
+        var handler = new LambdaHttpMessageHandler((_, _) =>
         {
             calls++;
             throw new TaskCanceledException("timeout");
@@ -211,7 +169,7 @@ public sealed class DailyImageServiceTests
     {
         var release = new TaskCompletionSource();
         var scripted = new StubHttpMessageHandler(ArchiveOk(), Image());
-        var handler = new LambdaHandler(async (request, ct) =>
+        var handler = new LambdaHttpMessageHandler(async (request, ct) =>
         {
             await release.Task;
             return await new HttpMessageInvoker(scripted, disposeHandler: false).SendAsync(request, ct);
@@ -231,7 +189,7 @@ public sealed class DailyImageServiceTests
     {
         var scripted = new StubHttpMessageHandler(ArchiveOk(), Image());
         var first = true;
-        var handler = new LambdaHandler(async (request, ct) =>
+        var handler = new LambdaHttpMessageHandler(async (request, ct) =>
         {
             if (first)
             {

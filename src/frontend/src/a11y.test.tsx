@@ -95,7 +95,7 @@ describe('accessibility sweep', () => {
 
   // List and reader both on screen: the default desktop reading-pane arrangement puts them side
   // by side, which is what the brief asks this surface to be swept while showing.
-  it('MailLayout — list and reader both on screen', async () => {
+  async function renderMail(preferences: Record<string, string>) {
     mocks.getMailFolders.mockResolvedValue([
       folderNodeOf({ path: 'INBOX', specialUse: 'inbox' }),
     ])
@@ -112,7 +112,7 @@ describe('accessibility sweep', () => {
       fromAddress: 'a@b.c', to: [], cc: [], date: '2026-07-18T09:00:00Z',
       htmlBody: '<p>Hi</p>', textBody: 'Hi', blockedImageCount: 0, attachments: [],
     })
-    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': 'right' })
+    mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': 'right', ...preferences })
     mocks.getIdentities.mockResolvedValue({ identities: [] })
 
     const { container } = render(
@@ -124,9 +124,20 @@ describe('accessibility sweep', () => {
     const reader = container.querySelector('.mail-reader') as HTMLElement
     await within(reader).findByText('Hello')
     expect(container.querySelector('.mail-list')).not.toBeNull()
+    return container
+  }
+
+  it('MailLayout — list and reader both on screen', async () => {
+    const container = await renderMail({})
     // One waiver left: the reader's real <iframe> defeats axe's cross-frame scan in jsdom, which is
     // true of no other surface here. The nested-interactive one is gone — the row is a role="row"
     // of four gridcells now, so nothing inside it is nested in a button any more.
+    await expectNoAxeViolations(container, { iframes: false })
+  })
+
+  it('MailLayout — rows carrying sender avatars', async () => {
+    const container = await renderMail({ 'mail.showAvatars': 'true', 'mail.avatarColor': 'sender' })
+    await vi.waitFor(() => expect(container.querySelector('.message-row-avatar')).not.toBeNull())
     await expectNoAxeViolations(container, { iframes: false })
   })
 
@@ -281,7 +292,7 @@ describe('accessibility sweep', () => {
 
     const client = queryClient()
     const { container } = render(<MailGeneralPage />, {
-      wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+      wrapper: ({ children }) => <QueryClientProvider client={client}><MemoryRouter>{children}</MemoryRouter></QueryClientProvider>,
     })
 
     await screen.findByLabelText('Messages per page')

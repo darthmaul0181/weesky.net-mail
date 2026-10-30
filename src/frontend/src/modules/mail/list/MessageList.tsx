@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import type { CSSProperties, DragEvent, KeyboardEvent, ReactNode, RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  DEFAULT_ROW_ACTIONS, requestSizeOf, rowActionsOf, showPreviewOf, swipeActionOf, usePreferences,
+  DEFAULT_ROW_ACTIONS, avatarColorOf, requestSizeOf, rowActionsOf, showAvatarsOf, showPreviewOf,
+  swipeActionOf, usePreferences,
 } from '../../../hooks/usePreferences'
 import type { RowAction } from '../../../hooks/usePreferences'
 import type { MailMessageSummary, MailSearchResult, SpecialUse } from '../api/mailTypes'
@@ -86,6 +87,7 @@ export default function MessageList(
     () => (preferences ? rowActionsOf(preferences) : DEFAULT_ROW_ACTIONS), [preferences])
   const swipeRight = preferences ? swipeActionOf(preferences, 'right') : 'none'
   const swipeLeft = preferences ? swipeActionOf(preferences, 'left') : 'none'
+  const avatar = preferences && showAvatarsOf(preferences) ? avatarColorOf(preferences) : null
 
   const pageSize = preferences ? requestSizeOf(preferences) : 0
   const listSearch = useListSearch(folderPath, search, onSearchChange, pageSize)
@@ -320,6 +322,7 @@ export default function MessageList(
           deleteLabel={deleteLabel}
           swipeRight={swipeRight}
           swipeLeft={swipeLeft}
+          avatar={avatar}
           on={rowOn}
         />
       )
