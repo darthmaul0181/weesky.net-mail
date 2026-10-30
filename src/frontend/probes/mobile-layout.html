@@ -815,9 +815,9 @@
     // preview on: the first child of the content cell, `has-avatar` on the row, `aria-hidden`. Read
     // `height` (the row's own box) across the `-off`/`-on` pairs — the spec allows the narrow row 6px
     // at most and the wide one none — and `clipped`, which must stay 0. `escape` holds the avatar,
-    // the subject and the preview inside the row, `overlap` the avatar against the checkbox it sits
-    // beside: `intersect` must be false. The narrow pair is drawn LOADED like `row-360`, so the
-    // top line still has to fit its dot, badges and date in the 50px the avatar takes from it.
+    // the subject and the preview inside the row, `overlap` the avatar against the checkbox that
+    // takes its place (`has-selection` reveals it): `intersect` must be true, the box centred on the avatar. The narrow pair is drawn LOADED like `row-360`, so the
+    // top line still has to fit its dot, badges and date in the 28px the avatar takes from it.
     // `thread` adds the head's count and toggle to that line — the tightest line the avatar
     // shortens, read at 320 and under touch emulation too. No rule enlarges the toggle under touch:
     // it stays 26x26 and reads `undersized`, as it does on the avatar-less thread rows above.

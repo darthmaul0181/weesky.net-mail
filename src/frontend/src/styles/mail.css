@@ -678,14 +678,22 @@
 /* The wide skin is a baseline flex row: the box is a real leftmost slot, centred like the row-btns. */
 .message-row.is-line .message-row-check { align-self: center; }
 
-/* The avatar takes the checkbox's idiom: absolute in a gutter of its own, so the text column keeps
-   its block flow and the row its height. */
-.message-row:not(.is-line).has-avatar { padding-left: 84px; }
-.message-row:not(.is-line) .message-row-avatar { position: absolute; left: 34px; top: var(--pad-y); }
-/* 28px centred on the line; the negative margin keeps it from setting the line's height. */
-.message-row.is-line .message-row-avatar {
-  width: 28px; height: 28px; margin-block: -6px; align-self: center; font-size: 11px;
+/* The avatar takes the checkbox's place and the two swap: the box shows where the avatar was while the
+   pointer or the keyboard is on the row, and once anything is checked. The reserved slot is the
+   avatar's, 40px, the box centred in it; a row with no box (cross-folder) never swaps. */
+.message-row:not(.is-line).has-avatar { padding-left: 62px; }
+.message-row:not(.is-line) .message-row-avatar { position: absolute; left: 12px; top: var(--pad-y); }
+.message-row:not(.is-line).has-avatar .message-row-check {
+  left: 24px;
+  top: calc(var(--pad-y) + 20px);
 }
+/* 28px in the box's slot; absolute, so it neither sets the line's height nor takes a flex gap. */
+.message-row.is-line .message-row-avatar {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  width: 28px; height: 28px; font-size: 11px;
+}
+.message-row.is-line.has-avatar .message-row-select { flex: none; width: 28px; justify-content: center; }
+.message-row.is-line.has-avatar .message-row-select:empty { margin-inline-end: 0; }
 
 .message-row:hover .message-row-check,
 .message-row:focus-within .message-row-check,
@@ -694,6 +702,22 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Where the avatar stands in, the box answers to hover and to keyboard focus on the row (not to a
+   mouse click's focus, which would hide the avatar of the message just opened), to a selection and
+   to being checked; the avatar leaves on exactly the same conditions. */
+.message-row.has-avatar:focus-within .message-row-check { opacity: 0; pointer-events: none; }
+.message-row.has-avatar:hover .message-row-check,
+.message-row.has-avatar:has(:focus-visible) .message-row-check,
+.message-list.has-selection .message-row.has-avatar .message-row-check,
+.message-row.has-avatar .message-row-check:checked {
+  opacity: 1;
+  pointer-events: auto;
+}
+.message-row.has-avatar:hover:has(.message-row-check) .message-row-avatar,
+.message-row.has-avatar:has(.message-row-check):has(:focus-visible) .message-row-avatar,
+.message-list.has-selection .message-row.has-avatar:has(.message-row-check) .message-row-avatar,
+.message-row.has-avatar:has(.message-row-check:checked) .message-row-avatar { visibility: hidden; }
 
 /* ── Row controls ────────────────────────────────────────── */
 
@@ -812,8 +836,7 @@
    narrow skin's own padding rule on purpose: the two tie on specificity, and this one must win
    to indent that skin past its 34px gutter. */
 .message-row.is-thread-member { padding-left: 46px; }
-.message-row.is-thread-member:not(.is-line).has-avatar { padding-left: 96px; }
-.message-row.is-thread-member:not(.is-line) .message-row-avatar { left: 46px; }
+.message-row.is-thread-member:not(.is-line).has-avatar { padding-left: 74px; }
 
 /* ── Pager ───────────────────────────────────────────────── */
 
@@ -2178,6 +2201,9 @@ textarea.compose-editor {
   .message-list:not(.has-selection) .message-row:hover:not(:focus-within) .message-row-check {
     opacity: 0;
     pointer-events: none;
+  }
+  .message-list:not(.has-selection) .message-row.has-avatar:hover:not(:has(:focus-visible)) .message-row-avatar {
+    visibility: visible;
   }
 
   /* The wide skin's other half of the cluster swap, sharing the reserve's condition: with the
