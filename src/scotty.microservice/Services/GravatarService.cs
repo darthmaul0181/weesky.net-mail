@@ -1,9 +1,7 @@
-using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using weesky.Scotty.Microservice.Models;
 
@@ -19,59 +17,23 @@ internal sealed class GravatarService(
     public static readonly TimeSpan MissLifetime = TimeSpan.FromHours(24);
     public static readonly TimeSpan FailureLifetime = TimeSpan.FromMinutes(5);
     private const long CacheBytes = 32 * 1024 * 1024;
-    private const long AnswerWithoutImageCost = 512;
 
     // Never SVG: a picture that can carry script is not a picture.
     private static readonly FrozenSet<string> ImageTypes =
         FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "image/jpeg", "image/png", "image/gif", "image/webp");
 
-    private readonly MemoryCache cache = new(new MemoryCacheOptions { SizeLimit = CacheBytes });
-    private readonly ConcurrentDictionary<string, Lazy<Task<AvatarImage?>>> inFlight = new(StringComparer.Ordinal);
+    private readonly AnswerCache cache = new(clock, CacheBytes);
 
-    public async Task<AvatarImage?> GetAsync(string address, CancellationToken cancellationToken)
+    public Task<AvatarImage?> GetAsync(string address, CancellationToken cancellationToken)
     {
         var hash = HashOf(address);
-        if (TryHeld(hash, out var held)) return held;
-
-        // Shared by every caller: one leaving stops waiting, it never cancels the lookup the others wait on.
-        var lookup = inFlight.GetOrAdd(hash, key => new Lazy<Task<AvatarImage?>>(() => LookUpAsync(key)));
-        return await lookup.Value.WaitAsync(cancellationToken);
+        return cache.GetAsync(hash, () => FetchAsync(hash), cancellationToken);
     }
 
     public void Dispose() => cache.Dispose();
 
     internal static string HashOf(string address) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(address.Trim().ToLowerInvariant())));
-
-    // The cache's own expiry runs on the wall clock and only bounds memory; freshness is judged on ours.
-    private bool TryHeld(string hash, out AvatarImage? image)
-    {
-        image = null;
-        if (!cache.TryGetValue(hash, out Answer? answer) || clock.GetUtcNow() >= answer!.ExpiresAt) return false;
-        image = answer.Image;
-        return true;
-    }
-
-    private async Task<AvatarImage?> LookUpAsync(string hash)
-    {
-        try
-        {
-            // A lookup that finished between the caller's check and this one has already answered.
-            if (TryHeld(hash, out var held)) return held;
-
-            var (image, lifetime) = await FetchAsync(hash);
-            cache.Set(hash, new Answer(image, clock.GetUtcNow() + lifetime), new MemoryCacheEntryOptions
-            {
-                Size = image?.Bytes.Length ?? AnswerWithoutImageCost,
-                AbsoluteExpirationRelativeToNow = lifetime
-            });
-            return image;
-        }
-        finally
-        {
-            inFlight.TryRemove(hash, out _);
-        }
-    }
 
     private async Task<(AvatarImage? Image, TimeSpan Lifetime)> FetchAsync(string hash)
     {
@@ -112,6 +74,4 @@ internal sealed class GravatarService(
         logger.LogWarning("Gravatar answer refused for {Hash}: {Check} {Value}", hash, check, value);
         return (null, MissLifetime);
     }
-
-    private sealed record Answer(AvatarImage? Image, DateTimeOffset ExpiresAt);
 }

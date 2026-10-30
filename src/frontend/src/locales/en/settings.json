@@ -120,7 +120,7 @@
     },
     "avatars": {
       "label": "Show sender avatars",
-      "hint": "Show a picture or the initials of the sender at the left of each message. The sender's address is checked against Gravatar through the server.",
+      "hint": "Show a picture or the initials of the sender at the left of each message. The sender's address is checked against Gravatar and, for messages that pass DMARC (the sender authenticity check), the sender's domain is looked up for its brand logo, both through the server.",
       "on": "Sender avatars are shown",
       "off": "Sender avatars are hidden"
     },

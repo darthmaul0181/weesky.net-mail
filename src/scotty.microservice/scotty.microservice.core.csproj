@@ -62,6 +62,7 @@
     <PackageReference Include="CryptSharp.Core" Version="2.0.0" />
     <PackageReference Include="CSharpFunctionalExtensions" Version="2.27.1" />
     <PackageReference Include="dbup-mysql" Version="6.1.0" />
+    <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="FolkerKinzel.VCards" Version="8.2.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.1.949-beta" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
@@ -70,6 +71,8 @@
     <PackageReference Include="MsgKit" Version="3.0.5" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.148.0" />
+    <PackageReference Include="Svg.Skia" Version="5.2.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="10.2.3" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.17.0" />

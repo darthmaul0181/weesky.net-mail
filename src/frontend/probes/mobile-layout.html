@@ -822,9 +822,11 @@
     // shortens, read at 320 and under touch emulation too. No rule enlarges the toggle under touch:
     // it stays 26x26 and reads `undersized`, as it does on the avatar-less thread rows above.
     // `width` reads the sender and the two badges, which that line squeezes first.
+    // `logo: true` draws a BIMI logo, a transparent PNG, in the photo box: height, avatar column and
+    // clipping must read as with the initials.
     // `actions: false` is an account with `mail.rowActions` empty: no cluster, `--row-actions:0`.
-    const avatarRow = ({ width, wide, avatar, member = false, thread = false, actions = true, draft = true }) => {
-      const box = avatar ? '<div class="message-row-avatar is-sender" aria-hidden="true" style="--avatar-h:212">AM</div>' : ''
+    const avatarRow = ({ width, wide, avatar, member = false, thread = false, actions = true, draft = true, logo = false }) => {
+      const box = logo ? `<div class="message-row-avatar is-photo" aria-hidden="true"><img alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAA7ElEQVR4nO3Syw3CMBBF0VTCmiKohIopgl7CCikgJDT2fJ4z90rexn5H2TYiIiIiIorscbnt1lP95ulGRp8Cw3P4chCR4+URMsZLImQOl4OoHC+BUD2+FKB6eCmC18Ov9+d6CLOD/x15hKjhHhCnGS+LkDl+FEEGwGP8CMLpxssgAFA43ooAAAAA1ABEjrcglAG0/wMAAACAMATL/QBEVYUgMd4K4IVgvVMKYBZh5L5QgEwEyfGjABaIme+nAMwifIN4fSttvDfCkuOVEMrGAyCAUL39o7bDj7Ue/671+GNth/+q5WgiIiIiEu4FnwP9Gt12XswAAAAASUVORK5CYII="></div>` : avatar ? '<div class="message-row-avatar is-sender" aria-hidden="true" style="--avatar-h:212">AM</div>' : ''
       const toggle = `
                     <span class="message-row-thread-count" title="2 messages in this conversation">2</span>
                     <button type="button" class="row-btn thread-toggle" aria-expanded="false" aria-label="Expand conversation">
@@ -893,6 +895,8 @@
       ['avatar-thread-head-high-on-320 (read at 320x640)', { width: 320, wide: false, avatar: true, thread: true, draft: false }],
       ['avatar-thread-head-off-320 (read at 320x640)', { width: 320, wide: false, avatar: false, thread: true }],
       ['avatar-loaded-on-320 (read at 320x640)', { width: 320, wide: false, avatar: true }],
+      ['avatar-logo-on-360', { width: 360, wide: false, avatar: true, logo: true }],
+      ['avatar-logo-wide-on-1024 (read at 1024x768)', { width: 1000, wide: true, avatar: true, logo: true }],
       ['avatar-no-actions-on-360', { width: 360, wide: false, avatar: true, actions: false }],
     ]) CASES.push({
       name, html: avatarRow(options), height: '.message-row',

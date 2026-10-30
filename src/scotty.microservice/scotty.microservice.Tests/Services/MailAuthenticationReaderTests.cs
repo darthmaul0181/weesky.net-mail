@@ -164,4 +164,33 @@ public sealed class MailAuthenticationReaderTests
 
         Assert.Equal("pass", result!.Dkim);
     }
+
+    [Fact]
+    public void DmarcPassDomain_TopmostPass_ReturnsHeaderFromDomain() =>
+        Assert.Equal("claude.com", MailAuthenticationReader.DmarcPassDomain(
+            Headers("mx.weesky.net; spf=pass; dmarc=pass header.from=claude.com")));
+
+    [Fact]
+    public void DmarcPassDomain_PassOnlyInLowerHeader_ReturnsNull() =>
+        Assert.Null(MailAuthenticationReader.DmarcPassDomain(
+            Headers("mx.weesky.net; spf=pass", "relay.net; dmarc=pass header.from=claude.com")));
+
+    [Fact]
+    public void DmarcPassDomain_TopmostFail_ReturnsNull() =>
+        Assert.Null(MailAuthenticationReader.DmarcPassDomain(
+            Headers("mx.weesky.net; dmarc=fail header.from=claude.com", "relay.net; dmarc=pass header.from=claude.com")));
+
+    [Fact]
+    public void DmarcPassDomain_NoHeaderFromProperty_ReturnsNull() =>
+        Assert.Null(MailAuthenticationReader.DmarcPassDomain(Headers("mx.weesky.net; dmarc=pass")));
+
+    [Fact]
+    public void DmarcPassDomain_UpperCaseAndTrailingDot_IsNormalised() =>
+        Assert.Equal("paypal.com", MailAuthenticationReader.DmarcPassDomain(
+            Headers("mx.weesky.net; dmarc=pass header.from=PayPal.COM.")));
+
+    [Fact]
+    public void DmarcPassDomain_HeaderFromIsAnAddress_ReturnsNull() =>
+        Assert.Null(MailAuthenticationReader.DmarcPassDomain(
+            Headers("mx.weesky.net; dmarc=pass header.from=a@claude.com")));
 }

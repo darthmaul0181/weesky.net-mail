@@ -1193,3 +1193,25 @@ describe('contact batches', () => {
     expect(sentJson(options)).toEqual({ ids: ['a'], isFavorite: true })
   })
 })
+
+describe('getBimiLogo', () => {
+  async function urlOf(domain: string, selector?: string) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 200, ok: true, headers: { get: () => null },
+      blob: () => Promise.resolve(new Blob(['x'])), text: () => Promise.resolve(''),
+    }))
+    const { api } = await import('./api.js')
+    await api.getBimiLogo(domain, selector)
+    return String(fetchCall()[0])
+  }
+
+  it('encodes the domain and the selector', async () => {
+    const url = await urlOf('bücher&x=1.example', 'sel #1')
+    expect(url).toContain('/api/Avatars/Bimi?domain=b%C3%BCcher%26x%3D1.example&selector=sel%20%231')
+  })
+
+  it('leaves the selector out of the query when there is none', async () => {
+    const url = await urlOf('brand.com')
+    expect(url).toMatch(/\/api\/Avatars\/Bimi\?domain=brand\.com$/)
+  })
+})

@@ -39,4 +39,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     path: ['rail:settings', 'settings:mail'], target: 'mail:show-avatars',
     href: '/settings/mail',
   },
+  {
+    id: 'bimi-logos', version: '2.7.0',
+    path: ['rail:settings', 'settings:mail'], target: 'mail:show-avatars',
+    href: '/settings/mail',
+  },
 ]

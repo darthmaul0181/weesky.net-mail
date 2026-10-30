@@ -35,6 +35,7 @@ internal static class MailMessageMapper
         summary.Size = item.Size ?? 0;
         summary.Preview = item.PreviewText ?? string.Empty;
         summary.Priority = item.Headers is { } headers ? MailPriorityReader.Parse(headers) : MailPriority.Normal;
+        (summary.BimiDomain, summary.BimiSelector) = item.Headers is { } fetchedHeaders ? MailBimiHint.Parse(fetchedHeaders) : (null, null);
         return summary;
     }
 

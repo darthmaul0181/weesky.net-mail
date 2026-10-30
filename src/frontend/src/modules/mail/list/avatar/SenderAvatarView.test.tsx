@@ -41,11 +41,18 @@ describe('SenderAvatar', () => {
 
   it('requests nothing until the box nears the list scroller', () => {
     const { container } = render(<div className="mail-list-scroll"><SenderAvatar address="a@x.be" color="mono" /></div>)
-    expect(hook).toHaveBeenLastCalledWith('a@x.be', false)
+    expect(hook).toHaveBeenLastCalledWith('a@x.be', false, undefined)
     const observer = IntersectionObserver as unknown as { instances: Array<{ trigger(): void; options: IntersectionObserverInit }> }
     expect(observer.instances[0]!.options.rootMargin).toBe('1700px 0px')
     expect(observer.instances[0]!.options.root).toBe(container.firstChild)
     act(() => observer.instances[0]!.trigger())
-    expect(hook).toHaveBeenLastCalledWith('a@x.be', true)
+    expect(hook).toHaveBeenLastCalledWith('a@x.be', true, undefined)
+  })
+
+  it('hands the BIMI hint to the hook, and none without a domain', () => {
+    render(<SenderAvatar address="a@brand.com" color="mono" bimiDomain="brand.com" bimiSelector="sel" />)
+    expect(hook).toHaveBeenLastCalledWith('a@brand.com', false, { domain: 'brand.com', selector: 'sel' })
+    render(<SenderAvatar address="a@x.be" color="mono" bimiSelector="sel" />)
+    expect(hook).toHaveBeenLastCalledWith('a@x.be', false, undefined)
   })
 })

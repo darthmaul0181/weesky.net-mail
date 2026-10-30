@@ -48,14 +48,18 @@ describe('usePreferences', () => {
   it('forgets the cached pictures when the avatars switch is saved, and only then', async () => {
     mocks.setPreference.mockResolvedValue(undefined)
     const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const bimiMiss = ['avatar', 'bimi', 'brand.com', 'default']
+    client.setQueryData(bimiMiss, null)
     const { result } = renderHook(() => useSetPreference(), { wrapper })
 
     result.current.mutate({ key: PREFERENCE_KEYS.pageSize, value: '10' })
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['mail'] }))
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['avatar'] })
+    expect(client.getQueryState(bimiMiss)?.isInvalidated).toBe(false)
 
     result.current.mutate({ key: PREFERENCE_KEYS.showAvatars, value: 'true' })
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['avatar'] }))
+    expect(client.getQueryState(bimiMiss)?.isInvalidated).toBe(true)
   })
 
   it('leaves the caches alone when the write fails', async () => {

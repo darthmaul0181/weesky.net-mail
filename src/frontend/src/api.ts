@@ -267,6 +267,10 @@ export const api = {
   getAvatar: (address: string): Promise<Blob | null> =>
     requestBlob(`/api/Avatars?address=${encodeURIComponent(address)}`).then(({ blob }) => blob, nullOn404),
 
+  getBimiLogo: (domain: string, selector?: string): Promise<Blob | null> =>
+    requestBlob(`/api/Avatars/Bimi?domain=${encodeURIComponent(domain)}${selector ? `&selector=${encodeURIComponent(selector)}` : ''}`)
+      .then(({ blob }) => blob, nullOn404),
+
   createContact: (contact: ContactDraft) =>
     request<Contact>('POST', '/api/Contacts', contact),
 

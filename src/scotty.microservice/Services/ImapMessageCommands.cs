@@ -402,20 +402,13 @@ internal sealed class ImapMessageCommands(
         MessageSummaryItems.Size | MessageSummaryItems.BodyStructure | MessageSummaryItems.InternalDate |
         MessageSummaryItems.PreviewText;
 
-    /// <summary>
-    /// Priority is not in the envelope, so the summary FETCH has to name its headers. On the wire
-    /// this is one BODY.PEEK[HEADER.FIELDS (...)] alongside the items above — one more item in the
-    /// same round trip, not a second request, and the price of showing priority in the list at all.
-    /// </summary>
-    private static readonly string[] SummaryHeaders = MailPriorityReader.Fields;
-
     private Task<IList<IMessageSummary>> FetchSummariesAsync(
         IMailFolder folder, IList<UniqueId> uids, CancellationToken cancellationToken) =>
-        WithPreviewFallbackAsync(folder, items => folder.FetchAsync(uids, items, SummaryHeaders, cancellationToken));
+        WithPreviewFallbackAsync(folder, items => folder.FetchAsync(uids, items, MailBimiHint.Fields, cancellationToken));
 
     private Task<IList<IMessageSummary>> FetchSummariesAsync(
         IMailFolder folder, int start, int end, CancellationToken cancellationToken) =>
-        WithPreviewFallbackAsync(folder, items => folder.FetchAsync(start, end, items, SummaryHeaders, cancellationToken));
+        WithPreviewFallbackAsync(folder, items => folder.FetchAsync(start, end, items, MailBimiHint.Fields, cancellationToken));
 
     /// <summary>
     /// A server without PREVIEW (RFC 8970) gets its previews emulated by MailKit as partial body
