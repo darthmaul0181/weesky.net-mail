@@ -565,7 +565,8 @@ a.dropdown-item { text-decoration: none; }
 }
 /* The last row's 12px bottom margin collapses into this one, so this value IS the gap between
    two groups — 26px against the 12px between rows was too close to read as a break. */
-.account-section { margin-bottom: 38px; max-width: 760px; }
+.account-section, .settings-page > .field-h.is-setting { max-width: 760px; }
+.account-section { margin-bottom: 38px; }
 /* 13px, not more: at 14px the caps stand optically taller than the 14px row labels and the
    heading stops reading as their heading. The muted colour is what keeps it subordinate. */
 .account-section h2 {
@@ -646,6 +647,14 @@ a.dropdown-item { text-decoration: none; }
   color: var(--text);
   text-transform: none;
   letter-spacing: 0;
+}
+
+/* A row that explains itself takes the width the section leaves, the control standing at its
+   right edge: a fixed 300px column wrapped every hint to three lines inside 760px. */
+.field-h.is-setting > .setting-label:has(.setting-hint) {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
 }
 
 .setting-label > label { cursor: pointer; }
@@ -1467,6 +1476,7 @@ a.dropdown-item { text-decoration: none; }
      `<span class="setting-label">` never matches — the 300px wrapper survived rotation (measured
      clip). `.field-h.is-setting`'s own 260px column needs no companion rule: it already fits. */
   .field-h.is-setting > .setting-label { width: auto; }
+  .field-h.is-setting > .setting-label:has(.setting-hint) { flex: none; }
 
   /* Three 86-92px cards and two 12px gaps. At 360 they fit the rotated row and this changes
      nothing; at 320 they run 30px past it, measured with every other rule here in place. */
