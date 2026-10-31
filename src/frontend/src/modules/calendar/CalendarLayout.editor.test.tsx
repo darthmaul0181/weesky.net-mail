@@ -145,7 +145,7 @@ describe('CalendarLayout — sowing and saving the editor', () => {
     expect(api.updateEvent).toHaveBeenLastCalledWith('e1', expect.objectContaining({ ifHash: 'h1' }))
 
     await router.navigate('/calendar/e1/edit?view=week&date=2026-09-16')
-    await settle()
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2))
     land()
     await user.click(await screen.findByRole('button', { name: 'Save' }))
     await waitFor(() => expect(api.updateEvent).toHaveBeenCalledTimes(2))
