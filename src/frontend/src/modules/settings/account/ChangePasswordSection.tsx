@@ -51,7 +51,8 @@ function ChangePasswordDialog({ warnsAboutSync, onClose, onDone }: ChangePasswor
   }
 
   return (
-    <Modal title={t('account.changePassword')} icon={<KeyIcon />} onClose={onClose} busy={loading}
+    <Modal className="change-password-modal" title={t('account.changePassword')} icon={<KeyIcon />}
+      onClose={onClose} busy={loading}
       initialFocusRef={oldPasswordRef} onSubmit={e => void handleSubmit(e)}>
       {warnsAboutSync && (
         <p className="alert alert-warn">

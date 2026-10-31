@@ -595,6 +595,9 @@ a.dropdown-item { text-decoration: none; }
 .account-domains { list-style: none; margin: 0; padding: 0; }
 .account-domains li { padding: 2px 0; }
 
+/* The warning sets this dialog's width: the 34ch measure left the fields narrower than the submit. */
+.change-password-modal { --field-w: 100%; }
+
 /* One welded control per exclusive choice: the lit segment wears --action-primary, the action
    chips' "this one is live" language. The radios stay real inputs, visually hidden rather than
    unmounted, so the group keeps its arrow-key navigation and its focus ring. */
