@@ -34,31 +34,48 @@ jobs:
               - 'src/scotty.microservice.sln'
               - 'src/Directory.Build.props'
 
-  ci-frontend:
+  test-frontend:
     needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: src/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/frontend-install
+      - name: Test
+        run: npx vitest run --coverage --shard=${{ matrix.shard }}/3 --reporter=blob --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: src/frontend/.vitest-reports
+          retention-days: 1
+
+  coverage-frontend:
+    needs: [detect-changes, test-frontend]
     if: needs.detect-changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-
     defaults:
       run:
         working-directory: src/frontend
-
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/frontend-install
+      - uses: actions/download-artifact@v4
         with:
-          node-version: 24.x
-          cache: npm
-          cache-dependency-path: src/frontend/package-lock.json
-      - name: Install dependencies
-        run: npm install
-      - name: Lint
-        run: npm run lint
-      - name: Test
-        run: npm run test:coverage
+          pattern: vitest-blob-*
+          path: src/frontend/.vitest-reports
+          merge-multiple: true
+      - name: Merge the shards
+        run: npx vitest --merge-reports --coverage
       - name: Coverage summary
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
@@ -80,6 +97,23 @@ jobs:
           number: ${{ steps.pr.outputs.number }}
           recreate: true
           path: code-coverage-results.md
+
+  ci-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: src/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/frontend-install
+      - name: Lint
+        run: npm run lint
       - name: Create env files
         run: |
           echo "VITE_API_BASE=${{ secrets.API_ENDPOINT_PROD }}" > .env.production
@@ -153,13 +187,13 @@ jobs:
           retention-days: 1
 
   ci-result:
-    needs: [ci-frontend, ci-backend]
+    needs: [ci-frontend, test-frontend, coverage-frontend, ci-backend]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check CI results
         run: |
-          if [[ "${{ needs.ci-frontend.result }}" == "failure" || \
+          if [[ "${{ needs.ci-frontend.result }}" == "failure" ||                 "${{ needs.test-frontend.result }}" == "failure" ||                 "${{ needs.coverage-frontend.result }}" == "failure" || \
                 "${{ needs.ci-backend.result }}" == "failure" ]]; then
             exit 1
           fi
