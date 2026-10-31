@@ -541,8 +541,7 @@ body {
 
 .identities-hint { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
 
-/* The identities area is deliberately narrow — about half the settings width. */
-.identity-panel { max-width: 50%; }
+.identity-panel { max-width: 760px; }
 .identity-panel .admin-list-header { justify-content: flex-start; gap: 14px; }
 
 /* Identity tiles reuse the Administration list; the star leads on the left, the name and address
@@ -589,7 +588,7 @@ body {
 
 /* ── Connected accounts page ─────────────────────────────── */
 
-.connected-accounts { max-width: 620px; }
+.connected-accounts { max-width: 760px; }
 
 /* The tile stacks where the admin list runs one row: an address, a server name and a date do
    not fit beside the 40ch name column, so the name sizes to its own text and the line under it

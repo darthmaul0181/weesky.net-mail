@@ -19,7 +19,7 @@ export default function PreferencePage({ group, toasts, children }: Props) {
   const { data: preferences, isLoading, isError } = usePreferences()
 
   return (
-    <div className="settings-page is-wide">
+    <div className="settings-page">
       <p className="settings-page-eyebrow">{group}</p>
       <div className="settings-page-header">
         <h1 className="settings-page-title"><SlidersIcon size={17} />{t('nav.general')}</h1>
