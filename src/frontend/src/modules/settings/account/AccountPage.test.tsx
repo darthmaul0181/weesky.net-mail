@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getQuota: vi.fn(),
   changeFullName: vi.fn(),
   changePassword: vi.fn(),
+  getDavCredentials: vi.fn(),
   logout: vi.fn(),
   hasSession: vi.fn(() => true),
   clearSession: vi.fn(),
@@ -26,9 +27,11 @@ vi.mock('../../../api.js', () => ({
     getQuota: mocks.getQuota,
     changeFullName: mocks.changeFullName,
     changePassword: mocks.changePassword,
+    getDavCredentials: mocks.getDavCredentials,
     logout: mocks.logout,
     getConnectedAccounts: vi.fn().mockResolvedValue([]),
   },
+  ApiError: class extends Error {},
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
@@ -44,12 +47,21 @@ function renderPage() {
   )
 }
 
+async function renderDialog(trigger = /change password/i) {
+  renderPage()
+  fireEvent.click(await screen.findByRole('button', { name: trigger }))
+}
+
+const submitButton = () =>
+  within(screen.getByRole('dialog')).getByRole('button', { name: /change password/i })
+
 const MB = 1024 * 1024
 
 describe('AccountPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.hasSession.mockReturnValue(true)
+    mocks.getDavCredentials.mockResolvedValue({ configured: true })
     mocks.getAccount.mockResolvedValue({
       userName: 'mick', mailbox: 'WSY', fullName: 'Mick', isAdmin: false,
       domains: [{ id: 'WSY', name: 'weesky.be' }, { id: 'EXT', name: 'example.org' }],
@@ -124,64 +136,62 @@ describe('AccountPage', () => {
   })
 
   it('rejects a new password shorter than 10 characters', async () => {
-    renderPage()
+    await renderDialog()
     fireEvent.change(await screen.findByLabelText(/current password/i), { target: { value: 'old-pass-123' } })
     fireEvent.change(screen.getByLabelText(/^new password/i), { target: { value: 'short' } })
     fireEvent.change(screen.getByLabelText(/confirm/i), { target: { value: 'short' } })
-    fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+    fireEvent.click(submitButton())
     expect(await screen.findByText(/at least 10 characters/i)).toBeInTheDocument()
     expect(mocks.changePassword).not.toHaveBeenCalled()
   })
 
   it('rejects mismatched confirmation', async () => {
-    renderPage()
+    await renderDialog()
     fireEvent.change(await screen.findByLabelText(/current password/i), { target: { value: 'old-pass-123' } })
     fireEvent.change(screen.getByLabelText(/^new password/i), { target: { value: 'long-enough-pw' } })
     fireEvent.change(screen.getByLabelText(/confirm/i), { target: { value: 'different-pw-99' } })
-    fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+    fireEvent.click(submitButton())
     expect(await screen.findByText(/do not match/i)).toBeInTheDocument()
     expect(mocks.changePassword).not.toHaveBeenCalled()
   })
 
   it('submits a valid password change', async () => {
     mocks.changePassword.mockResolvedValue(null)
-    renderPage()
+    await renderDialog()
     fireEvent.change(await screen.findByLabelText(/current password/i), { target: { value: 'old-pass-123' } })
     fireEvent.change(screen.getByLabelText(/^new password/i), { target: { value: 'long-enough-pw' } })
     fireEvent.change(screen.getByLabelText(/confirm/i), { target: { value: 'long-enough-pw' } })
-    fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+    fireEvent.click(submitButton())
     await waitFor(() =>
       expect(mocks.changePassword).toHaveBeenCalledWith('old-pass-123', 'long-enough-pw'))
   })
 
   it('surfaces an API error and keeps the entered values when the password change fails', async () => {
     mocks.changePassword.mockRejectedValue(new Error('boom'))
-    renderPage()
+    await renderDialog()
     const oldInput = await screen.findByLabelText(/current password/i)
     const newInput = screen.getByLabelText(/^new password/i)
     const confirmInput = screen.getByLabelText(/confirm/i)
     fireEvent.change(oldInput, { target: { value: 'old-pass-123' } })
     fireEvent.change(newInput, { target: { value: 'long-enough-pw' } })
     fireEvent.change(confirmInput, { target: { value: 'long-enough-pw' } })
-    fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+    fireEvent.click(submitButton())
     expect(await screen.findByText(/incorrect/i)).toBeInTheDocument()
     expect(oldInput).toHaveValue('old-pass-123')
     expect(newInput).toHaveValue('long-enough-pw')
     expect(confirmInput).toHaveValue('long-enough-pw')
   })
 
-  it('warns on the change-password form that the gesture turns contact sync off, and in what order', async () => {
-    // The gesture destroys the sync secret without the Sync tab being open, so the warning has to
-    // live where the gesture is — scoped to the form, or it would pass from anywhere on the page.
-    renderPage()
-    const form = (await screen.findByRole('button', { name: /change password/i })).closest('form')
-    const onForm = within(form as HTMLElement)
-
+  it('warns in the dialog that the gesture stops the devices, and in what order', async () => {
     // RotateSecurityStampAsync deletes the dav_credentials row rather than re-keying it, so there
     // is no new password to enter; and devices left retrying take 401s that AuthAttemptThrottle
     // counts, with IsBlocked running before the digest comparison. Hence the order.
-    expect(onForm.getByText(/turns contact sync off/i)).toBeInTheDocument()
-    expect(onForm.getByText(/Turn syncing off on your devices first/i)).toBeInTheDocument()
+    await renderDialog()
+    const dialog = within(screen.getByRole('dialog'))
+
+    expect(dialog.getByText('Your devices will stop syncing.')).toBeInTheDocument()
+    expect(dialog.getByText(/Turn syncing off on each one first/i)).toBeInTheDocument()
+    expect(dialog.getByRole('link', { name: 'Sync' })).toHaveAttribute('href', '/settings/sync')
   })
 
   // Parity checks keys and typography, never prose, so the order clause could be dropped in French
@@ -189,22 +199,33 @@ describe('AccountPage', () => {
   it('states the order in French too, not only that sync goes off', async () => {
     await i18next.changeLanguage('fr')
     try {
-      renderPage()
-      const form = (await screen.findByRole('button', { name: /modifier le mot de passe/i })).closest('form')
+      await renderDialog(/modifier le mot de passe/i)
 
-      expect(within(form as HTMLElement)
-        .getByText(/Désactivez d’abord la synchronisation sur vos appareils/)).toBeInTheDocument()
+      expect(within(screen.getByRole('dialog'))
+        .getByText(/Coupez d’abord la synchronisation sur chacun/)).toBeInTheDocument()
     } finally {
       cleanup()
       await i18next.changeLanguage('en')
     }
   })
 
+  it('closes the dialog and confirms once the password is changed', async () => {
+    mocks.changePassword.mockResolvedValue(null)
+    await renderDialog()
+    fireEvent.change(screen.getByLabelText(/current password/i), { target: { value: 'old-pass-123' } })
+    fireEvent.change(screen.getByLabelText(/^new password/i), { target: { value: 'long-enough-pw' } })
+    fireEvent.change(screen.getByLabelText(/confirm new password/i), { target: { value: 'long-enough-pw' } })
+    fireEvent.click(submitButton())
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await screen.findByText('Password changed')).toBeInTheDocument()
+  })
+
   it('blocks submission when the current password is empty', async () => {
-    renderPage()
+    await renderDialog()
     fireEvent.change(await screen.findByLabelText(/^new password/i), { target: { value: 'long-enough-pw' } })
     fireEvent.change(screen.getByLabelText(/confirm/i), { target: { value: 'long-enough-pw' } })
-    fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+    fireEvent.click(submitButton())
     expect(await screen.findByText(/current password is required/i)).toBeInTheDocument()
     expect(mocks.changePassword).not.toHaveBeenCalled()
   })
@@ -212,7 +233,7 @@ describe('AccountPage', () => {
   describe('capability gating', () => {
     it('hides the change-password section when the platform does not wire it up', async () => {
       mocks.getCapabilities.mockResolvedValue({ passwordChange: false })
-      renderPage()
+      await renderDialog()
       await screen.findByText('mick@weesky.be')
       await waitFor(() => expect(screen.queryByText('Change password')).not.toBeInTheDocument())
       expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument()
@@ -220,7 +241,7 @@ describe('AccountPage', () => {
 
     it('hides the name-editing pencil when the platform does not wire profile editing up', async () => {
       mocks.getCapabilities.mockResolvedValue({ profileEditing: false })
-      renderPage()
+      await renderDialog()
       await screen.findByText('mick@weesky.be')
       await waitFor(() =>
         expect(screen.queryByRole('button', { name: /edit name/i })).not.toBeInTheDocument())

@@ -595,10 +595,6 @@ a.dropdown-item { text-decoration: none; }
 .account-domains { list-style: none; margin: 0; padding: 0; }
 .account-domains li { padding: 2px 0; }
 
-/* width:auto undoes .btn-primary's 100%, which is meant for a form filling a narrow dialog;
-   here it stretched the button across the whole settings column. */
-.change-password-form .btn { width: auto; }
-
 /* One welded control per exclusive choice: the lit segment wears --action-primary, the action
    chips' "this one is live" language. The radios stay real inputs, visually hidden rather than
    unmounted, so the group keeps its arrow-key navigation and its focus ring. */

@@ -258,10 +258,11 @@ body {
 }
 
 .alert-error { --status-tone: var(--danger); }
+.alert-warn { --status-tone: var(--warning); }
 
 /* Status text mixes in --text: straight --success is 3.2:1 on a light surface. A toast's fill is
    opaque since it floats over anything. */
-.alert-error, .toast-success, .toast-error, .svc-account-pill.is-ok, .svc-account-pill.is-fail,
+.alert-error, .alert-warn, .toast-success, .toast-error, .svc-account-pill.is-ok, .svc-account-pill.is-fail,
 .svc-account-test-result.is-ok, .svc-account-test-result.is-fail, .contact-scopes-error,
 .calendar-sidebar-error, .message-row-draft, .contact-editor-photo-error, .compose-attachment-error,
 .invitation-card-badge.is-cancel, .invitation-card-error, .invitation-card .btn-danger,
@@ -269,7 +270,7 @@ body {
 .logo-warning {
   color: color-mix(in oklab, var(--status-tone) 55%, var(--text));
 }
-.alert-error, .toast-success, .toast-error {
+.alert-error, .alert-warn, .toast-success, .toast-error {
   background: color-mix(in oklab, var(--status-tone) 12%, var(--surface));
   border: 1px solid color-mix(in oklab, var(--status-tone) 30%, var(--surface));
 }

@@ -47,6 +47,7 @@ vi.mock('../../api.js', () => ({
     getWhatsNew: mocks.getWhatsNew,
     markWhatsNew: mocks.markWhatsNew,
   },
+  ApiError: class extends Error {},
   hasSession: mocks.hasSession,
   clearSession: mocks.clearSession,
   setUnauthorizedHandler: mocks.setUnauthorizedHandler,
