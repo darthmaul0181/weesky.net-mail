@@ -649,10 +649,11 @@ a.dropdown-item { text-decoration: none; }
   letter-spacing: 0;
 }
 
-/* A row that explains itself takes the width the section leaves, the control standing at its
-   right edge: a fixed 300px column wrapped every hint to three lines inside 760px. */
+/* A row that explains itself gets a 480px column, not the section's whole width: measured on
+   the Mail page, 300px wrapped hints to three lines while the full 760px left a switch 400px
+   from its own label. 480 keeps every control in one column and wraps only the longest hints. */
 .field-h.is-setting > .setting-label:has(.setting-hint) {
-  flex: 1 1 0;
+  flex: 0 1 480px;
   width: auto;
   min-width: 0;
 }
