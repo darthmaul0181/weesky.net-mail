@@ -54,6 +54,7 @@ jobs:
         with:
           name: vitest-blob-${{ matrix.shard }}
           path: src/frontend/.vitest-reports
+          include-hidden-files: true
           retention-days: 1
 
   coverage-frontend:
