@@ -32,12 +32,16 @@
     "currentPassword": "Current password",
     "newPassword": "New password",
     "confirmNewPassword": "Confirm new password",
+    "passwordLabel": "Sign-in password",
+    "passwordHint": "The one that opens your mailbox.",
+    "passwordHintSync": "Changing it stops your devices from syncing.",
+    "changePasswordOpen": "Change…",
     "changePassword": "Change password",
     "currentPasswordRequired": "Current password is required.",
     "newPasswordTooShort": "New password must be at least 10 characters.",
     "passwordsDoNotMatch": "Passwords do not match.",
     "currentPasswordIncorrect": "Current password is incorrect.",
-    "passwordResetsSync": "Changing your password turns contact sync off: the sync password is deleted, not replaced. Turn syncing off on your devices first, then switch it back on in the Sync tab to get a new one — devices left retrying lock the account out for fifteen minutes."
+    "passwordResetsSync": "<strong>Your devices will stop syncing.</strong> Turn syncing off on each one first, or their attempts lock the account for fifteen minutes. Then turn it back on in <syncLink>Sync</syncLink> to get a new password."
   },
   "appearance": {
     "language": {
@@ -120,7 +124,7 @@
     },
     "avatars": {
       "label": "Show sender avatars",
-      "hint": "Show a picture or the initials of the sender at the left of each message. The sender's address is checked against Gravatar and, for messages that pass DMARC (the sender authenticity check), the sender's domain is looked up for its brand logo, both through the server.",
+      "hint": "Show the sender's picture (Gravatar), brand logo or initials at the left of each message.",
       "on": "Sender avatars are shown",
       "off": "Sender avatars are hidden"
     },
@@ -146,7 +150,6 @@
       "intro": "Swipe a message in the list to act on it without opening it. Touch screens only.",
       "right": "Swipe right",
       "left": "Swipe left",
-      "offHint": "Choose None on both sides to turn swiping off.",
       "none": "None",
       "seen": "Read / unread",
       "flag": "Star / unstar",

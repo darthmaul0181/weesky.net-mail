@@ -32,12 +32,16 @@
     "currentPassword": "Mot de passe actuel",
     "newPassword": "Nouveau mot de passe",
     "confirmNewPassword": "Confirmer le nouveau mot de passe",
+    "passwordLabel": "Mot de passe de connexion",
+    "passwordHint": "Celui qui ouvre votre boîte mail.",
+    "passwordHintSync": "Le modifier interrompt la synchronisation de vos appareils.",
+    "changePasswordOpen": "Modifier…",
     "changePassword": "Modifier le mot de passe",
     "currentPasswordRequired": "Le mot de passe actuel est requis.",
     "newPasswordTooShort": "Le nouveau mot de passe doit compter au moins 10 caractères.",
     "passwordsDoNotMatch": "Les mots de passe ne correspondent pas.",
     "currentPasswordIncorrect": "Le mot de passe actuel est incorrect.",
-    "passwordResetsSync": "Changer votre mot de passe désactive la synchronisation des contacts : le mot de passe de synchronisation est supprimé, pas remplacé. Désactivez d’abord la synchronisation sur vos appareils, puis réactivez-la dans l’onglet Synchronisation pour en obtenir un nouveau — des appareils qui continuent d’essayer bloquent le compte un quart d’heure."
+    "passwordResetsSync": "<strong>Vos appareils cesseront de se synchroniser.</strong> Coupez d’abord la synchronisation sur chacun, sinon leurs essais bloquent le compte un quart d’heure. Réactivez-la ensuite dans <syncLink>Synchronisation</syncLink> pour obtenir un nouveau mot de passe."
   },
   "appearance": {
     "language": {
@@ -120,7 +124,7 @@
     },
     "avatars": {
       "label": "Afficher les avatars des expéditeurs",
-      "hint": "Affiche une photo ou les initiales de l’expéditeur à gauche de chaque message. L’adresse de l’expéditeur est vérifiée auprès de Gravatar et, pour les messages qui passent DMARC (la vérification d’authenticité de l’expéditeur), le domaine de l’expéditeur est consulté pour y trouver le logo de sa marque, le tout par l’intermédiaire du serveur.",
+      "hint": "Affiche à gauche de chaque message la photo de l’expéditeur (Gravatar), son logo de marque ou ses initiales.",
       "on": "Les avatars des expéditeurs sont affichés",
       "off": "Les avatars des expéditeurs sont masqués"
     },
@@ -146,7 +150,6 @@
       "intro": "Glissez un message dans la liste pour agir sans l’ouvrir. Écrans tactiles uniquement.",
       "right": "Glisser vers la droite",
       "left": "Glisser vers la gauche",
-      "offHint": "Choisissez Aucune des deux côtés pour désactiver le glissement.",
       "none": "Aucune",
       "seen": "Lu / non lu",
       "flag": "Suivre / ne plus suivre",

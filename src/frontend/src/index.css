@@ -258,10 +258,12 @@ body {
 }
 
 .alert-error { --status-tone: var(--danger); }
+.alert-warn { --status-tone: var(--warning); }
+.alert a { color: inherit; }
 
 /* Status text mixes in --text: straight --success is 3.2:1 on a light surface. A toast's fill is
    opaque since it floats over anything. */
-.alert-error, .toast-success, .toast-error, .svc-account-pill.is-ok, .svc-account-pill.is-fail,
+.alert-error, .alert-warn, .toast-success, .toast-error, .svc-account-pill.is-ok, .svc-account-pill.is-fail,
 .svc-account-test-result.is-ok, .svc-account-test-result.is-fail, .contact-scopes-error,
 .calendar-sidebar-error, .message-row-draft, .contact-editor-photo-error, .compose-attachment-error,
 .invitation-card-badge.is-cancel, .invitation-card-error, .invitation-card .btn-danger,
@@ -269,7 +271,7 @@ body {
 .logo-warning {
   color: color-mix(in oklab, var(--status-tone) 55%, var(--text));
 }
-.alert-error, .toast-success, .toast-error {
+.alert-error, .alert-warn, .toast-success, .toast-error {
   background: color-mix(in oklab, var(--status-tone) 12%, var(--surface));
   border: 1px solid color-mix(in oklab, var(--status-tone) 30%, var(--surface));
 }
@@ -541,8 +543,7 @@ body {
 
 .identities-hint { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
 
-/* The identities area is deliberately narrow — about half the settings width. */
-.identity-panel { max-width: 50%; }
+.identity-panel { max-width: 760px; }
 .identity-panel .admin-list-header { justify-content: flex-start; gap: 14px; }
 
 /* Identity tiles reuse the Administration list; the star leads on the left, the name and address
@@ -589,7 +590,7 @@ body {
 
 /* ── Connected accounts page ─────────────────────────────── */
 
-.connected-accounts { max-width: 620px; }
+.connected-accounts { max-width: 760px; }
 
 /* The tile stacks where the admin list runs one row: an address, a server name and a date do
    not fit beside the 40ch name column, so the name sizes to its own text and the line under it

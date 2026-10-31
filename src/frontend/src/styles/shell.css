@@ -565,7 +565,8 @@ a.dropdown-item { text-decoration: none; }
 }
 /* The last row's 12px bottom margin collapses into this one, so this value IS the gap between
    two groups — 26px against the 12px between rows was too close to read as a break. */
-.account-section { margin-bottom: 38px; max-width: 560px; }
+.account-section, .settings-page > .field-h.is-setting { max-width: 760px; }
+.account-section { margin-bottom: 38px; }
 /* 13px, not more: at 14px the caps stand optically taller than the 14px row labels and the
    heading stops reading as their heading. The muted colour is what keeps it subordinate. */
 .account-section h2 {
@@ -594,9 +595,8 @@ a.dropdown-item { text-decoration: none; }
 .account-domains { list-style: none; margin: 0; padding: 0; }
 .account-domains li { padding: 2px 0; }
 
-/* width:auto undoes .btn-primary's 100%, which is meant for a form filling a narrow dialog;
-   here it stretched the button across the whole settings column. */
-.change-password-form .btn { width: auto; }
+/* The warning sets this dialog's width: the 34ch measure left the fields narrower than the submit. */
+.change-password-modal { --field-w: 100%; }
 
 /* One welded control per exclusive choice: the lit segment wears --action-primary, the action
    chips' "this one is live" language. The radios stay real inputs, visually hidden rather than
@@ -646,6 +646,15 @@ a.dropdown-item { text-decoration: none; }
   color: var(--text);
   text-transform: none;
   letter-spacing: 0;
+}
+
+/* A row that explains itself gets a 480px column, not the section's whole width: measured on
+   the Mail page, 300px wrapped hints to three lines while the full 760px left a switch 400px
+   from its own label. 480 keeps every control in one column and wraps only the longest hints. */
+.field-h.is-setting > .setting-label:has(.setting-hint) {
+  flex: 0 1 480px;
+  width: auto;
+  min-width: 0;
 }
 
 .setting-label > label { cursor: pointer; }
@@ -1467,6 +1476,7 @@ a.dropdown-item { text-decoration: none; }
      `<span class="setting-label">` never matches — the 300px wrapper survived rotation (measured
      clip). `.field-h.is-setting`'s own 260px column needs no companion rule: it already fits. */
   .field-h.is-setting > .setting-label { width: auto; }
+  .field-h.is-setting > .setting-label:has(.setting-hint) { flex: none; }
 
   /* Three 86-92px cards and two 12px gaps. At 360 they fit the rotated row and this changes
      nothing; at 320 they run 30px past it, measured with every other rule here in place. */
