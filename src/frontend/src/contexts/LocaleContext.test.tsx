@@ -23,6 +23,9 @@ vi.mock('../api.js', () => ({ api: mocks }))
 
 vi.mock('./AuthContext', () => ({ useAuth: () => ({ isLoggedIn: true }) }))
 
+const reload = vi.hoisted(() => vi.fn())
+vi.mock('../lib/reloadPage', () => ({ reloadPage: reload }))
+
 // The default behaviour is the real loadLocale — only the reload test below overrides it, so the
 // other cases in this file keep exercising the genuine dynamic-import path.
 vi.mock('../lib/i18n', async (importOriginal) => {
@@ -108,8 +111,6 @@ describe('LocaleProvider', () => {
   // the old language; a reload is the recovery, since a fresh index.html has the current hashes.
   it('reloads the page when the catalogue import fails', async () => {
     const user = setupUser()
-    const reload = vi.fn()
-    vi.stubGlobal('location', { ...window.location, reload })
     mount()
     await waitFor(() => expect(screen.getByTestId('inbox')).toHaveTextContent('Boîte de réception'))
 
@@ -119,6 +120,5 @@ describe('LocaleProvider', () => {
     await user.click(screen.getByRole('button', { name: 'to english' }))
 
     await waitFor(() => expect(reload).toHaveBeenCalled())
-    vi.unstubAllGlobals()
   })
 })

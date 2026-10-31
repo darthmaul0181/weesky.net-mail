@@ -233,7 +233,7 @@ describe('AccountPage', () => {
   describe('capability gating', () => {
     it('hides the change-password section when the platform does not wire it up', async () => {
       mocks.getCapabilities.mockResolvedValue({ passwordChange: false })
-      await renderDialog()
+      renderPage()
       await screen.findByText('mick@weesky.be')
       await waitFor(() => expect(screen.queryByText('Change password')).not.toBeInTheDocument())
       expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument()

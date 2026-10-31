@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useAuth } from './AuthContext'
 import { languageOf, usePreferences, useSetPreference, PREFERENCE_KEYS } from '../hooks/usePreferences'
 import { loadLocale } from '../lib/i18n'
+import { reloadPage } from '../lib/reloadPage'
 import {
   readLanguageMirror,
   resolveLocale,
@@ -50,7 +51,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     let current = true
     void loadLocale(resolved)
       .then(() => { if (current) setLocale(resolved) })
-      .catch(() => { if (current) location.reload() })
+      .catch(() => { if (current) reloadPage() })
     return () => { current = false }
   }, [preferences, preference, locale])
 

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRouteError } from 'react-router'
+import { reloadPage } from '../lib/reloadPage'
 import { readStored, writeStored } from '../lib/safeStorage'
 
 const RELOADED_AT = 'chunkReloadAt'
@@ -29,7 +30,7 @@ export default function RouteError() {
     // Blocked storage can't hold the guard: only a read-back that matches what was just
     // written proves it will stop the next reload.
     if (readStored(RELOADED_AT, 'session') !== marker) return
-    window.location.reload()
+    reloadPage()
   }, [stale, offline])
 
   const message = offline ? t('appError.offline') : stale ? t('appError.updated') : t('appError.message')
@@ -38,7 +39,7 @@ export default function RouteError() {
     <div className="app-error">
       <div className="modal" role="alert">
         <p style={{ margin: '0 0 20px' }}>{message}</p>
-        <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+        <button type="button" className="btn btn-primary" onClick={reloadPage}>
           {t('appError.reload')}
         </button>
       </div>

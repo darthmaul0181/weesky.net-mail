@@ -27,6 +27,7 @@ void i18next.use(initReactI18next).init({
 configure({ asyncUtilTimeout: 5000 })
 
 Object.defineProperty(window, 'matchMedia', {
+  configurable: true,
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
     matches: false,

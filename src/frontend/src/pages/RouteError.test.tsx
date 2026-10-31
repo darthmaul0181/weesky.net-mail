@@ -4,6 +4,9 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import RouteError, { isChunkLoadError } from './RouteError'
 
+const reload = vi.hoisted(() => vi.fn())
+vi.mock('../lib/reloadPage', () => ({ reloadPage: reload }))
+
 function Boom(): never {
   throw new Error('boom')
 }
@@ -28,23 +31,15 @@ function renderAt(Element: () => never) {
 }
 
 describe('RouteError', () => {
-  let reload: ReturnType<typeof vi.fn>
-  const originalLocation = Object.getOwnPropertyDescriptor(window, 'location')!
-
   beforeEach(() => {
     sessionStorage.clear()
-    reload = vi.fn()
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...window.location, reload },
-    })
+    reload.mockClear()
     vi.spyOn(console, 'error').mockImplementation(() => {})
     window.addEventListener('error', preventLog)
   })
 
   afterEach(() => {
     window.removeEventListener('error', preventLog)
-    Object.defineProperty(window, 'location', originalLocation)
     vi.restoreAllMocks()
   })
 

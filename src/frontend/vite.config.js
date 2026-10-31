@@ -175,6 +175,8 @@ export default defineConfig(({ command, mode }) => {
     },
     test: {
       environment: 'jsdom',
+      // jsdom loads once per worker rather than once per file: that reload outweighed the tests.
+      pool: 'vmThreads',
       globals: false,
       // Palette parity and the responsive contract test parse stylesheets for their actual text;
       // Vitest mocks a CSS import to '' otherwise, which passes every check vacuously. Keep this
