@@ -174,7 +174,11 @@ export default defineConfig(({ command, mode }) => {
       allowedHosts: ['.mail.weesky.net'],
     },
     test: {
-      environment: 'jsdom',
+      // `*.node.test.ts` files never touch the DOM: they skip jsdom, which costs about a second per file.
+      projects: [
+        { extends: true, test: { name: 'dom', environment: 'jsdom', setupFiles: ['./src/test-setup.ts'], include: ['src/**/*.test.{ts,tsx}'], exclude: ['**/*.node.test.ts', '**/node_modules/**'] } },
+        { extends: true, test: { name: 'node', environment: 'node', setupFiles: ['./src/test-setup.node.ts'], include: ['src/**/*.node.test.ts'] } },
+      ],
       globals: false,
       // Palette parity and the responsive contract test parse stylesheets for their actual text;
       // Vitest mocks a CSS import to '' otherwise, which passes every check vacuously. Keep this
@@ -182,7 +186,6 @@ export default defineConfig(({ command, mode }) => {
       // spans the whole styles directory, so a narrower list silently blinds it to whichever file
       // falls outside the pattern.
       css: { include: [/src\/.*\.css/] },
-      setupFiles: ['./src/test-setup.ts'],
       coverage: {
         provider: 'v8',
         reporter: ['text', 'cobertura'],
