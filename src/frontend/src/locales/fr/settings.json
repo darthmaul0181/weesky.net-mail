@@ -146,7 +146,6 @@
       "intro": "Glissez un message dans la liste pour agir sans l’ouvrir. Écrans tactiles uniquement.",
       "right": "Glisser vers la droite",
       "left": "Glisser vers la gauche",
-      "offHint": "Choisissez Aucune des deux côtés pour désactiver le glissement.",
       "none": "Aucune",
       "seen": "Lu / non lu",
       "flag": "Suivre / ne plus suivre",

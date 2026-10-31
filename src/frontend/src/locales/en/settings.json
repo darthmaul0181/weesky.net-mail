@@ -146,7 +146,6 @@
       "intro": "Swipe a message in the list to act on it without opening it. Touch screens only.",
       "right": "Swipe right",
       "left": "Swipe left",
-      "offHint": "Choose None on both sides to turn swiping off.",
       "none": "None",
       "seen": "Read / unread",
       "flag": "Star / unstar",

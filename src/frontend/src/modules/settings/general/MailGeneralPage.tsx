@@ -313,10 +313,7 @@ export default function MailGeneralPage() {
               />
             </div>
             <div className="field-h is-setting">
-              <span className="setting-label">
-                <label htmlFor="swipe-left">{t('general.swipe.left')}</label>
-                <span className="setting-hint">{t('general.swipe.offHint')}</span>
-              </span>
+              <span className="setting-label"><label htmlFor="swipe-left">{t('general.swipe.left')}</label></span>
               <MenuSelect
                 id="swipe-left"
                 value={swipeActionOf(preferences, 'left')}
