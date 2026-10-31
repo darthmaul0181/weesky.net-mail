@@ -259,6 +259,7 @@ body {
 
 .alert-error { --status-tone: var(--danger); }
 .alert-warn { --status-tone: var(--warning); }
+.alert a { color: inherit; }
 
 /* Status text mixes in --text: straight --success is 3.2:1 on a light surface. A toast's fill is
    opaque since it floats over anything. */
