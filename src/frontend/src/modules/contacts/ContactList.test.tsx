@@ -2,9 +2,16 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import { focusablesIn, tabbablesIn } from '../../lib/layerStack'
 import { setupUser } from '../../test-utils'
+import { usePreferences } from '../../hooks/usePreferences'
 import ContactList from './ContactList'
 import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
+
+vi.mock('../../components/avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: () => null }))
+vi.mock('../../hooks/usePreferences', async importOriginal => ({
+  ...await importOriginal<typeof import('../../hooks/usePreferences')>(),
+  usePreferences: vi.fn(() => ({ data: undefined })),
+}))
 
 const contact = contactOf
 
@@ -178,9 +185,10 @@ describe('ContactList', () => {
 
     const [select, content, flag, actions] =
       Array.from(screen.getByTestId('contact-tile-a').children) as [Element, Element, Element, Element]
-    const [line, address] = Array.from(content.children) as [Element, Element]
+    const [avatar, line, address] = Array.from(content.children) as [Element, Element, Element]
 
     expect(select.firstElementChild).toHaveClass('contact-tile-check')
+    expect(avatar).toHaveClass('contact-tile-avatar')
     expect(line.firstElementChild).toHaveClass('contact-tile-name')
     expect(flag.firstElementChild).toHaveClass('contact-star')
     expect(address).toHaveClass('contact-tile-address')
@@ -581,6 +589,33 @@ describe('the list as a grid', () => {
     expect(screen.queryByTestId('contact-tile-b')).toBeNull()
     expect(stopsIn(grid())).toHaveLength(1)
     expect(rowOf('a')).toContainElement(stopsIn(grid())[0]!)
+  })
+
+  describe('the avatars', () => {
+    const avatars = () => [...document.querySelectorAll('.contact-tile-avatar')]
+    const withPreferences = (data: Record<string, string>) =>
+      vi.mocked(usePreferences).mockReturnValue({ data } as unknown as ReturnType<typeof usePreferences>)
+
+    it('draws one per contact, in monochrome while the preferences have not arrived', () => {
+      setup()
+
+      expect(avatars()).toHaveLength(2)
+      expect(avatars().every(a => a.classList.contains('is-mono'))).toBe(true)
+    })
+
+    it('stays monochrome when the mail avatars are off, whatever colour the mail setting holds', () => {
+      withPreferences({ 'mail.showAvatars': 'false', 'mail.avatarColor': 'sender' })
+      setup()
+
+      expect(avatars().every(a => a.classList.contains('is-mono'))).toBe(true)
+    })
+
+    it('follows the mail colour setting once the mail avatars are on', () => {
+      withPreferences({ 'mail.showAvatars': 'true', 'mail.avatarColor': 'sender' })
+      setup()
+
+      expect(avatars().every(a => a.classList.contains('is-sender'))).toBe(true)
+    })
   })
 
   // No pager and every contact drawn, so a count here would be a lie about a list that is complete.

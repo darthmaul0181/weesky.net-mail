@@ -1,6 +1,6 @@
-import { canonicalAddress } from '../../../../lib/canonicalAddress'
+import { canonicalAddress } from '../../lib/canonicalAddress'
 
-export type { AvatarColor } from '../../../../hooks/usePreferences'
+export type { AvatarColor } from '../../hooks/usePreferences'
 
 let segmenter: Intl.Segmenter | undefined
 

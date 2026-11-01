@@ -9,6 +9,7 @@ import PersonMinusIcon from '../../icons/PersonMinusIcon'
 import SearchIcon from '../../icons/SearchIcon'
 import TrashIcon from '../../icons/TrashIcon'
 import { useForwarders } from '../../hooks/useForwarders'
+import { avatarColorOf, showAvatarsOf, usePreferences } from '../../hooks/usePreferences'
 import { useGridNav } from '../../hooks/useGridNav'
 import { buildDragPill, LIST_GLYPH, setDragPill } from '../mail/list/dragImage'
 import { useSelection } from '../mail/list/useSelection'
@@ -80,6 +81,9 @@ export default function ContactList({
   // A Set, not the array: `includes` per tile is quadratic across the book, and a drag carrying the
   // whole selection is exactly when the book is largest.
   const [draggingIds, setDraggingIds] = useState<Set<string> | null>(null)
+  const { data: preferences } = usePreferences()
+  const remoteAvatars = preferences !== undefined && showAvatarsOf(preferences)
+  const avatarColor = preferences && remoteAvatars ? avatarColorOf(preferences) : 'mono'
   const searchBox = useRef<HTMLInputElement>(null)
   const wantsSearch = useRef(false)
   const shown = useMemo(() => filterContacts(contacts, query), [contacts, query])
@@ -195,6 +199,7 @@ export default function ContactList({
                 checked={selected.has(contact.id)}
                 open={contact.id === selectedId}
                 dragging={draggingIds?.has(contact.id) ?? false}
+                avatarColor={avatarColor} remoteAvatars={remoteAvatars}
                 on={tileOn} />
             ))}
           </ContactGrid>

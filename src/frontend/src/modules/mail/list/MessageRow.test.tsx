@@ -4,10 +4,10 @@ import MessageRow, { rowUidsOf } from './MessageRow'
 import type { RowCallbacks } from './MessageRow'
 import type { MailMessageSummary } from '../api/mailTypes'
 import type { AvatarColor } from '../../../hooks/usePreferences'
-import { avatarHue } from './avatar/senderAvatar'
-import { useSenderAvatarUrl } from './avatar/useSenderAvatarUrl'
+import { avatarHue } from '../../../components/avatar/senderAvatar'
+import { useSenderAvatarUrl } from '../../../components/avatar/useSenderAvatarUrl'
 
-vi.mock('./avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: vi.fn(() => null) }))
+vi.mock('../../../components/avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: vi.fn(() => null) }))
 
 /**
  * The memo contract, which only makes sense at this level: what the list must hand a row for one
@@ -140,10 +140,10 @@ describe('MessageRow', () => {
     it('hands the row’s BIMI hint to the avatar, and none in a drafts folder', () => {
       const bimi = { bimiDomain: 'brand.com', bimiSelector: 'sel' }
       render(<MessageRow {...props({ message: message(bimi), avatar: 'mono' })} />)
-      expect(useSenderAvatarUrl).toHaveBeenLastCalledWith('alice@x.be', false, { domain: 'brand.com', selector: 'sel' })
+      expect(useSenderAvatarUrl).toHaveBeenLastCalledWith('alice@x.be', false, { domain: 'brand.com', selector: 'sel' }, undefined, undefined)
       const draft = message({ ...bimi, to: [{ name: 'Bob', address: 'bob@x.be' }] })
       render(<MessageRow {...props({ message: draft, drafts: true, avatar: 'mono' })} />)
-      expect(useSenderAvatarUrl).toHaveBeenLastCalledWith('bob@x.be', false, undefined)
+      expect(useSenderAvatarUrl).toHaveBeenLastCalledWith('bob@x.be', false, undefined, undefined, undefined)
     })
 
     it('a collapsed conversation head shows its own sender', () => {

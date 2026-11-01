@@ -1,10 +1,12 @@
 import { memo } from 'react'
 import type { DragEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import SenderAvatar from '../../components/avatar/SenderAvatarView'
+import type { AvatarColor } from '../../components/avatar/senderAvatar'
 import PencilIcon from '../../icons/PencilIcon'
 import StarIcon from '../../icons/StarIcon'
 import TrashIcon from '../../icons/TrashIcon'
-import { displayNameOf, primaryAddressOf } from './contactName'
+import { contactNameOf, displayNameOf, primaryAddressOf } from './contactName'
 import type { Contact } from './contactTypes'
 
 /** Everything a tile asks the list to do, as one object built once: a callback the list re-creates
@@ -28,12 +30,15 @@ export interface ContactTileProps {
       real multi-selection, so "selected" already means something else to this list's user. */
   open: boolean
   dragging: boolean
+  avatarColor: AvatarColor
+  /** The mail setting that lets avatars reach Gravatar: off, a contact shows its stored photo or its initials. */
+  remoteAvatars: boolean
   on: TileCallbacks
 }
 
 /** One tile on two lines. It reads its own catalogue: four labels interpolate the contact's name,
  * which the list would recompute every render, and the subscription redraws it on a language switch. */
-function ContactTile({ contact, checked, open, dragging, on }: ContactTileProps) {
+function ContactTile({ contact, checked, open, dragging, avatarColor, remoteAvatars, on }: ContactTileProps) {
   const { t } = useTranslation('contacts')
   const name = displayNameOf(contact)
   const primary = primaryAddressOf(contact)
@@ -77,6 +82,9 @@ function ContactTile({ contact, checked, open, dragging, on }: ContactTileProps)
         {/* The message row's layout, not the page tile's: the name takes the first line and the
             star closes it on the right, while the actions are the tile's last child — the cluster
             idiom, drawn over the bottom line rather than beside it. */}
+        <SenderAvatar name={contactNameOf(contact) ?? undefined} address={primary ?? undefined} color={avatarColor}
+          className="contact-tile-avatar" scrollRoot=".contacts-list-scroll"
+          contactId={contact.hasPhoto ? contact.id : null} remote={remoteAvatars} />
         <div className="contact-tile-line">
           <span className="contact-tile-name">{name}</span>
         </div>

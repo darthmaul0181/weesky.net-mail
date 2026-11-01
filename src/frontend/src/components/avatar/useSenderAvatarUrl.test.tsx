@@ -1,15 +1,15 @@
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, api as realApi } from '../../../../api.js'
-import { contactOf } from '../../../contacts/contactTestHarness'
-import type { Contact } from '../../../contacts/contactTypes'
-import { contactKeys } from '../../../contacts/queries'
-import { createTestQueryClient, settle, waitFor, withQueryClient } from '../../../../test-utils'
+import { ApiError, api as realApi } from '../../api.js'
+import { contactOf } from '../../modules/contacts/contactTestHarness'
+import type { Contact } from '../../modules/contacts/contactTypes'
+import { contactKeys } from '../../modules/contacts/queries'
+import { createTestQueryClient, settle, waitFor, withQueryClient } from '../../test-utils'
 import { useSenderAvatarUrl } from './useSenderAvatarUrl'
 
-vi.mock('../../../../hooks/useAccountId', () => ({ useAccountId: () => 'acc' }))
-vi.mock('../../../../api.js', async importOriginal => ({
-  ...await importOriginal<typeof import('../../../../api.js')>(),
+vi.mock('../../hooks/useAccountId', () => ({ useAccountId: () => 'acc' }))
+vi.mock('../../api.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../../api.js')>(),
   api: { getContacts: vi.fn(), getContactPhoto: vi.fn(), getAvatar: vi.fn(), getBimiLogo: vi.fn() },
 }))
 
@@ -60,6 +60,37 @@ describe('useSenderAvatarUrl', () => {
     await waitFor(() => expect(result.current).toMatch(/^blob:photo/))
     expect(api.getContactPhoto).toHaveBeenCalledWith('c1')
     expect(api.getAvatar).not.toHaveBeenCalled()
+  })
+
+  describe('without remote lookups', () => {
+    const local = (address: string, hint?: Bimi, ownId?: string) => renderHook(
+      () => useSenderAvatarUrl(address, true, hint, ownId, false), { wrapper: withQueryClient() })
+
+    it('asks neither Gravatar nor the BIMI logo, and leaves the initials', async () => {
+      const { result } = local('bob@x.be', { domain: 'brand.com' })
+      await settle()
+
+      expect(api.getAvatar).not.toHaveBeenCalled()
+      expect(api.getBimiLogo).not.toHaveBeenCalled()
+      expect(result.current).toBeNull()
+    })
+
+    it('still shows the contact’s stored photo', async () => {
+      const { result } = local('ann@x.be', undefined, 'c1')
+
+      await waitFor(() => expect(result.current).toMatch(/^blob:photo/))
+      expect(api.getAvatar).not.toHaveBeenCalled()
+    })
+  })
+
+  it('ignores the book’s contact for the address when the caller names its own, photoless one', async () => {
+    const { result } = renderHook(() => useSenderAvatarUrl('ann@x.be', true, undefined, null, false),
+      { wrapper: withQueryClient() })
+    await settle()
+
+    expect(api.getContacts).not.toHaveBeenCalled()
+    expect(api.getContactPhoto).not.toHaveBeenCalled()
+    expect(result.current).toBeNull()
   })
 
   it.each(['bob@x.be', 'nobody@x.be'])('asks Gravatar once for %s', async address => {

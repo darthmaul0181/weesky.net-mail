@@ -15,7 +15,7 @@ import PaperclipIcon from '../../../icons/PaperclipIcon'
 import StarIcon from '../../../icons/StarIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import SwipeActionIcon from '../SwipeActionIcon'
-import SenderAvatar from './avatar/SenderAvatarView'
+import SenderAvatar from '../../../components/avatar/SenderAvatarView'
 import { formatListDate } from './formatDate'
 import { useLongPress } from '../../../hooks/useLongPress'
 import { useSwipe, type SwipeSide } from '../../../hooks/useSwipe'
@@ -160,6 +160,7 @@ function MessageRow({
     : (message.fromName || message.fromAddress)
   const person = drafts ? message.to[0] : { name: message.fromName, address: message.fromAddress }
   const avatarBox = avatar && <SenderAvatar name={person?.name} address={person?.address} color={avatar}
+    className="message-row-avatar" scrollRoot=".mail-list-scroll"
     bimiDomain={drafts ? undefined : message.bimiDomain} bimiSelector={drafts ? undefined : message.bimiSelector} />
   const subject = message.subject || t('list.noSubject')
   const when = formatListDate(message.date, today)

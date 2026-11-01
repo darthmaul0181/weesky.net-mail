@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import css from '../../../../styles/mail.css?raw'
-import { contrast, generateCustomPalette, INTENSITIES, type TokenSet } from '../../../../lib/customPalette'
+import css from '../../styles/avatar.css?raw'
+import { contrast, generateCustomPalette, INTENSITIES, type TokenSet } from '../../lib/customPalette'
 
-const themes = import.meta.glob('../../../../styles/theme-*.css', { query: '?raw', import: 'default', eager: true })
+const themes = import.meta.glob('../../styles/theme-*.css', { query: '?raw', import: 'default', eager: true })
 
 function constantsOf(selector: string): Record<string, number> {
   const at = css.indexOf(`${selector} {`)
@@ -34,11 +34,11 @@ function minContrast(selector: string): number {
 
 describe('sender avatar contrast', () => {
   it('reaches 4.5:1 for every hue in the light theme', () => {
-    expect(minContrast('.message-row-avatar.is-sender')).toBeGreaterThanOrEqual(4.5)
+    expect(minContrast('.avatar.is-sender')).toBeGreaterThanOrEqual(4.5)
   })
 
   it('reaches 4.5:1 for every hue in the dark theme', () => {
-    expect(minContrast(`[data-theme='dark'] .message-row-avatar.is-sender`)).toBeGreaterThanOrEqual(4.5)
+    expect(minContrast(`[data-theme='dark'] .avatar.is-sender`)).toBeGreaterThanOrEqual(4.5)
   })
 })
 

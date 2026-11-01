@@ -1,10 +1,10 @@
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { api, nullOn404 } from '../../../../api.js'
-import { useAccountId } from '../../../../hooks/useAccountId'
-import { useKeyedState } from '../../../../hooks/useKeyedState'
-import { canonicalAddress } from '../../../../lib/canonicalAddress'
-import { contactKeys, useContactPhotoIds } from '../../../contacts/queries'
+import { api, nullOn404 } from '../../api.js'
+import { useAccountId } from '../../hooks/useAccountId'
+import { useKeyedState } from '../../hooks/useKeyedState'
+import { canonicalAddress } from '../../lib/canonicalAddress'
+import { contactKeys, useContactPhotoIds } from '../../modules/contacts/queries'
 
 const STALE_MS = 24 * 60 * 60_000
 
@@ -30,13 +30,18 @@ function useGravatar(key: string, enabled: boolean) {
   })
 }
 
-/** The sender's picture as an object URL: the contact's own photo, then the BIMI logo, then Gravatar,
- * `null` for the initials. Nothing is requested while `enabled` is false. */
-export function useSenderAvatarUrl(address: string | undefined, enabled: boolean, bimi?: BimiHint): string | null {
+/** The sender's picture as an object URL: the contact's own photo (the book's contact for the address, or, when the caller names its contact — `null` for one without a photo — that contact's alone), then the BIMI logo, then Gravatar
+ * (both only while `remote`), `null` for the initials. Nothing is requested while `enabled` is false. */
+export function useSenderAvatarUrl(
+  address: string | undefined, enabled: boolean, bimi?: BimiHint, ownContactId?: string | null,
+  remote = true,
+): string | null {
   const accountId = useAccountId()
   const key = canonicalAddress(address)
-  const book = useContactPhotoIds(enabled)
-  const contactId = book.data?.get(key) ?? null
+  const byAddress = ownContactId === undefined
+  const book = useContactPhotoIds(enabled && byAddress)
+  const bookReady = !byAddress || !book.isPending
+  const contactId = byAddress ? book.data?.get(key) ?? null : ownContactId
 
   const contactPhoto = useQuery({
     queryKey: contactKeys.avatar(accountId, contactId ?? ''),
@@ -46,10 +51,10 @@ export function useSenderAvatarUrl(address: string | undefined, enabled: boolean
   })
   const fellThrough = contactId === null || contactPhoto.data === null || contactPhoto.isError
 
-  const logo = useBimiLogo(bimi, enabled && !book.isPending && fellThrough && bimi !== undefined)
-  const logoPending = bimi !== undefined && fellThrough && !logo.isError && logo.data === undefined
+  const logo = useBimiLogo(bimi, enabled && remote && bookReady && fellThrough && bimi !== undefined)
+  const logoPending = remote && bimi !== undefined && fellThrough && !logo.isError && logo.data === undefined
   const logoShown = logo.data != null
-  const gravatar = useGravatar(key, enabled && !book.isPending && fellThrough && !logoPending && !logoShown)
+  const gravatar = useGravatar(key, enabled && remote && bookReady && fellThrough && !logoPending && !logoShown)
 
   const blob = !enabled ? null
     : !fellThrough ? contactPhoto.data ?? null
