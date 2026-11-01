@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useSenderAvatarUrl } from '../../components/avatar/useSenderAvatarUrl'
 import ContactTile from './ContactTile'
 import type { ContactTileProps, TileCallbacks } from './ContactTile'
 import { contactOf } from './contactTestHarness'
 import type { Contact } from './contactTypes'
+
+vi.mock('../../components/avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: vi.fn(() => null) }))
 
 /**
  * The memo contract, which only makes sense at this level: what the list must hand a tile for one
@@ -33,11 +36,31 @@ function counted(over: Partial<Contact> = {}) {
 
 function props(over: Partial<ContactTileProps> = {}): ContactTileProps {
   return {
-    contact: contact(), checked: false, open: false, dragging: false, on: callbacks(), ...over,
+    contact: contact(), checked: false, open: false, dragging: false, avatarColor: 'mono', remoteAvatars: true, on: callbacks(), ...over,
   }
 }
 
 describe('ContactTile', () => {
+  it('draws the contact’s avatar: initials, in the colour it is handed', () => {
+    render(<ContactTile {...props({ avatarColor: 'sender' })} />)
+    const avatar = document.querySelector<HTMLElement>('.contact-tile-avatar')!
+    expect(avatar).toHaveTextContent('AD')
+    expect(avatar).toHaveClass('is-sender')
+    expect(avatar.style.getPropertyValue('--avatar-h')).toMatch(/^[0-9]+$/)
+  })
+
+  it('keeps the lookups local while the mail avatars are off', () => {
+    render(<ContactTile {...props({ remoteAvatars: false })} />)
+    expect(useSenderAvatarUrl).toHaveBeenLastCalledWith('alice@x.be', false, undefined, null, false)
+  })
+
+  it('asks for the contact’s own photo only when the card has one', () => {
+    render(<ContactTile {...props({ contact: contact({ hasPhoto: true }) })} />)
+    expect(useSenderAvatarUrl).toHaveBeenLastCalledWith('alice@x.be', false, undefined, 'a', true)
+    render(<ContactTile {...props()} />)
+    expect(useSenderAvatarUrl).toHaveBeenLastCalledWith('alice@x.be', false, undefined, null, true)
+  })
+
   it('draws nothing again when the list re-renders with the same props', () => {
     const { contact: watched, seen } = counted()
     const base = props({ contact: watched })

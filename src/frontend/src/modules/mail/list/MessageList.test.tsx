@@ -50,7 +50,7 @@ vi.mock('../queries', () => ({
 // The list is tested against the shape it consumes, not against the network: what the hook
 // puts on the wire is useMessageList's own test.
 vi.mock('./useMessageList', () => ({ useMessageList: mocks.useMessageList }))
-vi.mock('./avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: () => null }))
+vi.mock('../../../components/avatar/useSenderAvatarUrl', () => ({ useSenderAvatarUrl: () => null }))
 
 // The DOM lib type has no `instances` static — that's the test double's addition.
 const IntersectionObserver = globalThis.IntersectionObserver as unknown as {

@@ -10,7 +10,7 @@ const hook = vi.mocked(useSenderAvatarUrl)
 beforeEach(() => { hook.mockReset().mockReturnValue(null) })
 
 function box(container: HTMLElement) {
-  return container.querySelector('.message-row-avatar') as HTMLElement
+  return container.querySelector('.avatar') as HTMLElement
 }
 
 describe('SenderAvatar', () => {
@@ -40,19 +40,28 @@ describe('SenderAvatar', () => {
   })
 
   it('requests nothing until the box nears the list scroller', () => {
-    const { container } = render(<div className="mail-list-scroll"><SenderAvatar address="a@x.be" color="mono" /></div>)
-    expect(hook).toHaveBeenLastCalledWith('a@x.be', false, undefined)
+    const { container } = render(<div className="mail-list-scroll"><SenderAvatar address="a@x.be" color="mono" scrollRoot=".mail-list-scroll" /></div>)
+    expect(hook).toHaveBeenLastCalledWith('a@x.be', false, undefined, undefined, undefined)
     const observer = IntersectionObserver as unknown as { instances: Array<{ trigger(): void; options: IntersectionObserverInit }> }
     expect(observer.instances[0]!.options.rootMargin).toBe('1700px 0px')
     expect(observer.instances[0]!.options.root).toBe(container.firstChild)
     act(() => observer.instances[0]!.trigger())
-    expect(hook).toHaveBeenLastCalledWith('a@x.be', true, undefined)
+    expect(hook).toHaveBeenLastCalledWith('a@x.be', true, undefined, undefined, undefined)
   })
 
   it('hands the BIMI hint to the hook, and none without a domain', () => {
     render(<SenderAvatar address="a@brand.com" color="mono" bimiDomain="brand.com" bimiSelector="sel" />)
-    expect(hook).toHaveBeenLastCalledWith('a@brand.com', false, { domain: 'brand.com', selector: 'sel' })
+    expect(hook).toHaveBeenLastCalledWith('a@brand.com', false, { domain: 'brand.com', selector: 'sel' }, undefined, undefined)
     render(<SenderAvatar address="a@x.be" color="mono" bimiSelector="sel" />)
-    expect(hook).toHaveBeenLastCalledWith('a@x.be', false, undefined)
+    expect(hook).toHaveBeenLastCalledWith('a@x.be', false, undefined, undefined, undefined)
+  })
+
+  it('hands the contact it stands for to the hook, and watches the host’s scroller', () => {
+    const { container } = render(<div className="host"><SenderAvatar address="a@x.be" color="mono"
+      className="host-avatar" scrollRoot=".host" contactId="c1" /></div>)
+    expect(hook).toHaveBeenLastCalledWith('a@x.be', false, undefined, 'c1', undefined)
+    expect(container.querySelector('.avatar')).toHaveClass('host-avatar')
+    const observer = IntersectionObserver as unknown as { instances: Array<{ options: IntersectionObserverInit }> }
+    expect(observer.instances[observer.instances.length - 1]!.options.root).toBe(container.firstChild)
   })
 })
