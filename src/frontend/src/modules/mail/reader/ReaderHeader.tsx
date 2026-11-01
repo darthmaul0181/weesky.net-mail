@@ -4,6 +4,8 @@ import ArrowLeftIcon from '../../../icons/ArrowLeftIcon'
 import ChevronRightIcon from '../../../icons/ChevronRightIcon'
 import ExternalLinkIcon from '../../../icons/ExternalLinkIcon'
 import Tooltip from '../../../components/Tooltip'
+import SenderAvatar from '../../../components/avatar/SenderAvatarView'
+import type { AvatarColor } from '../../../components/avatar/senderAvatar'
 import type { MailMessageDetail } from '../api/mailTypes'
 import AddressLabel, { AddressList } from './AddressLabel'
 import AuthBadge from './AuthBadge'
@@ -19,6 +21,8 @@ interface Props {
   onToggleDetails: () => void
   unsubscribe: string | null
   spamOn: boolean
+  /** How the sender's avatar is coloured; null while sender avatars are off. */
+  avatar: AvatarColor | null
   bottomActions?: boolean
   readerActions: ReactNode
 }
@@ -28,7 +32,7 @@ interface Props {
     band instead. */
 export default function ReaderHeader({
   data, onBack, viewportNarrow, detailsOpen, onToggleDetails, unsubscribe, spamOn,
-  bottomActions, readerActions,
+  avatar, bottomActions, readerActions,
 }: Props) {
   const { t } = useTranslation('mail')
   // A phone header spends four of its lines on metadata before the body starts. Two of them are
@@ -66,6 +70,11 @@ export default function ReaderHeader({
             </Tooltip>
           )}
         </h1>
+        <div className="reader-who">
+          {avatar && (
+            <SenderAvatar name={data.fromName} address={data.fromAddress} color={avatar} className="reader-avatar"
+              bimiDomain={data.bimiDomain} bimiSelector={data.bimiSelector} />
+          )}
         <div className="reader-meta">
           <div className="reader-from">
             <AddressLabel sender name={data.fromName} address={data.fromAddress} />
@@ -111,6 +120,7 @@ export default function ReaderHeader({
             </>
           )}
           {spamOn && !viewportNarrow && <SpamGauge spamScore={data.spamScore} />}
+        </div>
         </div>
       </div>
       {!bottomActions && readerActions}

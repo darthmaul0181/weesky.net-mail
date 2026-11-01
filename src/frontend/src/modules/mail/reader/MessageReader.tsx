@@ -27,7 +27,7 @@ import type { MailAttachmentInfo, MailExportFormat, SpecialUse } from '../api/ma
 import DeleteConfirmModal from '../../../components/DeleteConfirmModal'
 import MoveMessagesModal from '../MoveMessagesModal'
 import {
-  alwaysShowImagesOf, showSpamScoreOf, trustContactsOf, usePreferences,
+  alwaysShowImagesOf, avatarColorOf, showAvatarsOf, showSpamScoreOf, trustContactsOf, usePreferences,
 } from '../../../hooks/usePreferences'
 import { useContacts } from '../../contacts/queries'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
@@ -207,6 +207,7 @@ export default function MessageReader(
   const imageAttachments = attachments.filter(a => isImageType(a.contentType))
   const unsubscribe = isWebUnsubscribe(data.unsubscribeUrl) ? data.unsubscribeUrl : null
   const spamOn = !!preferences && showSpamScoreOf(preferences)
+  const avatar = preferences && showAvatarsOf(preferences) ? avatarColorOf(preferences) : null
 
   async function saveAs(format: MailExportFormat) {
     const file = await api.exportMessage(folderPath!, uid!, format, { accountId })
@@ -333,6 +334,7 @@ export default function MessageReader(
         onToggleDetails={() => setDetailsOpen(open => !open)}
         unsubscribe={unsubscribe}
         spamOn={spamOn}
+        avatar={avatar}
         bottomActions={bottomActions}
         readerActions={readerActions}
       />

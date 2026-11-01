@@ -44,4 +44,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     path: ['rail:settings', 'settings:mail'], target: 'mail:show-avatars',
     href: '/settings/mail',
   },
+  {
+    id: 'reader-avatars', version: '2.8.0',
+    path: ['rail:settings', 'settings:mail'], target: 'mail:show-avatars',
+    href: '/settings/mail',
+  },
 ]

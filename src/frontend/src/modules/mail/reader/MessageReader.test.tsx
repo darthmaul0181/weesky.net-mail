@@ -1235,6 +1235,27 @@ describe('MessageReader', () => {
     })
   })
 
+  describe('the sender avatar', () => {
+    it('shows no avatar while the setting is off', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+      await screen.findByText('Re: facture')
+
+      expect(container.querySelector('.reader-avatar')).toBeNull()
+    })
+
+    it('draws the sender as initials once the setting is on', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      mocks.getPreferences.mockResolvedValue({ 'mail.showAvatars': 'true', 'mail.avatarColor': 'sender' })
+
+      const { container } = render(<MessageReader folderPath="INBOX" uid={2} />, { wrapper })
+
+      await waitFor(() => expect(container.querySelector('.reader-avatar.is-sender')).not.toBeNull())
+      expect(container.querySelector('.reader-who')).toContainElement(container.querySelector<HTMLElement>('.reader-meta'))
+    })
+  })
+
   describe('the declared priority', () => {
     it('shows a chip for a high-priority message', async () => {
       mocks.getMailMessage.mockResolvedValue({ ...detail, priority: 'high' })

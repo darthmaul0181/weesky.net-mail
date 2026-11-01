@@ -495,6 +495,7 @@ internal sealed class ImapMessageCommands(
             };
 
             MailMessageMapper.ApplyThreading(detail, message);
+            (detail.BimiDomain, detail.BimiSelector) = MailBimiHint.Parse(message.Headers);
 
             foreach (var part in summary.BodyParts.OfType<BodyPartBasic>())
             {

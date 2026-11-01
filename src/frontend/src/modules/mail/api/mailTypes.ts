@@ -244,6 +244,8 @@ export interface MailMessageDetail {
   unsubscribeUrl?: string
   tlsReceived?: boolean
   priority: MailPriority
+  bimiDomain?: string
+  bimiSelector?: string
   /** Already sanitised by the backend. Still only ever rendered in a sandboxed iframe. */
   htmlBody: string
   textBody: string

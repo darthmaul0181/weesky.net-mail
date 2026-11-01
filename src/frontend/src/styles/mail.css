@@ -925,6 +925,9 @@
 }
 
 .reader-back:hover { background: var(--list-row-hover); color: var(--text); }
+/* The avatar sits beside the sender and recipient lines, which come to about its own 40px; the subject keeps the whole width. */
+.reader-who { display: flex; align-items: flex-start; gap: 12px; }
+.reader-who > .reader-meta { flex: 1; min-width: 0; }
 .reader-meta {
   color: var(--text-muted);
   font-size: 13px;

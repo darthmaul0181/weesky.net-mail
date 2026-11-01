@@ -49,6 +49,12 @@ public sealed class MailMessageDetail
     /// <summary>Priority the sender declared. Normal when the message carries no priority header.</summary>
     public MailPriority Priority { get; set; } = MailPriority.Normal;
 
+    /// <summary>Domain the sender's DMARC pass vouches for; the key of a BIMI lookup. Null when unverified.</summary>
+    public string? BimiDomain { get; set; }
+
+    /// <summary>BIMI selector the sender declared; null means the default one.</summary>
+    public string? BimiSelector { get; set; }
+
     /// <summary>Sanitised HTML body. Empty when the message is text-only.</summary>
     public string HtmlBody { get; set; } = string.Empty;
 

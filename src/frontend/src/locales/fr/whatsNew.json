@@ -24,6 +24,10 @@
     "bimi-logos": {
       "title": "Logos de marque comme avatars",
       "body": "Quand un message passe la vérification d’authenticité de l’expéditeur, son avatar peut désormais être le logo de la marque. Il suit le même réglage dans Paramètres > Mail."
+    },
+    "reader-avatars": {
+      "title": "Avatar de l’expéditeur dans le lecteur",
+      "body": "Un message ouvert affiche désormais l’avatar de son expéditeur à côté de la ligne de l’expéditeur. Il suit le même réglage dans Paramètres > Mail."
     }
   }
 }
