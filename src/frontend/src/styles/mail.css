@@ -938,12 +938,9 @@
 }
 
 .reader-from { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-/* With the unsubscribe pill the line stays one line: the date gives way first, the name is capped to leave room for the badge, the chevron and the pill (200px), never the pill. A shrinking name would ellipsise on a sub-pixel. */
-.reader-from:has(.unsub-btn) { flex-wrap: nowrap; max-width: 100%; }
-.reader-from:has(.unsub-btn) > * { flex: none; }
-.reader-from:has(.unsub-btn) > .reader-date { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reader-from:has(.unsub-btn) > .tooltip-wrap:first-child { flex: none; max-width: calc(100% - 200px); display: flex; }
-.reader-from:has(.unsub-btn) .address-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Beside the actions the pill stands at the header's right edge, on the sender line (static position of a flex child: centred), where the stack leaves a gap above the cluster; the date keeps its whole width. */
+.reader-header { position: relative; }
+.reader-header .unsub-btn { position: absolute; right: 22px; }
 /* Block, not flex: AddressList's separator lives inside each recipient's span, and a flex
    gap would land between the comma and the name it precedes instead of after it. */
 .reader-recipients { display: block; }
@@ -2132,6 +2129,13 @@ textarea.compose-editor {
    a window-keyed rule near a width here — responsive.test.ts scans comments as raw text too. */
 @container (max-width: 480px) {
   .reader-header { flex-direction: column; }
+  /* Stacked, the right edge is the line's own: the pill returns to it, and the date, then the name, give way before it, never the pill. A shrinking name would ellipsise on a sub-pixel. */
+  .reader-header .unsub-btn { position: static; }
+  .reader-from:has(.unsub-btn) { flex-wrap: nowrap; max-width: 100%; }
+  .reader-from:has(.unsub-btn) > * { flex: none; }
+  .reader-from:has(.unsub-btn) > .reader-date { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-from:has(.unsub-btn) > .tooltip-wrap:first-child { flex: none; max-width: calc(100% - 200px); display: flex; }
+  .reader-from:has(.unsub-btn) .address-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* The base rule's `align-self: flex-end` decides LEFT/RIGHT once the header is a column, not
      top/bottom — `flex-start` put the cluster against the left margin. `stretch`, not `flex-end`:
      an aligned item is shrink-to-fit and a wrapped cluster would return to where it started. */
