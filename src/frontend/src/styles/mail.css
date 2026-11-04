@@ -938,11 +938,11 @@
 }
 
 .reader-from { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-/* With the unsubscribe pill the line stays one line: the date gives way first, then the name, never the pill. */
+/* With the unsubscribe pill the line stays one line: the date gives way first, the name is capped to leave room for the badge, the chevron and the pill (200px), never the pill. A shrinking name would ellipsise on a sub-pixel. */
 .reader-from:has(.unsub-btn) { flex-wrap: nowrap; max-width: 100%; }
 .reader-from:has(.unsub-btn) > * { flex: none; }
-.reader-from:has(.unsub-btn) > .reader-date { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reader-from:has(.unsub-btn) > .tooltip-wrap:first-child { flex: 0 1 auto; min-width: 0; display: flex; }
+.reader-from:has(.unsub-btn) > .reader-date { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-from:has(.unsub-btn) > .tooltip-wrap:first-child { flex: none; max-width: calc(100% - 200px); display: flex; }
 .reader-from:has(.unsub-btn) .address-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Block, not flex: AddressList's separator lives inside each recipient's span, and a flex
    gap would land between the comma and the name it precedes instead of after it. */
