@@ -139,13 +139,14 @@ export function AddEditUserModal({ user, domains, onSave, onClose }: Props) {
           <span className="toggle-track" />
         </label>
       </div>
-      <button className="btn btn-primary" type="submit"
-        disabled={loading || !userName.trim() || (!isEdit && !password.trim())}
-        style={{ marginTop: '8px' }}>
-        {loading
-          ? <span className="spinner" />
-          : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('accounts.create'))}
-      </button>
+      <div className="modal-actions">
+        <button className="btn btn-primary" type="submit"
+          disabled={loading || !userName.trim() || (!isEdit && !password.trim())}>
+          {loading
+            ? <span className="spinner" />
+            : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('accounts.create'))}
+        </button>
+      </div>
     </Modal>
   )
 }

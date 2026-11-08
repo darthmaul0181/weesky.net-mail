@@ -89,9 +89,11 @@ function ChangePasswordDialog({ warnsAboutSync, onClose, onDone }: ChangePasswor
           onChange={e => setConfirm(e.target.value)}
         />
       </div>
-      <button className="btn btn-primary" type="submit" disabled={loading}>
-        {loading ? <span className="spinner" /> : t('account.changePassword')}
-      </button>
+      <div className="modal-actions">
+        <button className="btn btn-primary" type="submit" disabled={loading}>
+          {loading ? <span className="spinner" /> : t('account.changePassword')}
+        </button>
+      </div>
     </Modal>
   )
 }

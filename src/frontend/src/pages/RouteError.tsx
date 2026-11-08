@@ -38,9 +38,11 @@ export default function RouteError() {
     <div className="app-error">
       <div className="modal" role="alert">
         <p style={{ margin: '0 0 20px' }}>{message}</p>
-        <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
-          {t('appError.reload')}
-        </button>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+            {t('appError.reload')}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -162,14 +162,11 @@ export default function FolderManager({ folders, onNotify }: Props) {
               />
             </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ marginTop: '8px' }}
-              disabled={!renameValue.trim() || renameFolder.isPending}
-            >
-              {renameFolder.isPending ? <span className="spinner" /> : t('folders.manage.renameAction')}
-            </button>
+            <div className="modal-actions">
+              <button type="submit" className="btn btn-primary" disabled={!renameValue.trim() || renameFolder.isPending}>
+                {renameFolder.isPending ? <span className="spinner" /> : t('folders.manage.renameAction')}
+              </button>
+            </div>
           </form>
         </Modal>
       )}
