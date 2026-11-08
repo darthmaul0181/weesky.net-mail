@@ -24,6 +24,15 @@
   justify-content: center;
 }
 
+/* Same box as the row checkboxes (.message-row-check, .contact-tile-check). */
+.selection-master {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--action-primary);
+  cursor: pointer;
+}
+
 /* The name and its filter travel together, so the star sits against the name rather than
    drifting to the actions on the far side. */
 .selection-heading {
