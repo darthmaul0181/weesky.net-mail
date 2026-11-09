@@ -207,6 +207,8 @@
     "loading": "Loading message…",
     "loadFailed": "Could not load this message.",
     "back": "Back to the message list",
+    "expand": "Expand the reader",
+    "collapse": "Collapse the reader",
     "bodyTitle": "Message body",
     "showDetails": "Show details",
     "hideDetails": "Hide details",

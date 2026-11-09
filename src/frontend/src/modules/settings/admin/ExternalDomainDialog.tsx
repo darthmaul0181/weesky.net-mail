@@ -233,12 +233,13 @@ export default function ExternalDomainDialog({ domain, onSave, onClose }: Props)
       )}
       <p className="settings-note">{t('external.sieveNote')}</p>
 
-      <button className="btn btn-primary" type="submit" disabled={pending || !canSubmit}
-        style={{ marginTop: '8px' }}>
-        {pending
-          ? <span className="spinner" />
-          : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('external.create'))}
-      </button>
+      <div className="modal-actions">
+        <button className="btn btn-primary" type="submit" disabled={pending || !canSubmit}>
+          {pending
+            ? <span className="spinner" />
+            : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('external.create'))}
+        </button>
+      </div>
     </Modal>
   )
 }

@@ -24,6 +24,8 @@
         }
         else if(['night','classic','forest','slate','plum','ink','azure','indigo'].indexOf(p)<0)p='night';
         document.documentElement.setAttribute('data-palette',p);
+        var b=localStorage.getItem('appearance_buttons');
+        if(b==='structure'||b==='accent')document.documentElement.setAttribute('data-buttons',b);
         var langs=['en','fr'];
         var l=localStorage.getItem('ui_language');
         if(langs.indexOf(l)<0){

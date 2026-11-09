@@ -70,14 +70,11 @@ export default function CreateFolderModal({ folders, defaultParent = '', onClose
           ]} />
         </div>
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          style={{ marginTop: '8px' }}
-          disabled={!name.trim() || createFolder.isPending}
-        >
-          {createFolder.isPending ? <span className="spinner" /> : t('folders.create.submit')}
-        </button>
+        <div className="modal-actions">
+          <button type="submit" className="btn btn-primary" disabled={!name.trim() || createFolder.isPending}>
+            {createFolder.isPending ? <span className="spinner" /> : t('folders.create.submit')}
+          </button>
+        </div>
       </form>
     </Modal>
   )

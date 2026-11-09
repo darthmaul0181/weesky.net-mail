@@ -1,18 +1,19 @@
-import type { Palette } from '../../../contexts/ThemeContext'
+import type { ButtonStyle, Palette } from '../../../contexts/ThemeContext'
 import type { TokenSet } from '../../../lib/customPalette'
 
 /** Renders in the palette it advertises: the palette selectors are attribute-based and unanchored,
  * so stamping both attributes re-declares every token here. It shows --action-primary (compose,
  * attachment chip), which tells palettes apart; `large` only scales --pp. `tokens`, inline, win
  * over the attributes: the custom palette's editor previews a draft nothing has declared yet. */
-export default function PalettePreview({ value, dark, large, tokens }: {
-  value: Palette; dark: boolean; large?: boolean; tokens?: TokenSet
+export default function PalettePreview({ value, dark, large, tokens, buttons }: {
+  value: Palette; dark: boolean; large?: boolean; tokens?: TokenSet; buttons?: ButtonStyle
 }) {
   return (
     <span
       className={`palette-preview${large ? ' is-large' : ''}`}
       data-palette={value}
       data-theme={dark ? 'dark' : 'light'}
+      data-buttons={buttons}
       style={tokens}
       aria-hidden="true"
     >

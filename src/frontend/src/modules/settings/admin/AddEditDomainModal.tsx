@@ -58,12 +58,14 @@ export function AddEditDomainModal({ domain, onSave, onClose }: Props) {
         <input id={`${uid}-domain-name`} type="text" value={name} onChange={e => setName(e.target.value)} required
           className={name && !nameValid ? 'is-error' : undefined} />
       </div>
-      <button className="btn btn-primary" type="submit"
-        disabled={loading || !id.trim() || !nameValid}>
-        {loading
-          ? <span className="spinner" />
-          : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('domains.create'))}
-      </button>
+      <div className="modal-actions">
+        <button className="btn btn-primary" type="submit"
+          disabled={loading || !id.trim() || !nameValid}>
+          {loading
+            ? <span className="spinner" />
+            : (isEdit ? t('actions.saveChanges', { ns: 'common' }) : t('domains.create'))}
+        </button>
+      </div>
     </Modal>
   )
 }

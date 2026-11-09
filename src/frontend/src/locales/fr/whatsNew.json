@@ -24,6 +24,14 @@
     "bimi-logos": {
       "title": "Logos de marque comme avatars",
       "body": "Quand un message passe la vérification d’authenticité de l’expéditeur, son avatar peut désormais être le logo de la marque. Il suit le même réglage dans Paramètres > Mail."
+    },
+    "reader-expand": {
+      "title": "Agrandir le lecteur",
+      "body": "Le bouton d’agrandissement de la barre d’un message ouvert masque la liste et donne toute la place au message. Un nouveau clic, ou Échap, ramène la liste."
+    },
+    "palette-buttons": {
+      "title": "Couleur des boutons en mode clair",
+      "body": "Dans Apparence, vous pouvez désormais choisir si les boutons portent la couleur de structure de la palette ou son accent en mode clair, pour toutes les palettes fournies."
     }
   }
 }

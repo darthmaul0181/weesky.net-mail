@@ -59,6 +59,13 @@
       "default": "{{name}} (default)",
       "enlarge": "Enlarge the {{name}} preview"
     },
+    "buttons": {
+      "heading": "Buttons in light mode",
+      "structure": "Structure",
+      "accent": "Accent",
+      "hint": "Dark mode always uses the accent.",
+      "custom": "Your palette sets this in its own editor."
+    },
     "dailyImage": {
       "heading": "Image of the day",
       "intro": "Shown in the reading pane when no message is open.",

@@ -620,6 +620,7 @@ a.dropdown-item { text-decoration: none; }
   cursor: pointer;
 }
 .seg label:hover { color: var(--text); }
+.seg label:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
 .seg label:has(input:checked) {
   background: var(--action-primary);
   color: var(--action-primary-fg);

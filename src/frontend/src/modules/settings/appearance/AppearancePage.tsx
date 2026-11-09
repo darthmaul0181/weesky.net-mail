@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocale } from '../../../contexts/LocaleContext'
-import { useTheme, type BuiltinPalette, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
+import { useTheme, type BuiltinPalette, type ButtonStyle, type ThemePreference, type Palette } from '../../../contexts/ThemeContext'
 import Modal from '../../../components/Modal'
 import DropletIcon from '../../../icons/DropletIcon'
 import SearchIcon from '../../../icons/SearchIcon'
@@ -9,6 +9,7 @@ import PencilIcon from '../../../icons/PencilIcon'
 import PlusIcon from '../../../icons/PlusIcon'
 import { customPaletteOf, usePreferences } from '../../../hooks/usePreferences'
 import { PALETTE_SEEDS, type CustomPaletteDef } from '../../../lib/customPalette'
+import WhatsNewTarget from '../../whatsnew/WhatsNewTarget'
 import PalettePreview from './PalettePreview'
 import CustomPaletteEditor from './CustomPaletteEditor'
 import DailyImageSection from './DailyImageSection'
@@ -27,6 +28,8 @@ const THEMES = [
   { value: 'system', labelKey: 'appearance.theme.system' },
 ] as const satisfies { value: ThemePreference; labelKey: string }[]
 
+const BUTTON_STYLES: readonly ButtonStyle[] = ['structure', 'accent']
+
 // Product names, not prose: they stay out of the catalogue. Only the "(default)" suffix moves.
 const PALETTES: { value: BuiltinPalette; name: string; isDefault?: boolean }[] = [
   { value: 'night', name: 'Night & coral', isDefault: true },
@@ -43,13 +46,14 @@ const PALETTES: { value: BuiltinPalette; name: string; isDefault?: boolean }[] =
     mode in use, and a palette is chosen once for both. */
 function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: string; onClose: () => void }) {
   const { t } = useTranslation('settings')
+  const { buttons } = useTheme()
   return (
     // The loupe again, so the dialog reads as the enlargement of what was clicked.
     <Modal icon={<SearchIcon size={16} />} title={label} onClose={onClose} className="palette-zoom-modal">
       <div className="palette-zoom-pair">
         {[false, true].map(dark => (
           <figure key={String(dark)}>
-            <PalettePreview value={value} dark={dark} large />
+            <PalettePreview value={value} dark={dark} buttons={buttons} large />
             <figcaption>{t(dark ? 'appearance.theme.dark' : 'appearance.theme.light')}</figcaption>
           </figure>
         ))}
@@ -59,7 +63,7 @@ function PaletteZoomModal({ value, label, onClose }: { value: Palette; label: st
 }
 
 export default function AppearancePage() {
-  const { theme, setTheme, palette, setPalette, isDark, declareCustomPalette } = useTheme()
+  const { theme, setTheme, palette, setPalette, isDark, declareCustomPalette, buttons, setButtons } = useTheme()
   const { preference, setPreference } = useLocale()
   const { t } = useTranslation('settings')
   const [zoomed, setZoomed] = useState<{ value: Palette; label: string } | null>(null)
@@ -118,7 +122,7 @@ export default function AppearancePage() {
             return (
               <div key={value} className="palette-card">
                 <label className="palette-pick">
-                  <PalettePreview value={value} dark={isDark} />
+                  <PalettePreview value={value} dark={isDark} buttons={buttons} />
                   <span className="palette-name">
                     <input
                       type="radio"
@@ -170,6 +174,24 @@ export default function AppearancePage() {
           ))}
         </div>
       </section>
+
+      <WhatsNewTarget id="appearance:buttons" className="account-section">
+        <section>
+          <h2 id="buttons-heading">{t('appearance.buttons.heading')}</h2>
+          <p className="svc-account-section-intro">
+            {t(palette === 'custom' ? 'appearance.buttons.custom' : 'appearance.buttons.hint')}
+          </p>
+          <div className="seg" role="radiogroup" aria-labelledby="buttons-heading">
+            {BUTTON_STYLES.map(value => (
+              <label key={value}>
+                <input type="radio" name="buttons" checked={palette !== 'custom' && buttons === value}
+                  disabled={palette === 'custom'} onChange={() => setButtons(value)} />
+                {t(value === 'accent' ? 'appearance.buttons.accent' : 'appearance.buttons.structure')}
+              </label>
+            ))}
+          </div>
+        </section>
+      </WhatsNewTarget>
 
       <DailyImageSection />
 

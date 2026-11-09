@@ -182,8 +182,8 @@ body {
   cursor: not-allowed;
 }
 
-/* The 100% is the login form's shape and a dialog's, where the button IS the form's only control
-   — wrong anywhere else (a settings page, a toolbar, a band), a mistake made six times already.
+/* The 100% is the login form's shape — wrong anywhere else (a settings page, a toolbar, a band), a
+   mistake made six times already; a dialog's button sizes to its label (modal.css).
    Reach for .btn-auto rather than inventing a seventh parent selector that undoes it. */
 .btn-primary {
   background: var(--action-primary);

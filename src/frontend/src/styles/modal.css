@@ -169,3 +169,6 @@
      .selection-btn (mail.css). */
   .modal-close { min-width: var(--touch); min-height: var(--touch); }
 }
+
+/* A dialog's button sits at the right edge and is as wide as its label, never the dialog's width. */
+.modal .btn-primary { width: auto; }
