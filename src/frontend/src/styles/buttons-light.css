@@ -1,0 +1,11 @@
+/* Light-mode buttons: the palette's accent instead of its structure (slate, whose buttons are already
+   its accent, the other way round). The hover goes darker, as the palettes' own do in light mode. Dark mode always wears the accent, so it is left alone. Not a
+   theme-*.css file: palettes.test.ts requires those to declare the full role set. */
+[data-palette='night'][data-buttons='accent']:not([data-theme='dark']) { --action-primary: #c35035; --action-primary-hover: #ac462f; }
+[data-palette='classic'][data-buttons='accent']:not([data-theme='dark']) { --action-primary: #5377a3; --action-primary-hover: #49698f; }
+[data-palette='forest'][data-buttons='accent']:not([data-theme='dark']) { --action-primary: #9c6c00; --action-primary-hover: #895f00; }
+[data-palette='plum'][data-buttons='accent']:not([data-theme='dark']) { --action-primary: #937000; --action-primary-hover: #816300; }
+[data-palette='ink'][data-buttons='accent']:not([data-theme='dark']) { --action-primary: #4471d4; --action-primary-hover: #3c63bb; }
+[data-palette='azure'][data-buttons='accent']:not([data-theme='dark']) { --action-primary: #017daf; --action-primary-hover: #016e9a; }
+[data-palette='indigo'][data-buttons='accent']:not([data-theme='dark']) { --action-primary: #7965c9; --action-primary-hover: #6a59b1; }
+[data-palette='slate'][data-buttons='structure']:not([data-theme='dark']) { --action-primary: #2b3a41; --action-primary-hover: #445258; }

@@ -10,6 +10,8 @@ export const PALETTE_IDS = [
 ] as const
 export type BuiltinPalette = typeof PALETTE_IDS[number]
 export type Palette = BuiltinPalette | 'custom'
+/** What the light-mode buttons wear; dark ones wear the accent either way. */
+export type ButtonStyle = 'structure' | 'accent'
 
 interface ThemeContextValue {
   theme: ThemePreference
@@ -19,6 +21,9 @@ interface ThemeContextValue {
   isDark: boolean
   setTheme: (t: ThemePreference) => void
   setPalette: (p: Palette) => void
+  /** The palette's own choice until the device picks one. */
+  buttons: ButtonStyle
+  setButtons: (b: ButtonStyle) => void
   /** Declares the account's palette, or that it has none; the device's choice is left alone. */
   declareCustomPalette: (def: CustomPaletteDef | null) => void
 }
@@ -27,6 +32,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 const THEME_KEY = 'appearance_theme'
 const PALETTE_KEY = 'appearance_palette'
+const BUTTONS_KEY = 'appearance_buttons'
 
 function readTheme(): ThemePreference {
   const v = readStored(THEME_KEY)
@@ -39,9 +45,15 @@ function readPalette(): Palette {
   return PALETTE_IDS.includes(stored as BuiltinPalette) ? stored as BuiltinPalette : 'night'
 }
 
+function readButtons(): ButtonStyle | null {
+  const v = readStored(BUTTONS_KEY)
+  return v === 'structure' || v === 'accent' ? v : null
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemePreference>(readTheme)
   const [choice, setChoice] = useState<Palette>(readPalette)
+  const [buttonsChoice, setButtonsChoice] = useState<ButtonStyle | null>(readButtons)
   const [customDeclared, setCustomDeclared] = useState(hasCustomPaletteMirror)
   const palette = choice === 'custom' && !customDeclared ? 'night' : choice
   const [isDark, setIsDark] = useState(false)
@@ -64,6 +76,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute('data-palette', palette)
   }, [palette])
 
+  useEffect(() => {
+    if (buttonsChoice) document.documentElement.setAttribute('data-buttons', buttonsChoice)
+    else document.documentElement.removeAttribute('data-buttons')
+  }, [buttonsChoice])
+
+  function setButtons(b: ButtonStyle) {
+    writeStored(BUTTONS_KEY, b)
+    setButtonsChoice(b)
+  }
+
   function setTheme(t: ThemePreference) {
     writeStored(THEME_KEY, t)
     setThemeState(t)
@@ -80,7 +102,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ThemeContext.Provider value={{ theme, palette, isDark, setTheme, setPalette, declareCustomPalette }}>
+    <ThemeContext.Provider value={{ theme, palette, isDark, setTheme, setPalette, declareCustomPalette, setButtons,
+      buttons: buttonsChoice ?? (palette === 'slate' ? 'accent' : 'structure') }}>
       {children}
     </ThemeContext.Provider>
   )

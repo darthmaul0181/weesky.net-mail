@@ -49,4 +49,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     // No Show me: the button exists only behind an open message.
     path: ['rail:mail'], target: 'reader:expand',
   },
+  {
+    id: 'palette-buttons', version: '2.8.0',
+    path: ['rail:settings', 'settings:appearance'], target: 'appearance:buttons',
+    href: '/settings/appearance',
+  },
 ]

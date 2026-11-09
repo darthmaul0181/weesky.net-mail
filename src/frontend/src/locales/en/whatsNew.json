@@ -28,6 +28,10 @@
     "reader-expand": {
       "title": "Expand the reader",
       "body": "The expand button in an open message’s toolbar hides the list and gives the whole space to the message. Click it again, or press Esc, to bring the list back."
+    },
+    "palette-buttons": {
+      "title": "Button colour in light mode",
+      "body": "Appearance now lets you choose whether buttons wear the palette’s structure colour or its accent in light mode, for every built-in palette."
     }
   }
 }

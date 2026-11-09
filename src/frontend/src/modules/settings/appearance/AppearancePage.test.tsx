@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router'
 import { createTestQueryClient, setupUser } from '../../../test-utils'
 import { ThemeProvider, PALETTE_IDS } from '../../../contexts/ThemeContext'
 import AppearancePage from './AppearancePage'
@@ -18,7 +19,7 @@ function renderPage(customPalette = '') {
   mocks.setPreference.mockResolvedValue(undefined)
   return render(
     <QueryClientProvider client={createTestQueryClient()}>
-      <ThemeProvider><AppearancePage /></ThemeProvider>
+      <MemoryRouter><ThemeProvider><AppearancePage /></ThemeProvider></MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -274,7 +275,7 @@ describe('AppearancePage — my palette', () => {
     mocks.getPreferences.mockReturnValue(new Promise(() => {}))
     render(
       <QueryClientProvider client={createTestQueryClient()}>
-        <ThemeProvider><AppearancePage /></ThemeProvider>
+        <MemoryRouter><ThemeProvider><AppearancePage /></ThemeProvider></MemoryRouter>
       </QueryClientProvider>,
     )
     await screen.findByRole('radio', { name: /Night & coral/ })
@@ -317,8 +318,9 @@ describe('AppearancePage — my palette', () => {
   it('saves accent buttons when asked, and previews them in light mode only', async () => {
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
-    expect(screen.getByRole('radiogroup', { name: 'Buttons in light mode' })).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: 'Accent' }))
+    const editor = within(screen.getByRole('dialog'))
+    expect(editor.getByRole('radiogroup', { name: 'Buttons in light mode' })).toBeInTheDocument()
+    await user.click(editor.getByRole('radio', { name: 'Accent' }))
 
     const [light, dark] = screen.getByRole('dialog').querySelectorAll<HTMLElement>('.palette-preview')
     expect(light!.style.getPropertyValue('--action-primary')).toBe(light!.style.getPropertyValue('--accent-unread'))
@@ -333,19 +335,53 @@ describe('AppearancePage — my palette', () => {
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Create my palette' }))
 
-    expect(screen.getByRole('radio', { name: 'Accent' })).toBeChecked()
+    expect(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Accent' })).toBeChecked()
   })
 
   it('reopens on the saved buttons choice', async () => {
     renderPage('100,neutral,300,accent')
     await user.click(await screen.findByRole('button', { name: 'Edit my palette' }))
 
-    expect(screen.getByRole('radio', { name: 'Accent' })).toBeChecked()
+    expect(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Accent' })).toBeChecked()
   })
 
   it('selects the saved palette like any other', async () => {
     renderPage('100,neutral,300')
     await user.click(await screen.findByRole('radio', { name: 'My palette' }))
     expect(localStorage.getItem('appearance_palette')).toBe('custom')
+  })
+})
+
+describe('AppearancePage — buttons in light mode', () => {
+  beforeEach(() => { localStorage.clear(); document.documentElement.removeAttribute('data-buttons') })
+
+  const choice = (name: string) => within(screen.getByRole('radiogroup', { name: 'Buttons in light mode' }))
+    .getByRole('radio', { name })
+
+  it('starts on the palette\u2019s own choice and leaves the attribute unset', () => {
+    renderPage()
+    expect(choice('Structure')).toBeChecked()
+    expect(document.documentElement).not.toHaveAttribute('data-buttons')
+  })
+
+  it('starts on accent for Slate, whose buttons already wear it', () => {
+    localStorage.setItem('appearance_palette', 'slate')
+    renderPage()
+    expect(choice('Accent')).toBeChecked()
+  })
+
+  it('stamps the device\u2019s choice on the page and remembers it', async () => {
+    renderPage()
+    await user.click(choice('Accent'))
+    expect(document.documentElement).toHaveAttribute('data-buttons', 'accent')
+    expect(localStorage.getItem('appearance_buttons')).toBe('accent')
+  })
+
+  it('is read-only while the account\u2019s own palette is drawn, which sets it in its editor', async () => {
+    localStorage.setItem('appearance_palette', 'custom')
+    localStorage.setItem('appearance_custom_palette_css', ':root{}')
+    renderPage('100,neutral,300,structure')
+    expect(choice('Accent')).toBeDisabled()
+    expect(choice('Structure')).not.toBeChecked()
   })
 })

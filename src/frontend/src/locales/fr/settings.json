@@ -59,6 +59,13 @@
       "default": "{{name}} (par défaut)",
       "enlarge": "Agrandir l’aperçu {{name}}"
     },
+    "buttons": {
+      "heading": "Boutons en mode clair",
+      "structure": "Structure",
+      "accent": "Accent",
+      "hint": "Le mode sombre utilise toujours l’accent.",
+      "custom": "Votre palette règle cela dans son propre éditeur."
+    },
     "dailyImage": {
       "heading": "Image du jour",
       "intro": "Affichée dans le panneau de lecture quand aucun message n’est ouvert.",
