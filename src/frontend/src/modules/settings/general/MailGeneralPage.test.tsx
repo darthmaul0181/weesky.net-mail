@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
@@ -565,6 +565,20 @@ describe('the default composing editor', () => {
 
     await waitFor(() =>
       expect(mocks.setPreference).toHaveBeenCalledWith('mail.composeFormat', 'text'))
+  })
+})
+
+describe('MailGeneralPage compose window', () => {
+  it('the compose window row saves the choice', async () => {
+    renderPage()
+    const group = await screen.findByRole('radiogroup', { name: 'Write messages in' })
+    expect(within(group).getByRole('radio', { name: 'Full page' })).toBeChecked()
+
+    fireEvent.click(within(group).getByRole('radio', { name: 'Floating window' }))
+
+    await waitFor(() =>
+      expect(mocks.setPreference).toHaveBeenCalledWith('mail.composeWindow', 'window'))
+    expect(await screen.findByText('New messages will open in a floating window')).toBeInTheDocument()
   })
 })
 

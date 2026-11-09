@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
 import MenuSelect from '../../../components/MenuSelect'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import ToggleRow from '../../../components/ToggleRow'
 import { useToasts } from '../../../hooks/useToasts'
 import {
   ALL, PAGE_SIZES, PREFERENCE_KEYS, ROW_ACTIONS, SWIPE_ACTIONS, alwaysShowImagesOf,
-  avatarColorOf, captureRecipientsOf, composeFormatOf, groupConversationsOf, isStreaming, notifyDesktopOf,
+  avatarColorOf, captureRecipientsOf, composeFormatOf, composeWindowOf, groupConversationsOf, isStreaming, notifyDesktopOf,
   notifySoundOf, readingPaneOf, requestSizeOf, rowActionsOf, showAvatarsOf, showFolderIconsOf,
   showPreviewOf, showSpamScoreOf, swipeActionOf, trustContactsOf,
-  type AvatarColor, type ComposeFormat, type ReadingPane, type RowAction, type SwipeAction,
+  type AvatarColor, type ComposeFormat, type ComposeWindow, type ReadingPane, type RowAction, type SwipeAction,
 } from '../../../hooks/usePreferences'
 import {
   desktopPermission, playNewMailSound, requestDesktopPermission,
@@ -40,17 +40,6 @@ const ROW_ACTION_CHOICES = [
 ] as const satisfies { value: RowAction; labelKey: string; Icon: ComponentType<{ size?: number }> }[]
 
 const AVATAR_COLORS: readonly AvatarColor[] = ['mono', 'sender']
-
-const READING_PANES = [
-  { value: 'right', labelKey: 'general.readingPane.right', toastKey: 'general.readingPane.rightToast' },
-  { value: 'bottom', labelKey: 'general.readingPane.bottom', toastKey: 'general.readingPane.bottomToast' },
-  { value: 'none', labelKey: 'general.readingPane.none', toastKey: 'general.readingPane.noneToast' },
-] as const satisfies { value: ReadingPane; labelKey: string; toastKey: string }[]
-
-const COMPOSE_FORMATS = [
-  { value: 'html', labelKey: 'general.composeFormat.html', toastKey: 'general.composeFormat.htmlToast' },
-  { value: 'text', labelKey: 'general.composeFormat.text', toastKey: 'general.composeFormat.textToast' },
-] as const satisfies { value: ComposeFormat; labelKey: string; toastKey: string }[]
 
 /** A miniature of the arrangement — the glyph is the description, like Appearance's
     palette thumbnails. */
@@ -82,6 +71,55 @@ function EditorGlyph({ variant }: { variant: ComposeFormat }) {
       )}
       <span className="pane-glyph-lines" />
     </span>
+  )
+}
+
+function WindowGlyph({ variant }: { variant: ComposeWindow }) {
+  return (
+    <span className="pane-glyph" aria-hidden="true">
+      <span className="pane-glyph-lines" />
+      {variant === 'window' && <span className="window-glyph-box" />}
+    </span>
+  )
+}
+
+interface CardChoice<V extends string> { value: V; label: string; toast: string; glyph: ReactNode }
+
+interface CardChoiceRowProps<V extends string> {
+  name: string
+  label: string
+  hint: string
+  choices: CardChoice<V>[]
+  value: V
+  disabled: boolean
+  onPick: (value: V, toast: string) => void
+}
+
+/** The inside of a stacked setting whose choices are cards, each a radio under the glyph that
+    describes it; the caller draws the row, a What's new target included. Every label and toast is
+    spelled there as a literal key: the missing-key guard reads no other. */
+function CardChoiceRow<V extends string>(
+  { name, label, hint, choices, value, disabled, onPick }: CardChoiceRowProps<V>,
+) {
+  return (
+    <>
+      <span className="setting-label">
+        <span id={`${name}-label`}>{label}</span>
+        <span className="setting-hint">{hint}</span>
+      </span>
+      <div className="layout-cards" role="radiogroup" aria-labelledby={`${name}-label`}>
+        {choices.map(choice => (
+          <label key={choice.value} className="layout-card">
+            {choice.glyph}
+            <span className="layout-card-name">
+              <input type="radio" name={name} value={choice.value} checked={value === choice.value}
+                disabled={disabled} onChange={() => onPick(choice.value, choice.toast)} />
+              {choice.label}
+            </span>
+          </label>
+        ))}
+      </div>
+    </>
   )
 }
 
@@ -163,28 +201,17 @@ export default function MailGeneralPage() {
             <h2>{t('general.layout')}</h2>
 
             <div className="field-h is-setting is-stacked">
-              <span className="setting-label">
-                <span id="reading-pane-label">{t('general.readingPane.label')}</span>
-                <span className="setting-hint">{t('general.readingPane.hint')}</span>
-              </span>
-              <div className="layout-cards" role="radiogroup" aria-labelledby="reading-pane-label">
-                {READING_PANES.map(({ value, labelKey, toastKey }) => (
-                  <label key={value} className="layout-card">
-                    <PaneGlyph variant={value} />
-                    <span className="layout-card-name">
-                      <input
-                        type="radio"
-                        name="reading-pane"
-                        value={value}
-                        checked={readingPaneOf(preferences) === value}
-                        disabled={saving}
-                        onChange={() => void save(PREFERENCE_KEYS.readingPane, value, t(toastKey))}
-                      />
-                      {t(labelKey)}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              <CardChoiceRow name="reading-pane" label={t('general.readingPane.label')}
+                hint={t('general.readingPane.hint')} value={readingPaneOf(preferences)} disabled={saving}
+                onPick={(value, toast) => void save(PREFERENCE_KEYS.readingPane, value, toast)}
+                choices={[
+                  { value: 'right', label: t('general.readingPane.right'), toast: t('general.readingPane.rightToast'),
+                    glyph: <PaneGlyph variant="right" /> },
+                  { value: 'bottom', label: t('general.readingPane.bottom'), toast: t('general.readingPane.bottomToast'),
+                    glyph: <PaneGlyph variant="bottom" /> },
+                  { value: 'none', label: t('general.readingPane.none'), toast: t('general.readingPane.noneToast'),
+                    glyph: <PaneGlyph variant="none" /> },
+                ]} />
             </div>
 
             <div className="field-h is-setting">
@@ -367,29 +394,28 @@ export default function MailGeneralPage() {
             <h2>{t('general.composing')}</h2>
 
             <div className="field-h is-setting is-stacked">
-              <span className="setting-label">
-                <span id="compose-format-label">{t('general.composeFormat.label')}</span>
-                <span className="setting-hint">{t('general.composeFormat.hint')}</span>
-              </span>
-              <div className="layout-cards" role="radiogroup" aria-labelledby="compose-format-label">
-                {COMPOSE_FORMATS.map(({ value, labelKey, toastKey }) => (
-                  <label key={value} className="layout-card">
-                    <EditorGlyph variant={value} />
-                    <span className="layout-card-name">
-                      <input
-                        type="radio"
-                        name="compose-format"
-                        value={value}
-                        checked={composeFormatOf(preferences) === value}
-                        disabled={saving}
-                        onChange={() => void save(PREFERENCE_KEYS.composeFormat, value, t(toastKey))}
-                      />
-                      {t(labelKey)}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              <CardChoiceRow name="compose-format" label={t('general.composeFormat.label')}
+                hint={t('general.composeFormat.hint')} value={composeFormatOf(preferences)} disabled={saving}
+                onPick={(value, toast) => void save(PREFERENCE_KEYS.composeFormat, value, toast)}
+                choices={[
+                  { value: 'html', label: t('general.composeFormat.html'), toast: t('general.composeFormat.htmlToast'),
+                    glyph: <EditorGlyph variant="html" /> },
+                  { value: 'text', label: t('general.composeFormat.text'), toast: t('general.composeFormat.textToast'),
+                    glyph: <EditorGlyph variant="text" /> },
+                ]} />
             </div>
+
+            <WhatsNewTarget id="mail:compose-window" className="field-h is-setting is-stacked">
+              <CardChoiceRow name="compose-window" label={t('general.composeWindow.label')}
+                hint={t('general.composeWindow.hint')} value={composeWindowOf(preferences)} disabled={saving}
+                onPick={(value, toast) => void save(PREFERENCE_KEYS.composeWindow, value, toast)}
+                choices={[
+                  { value: 'page', label: t('general.composeWindow.page'), toast: t('general.composeWindow.pageToast'),
+                    glyph: <WindowGlyph variant="page" /> },
+                  { value: 'window', label: t('general.composeWindow.window'), toast: t('general.composeWindow.windowToast'),
+                    glyph: <WindowGlyph variant="window" /> },
+                ]} />
+            </WhatsNewTarget>
 
             <ToggleRow
               id="capture-recipients"

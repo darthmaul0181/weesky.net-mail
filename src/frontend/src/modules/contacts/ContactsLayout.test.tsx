@@ -11,6 +11,7 @@ import { CONTACT_DRAG_MIME } from './dragContacts'
 import {
   createTestQueryClient, fireEscape, mockViewport, pressBackdrop, resetViewport, settle, setupUser,
 } from '../../test-utils'
+import { QuickComposeContext, type QuickComposeApi } from '../mail/compose/quick/QuickComposeContext'
 
 let user: ReturnType<typeof setupUser>
 beforeEach(() => { user = setupUser() })
@@ -24,7 +25,7 @@ vi.mock('../../api.js', () => ({
     importContacts: vi.fn(), exportContacts: vi.fn(),
     getContactGroups: vi.fn(), createContactGroup: vi.fn(), renameContactGroup: vi.fn(),
     deleteContactGroup: vi.fn(), addContactGroupMembers: vi.fn(),
-    removeContactGroupMembers: vi.fn(),
+    removeContactGroupMembers: vi.fn(), getPreferences: vi.fn(),
   },
   // The very class the layout imports from the mocked module, so its `instanceof ApiError` holds
   // against what these tests throw: a locally-declared twin fails that check and routes a 409 to
@@ -45,7 +46,7 @@ const { api } = await import('../../api.js') as unknown as {
     | 'setContactFavorite' | 'deleteContacts' | 'setContactsFavorite'
     | 'importContacts' | 'exportContacts'
     | 'getContactGroups' | 'createContactGroup' | 'renameContactGroup' | 'deleteContactGroup'
-    | 'addContactGroupMembers' | 'removeContactGroupMembers', Mock<(...args: unknown[]) => unknown>>
+    | 'addContactGroupMembers' | 'removeContactGroupMembers' | 'getPreferences', Mock<(...args: unknown[]) => unknown>>
     & { getContact: Mock<typeof realApi.getContact> }
 }
 const { ApiError } = await import('../../api.js') as unknown as {
@@ -81,7 +82,10 @@ function serveBook(rows: Contact[]) {
 
 /** Every case reads the band, and the band asks for the groups: an endpoint answering nothing
     would put every existing case behind a failed query. */
-beforeEach(() => { api.getContactGroups.mockResolvedValue({ groups: [] }) })
+beforeEach(() => {
+  api.getContactGroups.mockResolvedValue({ groups: [] })
+  api.getPreferences.mockResolvedValue({})
+})
 
 function serveGroups(groups: ContactGroup[]) {
   api.getContactGroups.mockResolvedValue({ groups })
@@ -113,10 +117,14 @@ const routes = [
 
 /** Both edit routes are the same route object, so the layout is not remounted between them —
     which is what makes the editor's own key the only thing that can reseed the form. */
-function renderRouter(path: string) {
+function renderRouter(path: string, quick?: QuickComposeApi) {
   const client = createTestQueryClient()
   const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
+  const routed = <RouterProvider router={router} />
+  render(
+    <QueryClientProvider client={client}>
+      {quick ? <QuickComposeContext.Provider value={quick}>{routed}</QuickComposeContext.Provider> : routed}
+    </QueryClientProvider>)
   return router
 }
 
@@ -1096,6 +1104,25 @@ describe('contact groups', () => {
 
   // The entry and the composer's dropdown row resolve the members through one function, so a group
   // the book answers nothing for refuses the click here rather than opening an empty composer.
+  it('Write opens the window and stays on the card', async () => {
+    api.getPreferences.mockResolvedValue({ 'mail.composeWindow': 'window' })
+    const quick: QuickComposeApi = {
+      state: null, open: vi.fn(), restore: vi.fn(), close: vi.fn(), showsDraft: vi.fn(() => false),
+    }
+    const router = renderRouter('/contacts?id=a', quick)
+    await waitFor(() => expect(api.getPreferences).toHaveBeenCalled())
+    await settle()
+
+    await user.click(await screen.findByRole('button', { name: 'Write' }))
+
+    await waitFor(() => expect(quick.open).toHaveBeenCalled())
+    const [seed, origin] = vi.mocked(quick.open).mock.calls[0]!
+    expect(seed?.to).toEqual(['alice@x.be'])
+    expect(origin).toBe('/contacts?id=a')
+    expect(router.state.location.pathname).toBe('/contacts')
+    expect(router.state.location.search).toBe('?id=a')
+  })
+
   it('refuses Write to group when no member resolves to an address', async () => {
     serveGroups([{ id: 'g1', name: 'Friends', memberIds: ['gone'] }])
     renderAt('/contacts')

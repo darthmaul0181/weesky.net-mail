@@ -32,6 +32,10 @@
     "palette-buttons": {
       "title": "Button colour in light mode",
       "body": "Appearance now lets you choose whether buttons wear the palette’s structure colour or its accent in light mode, for every built-in palette."
+    },
+    "compose-window": {
+      "title": "Write in a floating window",
+      "body": "Settings > Mail now lets you open new messages in a floating window that stays open while you move around the app. On a phone, messages always open full page."
     }
   }
 }

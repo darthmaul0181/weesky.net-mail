@@ -6,6 +6,7 @@ import { createTestQueryClient, withQueryClient } from '../test-utils'
 // The three ambient hooks are the shell's own business and none of them touches the tab bar.
 vi.mock('../modules/mail/notify/useMailNotifications', () => ({ useMailNotifications: () => {} }))
 vi.mock('../hooks/useTabTitle', () => ({ useTabTitle: () => {} }))
+vi.mock('../contexts/AuthContext', () => import('../test-auth'))
 vi.mock('../modules/mail/notify/useFaviconBadge', () => ({ useFaviconBadge: () => {} }))
 vi.mock('../api.js', () => ({
   api: {

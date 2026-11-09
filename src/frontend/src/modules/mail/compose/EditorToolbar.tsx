@@ -86,14 +86,16 @@ interface Props {
   onPickImages: (files: File[]) => void
   /** Attaching moved here from the tray, which is a list of files and not a place to add one. */
   onAddFiles?: (files: File[]) => void
+  /** Folds as on a phone whatever the viewport: the quick compose window is as narrow as one. */
+  folded?: boolean
 }
 
 export default function EditorToolbar(
-  { editor, active, plainText, switchLocked, onTogglePlainText, onPickImages, onAddFiles }: Props) {
+  { editor, active, plainText, switchLocked, onTogglePlainText, onPickImages, onAddFiles, folded }: Props) {
   const { t } = useTranslation('compose')
   // Three rows of tools left 102px of a 640px screen to the message. Only the phone folds: a
   // desktop has the width for all seven groups and would gain a button that hides its own tools.
-  const narrow = useViewport() === 'phone'
+  const narrow = useViewport() === 'phone' || folded === true
   const [expanded, setExpanded] = useState(false)
   const [openPopover, setOpenPopover] = useState<'text' | 'highlight' | 'link' | null>(null)
   const [url, setUrl] = useState('')
@@ -162,10 +164,11 @@ export default function EditorToolbar(
     </span>
   )
 
-  // `is-extra` groups are folded by the phone stylesheet, never unmounted, so an open popover among
-  // them survives a fold and the tab order needs no second source of truth.
+  // `is-extra` groups are folded by the stylesheet under `is-folded`, never unmounted, so an open
+  // popover among them survives a fold and the tab order needs no second source of truth.
+  const fold = narrow ? (expanded ? ' is-folded is-expanded' : ' is-folded') : ''
   return (
-    <div className={`compose-toolbar${narrow && expanded ? ' is-expanded' : ''}`} ref={container}>
+    <div className={`compose-toolbar${fold}`} ref={container}>
       {/* Stays when everything else folds away: it is the only way back to the editor. */}
       <div className="compose-tool-group">
         {btn(t('toolbar.plainText'), <PlainTextIcon size={ICON} />, onTogglePlainText, plainText, switchLocked)}

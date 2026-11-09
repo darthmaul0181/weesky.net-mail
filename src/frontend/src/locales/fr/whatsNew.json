@@ -32,6 +32,10 @@
     "palette-buttons": {
       "title": "Couleur des boutons en mode clair",
       "body": "Dans Apparence, vous pouvez désormais choisir si les boutons portent la couleur de structure de la palette ou son accent en mode clair, pour toutes les palettes fournies."
+    },
+    "compose-window": {
+      "title": "Écrire dans une fenêtre flottante",
+      "body": "Dans Paramètres > Mail, vous pouvez désormais ouvrir les nouveaux messages dans une fenêtre flottante qui reste ouverte quand vous naviguez dans l’application. Sur téléphone, les messages s’ouvrent toujours en pleine page."
     }
   }
 }

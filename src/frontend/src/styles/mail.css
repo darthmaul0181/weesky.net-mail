@@ -1688,6 +1688,10 @@ textarea.compose-editor {
   padding: 7px 10px;
   border-bottom: 1px solid var(--border);
 }
+/* Folded to seven cells on a phone and in the quick compose window, both under `is-folded` (measured:
+   seven fits one row at 320 and 360, eight wraps at 320) — see CLAUDE.md's composer paragraph.
+   Hidden, not unmounted, so an open popover survives a fold. */
+.compose-toolbar.is-folded:not(.is-expanded) .compose-tool-group.is-extra { display: none; }
 
 /* Each family of controls is its own capsule, and that grouping is what the 1px rules used to
    do — a rule between two capsules would say the same thing twice. */
@@ -2092,10 +2096,6 @@ textarea.compose-editor {
      probe paragraph). Stacking, not wrapping — a `.btn` neither shrinks nor wraps its label. */
   .folder-pick-submit { flex-direction: column; align-items: stretch; }
   .folder-pick-submit .btn { width: 100%; min-height: var(--touch); }
-
-  /* Folded to seven cells (measured: seven fits one row at 320 and 360, eight wraps at 320) —
-     see CLAUDE.md's composer paragraph. Hidden, not unmounted, so an open popover survives a fold. */
-  .compose-toolbar:not(.is-expanded) .compose-tool-group.is-extra { display: none; }
 
   /* The quick-search band is `flex: none`, so flooring this 26px button grows the band once and
      spends no row budget — same trade as .compose-header's buttons below. The input beside it

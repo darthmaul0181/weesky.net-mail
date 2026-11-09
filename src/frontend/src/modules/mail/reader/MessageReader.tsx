@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router'
 import { api, mailAttachmentUrl, requestBlob } from '../../../api.js'
 import { downloadBlob } from '../../../lib/downloadBlob'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -31,6 +30,7 @@ import {
 } from '../../../hooks/usePreferences'
 import { useContacts } from '../../contacts/queries'
 import { buildComposeSeed, type ComposeAction } from '../compose/composeSeed'
+import { useComposer } from '../compose/quick/useComposer'
 import { canonicalAddress } from '../../../lib/canonicalAddress'
 import { hasOpenLayer } from '../../../lib/layerStack'
 import ReaderActions from './ReaderActions'
@@ -115,11 +115,11 @@ export default function MessageReader(
   const {
     roles, inTrash, archiveOff, archiveReason, junkOff, junkReason, trashOff, trashReason, deleteLabel,
   } = useRoleActions(folders, folderRole)
-  const navigate = useNavigate()
   const { identity, activeAccount } = useAuth()
   const { data: identityList } = useIdentities()
   const { data: aliases } = useAliases()
   const prepare = usePrepareQuote()
+  const composer = useComposer()
   const { data: trustedSenders } = useTrustedSenders()
   const setTrust = useTrustSender(onNotify)
   const trustContacts = !!preferences && trustContactsOf(preferences)
@@ -130,13 +130,15 @@ export default function MessageReader(
 
   // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
   // replaced the list and needs a way back. Any open layer owns Escape — the reader's own
-  // dialogs and anything else on the screen alike — so the reader stays put under it.
+  // dialogs and anything else on the screen alike — so the reader stays put under it. So does an
+  // Escape typed in the quick compose window, which is no layer and leaves the key to its menus.
   const onEscape = onBack ?? (expanded ? onToggleExpand : undefined)
   useEffect(() => {
     if (!onEscape) return
 
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onEscape()
+      const inWindow = event.target instanceof Element && event.target.closest('.quick-compose') !== null
+      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer() && !inWindow) onEscape()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -250,6 +252,7 @@ export default function MessageReader(
   }
 
   async function openCompose(action: ComposeAction) {
+    if (!await composer.prepare()) return
     try {
       const purpose = action === 'editAsNew' ? 'editAsNew' : action === 'forward' ? 'forward' : 'reply'
       const prepared = await prepare.mutateAsync({ folder: folderPath!, uid: uid!, purpose })
@@ -258,7 +261,7 @@ export default function MessageReader(
       const seed = buildComposeSeed(
         action, data!, prepared, identityList ?? [], aliases ?? [],
         [activeAccount?.email ?? null, identity?.email ?? null], accountId)
-      void navigate('/mail/compose', { state: { from: folderPath, seed } })
+      composer.open({ seed, from: folderPath! })
     } catch (error) {
       onNotify?.(apiErrorMessage(error, t('reader.prepareFailed')))
     }

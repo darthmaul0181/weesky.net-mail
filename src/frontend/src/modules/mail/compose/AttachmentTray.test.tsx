@@ -5,7 +5,7 @@ import type { StagedItem } from './useStagedAttachments'
 
 function item(overrides: Partial<StagedItem> = {}): StagedItem {
   return {
-    key: 'staged-0', id: null, fileName: 'a.txt', size: 4096, progress: 0, error: null,
+    key: 'staged-0', id: null, fileName: 'a.txt', size: 4096, contentType: 'text/plain', progress: 0, error: null,
     accountId: 'primary', ...overrides,
   }
 }

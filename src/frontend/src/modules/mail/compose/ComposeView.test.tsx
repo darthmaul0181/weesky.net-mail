@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import ComposeView from './ComposeView'
 import { useIdentities } from '../queries'
 import type { ComposeSeed } from './composeSeed'
-import type { EditorHandle } from './SquireEditor'
+import { editorState } from './squireEditorStub'
 import { createTestQueryClient, fireEscape, mockViewport, resetViewport, settle, waitFor } from '../../../test-utils'
 import { confirmLeave } from '../../../lib/leaveGuard'
 import type { api as realApi } from '../../../api'
@@ -24,9 +24,6 @@ const mocks = vi.hoisted(() => ({
   deleteContact: vi.fn(),
   apiBase: 'https://api.test.example',
 }))
-// The editor's own state, shared with the stub below: Squire needs a real browser, so mounting
-// it here would only re-test what SquireEditor.mount already covers.
-const editorState = vi.hoisted(() => ({ html: '', commands: [] as string[], images: [] as string[] }))
 
 vi.mock('../../../api.js', () => ({
   api: {
@@ -56,29 +53,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
 }))
 
 beforeEach(() => { auth.activeAccountId = 'primary' })
-vi.mock('./SquireEditor', async () => {
-  const { forwardRef, useImperativeHandle } = await import('react')
-  const Stub = forwardRef<EditorHandle, { onChange: () => void; initialHtml?: string }>(
-    function SquireEditorStub({ onChange, initialHtml }, ref) {
-      useImperativeHandle(ref, () => ({
-        getHTML: () => editorState.html,
-        isEmpty: () => editorState.html === '',
-        focus: () => {},
-        command: (name: string) => { editorState.commands.push(name) },
-        setTextColour: () => {}, setHighlightColour: () => {},
-        setFontFace: () => {}, setFontSize: () => {}, setAlignment: () => {}, makeLink: () => {},
-        insertImage: (src: string) => { editorState.images.push(src) },
-      }), [])
-      return (
-        <textarea
-          data-testid="compose-editor"
-          defaultValue={initialHtml}
-          onChange={event => { editorState.html = event.target.value; onChange() }}
-        />
-      )
-    })
-  return { default: Stub }
-})
+vi.mock('./SquireEditor', () => import('./squireEditorStub'))
 
 /** The one source of truth for the account's preferences: the api mock resolves it, and
     renderCompose primes the query cache with it. ComposeView reads the composing format at mount
@@ -88,7 +63,8 @@ let prefs: Record<string, string> = {}
 
 function renderCompose(
   from: string | undefined = 'INBOX', seed?: ComposeSeed, search = '',
-  { cold = false, backTo, onCommit }: { cold?: boolean; backTo?: string; onCommit?: () => void } = {}) {
+  { cold = false, backTo, handedOver, onCommit }:
+  { cold?: boolean; backTo?: string; handedOver?: { dirty: boolean }; onCommit?: () => void } = {}) {
   const onNotify = vi.fn()
   const client = createTestQueryClient({ mutations: { retry: false } })
   if (!cold) client.setQueryData(['preferences'], prefs)
@@ -98,7 +74,7 @@ function renderCompose(
       { path: '/mail/compose', element: <ComposeView onNotify={onNotify} /> },
       { path: '/contacts/:id', element: <span data-testid="contact-view">contact</span> },
     ],
-    { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed, backTo } }], initialIndex: 1 },
+    { initialEntries: ['/mail', { pathname: '/mail/compose', search, state: { from, seed, backTo, handedOver } }], initialIndex: 1 },
   )
   const tree = <QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>
   render(onCommit ? <Profiler id="compose" onRender={onCommit}>{tree}</Profiler> : tree)
@@ -1644,6 +1620,44 @@ describe('the default composing editor', () => {
     expect(screen.queryAllByText('a@b.c')).toHaveLength(seededTokens)
     expect(screen.queryByTestId('compose-editor')).toBeNull()
     expect(screen.getByRole('textbox', { name: 'Message body' })).toBeInstanceOf(HTMLTextAreaElement)
+  })
+})
+
+// Expand from the window: the page takes the window's live content as it stands.
+describe('a composer handed over by the quick compose window', () => {
+  it('a handed-over draft opens dirty', async () => {
+    const { router } = renderCompose('INBOX', draftSeed({ subject: 'Typed in the window' }), '', { handedOver: { dirty: true } })
+
+    act(() => { void router.navigate('/mail') })
+
+    expect(await discardModal()).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/mail/compose')
+  })
+
+  // Saved in the window, then expanded: the page has nothing the Drafts folder does not hold.
+  it('a handed-over clean reply opens clean', async () => {
+    const saved = draftSeed({ action: 'reply', subject: 'Re: saved', draftRef: { folderPath: 'Drafts', uid: 7 } })
+    const { router } = renderCompose('INBOX', saved, '', { handedOver: { dirty: false } })
+
+    act(() => { void router.navigate('/mail') })
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/mail'))
+    expect(screen.queryByText('Save this draft?')).toBeNull()
+  })
+
+  it('a handed-over plain-text seed stays plain text when the account default is html', () => {
+    prefs = { 'mail.composeFormat': 'html' }
+    renderCompose('INBOX', draftSeed({ action: 'reply', html: '', text: 'plain words' }), '', { handedOver: { dirty: true } })
+
+    expect(screen.getByTestId<HTMLTextAreaElement>('compose-text-editor').value).toBe('plain words')
+  })
+
+  it('a handed-over html reply stays html when the account default is text', () => {
+    prefs = { 'mail.composeFormat': 'text' }
+    renderCompose('INBOX', draftSeed({ action: 'reply', html: '<p>rich</p>', draftRef: null }), '', { handedOver: { dirty: true } })
+
+    expect(screen.getByTestId('compose-editor')).toHaveValue('<p>rich</p>')
+    expect(screen.queryByTestId('compose-text-editor')).toBeNull()
   })
 })
 

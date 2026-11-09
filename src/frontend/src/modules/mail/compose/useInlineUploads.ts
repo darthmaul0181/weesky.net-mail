@@ -9,8 +9,6 @@ import type { EditorHandle } from './SquireEditor'
 /** The single predicate for "goes in the body", so the drop overlay and routeFiles cannot drift. */
 export const isImage = (type: string) => type.startsWith('image/')
 
-export type InsertedInline = { id: string; fileName: string; size: number }
-
 const INLINE_UPLOAD_CONCURRENCY = 3
 
 // At most `limit` tasks run at once, started in call order; each settles rather than rejects, so
@@ -36,7 +34,7 @@ interface Args {
   editor: EditorHandle | null
   addFiles: (files: File[]) => void
   addInline: (id: string) => void
-  setInsertedInline: React.Dispatch<React.SetStateAction<InsertedInline[]>>
+  setInsertedInline: React.Dispatch<React.SetStateAction<StagedAttachmentInfo[]>>
   markDirty: () => void
   onNotify: (message: string, kind?: Toast['type']) => void
 }

@@ -74,14 +74,16 @@ interface ToastsProps {
   onRemove: (id: number) => void
   onPause?: (id: number) => void
   onResume?: (id: number) => void
+  className?: string
 }
 
-export default function Toasts({ toasts, onRemove, onPause, onResume }: ToastsProps) {
+export default function Toasts({ toasts, onRemove, onPause, onResume, className }: ToastsProps) {
   // Always rendered, never withheld while empty: a live region created together with its first
   // child is routinely not announced, so the container has to already exist when a toast lands.
   // Empty, it costs nothing on screen — position: fixed, no padding or background, 0x0.
   return (
-    <div className="toast-container" role="status" aria-live="polite" aria-atomic="false">
+    <div className={className ? `toast-container ${className}` : 'toast-container'}
+      role="status" aria-live="polite" aria-atomic="false">
       {toasts.map(toast => (
         <Toast key={toast.id} toast={toast} onRemove={onRemove} onPause={onPause} onResume={onResume} />
       ))}

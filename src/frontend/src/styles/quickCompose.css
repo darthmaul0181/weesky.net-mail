@@ -1,0 +1,121 @@
+/* The quick compose window (`ComposeForm` frame="window"). The form inside keeps the page
+   composer's `.compose-*` skin; only what the window adds or changes is written here. */
+
+/* One set of measures, read by the window, its bar and both toast hosts. The clamps are the
+   tablet's: the height leaves two toasts room above the window on a short screen (measured, 136px
+   at 1366x657 and 1280x600). */
+.app-shell {
+  --qc-inset: 16px;
+  --qc-w: min(540px, calc(100vw - 2 * var(--qc-inset)));
+  --qc-h: min(560px, calc(100dvh - 160px));
+  --qc-bar-w: min(280px, calc(100vw - 2 * var(--qc-inset)));
+  --qc-bar-h: 48px;
+}
+
+/* Over the content and under every dialog, drawer and toast: it is not a dialog and dims nothing.
+   No transform, filter or contain here — the leave question is a `.modal-overlay` drawn inside,
+   and any of those would make this box its containing block. */
+.quick-compose {
+  position: fixed;
+  right: var(--qc-inset);
+  bottom: var(--qc-inset);
+  z-index: var(--z-floating);
+  display: flex;
+  flex-direction: column;
+  width: var(--qc-w);
+  height: var(--qc-h);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+/* The title takes the band, so Minimise, Expand and ✕ sit against the right edge. */
+.quick-compose-header { cursor: pointer; }
+.quick-compose-header .quick-compose-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-compose-header .quick-compose-title::after { content: none; }
+
+.quick-compose-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* Minimised, the header is the bar and everything else is hidden rather than unmounted, so the
+   draft keeps its state — except a dialog the form raises, a mailbox switch's question. */
+.quick-compose.is-minimised {
+  width: var(--qc-bar-w);
+  height: var(--qc-bar-h);
+}
+.quick-compose.is-minimised .compose-view > :not(.compose-header, .modal-overlay) { display: none; }
+.quick-compose.is-minimised .compose-header { flex: 1; padding-block: 0; border-bottom: none; }
+
+.quick-compose-restore {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A dialog the form raises (the leave question, the plain-text confirm) lives inside this box's
+   stacking context: the box rises with it, or a tablet's drawer would sit over the question. */
+.quick-compose:has(.modal-overlay) { z-index: var(--z-dialog); }
+
+/* Toasts never sit under the window: while it exists every host rises above it. The window's own
+   host keeps the left half of its footprint, a module's the right, so two hosts never overlap.
+   With no window, the window's host is an ordinary one in the usual corner. */
+.app-shell:has(.quick-compose) .quick-compose-toasts {
+  right: calc(var(--qc-inset) + var(--qc-w) / 2 + 4px);
+  align-items: flex-end;
+  max-width: calc(var(--qc-w) / 2 - 4px);
+}
+.app-shell:has(.quick-compose) { --qc-above: calc(var(--qc-inset) + var(--qc-h) + 8px); }
+.app-shell:has(.quick-compose.is-minimised) { --qc-above: calc(var(--qc-inset) + var(--qc-bar-h) + 8px); }
+.app-shell:has(.quick-compose) .toast-container { bottom: var(--qc-toasts, var(--qc-above)); }
+.app-shell:has(.quick-compose) .toast-container:not(.quick-compose-toasts) {
+  right: var(--qc-inset);
+  max-width: calc(var(--qc-w) / 2 - 4px);
+}
+/* Above an open window a short desktop screen leaves room for two toasts and no more (136px at
+   1366x657 and 1280x600), so there a module's host, which piles up Undo toasts, stands at the foot
+   of the screen beside the window. The tablet, tall and narrow, keeps it above (rule below). */
+.app-shell:has(.quick-compose:not(.is-minimised)) .toast-container:not(.quick-compose-toasts) {
+  bottom: var(--qc-inset);
+  right: calc(var(--qc-inset) + var(--qc-w) + 8px);
+  max-width: calc(100vw - var(--qc-w) - 2 * var(--qc-inset) - 8px);
+}
+
+/* With no window the two hosts share the usual corner, so once both hold toasts they split it the
+   same way: the window's host on the left half, a module's on the right, never one over the other. */
+.app-shell:not(:has(.quick-compose)):has(.quick-compose-toasts > .toast):has(.toast-container:not(.quick-compose-toasts) > .toast) .toast-container {
+  max-width: calc(var(--qc-w) / 2 - 4px);
+}
+.app-shell:not(:has(.quick-compose)):has(.quick-compose-toasts > .toast):has(.toast-container:not(.quick-compose-toasts) > .toast) .quick-compose-toasts {
+  right: calc(24px + var(--qc-w) / 2 + 4px);
+  align-items: flex-end;
+}
+
+/* A module's floating button (Contacts' Add, Calendar's +) stands on the window or its bar, and the
+   toasts climb over it by its 56px plus the 8px gap, as they do over its usual spot. Mail's own
+   button is withheld instead: it would only restore the window it sits on. */
+@media (max-width: 1023px) {
+  .app-shell:has(.quick-compose:not(.is-minimised)) .toast-container:not(.quick-compose-toasts) {
+    bottom: var(--qc-toasts, var(--qc-above));
+    right: var(--qc-inset);
+    max-width: calc(var(--qc-w) / 2 - 4px);
+  }
+  .app-shell:has(.quick-compose) .floating-action { bottom: var(--qc-above); }
+  .app-shell:has(.quick-compose):has(.floating-action) { --qc-toasts: calc(var(--qc-above) + 64px); }
+}

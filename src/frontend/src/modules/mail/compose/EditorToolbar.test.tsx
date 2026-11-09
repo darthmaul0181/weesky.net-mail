@@ -382,6 +382,7 @@ describe('EditorToolbar', () => {
     it('folds every group but the essentials behind one button', () => {
       const { container } = toolbar()
 
+      expect(container.querySelector('.compose-toolbar')!.className).toContain('is-folded')
       expect(container.querySelector('.compose-toolbar')!.className).not.toContain('is-expanded')
       expect(screen.getByRole('button', { name: 'More formatting tools' }))
         .toHaveAttribute('aria-expanded', 'false')
@@ -417,5 +418,15 @@ describe('EditorToolbar', () => {
 
     expect(screen.queryByRole('button', { name: 'More formatting tools' })).toBeNull()
     expect(container.querySelector('.compose-toolbar')!.className).not.toContain('is-expanded')
+    expect(container.querySelector('.compose-toolbar')!.className).not.toContain('is-folded')
+  })
+
+  // The quick compose window is as narrow as a phone, so it asks for the phone's fold by prop.
+  it('folds on a desktop when asked to', () => {
+    const { container } = render(<EditorToolbar editor={fakeEditor()} plainText={false} folded
+      onPickImages={noop} onAddFiles={noop} onTogglePlainText={noop} />)
+
+    expect(container.querySelector('.compose-toolbar')!.className).toContain('is-folded')
+    expect(screen.getByRole('button', { name: 'More formatting tools' })).toBeInTheDocument()
   })
 })

@@ -42,6 +42,8 @@ export default function IdentityMenu() {
   if (!identity) return null
 
   async function handleSignOut() {
+    setOpen(false)
+    if (!(await confirmLeave())) return
     await logout()
     void navigate('/login', { replace: true })
   }

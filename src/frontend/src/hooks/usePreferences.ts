@@ -14,6 +14,7 @@ export const PREFERENCE_KEYS = {
   readingPane: 'mail.readingPane',
   rowActions: 'mail.rowActions',
   composeFormat: 'mail.composeFormat',
+  composeWindow: 'mail.composeWindow',
   showFolderIcons: 'mail.showFolderIcons',
   groupConversations: 'mail.groupConversations',
   showAvatars: 'mail.showAvatars',
@@ -122,6 +123,13 @@ export type ComposeFormat = 'html' | 'text'
     unrecognised value from a newer build never leaves the user in an editor they did not pick. */
 export function composeFormatOf(preferences: Preferences): ComposeFormat {
   return preferences[PREFERENCE_KEYS.composeFormat] === 'text' ? 'text' : 'html'
+}
+
+export type ComposeWindow = 'page' | 'window'
+
+/** Where a composer opens. `page` unless the account chose the floating window. */
+export function composeWindowOf(preferences: Preferences): ComposeWindow {
+  return preferences[PREFERENCE_KEYS.composeWindow] === 'window' ? 'window' : 'page'
 }
 
 export type RowAction = 'seen' | 'archive' | 'junk' | 'delete'

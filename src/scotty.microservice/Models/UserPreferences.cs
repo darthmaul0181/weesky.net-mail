@@ -34,6 +34,7 @@ public static class UserPreferences
     public const string MailReadingPane = "mail.readingPane";
     public const string MailRowActions = "mail.rowActions";
     public const string MailComposeFormat = "mail.composeFormat";
+    public const string MailComposeWindow = "mail.composeWindow";
     public const string MailShowFolderIcons = "mail.showFolderIcons";
     public const string MailShowAvatars = "mail.showAvatars";
     public const string MailAvatarColor = "mail.avatarColor";
@@ -91,6 +92,7 @@ public static class UserPreferences
         // An enumeration rather than a boolean: it leaves room for a "follow the original" value
         // without a key migration.
         new(MailComposeFormat, "html", ["html", "text"]),
+        new(MailComposeWindow, "page", ["page", "window"]),
         // Off by default: the folder column has never carried icons, so an account that never
         // opens the setting sees exactly what it saw yesterday.
         new(MailShowFolderIcons, "false", Booleans),
