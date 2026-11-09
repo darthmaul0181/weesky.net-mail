@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import Tooltip from '../../../components/Tooltip'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
+import CollapseIcon from '../../../icons/CollapseIcon'
+import ExpandIcon from '../../../icons/ExpandIcon'
 import ForwardIcon from '../../../icons/ForwardIcon'
 import KebabIcon from '../../../icons/KebabIcon'
 import MailIcon from '../../../icons/MailIcon'
@@ -13,6 +15,7 @@ import StarIcon from '../../../icons/StarIcon'
 import SunIcon from '../../../icons/SunIcon'
 import TrashIcon from '../../../icons/TrashIcon'
 import WhatsNewDot from '../../whatsnew/WhatsNewDot'
+import WhatsNewTarget from '../../whatsnew/WhatsNewTarget'
 
 interface Props {
   showColourToggle: boolean
@@ -35,6 +38,9 @@ interface Props {
   preparing: boolean
   /** The phone's foot-of-screen shape: five named cells instead of an icon cluster. */
   bar?: boolean
+  /** Absent where the reader already owns the screen (no reading pane, or a phone). */
+  onToggleExpand?: () => void
+  expanded?: boolean
 }
 
 /** Icon AND tooltip describe the action to come, not the current state — the validated design:
@@ -43,7 +49,7 @@ interface Props {
 export default function ReaderActions({
   showColourToggle, originalColours, onToggleColours, seen, flagged, onToggleSeen, onToggleFlagged,
   deleteLabel, deleteDisabled, deleteReason, onDelete, actions,
-  onReply, onReplyAll, onForward, preparing, bar = false,
+  onReply, onReplyAll, onForward, preparing, bar = false, onToggleExpand, expanded = false,
 }: Props) {
   const { t } = useTranslation('mail')
   const deleteTitle = deleteDisabled ? deleteReason : undefined
@@ -113,6 +119,17 @@ export default function ReaderActions({
 
   return (
     <div className="reader-actions">
+      {onToggleExpand && (
+        <>
+          <WhatsNewTarget id="reader:expand">
+            <button type="button" className="action-btn" aria-label={t(expanded ? 'reader.collapse' : 'reader.expand')}
+              title={t(expanded ? 'reader.collapse' : 'reader.expand')} onClick={onToggleExpand}>
+              {expanded ? <CollapseIcon size={18} /> : <ExpandIcon size={18} />}
+            </button>
+          </WhatsNewTarget>
+          <span className="actions-rule" />
+        </>
+      )}
       <button type="button" className="action-btn" aria-label={t('reader.reply')} title={t('reader.reply')}
         disabled={preparing} onClick={onReply}>
         <ReplyIcon size={18} />

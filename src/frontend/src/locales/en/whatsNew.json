@@ -24,6 +24,10 @@
     "bimi-logos": {
       "title": "Brand logos as sender avatars",
       "body": "When a message passes the sender authenticity check, its avatar can now be the sender’s brand logo. It follows the same setting in Settings > Mail."
+    },
+    "reader-expand": {
+      "title": "Expand the reader",
+      "body": "The expand button in an open message’s toolbar hides the list and gives the whole space to the message. Click it again, or press Esc, to bring the list back."
     }
   }
 }

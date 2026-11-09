@@ -207,6 +207,8 @@
     "loading": "Chargement du message…",
     "loadFailed": "Impossible de charger ce message.",
     "back": "Revenir à la liste des messages",
+    "expand": "Agrandir le lecteur",
+    "collapse": "Réduire le lecteur",
     "bodyTitle": "Corps du message",
     "showDetails": "Afficher les détails",
     "hideDetails": "Masquer les détails",

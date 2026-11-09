@@ -44,4 +44,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     path: ['rail:settings', 'settings:mail'], target: 'mail:show-avatars',
     href: '/settings/mail',
   },
+  {
+    id: 'reader-expand', version: '2.8.0',
+    // No Show me: the button exists only behind an open message.
+    path: ['rail:mail'], target: 'reader:expand',
+  },
 ]

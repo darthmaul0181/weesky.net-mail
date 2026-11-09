@@ -207,6 +207,13 @@ export default function MailLayout() {
   const [listWidth, setListWidth] = usePaneSize('mail.split.right', 380, 240)
   const [listHeight, setListHeight] = usePaneSize('mail.split.bottom', 280, 120)
 
+  // Not remembered: the list comes back with the next message, and when the reader closes.
+  const [expandedState, setExpanded] = useState(false)
+  if (uid === null && expandedState) setExpanded(false)
+  const expanded = expandedState && uid !== null
+  const toggleExpanded = useCallback(() => setExpanded(v => !v), [])
+  const expandProps = pane === 'none' ? {} : { expanded, onToggleExpand: toggleExpanded }
+
   function closeMessage() {
     if (folder) setParams({ folder })
   }
@@ -360,28 +367,30 @@ export default function MailLayout() {
         <>
           {pane === 'right' && (
             <div className="mail-row">
-              {listColumn(uid, { width: listWidth })}
-              {preferences && (
+              {listColumn(uid, { width: listWidth }, expanded)}
+              {preferences && !expanded && (
                 <PaneSplitter
                   orientation="vertical" size={listWidth} defaultSize={380} min={240} reserve={320}
                   onResize={setListWidth}
                 />
               )}
               <div className="mail-reader">
-                <MessageReader {...readerProps} regionRef={listRegion} />
+                <MessageReader {...readerProps} {...expandProps} regionRef={listRegion} />
               </div>
             </div>
           )}
 
           {pane === 'bottom' && (
             <div className="mail-stack">
-              {listColumn(uid, { height: listHeight })}
-              <PaneSplitter
-                orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
-                onResize={setListHeight}
-              />
+              {listColumn(uid, { height: listHeight }, expanded)}
+              {!expanded && (
+                <PaneSplitter
+                  orientation="horizontal" size={listHeight} defaultSize={280} min={120} reserve={160}
+                  onResize={setListHeight}
+                />
+              )}
               <div className="mail-reader">
-                <MessageReader {...readerProps} regionRef={listRegion} />
+                <MessageReader {...readerProps} {...expandProps} regionRef={listRegion} />
               </div>
             </div>
           )}

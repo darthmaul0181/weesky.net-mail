@@ -655,6 +655,54 @@ describe('reading pane arrangements', () => {
   })
 })
 
+describe('expanding the reader over the list', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getMailMessage.mockResolvedValue({
+      uid: 7, folderPath: 'INBOX', uidValidity: 1, subject: 'open me', fromName: '', fromAddress: 'a@b.c',
+      to: [], cc: [], date: '2026-07-18T09:00:00Z', htmlBody: '<p>x</p>', textBody: 'x',
+      blockedImageCount: 0, attachments: [],
+    })
+  })
+
+  it.each(['right', 'bottom'])('hides the list and the splitter in the %s split, then brings them back', async pane => {
+    const { container } = renderAt('/mail?folder=INBOX&uid=7', folders, pane)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand the reader' }))
+    expect(container.querySelector('.mail-list.is-hidden')).not.toBeNull()
+    expect(screen.queryByRole('separator', { name: 'Resize the panes' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse the reader' }))
+    expect(container.querySelector('.mail-list.is-hidden')).toBeNull()
+    expect(await screen.findByRole('separator', { name: 'Resize the panes' })).toBeInTheDocument()
+  })
+
+  it('collapses on Escape', async () => {
+    const { container } = renderAt('/mail?folder=INBOX&uid=7', folders, 'right')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand the reader' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    await waitFor(() => expect(container.querySelector('.mail-list.is-hidden')).toBeNull())
+  })
+
+  it('is not remembered once the message closes', async () => {
+    const { container } = renderAt(['/mail?folder=INBOX', '/mail?folder=INBOX&uid=7'], folders, 'right')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand the reader' }))
+    fireEvent.click(screen.getByTestId('go-back'))
+
+    await waitFor(() => expect(container.querySelector('.mail-list.is-hidden')).toBeNull())
+  })
+
+  it('offers no button where the reader already has the screen', async () => {
+    renderAt('/mail?folder=INBOX&uid=7', folders, 'none')
+
+    await screen.findByText('open me')
+    expect(screen.queryByRole('button', { name: 'Expand the reader' })).toBeNull()
+  })
+})
+
 // The confirm hands focus back through the layout's own regions, and in `none` neither of them is
 // always on screen: the list is `display: none` while a message is open, and the reader column
 // leaves with the last message.

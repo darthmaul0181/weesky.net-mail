@@ -65,11 +65,14 @@ interface Props {
   bottomActions?: boolean
   /** The list column, where focus goes when an expunge takes the reader's own Delete with it. */
   regionRef?: RefObject<HTMLElement | null>
+  /** Hide the list and give the reader its space; absent where the reader already has it. */
+  onToggleExpand?: () => void
+  expanded?: boolean
 }
 
 export default function MessageReader(
   { folderPath, uid, folderRole, onBack, onNotify, onDeparted, depart, bottomActions,
-    regionRef }: Props) {
+    regionRef, onToggleExpand, expanded }: Props) {
   const { t } = useTranslation('mail')
   const { data, isLoading, isError } = useMessage(folderPath, uid)
   const { isDark } = useTheme()
@@ -128,15 +131,16 @@ export default function MessageReader(
   // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
   // replaced the list and needs a way back. Any open layer owns Escape — the reader's own
   // dialogs and anything else on the screen alike — so the reader stays put under it.
+  const onEscape = onBack ?? (expanded ? onToggleExpand : undefined)
   useEffect(() => {
-    if (!onBack) return
+    if (!onEscape) return
 
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onBack()
+      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onEscape()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [onEscape])
 
   // The body is computed above the early returns because useInlineImages hangs off it and hooks
   // cannot be conditional; before the detail lands it works on an empty document.
@@ -320,6 +324,8 @@ export default function MessageReader(
       onReplyAll={() => void openCompose('replyAll')}
       onForward={() => void openCompose('forward')}
       preparing={prepare.isPending}
+      onToggleExpand={onToggleExpand}
+      expanded={expanded}
     />
   )
 
