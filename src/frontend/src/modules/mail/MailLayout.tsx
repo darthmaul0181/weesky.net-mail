@@ -24,6 +24,8 @@ import {
 } from './queries'
 import RefreshButton from './folders/RefreshButton'
 import { buildDraftSeed } from './compose/composeSeed'
+import { useComposer } from './compose/quick/useComposer'
+import { useQuickCompose } from './compose/quick/QuickComposeContext'
 import { roleLabel } from './roleLabel'
 import { readingPaneOf, showFolderIconsOf, usePreferences } from '../../hooks/usePreferences'
 import { apiErrorMessage } from '../../lib/apiErrorMessage'
@@ -75,6 +77,8 @@ export default function MailLayout() {
   // rows too, and three sets would let one surface animate a row another has already dropped.
   const rowExit = useRowExit()
   const openDraft = useOpenDraft()
+  const composer = useComposer()
+  const windowExists = useQuickCompose().state !== null
   const { data: identityList } = useIdentities()
   const queryClient = useQueryClient()
 
@@ -152,9 +156,8 @@ export default function MailLayout() {
     else setParams({ folder: path })
   }
 
-  const openCompose = useCallback(() => {
-    void navigate('/mail/compose', { state: { from: folder } })
-  }, [navigate, folder])
+  const { newMessage } = composer
+  const openCompose = useCallback(() => newMessage(folder ?? undefined), [newMessage, folder])
 
   function selectMessage(nextUid: number) {
     if (!folder) return
@@ -166,6 +169,9 @@ export default function MailLayout() {
   async function openDraftInComposer(draftUid: number) {
     // A double-click stages the draft's parts twice; the losing set is left to the TTL sweeper.
     if (openDraft.isPending) return
+    const draftRef = { folderPath: folder!, uid: draftUid }
+    // Asked before staging: a window kept as it is must leave nothing staged behind it.
+    if (!await composer.prepare(draftRef)) return
     try {
       const opened = await openDraft.mutateAsync({ folder: folder!, uid: draftUid })
       // An unresolved query is not "no identities": seeding from [] rewrites the draft's From to
@@ -173,9 +179,7 @@ export default function MailLayout() {
       const identities = identityList ?? await queryClient
         .ensureQueryData(identitiesQueryOptions(accountId))
         .then(list => list.identities, () => [])
-      const seed = buildDraftSeed(
-        opened, identities, { folderPath: folder!, uid: draftUid }, accountId)
-      void navigate('/mail/compose', { state: { from: folder, seed } })
+      composer.open({ seed: buildDraftSeed(opened, identities, draftRef, accountId), from: folder! })
     } catch (error) {
       addToast(apiErrorMessage(error, t('layout.draftOpenFailed')), 'error')
     }
@@ -412,8 +416,9 @@ export default function MailLayout() {
       )}
 
       {/* Not over a phone reader: its bar owns the foot of the screen and the button would cover
-          delete and the kebab. A tablet at `none` keeps it: no bar, and the column's Compose is hidden. */}
-      {!composing && !(viewport === 'phone' && pane === 'none' && uid !== null) && (
+          delete and the kebab. A tablet at `none` keeps it: no bar, and the column's Compose is hidden.
+          Nor while a quick compose window exists: it holds that corner, and the button would only restore it. */}
+      {!composing && !windowExists && !(viewport === 'phone' && pane === 'none' && uid !== null) && (
         <FloatingAction label={t('layout.newMessage')} onClick={openCompose}>
           <RocketIcon size={22} />
         </FloatingAction>

@@ -54,4 +54,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     path: ['rail:settings', 'settings:appearance'], target: 'appearance:buttons',
     href: '/settings/appearance',
   },
+  {
+    id: 'compose-window', version: '2.9.0',
+    path: ['rail:settings', 'settings:mail'], target: 'mail:compose-window',
+    href: '/settings/mail',
+  },
 ]

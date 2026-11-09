@@ -194,6 +194,14 @@
       "text": "Texte brut",
       "textToast": "Les nouveaux messages s’ouvriront dans l’éditeur texte brut"
     },
+    "composeWindow": {
+      "label": "Écrire les messages dans",
+      "hint": "La fenêtre flottante reste ouverte quand vous naviguez dans l’application. Sur téléphone, les messages s’ouvrent toujours en pleine page.",
+      "page": "Pleine page",
+      "pageToast": "Les nouveaux messages s’ouvriront en pleine page",
+      "window": "Fenêtre flottante",
+      "windowToast": "Les nouveaux messages s’ouvriront dans une fenêtre flottante"
+    },
     "captureRecipients": {
       "label": "Enregistrer les nouveaux destinataires dans mes contacts",
       "hint": "Toute personne à qui vous écrivez pour la première fois rejoint votre carnet d’adresses.",

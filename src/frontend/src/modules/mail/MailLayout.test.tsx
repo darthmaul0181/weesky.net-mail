@@ -9,6 +9,8 @@ import type { MailFolderNode } from './api/mailTypes'
 import { createTestQueryClient, mockViewport, pickOption, resetViewport, settle, setupUser } from '../../test-utils'
 import { DRAG_MIME, serializeDrag } from './list/dragMessages'
 import { folderNodeOf } from './mailTestHarness'
+import { registerLeaveGuard } from '../../lib/leaveGuard'
+import { QuickComposeContext, type QuickComposeApi } from './compose/quick/QuickComposeContext'
 
 const mocks = vi.hoisted(() => ({
   getMailFolders: vi.fn(),
@@ -56,10 +58,15 @@ vi.mock('./compose/ComposeView', () => ({
   default: () => <div data-testid="compose-view">compose</div>,
 }))
 
+// A window test hands the layout a quick compose context and the preference choosing it.
+const harness: { quick: QuickComposeApi | null; prefs: Record<string, string> } = { quick: null, prefs: {} }
+
 beforeEach(() => {
   auth.activeAccountId = 'primary'
   auth.accountsLoading = false
   auth.authMode = 'Password'
+  harness.quick = null
+  harness.prefs = {}
 })
 
 /* A mail row is a `role="row"` of four gridcells and its name lives on the content cell, so a
@@ -112,13 +119,19 @@ function renderAt(
   mocks.getMailMessages.mockResolvedValue({
     folderPath: 'INBOX', uidValidity: 1, total: messages.length, page: 0, pageSize: 30, messages,
   })
-  mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': pane })
+  mocks.getPreferences.mockResolvedValue({ 'mail.pageSize': '30', 'mail.readingPane': pane, ...harness.prefs })
   mocks.getIdentities.mockReturnValue(Promise.resolve(identities))
 
   const client = createTestQueryClient()
+  const routed = (children: ReactNode) => (
+    <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>{children}<Where /></MemoryRouter>
+  )
+  const quick = harness.quick
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>{children}<Where /></MemoryRouter>
+      {quick
+        ? <QuickComposeContext.Provider value={quick}>{routed(children)}</QuickComposeContext.Provider>
+        : routed(children)}
     </QueryClientProvider>
   )
   return render(<MailLayout />, { wrapper })
@@ -959,6 +972,87 @@ describe('opening a draft from the drafts folder', () => {
 
     expect(await screen.findByText('Could not open the draft')).toBeInTheDocument()
     expect(screen.getByTestId('path')).toHaveTextContent(/^\/mail$/)
+  })
+})
+
+describe('compose entry points in window mode', () => {
+  let withdraw: (() => void) | null = null
+  beforeEach(() => {
+    vi.clearAllMocks()
+    harness.prefs = { 'mail.composeWindow': 'window' }
+    harness.quick = { state: null, open: vi.fn(), restore: vi.fn(), close: vi.fn(), showsDraft: vi.fn(() => false) }
+  })
+  afterEach(() => { withdraw?.(); withdraw = null })
+
+  const draftFolders = [
+    folderNodeOf({ path: 'INBOX', name: 'INBOX', specialUse: 'inbox' }),
+    folderNodeOf({ path: 'Drafts', name: 'Drafts', specialUse: 'drafts' }),
+  ]
+  const draftRow = {
+    uid: 9, subject: 'unsent', fromName: '', fromAddress: 'me@x.be',
+    to: [{ name: 'Bob', address: 'bob@x.example' }], date: '2026-07-20T09:00:00Z',
+    seen: true, flagged: false, answered: false, hasAttachments: false, size: 1, preview: '',
+  }
+
+  it('New message opens the window, not the route', async () => {
+    const { container } = renderAt('/mail?folder=INBOX')
+    await treeLoaded()
+
+    const column = container.querySelector('.mail-folders') as HTMLElement
+    fireEvent.click(within(column).getByRole('button', { name: 'New message' }))
+
+    await waitFor(() => expect(harness.quick!.open).toHaveBeenCalledWith(null, '/mail?folder=INBOX'))
+    expect(screen.getByTestId('path')).toHaveTextContent(/^\/mail$/)
+  })
+
+  it('a draft row opens in the window', async () => {
+    mocks.openDraft.mockResolvedValue({
+      to: ['bob@x.example'], cc: [], bcc: [], subject: 'unsent',
+      htmlBody: '<p>hi</p>', attachments: [], references: [],
+    })
+    renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
+
+    fireEvent.click(await screen.findByRole('gridcell', { name: /unsent/i }))
+
+    await waitFor(() => expect(harness.quick!.open).toHaveBeenCalled())
+    const [seed, origin] = vi.mocked(harness.quick!.open).mock.calls[0]!
+    expect(seed).toMatchObject({ action: 'draft', draftRef: { folderPath: 'Drafts', uid: 9 } })
+    expect(origin).toBe('/mail?folder=Drafts')
+    expect(screen.getByTestId('path')).toHaveTextContent(/^\/mail$/)
+  })
+
+  // A New message there would only restore the window it sits on.
+  it('withholds the floating compose button while a window exists', async () => {
+    mockViewport('tablet')
+    harness.quick!.state = { seed: null, accountId: 'primary', origin: '/mail', minimised: true, instance: 1 }
+    const { container } = renderAt('/mail?folder=INBOX')
+    await treeLoaded()
+
+    expect(container.querySelector('.floating-action')).toBeNull()
+  })
+
+  it('draws the floating compose button while no window exists', async () => {
+    mockViewport('tablet')
+    const { container } = renderAt('/mail?folder=INBOX')
+    await treeLoaded()
+
+    expect(container.querySelector('.floating-action')).toBeTruthy()
+  })
+
+  it("keeping the window's text cancels the draft open before anything is staged", async () => {
+    harness.quick!.state = { seed: null, accountId: 'primary', origin: '/mail', minimised: false, instance: 1 }
+    const guard = vi.fn(() => Promise.resolve(false))
+    withdraw = registerLeaveGuard(guard)
+    renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])
+
+    fireEvent.click(await screen.findByRole('gridcell', { name: /unsent/i }))
+
+    await waitFor(() => expect(guard).toHaveBeenCalled())
+    await settle()
+    expect(mocks.openDraft).not.toHaveBeenCalled()
+    expect(harness.quick!.open).not.toHaveBeenCalled()
+    expect(harness.quick!.close).not.toHaveBeenCalled()
+    expect(harness.quick!.restore).not.toHaveBeenCalled()
   })
 })
 

@@ -194,6 +194,14 @@
       "text": "Plain text",
       "textToast": "New messages will open in the plain-text editor"
     },
+    "composeWindow": {
+      "label": "Write messages in",
+      "hint": "The floating window stays open while you move around the app. On a phone, messages always open full page.",
+      "page": "Full page",
+      "pageToast": "New messages will open full page",
+      "window": "Floating window",
+      "windowToast": "New messages will open in a floating window"
+    },
     "captureRecipients": {
       "label": "Save new recipients to my contacts",
       "hint": "Anyone you write to for the first time joins your address book.",

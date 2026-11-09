@@ -8,7 +8,7 @@ import { AuthProvider } from '../contexts/AuthContext'
 import { registerLeaveGuard } from '../lib/leaveGuard'
 import ContextDrawer from './ContextDrawer'
 import IdentityMenu from './IdentityMenu'
-import { createTestQueryClient } from '../test-utils'
+import { createTestQueryClient, settle } from '../test-utils'
 
 const mocks = vi.hoisted(() => ({
   getAccount: vi.fn(),
@@ -43,6 +43,8 @@ function renderMenu() {
   )
 }
 
+const withdrawGuards: Array<() => void> = []
+
 const toggle = () => screen.getByRole('button', { name: /account menu/i })
 const path = () => screen.getByTestId('path').textContent
 
@@ -64,7 +66,7 @@ describe('IdentityMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
-    registerLeaveGuard(null)
+    withdrawGuards.splice(0).forEach(off => off())
     mocks.hasSession.mockReturnValue(true)
     mocks.logout.mockResolvedValue(null)
     mocks.getConnectedAccounts.mockResolvedValue([])
@@ -259,7 +261,7 @@ describe('IdentityMenu', () => {
 
   it('switches to the account clicked, once the leave guard allows it, and closes the menu', async () => {
     mocks.getConnectedAccounts.mockResolvedValue([connected()])
-    registerLeaveGuard(() => Promise.resolve(true))
+    withdrawGuards.push(registerLeaveGuard(() => Promise.resolve(true)))
     renderMenu()
     await openMenu()
 
@@ -279,7 +281,7 @@ describe('IdentityMenu', () => {
   // before it changes anything.
   it('leaves the account alone when the leave guard refuses', async () => {
     mocks.getConnectedAccounts.mockResolvedValue([connected()])
-    registerLeaveGuard(() => Promise.resolve(false))
+    withdrawGuards.push(registerLeaveGuard(() => Promise.resolve(false)))
     renderMenu()
     await openMenu()
 
@@ -288,6 +290,31 @@ describe('IdentityMenu', () => {
     await waitFor(() => expect(screen.queryByText('Sign out')).not.toBeInTheDocument())
     expect(screen.queryByText('support@acme.com · acme.com')).not.toBeInTheDocument()
     expect(localStorage.getItem('mail.activeAccount')).toBeNull()
+  })
+
+  it('sign out asks the leave guard first', async () => {
+    const guard = vi.fn(() => Promise.resolve(false))
+    withdrawGuards.push(registerLeaveGuard(guard))
+    renderMenu()
+    await openMenu()
+
+    fireEvent.click(await screen.findByText('Sign out'))
+
+    await waitFor(() => expect(guard).toHaveBeenCalledOnce())
+    await settle()
+    expect(mocks.logout).not.toHaveBeenCalled()
+  })
+
+  it('signs out once the leave guard allows it', async () => {
+    const guard = vi.fn(() => Promise.resolve(true))
+    withdrawGuards.push(registerLeaveGuard(guard))
+    renderMenu()
+    await openMenu()
+
+    fireEvent.click(await screen.findByText('Sign out'))
+
+    await waitFor(() => expect(mocks.logout).toHaveBeenCalledOnce())
+    expect(guard).toHaveBeenCalledOnce()
   })
 
   // A shared mailbox carries no external domain: the address alone, no made-up product name.

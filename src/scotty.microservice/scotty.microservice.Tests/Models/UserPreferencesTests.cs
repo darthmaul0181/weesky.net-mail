@@ -18,6 +18,7 @@ public sealed class UserPreferencesTests
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowSpamScore);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailReadingPane);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailComposeFormat);
+        Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailComposeWindow);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.MailShowFolderIcons);
         Assert.Contains(UserPreferences.All, p => p.Key == UserPreferences.UiLanguage);
     }
@@ -31,6 +32,7 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailShowSpamScore, "true")]
     [InlineData(UserPreferences.MailReadingPane, "right")]
     [InlineData(UserPreferences.MailComposeFormat, "html")]
+    [InlineData(UserPreferences.MailComposeWindow, "page")]
     [InlineData(UserPreferences.MailShowFolderIcons, "false")]
     [InlineData(UserPreferences.UiLanguage, "auto")]
     public void Default_IsTheValueAnAccountWithNoRowsGets(string key, string expected)
@@ -66,6 +68,9 @@ public sealed class UserPreferencesTests
     [InlineData(UserPreferences.MailComposeFormat, "HTML", false)]
     [InlineData(UserPreferences.MailComposeFormat, "plain", false)]  // the toolbar's label is not the value
     [InlineData(UserPreferences.MailComposeFormat, "", false)]
+    [InlineData(UserPreferences.MailComposeWindow, "page", true)]
+    [InlineData(UserPreferences.MailComposeWindow, "window", true)]
+    [InlineData(UserPreferences.MailComposeWindow, "floating", false)]
     [InlineData(UserPreferences.MailShowFolderIcons, "true", true)]
     [InlineData(UserPreferences.MailShowFolderIcons, "on", false)]
     [InlineData(UserPreferences.WhatsNewBaseline, "2.4.0-dev", true)]

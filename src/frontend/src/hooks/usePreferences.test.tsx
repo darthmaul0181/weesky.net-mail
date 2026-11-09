@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { QueryClient } from '@tanstack/react-query'
 import {
-  BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, isStreaming,
+  BLOCK_SIZE, PREFERENCE_KEYS, alwaysShowImagesOf, captureRecipientsOf, composeFormatOf, composeWindowOf, isStreaming,
   languageOf, notifiesOf, notifyDesktopOf, notifySoundOf, readingPaneOf, requestSizeOf,
   avatarColorOf, firstDayOfWeekOf, showAvatarsOf, showFolderIconsOf, showPreviewOf, swipeActionOf, trustContactsOf, usePreferences, useSetPreference,
 } from './usePreferences'
@@ -260,6 +260,14 @@ describe('composeFormatOf', () => {
   it('falls back to html on an absent or unrecognised value', () => {
     expect(composeFormatOf({})).toBe('html')
     expect(composeFormatOf({ 'mail.composeFormat': 'plain' })).toBe('html')
+  })
+})
+
+describe('composeWindowOf', () => {
+  it('falls back to page', () => {
+    expect(composeWindowOf({})).toBe('page')
+    expect(composeWindowOf({ 'mail.composeWindow': 'window' })).toBe('window')
+    expect(composeWindowOf({ 'mail.composeWindow': 'floating' })).toBe('page')
   })
 })
 

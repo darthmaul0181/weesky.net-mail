@@ -12,6 +12,11 @@
     "saving": "Saving…",
     "moreActions": "More actions"
   },
+  "window": {
+    "minimise": "Minimise",
+    "expand": "Expand",
+    "restore": "Restore"
+  },
   "fields": {
     "from": "From",
     "to": "To",

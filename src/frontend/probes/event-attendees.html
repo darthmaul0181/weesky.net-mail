@@ -134,11 +134,11 @@
       return `glyphes ${worst}  jeton ${Math.round(token.height * 10) / 10}  haut ${top}`
     }
 
-    // ComposeView's To row, as it renders it.
+    // ComposeFields' To row, as it renders it: its ids carry React's useId (`:r0:` here).
     function drawCompose(s) {
       document.body.innerHTML = `<div class="compose-view" data-testid="compose-view"><div class="compose-fields">
         <div class="compose-to-row">
-          <div class="field-h recipients-field"><label for="compose-to">À</label><div class="recipients-box">${chip.call(s, HUGE, HUGE)}<input id="compose-to" type="text" role="combobox" aria-expanded="false" aria-autocomplete="list" value=""></div></div>
+          <div class="field-h recipients-field"><label for="compose-:r0:-to">À</label><div class="recipients-box">${chip.call(s, HUGE, HUGE)}<input id="compose-:r0:-to" type="text" role="combobox" aria-expanded="false" aria-autocomplete="list" value=""></div></div>
           <span class="compose-cc-links"><button type="button" class="compose-link-btn">Cc</button><button type="button" class="compose-link-btn">Cci</button><button type="button" class="compose-link-btn">Priorité</button></span>
         </div></div></div>`
       const fields = document.querySelector('.compose-fields').getBoundingClientRect()

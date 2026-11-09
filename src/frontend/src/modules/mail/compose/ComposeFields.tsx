@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import MenuSelect from '../../../components/MenuSelect'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
@@ -55,6 +55,8 @@ export default function ComposeFields({
   showBcc, setShowBcc, showPriority, setShowPriority, priority, changePriority, subject, changeSubject,
 }: Props) {
   const { t } = useTranslation('compose')
+  // A mailto: page and the quick window can stand together, so no id here may be a constant.
+  const ids = `compose-${useId()}`
   const recipientNames = useMemo(() => namesByAddressOf(contacts ?? []), [contacts])
   const nameOf = (token: string) => recipientNames.get(canonicalAddress(token)) ?? token
   // The sender is named only where it can be wrong: `IdentitySelect` shows a menu on exactly this
@@ -98,7 +100,7 @@ export default function ComposeFields({
         )}
       </div>
       <div className="compose-to-row">
-        <RecipientsField id="compose-to" label={t('fields.to')} tokens={to} onChange={changeTo}
+        <RecipientsField id={`${ids}-to`} label={t('fields.to')} tokens={to} onChange={changeTo}
           autoFocus={autoFocusTo} contacts={contacts}
           groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />
         <span className="compose-cc-links">
@@ -109,9 +111,9 @@ export default function ComposeFields({
           )}
         </span>
       </div>
-      {showCc && <RecipientsField id="compose-cc" label={t('fields.cc')} tokens={cc} onChange={changeCc}
+      {showCc && <RecipientsField id={`${ids}-cc`} label={t('fields.cc')} tokens={cc} onChange={changeCc}
         contacts={contacts} groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />}
-      {showBcc && <RecipientsField id="compose-bcc" label={t('fields.bcc')} tokens={bcc} onChange={changeBcc}
+      {showBcc && <RecipientsField id={`${ids}-bcc`} label={t('fields.bcc')} tokens={bcc} onChange={changeBcc}
         contacts={contacts} groups={groupOptions} onEmptyGroup={notifyEmptyGroup} />}
       {/* Stays open while the value is not Normal: folding it would take a live setting off the
           screen while it kept riding on the message. Cc and Bcc are safe to fold — their tokens
@@ -125,8 +127,8 @@ export default function ComposeFields({
         </div>
       )}
       <div className="field-h">
-        <label htmlFor="compose-subject">{t('fields.subject')}</label>
-        <input id="compose-subject" type="text" value={subject} onChange={e => changeSubject(e.target.value)} />
+        <label htmlFor={`${ids}-subject`}>{t('fields.subject')}</label>
+        <input id={`${ids}-subject`} type="text" value={subject} onChange={e => changeSubject(e.target.value)} />
       </div>
       </>
       )}

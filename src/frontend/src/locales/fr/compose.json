@@ -12,6 +12,11 @@
     "saving": "Enregistrement…",
     "moreActions": "Plus d’actions"
   },
+  "window": {
+    "minimise": "Réduire",
+    "expand": "Agrandir",
+    "restore": "Rouvrir"
+  },
   "fields": {
     "from": "De",
     "to": "À",

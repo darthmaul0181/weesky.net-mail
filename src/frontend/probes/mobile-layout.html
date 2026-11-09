@@ -139,6 +139,7 @@
   <link rel="stylesheet" href="/src/styles/shell.css" />
   <link rel="stylesheet" href="/src/styles/tooltip.css" />
   <link rel="stylesheet" href="/src/styles/mail.css" />
+  <link rel="stylesheet" href="/src/styles/quickCompose.css" />
   <link rel="stylesheet" href="/src/styles/calendar.css" />
   <style>
     /* No literal here: #out inherits index.css's body colours, and the bar below borrows the
@@ -161,6 +162,8 @@
        its own keeps that width off the page. */
     #out { padding: 12px; white-space: pre; overflow-x: auto; font-family: monospace; font-size: 11px; }
     .case { margin-bottom: 8px; }
+    /* The viewport as a box, for `escape` on fixed-position furniture: nothing else in a case is. */
+    .probe-viewport { position: fixed; inset: 0; pointer-events: none; }
     .case > h2 {
       font: 700 11px monospace; padding: 2px 6px;
       background: var(--topbar-bg); color: var(--topbar-fg);
@@ -334,7 +337,7 @@
     function measure() {
       const stage = document.getElementById('stage')
       const floor = touchFloor()
-      const report = CASES.map(({ name, html, touch, overlap, height, width, contrast, escape }) => {
+      const report = CASES.map(({ name, html, touch, overlap, height, width, contrast, escape, topmost }) => {
         stage.innerHTML = `<div class="case"><h2>${name}</h2>${html}</div>`
         const doc = document.documentElement
         // Only what is actually drawn: a control a query hides has no box, and counting its 0px
@@ -460,6 +463,20 @@
           // box that runs off the LEFT of its container is a number rather than a clean report.
           // Every edge must read 0.
           ...(escape ? { escape: escapeOf(stage, escape) } : {}),
+          // `topmost: selector` asks the hit test, at each match's centre, whether that match (or
+          // something inside it) is what a tap lands on: a stacking defect `escape` cannot see.
+          // `covered` must be 0.
+          ...(topmost
+            ? {
+              topmost: (matches => ({
+                total: matches.length,
+                covered: matches.filter(el => {
+                  const r = el.getBoundingClientRect()
+                  return !el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2))
+                }).length,
+              }))([...stage.querySelectorAll(topmost)].filter(el => el.getClientRects().length)),
+            }
+            : {}),
           ...(contrast
             ? {
               contrast: Object.fromEntries(['light', 'dark'].map(theme => {
@@ -1294,7 +1311,7 @@
     // had 102px of a 640px screen. `height` is `.compose-body`, and the numbers are 347 folded at
     // both widths against 102 before, with the header's own 102px of overflow — Save draft cut off
     // and the ✕ entirely off screen — gone from `clipped` at the same time.
-    const composeView = ({ width, expanded = false, height = 640, folded = false }) => {
+    const composeView = ({ width, expanded = false, height = 640, folded = false, windowed = null }) => {
       const tools = n => Array.from({ length: n }, () => '<button class="compose-tool">B</button>').join('')
       const selects = n => Array.from({ length: n },
         () => '<div class="dropdown-root"><button class="compose-tool-select">A<span>v</span></button></div>').join('')
@@ -1305,13 +1322,25 @@
         [1, false], [1, false], [2, true], [4, false], [2, true],
         [3, true, 'select'], [4, true], [4, true], [1, false],
       ]
-      return `
-      <div class="compose-view" style="width:${width}px;height:${height}px">
+      // `windowed` is ComposeForm's frame="window": 'open' or 'bar', its header and its footer.
+      const title = 'Déjeuner de vendredi avec toute l’équipe du projet'
+      const header = !windowed ? `
         <div class="compose-header">
           <button class="btn btn-primary compose-send">🚀 Envoyer</button>
           <button class="btn btn-ghost compose-header-more">&#8942;</button>
           <button class="modal-close" aria-label="Fermer">&#10005;</button>
-        </div>
+        </div>` : `
+        <div class="compose-header quick-compose-header">
+          ${windowed === 'bar'
+            ? `<button type="button" class="modal-title quick-compose-title quick-compose-restore" title="Restaurer">${title}</button>`
+            : `<span class="modal-title quick-compose-title">${title}</span>
+               <button type="button" class="btn btn-ghost quick-compose-tool" aria-label="Réduire"><svg width="16" height="16"></svg></button>`}
+          <button type="button" class="btn btn-ghost quick-compose-tool" aria-label="Agrandir"><svg width="16" height="16"></svg></button>
+          <button class="modal-close" aria-label="Fermer">&#10005;</button>
+        </div>`
+      return `
+      <div class="compose-view${windowed ? ' quick-compose-form' : ''}"${windowed ? '' : ` style="width:${width}px;height:${height}px"`}>
+        ${header}
         <div class="compose-fields">
           ${folded ? `
           <button class="compose-summary" aria-expanded="false" aria-label="Afficher les destinataires et l’objet">
@@ -1336,11 +1365,15 @@
           <div class="field-h"><label for="probe-subject">Objet</label>
             <input id="probe-subject" type="text" value="Re: Mail avec pièce jointe .eml" /></div>`}
         </div>
-        <div class="compose-toolbar${expanded ? ' is-expanded' : ''}">
+        <div class="compose-toolbar is-folded${expanded ? ' is-expanded' : ''}">
           ${groups.map(([n, extra, kind]) =>
             `<div class="compose-tool-group${extra ? ' is-extra' : ''}">${kind === 'select' ? selects(n) : tools(n)}</div>`).join('')}
         </div>
         <div class="compose-body"><div class="compose-editor"></div></div>
+        ${windowed ? `<div class="quick-compose-footer">
+          <button type="button" class="btn btn-ghost">Enregistrer le brouillon</button>
+          <button type="button" class="btn btn-primary compose-send">🚀 Envoyer</button>
+        </div>` : ''}
       </div>`
     }
     // 384 x 406 is the S25 with its keyboard up — a measurement off a real screenshot, the scale
@@ -1362,6 +1395,140 @@
         touch: '.compose-tool, .compose-tool-select, .compose-send, .compose-header-more, .modal-close, .compose-summary',
         height: '.compose-body',
       })
+    }
+
+    // The quick compose window, open and minimised, in the shell it is drawn in: `.app-shell` is
+    // what declares its measures and what the toast rule reads. Read at 768x1024 and 1024x768 —
+    // the window never opens on a phone. `escape` holds the window and both toast hosts inside the
+    // viewport, `overlap` says the module's toasts do not sit under the window, `clipped` must be 0,
+    // and `height` is the body the window leaves for writing. The window is fixed to the viewport,
+    // so each case exists only at the width its name gives. The two toast hosts cannot overlap by
+    // construction: each is capped at half the window's width, on either side of its middle.
+    for (const [name, windowed] of [['quick-compose-open', 'open'], ['quick-compose-bar', 'bar']]) {
+      for (const size of [768, 1024].filter(size => size === window.innerWidth)) {
+        CASES.push({
+          name: `${name}-${size}`,
+          html: `<div class="app-shell">
+                   <div class="probe-viewport"></div>
+                   <div role="region" aria-label="Déjeuner" class="quick-compose${windowed === 'bar' ? ' is-minimised' : ''}">
+                     ${composeView({ windowed })}
+                   </div>
+                   <div class="toast-container quick-compose-toasts" role="status"><div class="toast toast-success">Brouillon enregistré</div></div>
+                   <div class="toast-container" role="status"><div class="toast toast-success">Message déplacé dans la corbeille</div></div>
+                 </div>`,
+          escape: ['.quick-compose, .toast-container', '.probe-viewport'],
+          overlap: ['.quick-compose', '.toast-container:not(.quick-compose-toasts)'],
+          height: '.quick-compose .compose-body',
+        })
+      }
+    }
+    // With no window, the window's toast host is an ordinary one: the usual corner, 24px in from
+    // the right and the bottom (the tablet's 80px, clear of the floating button, below 1024px).
+    // The `overlap` pair is only there for its rectangles.
+    CASES.push({
+      name: 'quick-compose-closed-toasts',
+      html: `<div class="app-shell">
+               <div class="probe-viewport"></div>
+               <div class="toast-container quick-compose-toasts" role="status"><div class="toast toast-success">Message envoyé</div></div>
+             </div>`,
+      escape: ['.toast-container', '.probe-viewport'],
+      overlap: ['.quick-compose-toasts', '.probe-viewport'],
+    })
+    // A send's "Added X — Undo" still standing when an archive raises its own Undo, with no window:
+    // both hosts hold toasts at once, so they split the corner. `intersect` must be false and
+    // `topmost.covered` 0 for both Undo links, at every size.
+    CASES.push({
+      name: 'quick-compose-closed-two-hosts',
+      html: `<div class="app-shell">
+               <div class="probe-viewport"></div>
+               <div class="toast-container quick-compose-toasts" role="status">
+                 <div class="toast toast-success"><span>Message envoyé</span></div>
+                 <div class="toast toast-success"><span>Bob Martin ajouté aux contacts</span><button type="button" class="toast-action">Annuler</button></div>
+               </div>
+               <div class="toast-container" role="status"><div class="toast toast-success"><span>Message archivé</span><button type="button" class="toast-action">Annuler</button></div></div>
+             </div>`,
+      escape: ['.toast-container', '.probe-viewport'],
+      overlap: ['.quick-compose-toasts', '.toast-container:not(.quick-compose-toasts)'],
+      topmost: '.toast-action',
+    })
+    // A minimised window asked the leave question by a mailbox switch, on a tablet with the drawer
+    // open: the question is drawn inside the window, so the window has to rise above the drawer
+    // with it. Read at 768x1024; `topmost.covered` must be 0 for the three buttons.
+    CASES.push({
+      name: 'quick-compose-dialog-over-drawer',
+      html: `<div class="app-shell">
+               <div class="context-drawer is-open">
+                 <div class="context-drawer-scrim" role="presentation"></div>
+                 <div class="context-drawer-panel" role="dialog" aria-modal="true"></div>
+               </div>
+               <div role="region" aria-label="Déjeuner" class="quick-compose is-minimised">
+                 <div class="compose-view quick-compose-form">
+                   <div class="compose-header quick-compose-header">
+                     <button type="button" class="modal-title quick-compose-title quick-compose-restore">Déjeuner</button>
+                     <button class="modal-close" aria-label="Fermer">&#10005;</button>
+                   </div>
+                   <div class="modal-overlay" role="presentation">
+                     <div class="modal" role="alertdialog" aria-modal="true">
+                       <div class="modal-header"><span class="modal-title">Enregistrer ce brouillon ?</span></div>
+                       <p>Votre message contient des modifications non enregistrées.</p>
+                       <div class="folder-pick-submit">
+                         <button type="button" class="btn btn-ghost">Continuer l'édition</button>
+                         <button type="button" class="btn btn-ghost">Abandonner</button>
+                         <button type="button" class="btn btn-primary">Enregistrer le brouillon</button>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </div>`,
+      topmost: '.folder-pick-submit .btn',
+    })
+    // A short laptop screen (1366x657, 1280x600) with the window open and three toasts stacked over
+    // it: `--qc-h` keeps a reserve above the window for them. `escape` must read 0 on every edge
+    // and `topmost.covered` 0 for the Undo links and the window's own header buttons.
+    for (const size of [1366, 1280].filter(size => size === window.innerWidth)) {
+      CASES.push({
+        name: `quick-compose-short-${size}`,
+        html: `<div class="app-shell">
+                 <div class="probe-viewport"></div>
+                 <div role="region" aria-label="Déjeuner" class="quick-compose">${composeView({ windowed: 'open' })}</div>
+                 <div class="toast-container quick-compose-toasts" role="status">
+                   <div class="toast toast-success"><span>Brouillon enregistré</span></div>
+                   <div class="toast toast-success"><span>Bob Martin ajouté aux contacts</span><button type="button" class="toast-action">Annuler</button></div>
+                 </div>
+                 <div class="toast-container" role="status">
+                   <div class="toast toast-success"><span>Message archivé</span><button type="button" class="toast-action">Annuler</button></div>
+                   <div class="toast toast-success"><span>Message déplacé dans la corbeille</span><button type="button" class="toast-action">Annuler</button></div>
+                   <div class="toast toast-error" role="alert"><span>Impossible de marquer le message comme lu</span><button type="button" class="toast-close" aria-label="Fermer">✕</button></div>
+                 </div>
+               </div>`,
+        escape: ['.quick-compose, .toast-container', '.probe-viewport'],
+        overlap: ['.quick-compose', '.toast-container:not(.quick-compose-toasts)'],
+        topmost: '.toast-action, .toast-close, .quick-compose-header button',
+        height: '.quick-compose .compose-body',
+      })
+    }
+    // Contacts' Add and Calendar's + are their module's only way in below 1024px, so they stand on
+    // the window or its bar rather than vanish, the toasts climbing over them. Read at 768x1024:
+    // `topmost.covered` must be 0 for the button and both Undo links, `escape` 0 on every edge.
+    for (const [name, windowed] of [['quick-compose-fab-open', 'open'], ['quick-compose-fab-bar', 'bar']]) {
+      for (const size of [768].filter(size => size === window.innerWidth)) {
+        CASES.push({
+          name: `${name}-${size}`,
+          html: `<div class="app-shell">
+                   <div class="probe-viewport"></div>
+                   <button type="button" class="floating-action" aria-label="Ajouter un contact">+</button>
+                   <div role="region" aria-label="Déjeuner" class="quick-compose${windowed === 'bar' ? ' is-minimised' : ''}">
+                     ${composeView({ windowed })}
+                   </div>
+                   <div class="toast-container quick-compose-toasts" role="status"><div class="toast toast-success"><span>Bob Martin ajouté aux contacts</span><button type="button" class="toast-action">Annuler</button></div></div>
+                   <div class="toast-container" role="status"><div class="toast toast-success"><span>Contact supprimé</span><button type="button" class="toast-action">Annuler</button></div></div>
+                 </div>`,
+          escape: ['.quick-compose, .toast-container, .floating-action', '.probe-viewport'],
+          overlap: ['.floating-action', '.quick-compose'],
+          topmost: '.floating-action, .toast-action',
+        })
+      }
     }
 
     // The one case that reads `.recipients-box`'s own height, which is the whole point of it now:

@@ -12,6 +12,8 @@ import { mailKeys } from '../queries'
 import MessageReader from './MessageReader'
 import Modal from '../../../components/Modal'
 import { formatReaderDateShort } from './formatReaderDate'
+import { registerLeaveGuard } from '../../../lib/leaveGuard'
+import { QuickComposeContext, type QuickComposeApi } from '../compose/quick/QuickComposeContext'
 
 const mocks = vi.hoisted(() => ({
   getMailMessage: vi.fn(),
@@ -1534,6 +1536,24 @@ describe('MessageReader', () => {
       expect(onBack).toHaveBeenCalled()
     })
 
+    // The window is not a layer: an Escape typed in its fields is the window's, not the reader's.
+    it('does not back out on an Escape typed inside the quick compose window', async () => {
+      mocks.getMailMessage.mockResolvedValue(detail)
+      const onBack = vi.fn()
+
+      render(
+        <>
+          <MessageReader folderPath="INBOX" uid={2} onBack={onBack} />
+          <div className="quick-compose"><input aria-label="Subject" /></div>
+        </>,
+        { wrapper })
+      await screen.findByText('Re: facture')
+
+      fireEvent.keyDown(screen.getByLabelText('Subject'), { key: 'Escape' })
+
+      expect(onBack).not.toHaveBeenCalled()
+    })
+
     it('closes the open kebab on Escape and backs out only on the next one', async () => {
       mocks.getMailMessage.mockResolvedValue(detail)
       const onBack = vi.fn()
@@ -1911,6 +1931,60 @@ describe('MessageReader', () => {
 
       await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Could not prepare the message'))
       expect(screen.queryByTestId('compose-state')).not.toBeInTheDocument()
+    })
+
+    describe('in window mode', () => {
+      let withdraw: (() => void) | null = null
+      afterEach(() => { withdraw?.(); withdraw = null })
+
+      function renderInWindowMode(quick: QuickComposeApi) {
+        const client = makeClient()
+        client.setQueryData(['preferences'], { 'mail.composeWindow': 'window' })
+        render(
+          <QueryClientProvider client={client}>
+            <QuickComposeContext.Provider value={quick}>
+              <MemoryRouter initialEntries={['/mail']}><MessageReader folderPath="INBOX" uid={2} /></MemoryRouter>
+            </QuickComposeContext.Provider>
+          </QueryClientProvider>)
+      }
+
+      const fakeQuick = (open = false): QuickComposeApi => ({
+        state: open ? { seed: null, accountId: 'primary', origin: '/mail', minimised: false, instance: 1 } : null,
+        open: vi.fn(), restore: vi.fn(), close: vi.fn(), showsDraft: vi.fn(() => false),
+      })
+
+      it('Reply opens the window', async () => {
+        mocks.getMailMessage.mockResolvedValue(detail)
+        mocks.prepareQuote.mockResolvedValue({ quotableHtml: '<p>o</p>', attachments: [] })
+        const quick = fakeQuick()
+        renderInWindowMode(quick)
+        await screen.findByText('Re: facture')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+
+        await waitFor(() => expect(quick.open).toHaveBeenCalled())
+        const [seed, origin] = vi.mocked(quick.open).mock.calls[0]!
+        expect(seed?.subject).toMatch(/^Re:/)
+        expect(origin).toBe('/mail?folder=INBOX')
+      })
+
+      it("keeping the window's text cancels the reply before prepare", async () => {
+        mocks.getMailMessage.mockResolvedValue(detail)
+        const guard = vi.fn(() => Promise.resolve(false))
+        withdraw = registerLeaveGuard(guard)
+        const quick = fakeQuick(true)
+        renderInWindowMode(quick)
+        await screen.findByText('Re: facture')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+
+        await waitFor(() => expect(guard).toHaveBeenCalled())
+        await settle()
+        expect(mocks.prepareQuote).not.toHaveBeenCalled()
+        expect(quick.open).not.toHaveBeenCalled()
+        expect(quick.close).not.toHaveBeenCalled()
+        expect(quick.restore).not.toHaveBeenCalled()
+      })
     })
   })
 

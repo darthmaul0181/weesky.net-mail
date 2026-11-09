@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMatch, useNavigate, useParams, useSearchParams } from 'react-router'
 import { newMessageSeed } from '../mail/compose/composeSeed'
+import { useComposer } from '../mail/compose/quick/useComposer'
 import DeleteConfirmModal from '../../components/DeleteConfirmModal'
 import FloatingAction from '../../components/FloatingAction'
 import Toasts from '../../components/Toasts'
@@ -49,15 +50,14 @@ export default function ContactsLayout() {
   const [params, setParams] = useSearchParams()
   const { id: routeId } = useParams()
   const navigate = useNavigate()
+  const composer = useComposer()
 
-  // The composer is a route, so writing to a contact navigates with a seed. `backTo` sends the ✕
-  // and the leave guard back where writing started (a card, a group), not to an unopened mailbox.
-  const writeTo = (addresses: string | string[]) => void navigate('/mail/compose', {
-    state: {
-      seed: newMessageSeed(Array.isArray(addresses) ? addresses : [addresses]),
-      backTo: backToHere(),
-    },
-  })
+  // `backTo` sends the page's ✕ and leave guard back where writing started (a card, a group); a
+  // window opens over the card instead, once a dirty one already open has been asked about.
+  function writeTo(addresses: string | string[]) {
+    const seed = newMessageSeed(Array.isArray(addresses) ? addresses : [addresses])
+    void composer.prepare().then(ok => { if (ok) composer.open({ seed, backTo: backToHere() }) })
+  }
 
   // The `/contacts` URL for the scope this render is showing, plus whatever `extra` overrides —
   // `{ id }` to open a particular contact, `{}` to leave the selection as the scope alone reads it.

@@ -3,6 +3,7 @@ import { useFaviconBadge } from '../modules/mail/notify/useFaviconBadge'
 import { useMailNotifications } from '../modules/mail/notify/useMailNotifications'
 import { useTabTitle } from '../hooks/useTabTitle'
 import { useWhatsNewSync } from '../modules/whatsnew/useWhatsNew'
+import { QuickComposeProvider } from '../modules/mail/compose/quick/QuickComposeContext'
 import AppRail from './AppRail'
 import BottomNav from './BottomNav'
 import TopBar from './TopBar'
@@ -36,14 +37,16 @@ export default function AppShell() {
 
   return (
     <div className="app-shell">
-      <TopBar />
-      <div className="app-shell-body">
-        <AppRail />
-        <main className="app-content">
-          <Outlet />
-        </main>
-      </div>
-      {!writing && !readingMail && !readingContact && <BottomNav />}
+      <QuickComposeProvider>
+        <TopBar />
+        <div className="app-shell-body">
+          <AppRail />
+          <main className="app-content">
+            <Outlet />
+          </main>
+        </div>
+        {!writing && !readingMail && !readingContact && <BottomNav />}
+      </QuickComposeProvider>
     </div>
   )
 }

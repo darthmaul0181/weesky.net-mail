@@ -125,7 +125,7 @@ describe('useStagedAttachments', () => {
 
   it('seeds already-staged items as completed uploads', () => {
     const { result } = renderHook(() =>
-      useStagedAttachments('primary', [{ id: 'a1', fileName: 'doc.pdf', size: 9 }]))
+      useStagedAttachments('primary', [{ id: 'a1', fileName: 'doc.pdf', size: 9, contentType: 'application/pdf' }]))
 
     expect(result.current.items).toHaveLength(1)
     expect(result.current.items[0]).toMatchObject({ id: 'a1', fileName: 'doc.pdf', progress: 1, error: null })
@@ -164,13 +164,13 @@ describe('useStagedAttachments', () => {
   it('moves the inline ids into the tray, once', () => {
     const { result } = renderHook(() => useStagedAttachments('primary', [], ['inline-1']))
 
-    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3, contentType: 'image/png' }]) })
 
     expect(result.current.items).toHaveLength(1)
     expect(result.current.items[0]).toMatchObject({ id: 'inline-1', fileName: 'logo.png', size: 3 })
     expect(result.current.ids).toEqual(['inline-1'])
 
-    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3, contentType: 'image/png' }]) })
     expect(result.current.items).toHaveLength(1)
   })
 
@@ -178,7 +178,7 @@ describe('useStagedAttachments', () => {
   it('releases an adopted id a single time', () => {
     const { result } = renderHook(() => useStagedAttachments('primary', [], ['inline-1']))
 
-    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3 }]) })
+    act(() => { result.current.adoptInline([{ id: 'inline-1', fileName: 'logo.png', size: 3, contentType: 'image/png' }]) })
     act(() => { result.current.discardAll() })
 
     expect(api.deleteAttachment).toHaveBeenCalledTimes(1)
@@ -200,7 +200,7 @@ describe('useStagedAttachments', () => {
     const { result } = renderHook(() => useStagedAttachments('primary', [], []))
 
     act(() => { result.current.addInline('i9') })
-    act(() => { result.current.adoptInline([{ id: 'i9', fileName: 'shot.png', size: 12 }]) })
+    act(() => { result.current.adoptInline([{ id: 'i9', fileName: 'shot.png', size: 12, contentType: 'image/png' }]) })
 
     expect(result.current.items.map(i => i.fileName)).toEqual(['shot.png'])
     expect(result.current.ids).toEqual(['i9'])

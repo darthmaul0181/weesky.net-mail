@@ -940,6 +940,7 @@ a.dropdown-item { text-decoration: none; }
 .editor-glyph-sep { position: absolute; top: 11px; left: 5px; right: 5px; height: 1px; background: var(--text-muted); opacity: 0.35; }
 .editor-glyph-heading { position: absolute; top: 14px; left: 5px; width: 50%; height: 3px; background: var(--text-muted); opacity: 0.95; border-radius: 1px; }
 .pane-glyph.is-editor-html .pane-glyph-lines { top: 19px; }
+.window-glyph-box { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 16px; background: var(--surface); border: 1.5px solid var(--text-muted); border-radius: 2px; }
 
 .palette-name {
   display: flex;

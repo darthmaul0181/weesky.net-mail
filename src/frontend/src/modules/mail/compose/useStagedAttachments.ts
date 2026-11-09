@@ -2,12 +2,14 @@ import i18next from 'i18next'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, uploadAttachment } from '../../../api.js'
 import { apiErrorMessage } from '../../../lib/apiErrorMessage'
+import type { StagedAttachmentInfo } from '../api/mailTypes'
 
 export interface StagedItem {
   key: string
   id: string | null
   fileName: string
   size: number
+  contentType: string
   progress: number
   error: string | null
   /** The mailbox holding the staged bytes — the only one a release of them can reach. */
@@ -20,12 +22,12 @@ let nextKey = 0
 // `inlineIds` live in the body: never shown here, yet released with the tray.
 export function useStagedAttachments(
   accountId: string,
-  initial: { id: string; fileName: string; size: number }[] = [],
+  initial: StagedAttachmentInfo[] = [],
   inlineIds: string[] = [],
 ) {
   const [items, setItems] = useState<StagedItem[]>(() => initial.map(item => ({
     key: `staged-${nextKey++}`, id: item.id, fileName: item.fileName, size: item.size,
-    progress: 1, error: null, accountId,
+    contentType: item.contentType, progress: 1, error: null, accountId,
   })))
   const itemsRef = useRef(items)
   // Each id keeps the account it was staged under: a release aimed at whatever account is current
@@ -80,11 +82,11 @@ export function useStagedAttachments(
     for (const file of Array.from(files)) {
       const key = `staged-${nextKey++}`
       apply(previous => [...previous, {
-        key, id: null, fileName: file.name, size: file.size, progress: 0, error: null, accountId,
+        key, id: null, fileName: file.name, size: file.size, contentType: file.type, progress: 0, error: null, accountId,
       }])
       uploadAttachment(file,
         { accountId, onProgress: (ratio: number) => patch(key, { progress: ratio }) })
-        .then((info: { id: string; size: number }) => patch(key, { id: info.id, size: info.size, progress: 1 }))
+        .then(info => patch(key, { id: info.id, size: info.size, contentType: info.contentType, progress: 1 }))
         .catch((error: Error) =>
           patch(key, { error: apiErrorMessage(error, i18next.t('compose:attachments.uploadFailed')), progress: 1 }))
     }
@@ -98,7 +100,7 @@ export function useStagedAttachments(
 
   // The body can no longer show an inline part, so it becomes an attachment. `known` names the files
   // from the caller's seed. Idempotent.
-  const adoptInline = useCallback((known: { id: string; fileName: string; size: number }[]) => {
+  const adoptInline = useCallback((known: StagedAttachmentInfo[]) => {
     const moving = [...inlineRef.current, ...addedInlineRef.current]
     if (moving.length === 0) return
     inlineRef.current = []
@@ -110,6 +112,7 @@ export function useStagedAttachments(
       id: entry.id,
       fileName: byId.get(entry.id)?.fileName ?? 'attachment',
       size: byId.get(entry.id)?.size ?? 0,
+      contentType: byId.get(entry.id)?.contentType ?? 'application/octet-stream',
       progress: 1,
       error: null,
       accountId: entry.accountId,
