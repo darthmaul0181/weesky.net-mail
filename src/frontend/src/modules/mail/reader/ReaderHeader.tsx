@@ -89,28 +89,30 @@ export default function ReaderHeader({
               </a>
             )}
           </div>
-          {detailsOpen ? (
-            <ReaderDetails
-              message={data}
-              showSubject={viewportNarrow}
-              showSpamScore={viewportNarrow && spamOn}
-            />
-          ) : (
-            <>
-              {(data.to.length > 0 || compactDate) && (
-                <div className="reader-recipients reader-to-row">
-                  {data.to.length > 0 && (
-                    <span className="reader-to">{t('reader.details.to')} <AddressList addresses={data.to} /></span>
-                  )}
-                  {compactDate}
-                </div>
-              )}
-              {data.cc.length > 0 && (
-                <div className="reader-recipients">{t('reader.details.cc')} <AddressList addresses={data.cc} /></div>
-              )}
-            </>
-          )}
-          {spamOn && !viewportNarrow && <SpamGauge spamScore={data.spamScore} />}
+          <div className="reader-lines">
+            {detailsOpen ? (
+              <ReaderDetails
+                message={data}
+                showSubject={viewportNarrow}
+                showSpamScore={viewportNarrow && spamOn}
+              />
+            ) : (
+              <>
+                {(data.to.length > 0 || compactDate) && (
+                  <div className="reader-recipients reader-to-row">
+                    {data.to.length > 0 && (
+                      <span className="reader-to">{t('reader.details.to')} <AddressList addresses={data.to} /></span>
+                    )}
+                    {compactDate}
+                  </div>
+                )}
+                {data.cc.length > 0 && (
+                  <div className="reader-recipients">{t('reader.details.cc')} <AddressList addresses={data.cc} /></div>
+                )}
+              </>
+            )}
+            {spamOn && !viewportNarrow && <SpamGauge spamScore={data.spamScore} />}
+          </div>
         </div>
       </div>
       {!bottomActions && readerActions}

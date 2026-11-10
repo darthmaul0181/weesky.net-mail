@@ -299,8 +299,8 @@ Three band-stack columns: **folders** (240px, `--folders-bg`), **message list** 
   every row keeps the same height.
 - **Reader** — the header is a vertical `.reader-stack`: subject (18px), then the sender line (name +
   a green/red auth shield + date), then To/Cc, then the spam gauge — each shown only when it exists.
-  The action cluster sits `align-self:flex-end`, bottom-right of whatever lines are present, with a
-  thin `.actions-rule` between groups. The spam gauge is a pattern worth copying: **one
+  The header is a grid: subject and sender line span its whole width, and the action cluster sits
+  beside the lower lines only (`.reader-lines`), bottom-right, with a thin `.actions-rule` between groups. The spam gauge is a pattern worth copying: **one
   `--gauge-ratio` custom property drives both the bar's length and its green-to-red colour**, so the
   two can never disagree. The body renders in a sandboxed iframe; attachments are `.attachment-chip`
   pills in their own band below the body, which scrolls on its own so many attachments can't take over

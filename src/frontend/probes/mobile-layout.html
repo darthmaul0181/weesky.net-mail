@@ -1009,6 +1009,7 @@
                   <span class="auth-badge is-pass" tabindex="0" role="img" aria-label="Authenticated">&check;</span>
                   <button type="button" class="details-toggle" aria-expanded="${detailsOpen}" aria-label="Show details">&rsaquo;</button>
                 </div>
+                <div class="reader-lines">
                 ${detailsOpen ? `
                 <dl class="reader-details">
                   <dt>Objet :</dt><dd class="detail-subject">Réunion budget T3 — validation finale avant envoi au comité de direction</dd>
@@ -1030,6 +1031,7 @@
                   <span class="reader-date">09/08/2026 14:32</span>
                 </div>
                 <div class="reader-recipients">Cc: ${addressList(cc)}</div>`}
+                </div>
               </div>
             </div>
             ${headerActions ? `
