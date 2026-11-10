@@ -19,6 +19,8 @@ export interface SelectionBandProps {
   trailing?: ReactNode
   /** The actions, on the right. */
   children: ReactNode
+  /** The slot the rows centre their box in, so the master box lines up with theirs. */
+  checkSlot?: 'avatar' | 'avatar-line'
 }
 
 /** The band both list columns wear: the master checkbox, and the centre giving way to the count
@@ -26,14 +28,14 @@ export interface SelectionBandProps {
  * field), are the caller's. */
 export default function SelectionBand({
   allSelected, indeterminate, onToggleAll, selectionDisabled, selectAllLabel,
-  count, countLabel, center, leading, trailing, children,
+  count, countLabel, center, leading, trailing, children, checkSlot,
 }: SelectionBandProps) {
   const master = useRef<HTMLInputElement>(null)
   // A DOM property, not an attribute: React writes no such attribute, so it has to be set here.
   useEffect(() => { if (master.current) master.current.indeterminate = indeterminate }, [indeterminate])
 
   return (
-    <div className={`selection-toolbar${count > 0 ? ' is-selecting' : ''}`}>
+    <div className={`selection-toolbar${count > 0 ? ' is-selecting' : ''}${checkSlot ? ` slot-${checkSlot}` : ''}`}>
       {leading}
       {/* The finger-sized target on a phone is this label, not the box: a native checkbox paints
           its whole border box, so sizing it to 44px draws a slab twice its neighbours' weight. */}
