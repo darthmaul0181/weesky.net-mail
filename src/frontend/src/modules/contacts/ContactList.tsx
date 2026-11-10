@@ -131,6 +131,7 @@ export default function ContactList({
     <>
       <SelectionBand
         leading={leading}
+        checkSlot="avatar"
         allSelected={count > 0 && count === shown.length}
         indeterminate={count > 0 && count < shown.length}
         onToggleAll={() =>

@@ -372,6 +372,7 @@ export default function MessageList(
       {/* Replaces the old heading band: the toolbar names the folder until a selection is on. */}
       <SelectionToolbar
         leading={leading}
+        checkSlot={avatar ? (wide ? 'avatar-line' : 'avatar') : undefined}
         refresh={onRefresh && inDrawer ? { onRun: onRefresh } : undefined}
         title={folderName || folderPath}
         count={count}

@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import DropdownMenu, { type MenuEntry } from '../../../components/DropdownMenu'
-import SelectionBand from '../../../components/SelectionBand'
+import SelectionBand, { type SelectionBandProps } from '../../../components/SelectionBand'
 import ArchiveIcon from '../../../icons/ArchiveIcon'
 import JunkIcon from '../../../icons/JunkIcon'
 import TrashIcon from '../../../icons/TrashIcon'
@@ -43,6 +43,7 @@ export interface SelectionToolbarProps {
   starredDisabled?: boolean
   /** All-folders results: rows carry no checkbox, so the master must not promise one. */
   selectionDisabled?: boolean
+  checkSlot?: SelectionBandProps['checkSlot']
   /** The drawer's hamburger below 1024px, nothing on desktop. */
   leading?: ReactNode
   /** Refresh, which loses its home in the folder column once that column is a drawer. */
@@ -94,6 +95,7 @@ export default function SelectionToolbar(props: SelectionToolbarProps) {
   return (
     <SelectionBand
       leading={props.leading}
+      checkSlot={props.checkSlot}
       allSelected={allSelected}
       indeterminate={indeterminate}
       onToggleAll={onToggleAll}

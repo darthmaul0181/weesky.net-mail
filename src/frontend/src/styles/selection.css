@@ -24,6 +24,10 @@
   justify-content: center;
 }
 
+/* As wide as the avatar slot the rows centre their box in. min-width, so the phone's 44px target wins. */
+.selection-toolbar.slot-avatar .selection-master-hit { min-width: 40px; }
+.selection-toolbar.slot-avatar-line .selection-master-hit { min-width: 28px; }
+
 /* Same box as the row checkboxes (.message-row-check, .contact-tile-check). */
 .selection-master {
   width: 16px;
