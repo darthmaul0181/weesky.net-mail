@@ -85,7 +85,7 @@ public sealed class ImapSessionMessageFetchTests
     }
 
     private static async Task<Result<MailMessageDetail>> GetSinglePartMessageAsync(
-        SinglePartImapServer server, CancellationToken token)
+        SinglePartImapServer server, CancellationToken token, Func<string, string>? sanitise = null)
     {
         using var client = new ImapClient();
         await client.ConnectAsync("127.0.0.1", server.Port, SecureSocketOptions.None, token);
@@ -93,7 +93,7 @@ public sealed class ImapSessionMessageFetchTests
 
         var sanitizer = new Mock<IMailHtmlSanitizer>();
         sanitizer.Setup(s => s.Sanitize(It.IsAny<string>()))
-                 .Returns((string html) => new SanitizedHtml { Html = html });
+                 .Returns((string html) => new SanitizedHtml { Html = sanitise is null ? html : sanitise(html) });
 
         await using var session = new ImapSession(client, sanitizer.Object, Mock.Of<ILogger>());
         return await session.GetMessageAsync("INBOX", 1, token);
@@ -133,6 +133,75 @@ public sealed class ImapSessionMessageFetchTests
 
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
         Assert.Contains("unwrapped.", result.Value.TextBody, StringComparison.Ordinal);
+    }
+
+    private const string Alternative =
+        "((\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 9 1 NIL NIL NIL NIL)" +
+        "(\"text\" \"html\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 9 1 NIL NIL NIL NIL) " +
+        "\"alternative\" (\"boundary\" \"b\") NIL NIL NIL)";
+
+    private static string Oversized(string subtype) =>
+        $"(\"text\" \"{subtype}\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" {ImapMessageCommands.MaxBodyFetchBytes + 1} 1 NIL NIL NIL NIL)";
+
+    // The reader shows the text only when the HTML sanitises to nothing: fetched beside every HTML
+    // body, it doubled the download of most messages for a field nothing displayed.
+    [Fact]
+    public async Task GetMessageAsync_DoesNotFetchTheTextAlternativeOfAnHtmlMessage()
+    {
+        using var server = new SinglePartImapServer(Alternative, "<p>Hi</p>");
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var result = await GetSinglePartMessageAsync(server, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.Contains("Hi", result.Value.HtmlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain(server.FetchCommands, c => c.Contains("BODY.PEEK[1]", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task GetMessageAsync_FallsBackToTheTextWhenTheHtmlSanitisesToNothing()
+    {
+        using var server = new SinglePartImapServer(Alternative, "Plain Hi.");
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var result = await GetSinglePartMessageAsync(server, cts.Token, sanitise: _ => string.Empty);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.Contains("Plain Hi.", result.Value.TextBody, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("plain")]
+    [InlineData("html")]
+    public async Task GetMessageAsync_FetchesOnlyTheHeadOfAnOversizedBody_AndSaysSo(string subtype)
+    {
+        using var server = new SinglePartImapServer(Oversized(subtype), "<p>Head of a huge body</p>");
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var result = await GetSinglePartMessageAsync(server, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.True(result.Value.Truncated);
+        Assert.Contains(server.FetchCommands, c => c.Contains($"<0.{ImapMessageCommands.MaxBodyFetchBytes}>", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetMessageAsync_FetchesABodyWithinTheBudgetWhole()
+    {
+        const string structure =
+            "(\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"7bit\" 12 1 NIL NIL NIL NIL)";
+        using var server = new SinglePartImapServer(structure, "Plain body.\r\n");
+        server.Start();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var result = await GetSinglePartMessageAsync(server, cts.Token);
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error : string.Empty);
+        Assert.False(result.Value.Truncated);
+        Assert.DoesNotContain(server.FetchCommands, c => c.Contains("<0.", StringComparison.Ordinal));
     }
 
     // A server may answer NIL for body_fld_enc; that null must read as the default encoding,
@@ -407,6 +476,8 @@ internal sealed class SinglePartImapServer : IDisposable
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private Task? _serverLoop;
 
+    public List<string> FetchCommands { get; } = new();
+
     public SinglePartImapServer(string bodyStructure, string bodyText)
     {
         _bodyStructure = bodyStructure;
@@ -480,6 +551,7 @@ internal sealed class SinglePartImapServer : IDisposable
                         break;
 
                     case "FETCH":
+                        FetchCommands.Add(line);
                         await RespondToFetchAsync(writer, tag, line);
                         break;
 
@@ -513,9 +585,12 @@ internal sealed class SinglePartImapServer : IDisposable
         if (line.Contains("BODY.PEEK[", StringComparison.OrdinalIgnoreCase))
         {
             var open = line.IndexOf("BODY.PEEK[", StringComparison.OrdinalIgnoreCase) + 10;
-            var section = line[open..line.IndexOf(']', open)];
+            var close = line.IndexOf(']', open);
+            var section = line[open..close];
+            // A partial fetch is answered at the origin it asked for; the fake's body is small enough to send whole.
+            var origin = close + 1 < line.Length && line[close + 1] == '<' ? "<0>" : string.Empty;
             var bytes = Encoding.ASCII.GetByteCount(_bodyText);
-            await writer.WriteLineAsync($"* 1 FETCH (UID 1 BODY[{section}] {{{bytes}}}\r\n{_bodyText})");
+            await writer.WriteLineAsync($"* 1 FETCH (UID 1 BODY[{section}]{origin} {{{bytes}}}\r\n{_bodyText})");
             await writer.WriteLineAsync($"{tag} OK FETCH completed");
             return;
         }

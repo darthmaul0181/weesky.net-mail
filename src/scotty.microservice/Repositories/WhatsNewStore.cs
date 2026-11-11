@@ -5,7 +5,7 @@ using weesky.Scotty.Microservice.Models.WhatsNew;
 
 namespace weesky.Scotty.Microservice.Repositories;
 
-internal sealed class WhatsNewStore(PreferencesDbContext context)
+internal sealed class WhatsNewStore(PreferencesDbContext context, UserPreferenceCache preferences)
     : ScopedStore<WhatsNewItem>(context), IWhatsNewStore
 {
     public async Task<WhatsNewState> GetAsync(Guid userId, CancellationToken cancellationToken)
@@ -49,6 +49,7 @@ internal sealed class WhatsNewStore(PreferencesDbContext context)
         try
         {
             await Context.SaveChangesAsync(cancellationToken);
+            preferences.Forget(userId);
             return true;
         }
         catch (DbUpdateException)

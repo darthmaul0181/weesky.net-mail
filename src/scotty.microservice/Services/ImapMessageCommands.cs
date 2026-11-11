@@ -430,6 +430,12 @@ internal sealed class ImapMessageCommands(
         }
     }
 
+    /// <summary>
+    /// The most of one body part a reader fetches: enough for the sanitiser's 2M characters even in
+    /// base64 over three-byte UTF-8, and the head alone of anything heavier.
+    /// </summary>
+    internal const int MaxBodyFetchBytes = 8 * 1024 * 1024;
+
     private static MailMessageSummary ToSummary(IMessageSummary item) =>
         MailMessageMapper.FillSummary(new MailMessageSummary(), item);
 
@@ -457,14 +463,15 @@ internal sealed class ImapMessageCommands(
 
             // IsAttachment: MimeKit refuses an attachment-disposed part as the body; MailKit's
             // non-multipart TextBody/HtmlBody branch does not check, so the guard sits here.
-            var htmlBody = summary.HtmlBody is { IsAttachment: false } htmlPart
+            (string Text, bool Cut)? htmlBody = summary.HtmlBody is { IsAttachment: false } htmlPart
                 ? await ReadTextPartAsync(folder, uniqueId, htmlPart, cancellationToken)
                 : null;
-            var textBody = summary.TextBody is { IsAttachment: false } textPart
+            var sanitized = sanitizer.Sanitize(htmlBody?.Text ?? string.Empty);
+
+            // The reader shows the text only when the HTML comes out empty, so only then is it fetched.
+            (string Text, bool Cut)? textBody = sanitized.Html.Length == 0 && summary.TextBody is { IsAttachment: false } textPart
                 ? await ReadTextPartAsync(folder, uniqueId, textPart, cancellationToken)
                 : null;
-
-            var sanitized = sanitizer.Sanitize(htmlBody ?? string.Empty);
             var sender = message.From?.Mailboxes?.FirstOrDefault();
             var headerDetails = MailHeaderDetailsReader.Parse(message.Headers);
 
@@ -480,9 +487,9 @@ internal sealed class ImapMessageCommands(
                 Cc = MailMessageMapper.ToAddressInfos(message.Cc),
                 Date = message.Date,
                 HtmlBody = sanitized.Html,
-                TextBody = textBody ?? string.Empty,
+                TextBody = textBody?.Text ?? string.Empty,
                 BlockedImageCount = sanitized.BlockedImageCount,
-                Truncated = sanitized.Truncated,
+                Truncated = sanitized.Truncated || htmlBody?.Cut == true || textBody?.Cut == true,
                 DeclaresDarkScheme = sanitized.DeclaresDarkScheme,
                 Authentication = MailAuthenticationReader.Parse(message.Headers),
                 SpamScore = MailSpamScoreReader.Parse(message.Headers),
@@ -548,12 +555,16 @@ internal sealed class ImapMessageCommands(
     /// <summary>
     /// Fetches one text part by its specifier and decodes it the way MimeKit decodes a parsed
     /// message's body — same transfer decoding, same charset handling and fallbacks — so a
-    /// quoted-printable accented body reads exactly as it did off the whole-message fetch.
+    /// quoted-printable accented body reads exactly as it did off the whole-message fetch. A part
+    /// past <see cref="MaxBodyFetchBytes"/> is fetched up to it only, and says it was cut.
     /// </summary>
-    private static async Task<string> ReadTextPartAsync(
+    private static async Task<(string Text, bool Cut)> ReadTextPartAsync(
         IMailFolder folder, UniqueId uniqueId, BodyPartText part, CancellationToken cancellationToken)
     {
-        using var encoded = await folder.GetStreamAsync(uniqueId, SectionOf(part), cancellationToken);
+        var cut = part.Octets > MaxBodyFetchBytes;
+        using var encoded = cut
+            ? await folder.GetStreamAsync(uniqueId, SectionOf(part), 0, MaxBodyFetchBytes, cancellationToken)
+            : await folder.GetStreamAsync(uniqueId, SectionOf(part), cancellationToken);
         // A NIL body_fld_enc reads as the default encoding. TryParse tolerates null on this
         // MimeKit version (verified), but that is its internals, not its contract.
         MimeUtils.TryParse(part.ContentTransferEncoding ?? string.Empty, out ContentEncoding encoding);
@@ -565,7 +576,7 @@ internal sealed class ImapMessageCommands(
         foreach (var parameter in part.ContentType.Parameters)
             textPart.ContentType.Parameters[parameter.Name] = parameter.Value;
 
-        return UnflowText(textPart);
+        return (UnflowText(textPart), cut);
     }
 
     /// <summary>
