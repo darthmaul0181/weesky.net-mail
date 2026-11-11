@@ -66,7 +66,7 @@ internal sealed class DavAuthenticationHandler(
         // UseForwardedHeaders runs first in the pipeline: behind the proxy every caller would
         // otherwise share the proxy's own key.
         var address = Context.Connection.RemoteIpAddress?.ToString();
-        if (throttle.IsBlocked(identifier, address, out var retryAfter))
+        if (throttle.IsBlocked(address, out var retryAfter))
         {
             Context.Items[RetryAfterKey] = retryAfter;
             return Refuse(Outcome.TooManyRequests);
@@ -83,16 +83,16 @@ internal sealed class DavAuthenticationHandler(
         var generation = cache.Generation(canonical);
 
         var account = await users.FindByEmailAsync(canonical, Context.RequestAborted);
-        if (account is null) return await RefuseWithDelayAsync(canonical, address);
+        if (account is null) return await RefuseWithDelayAsync(address);
 
         // The same check the JWT path runs through ISessionGuard: a deleted or disabled account
         // must not keep synchronising, and forgetting it would make the address book the last open
         // door of a closed account. The security stamp does not apply — a secret is not a session.
         if (!await accounts.IsUsableAsync(canonical, Context.RequestAborted))
-            return await RefuseWithDelayAsync(canonical, address);
+            return await RefuseWithDelayAsync(address);
 
         var row = await credentials.FindAsync(account.Value.Id, Context.RequestAborted);
-        if (row is null) return await RefuseWithDelayAsync(canonical, address);
+        if (row is null) return await RefuseWithDelayAsync(address);
 
         if (!DavSecret.Matches(row.Value.Salt, row.Value.SecretHash, secret))
         {
@@ -102,7 +102,7 @@ internal sealed class DavAuthenticationHandler(
             if (row.Value.SecretHash.Length != DavSecret.HashLength)
                 Logger.LogError("CardDAV credential row of {UserId} holds a malformed secret hash", account.Value.Id);
 
-            return await RefuseWithDelayAsync(canonical, address);
+            return await RefuseWithDelayAsync(address);
         }
 
         var identity = new DavIdentity(
@@ -185,9 +185,9 @@ internal sealed class DavAuthenticationHandler(
     /// no lock, no open connection is held across it. Routed through the injected clock, so a test
     /// observes the wait it asks for instead of chronometering one.
     /// </summary>
-    private async Task<AuthenticateResult> RefuseWithDelayAsync(string identifier, string? address)
+    private async Task<AuthenticateResult> RefuseWithDelayAsync(string? address)
     {
-        throttle.RecordFailure(identifier, address);
+        throttle.RecordFailure(address);
         try
         {
             await Task.Delay(
@@ -222,7 +222,6 @@ internal sealed class DavAuthenticationHandler(
         }
 
         if (generation is { } taken) cache.Store(identifier, fingerprint, identity, taken);
-        throttle.RecordSuccess(identifier);
 
         // After the digest matched and never before: a 403 answered earlier would say "this
         // account exists and its DAV is asleep" to anyone asking. Both switches off is the only

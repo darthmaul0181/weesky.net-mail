@@ -284,7 +284,7 @@ public sealed class DavAuthenticationHandlerTests
     {
         // One short of the threshold, so a throttle write by the handler would tip it over.
         for (var i = 0; i < AuthAttemptThrottle.MaxFailures - 1; i++)
-            throttle.RecordFailure(Email, "203.0.113.7");
+            throttle.RecordFailure("203.0.113.7");
 
         var (_, context) = await AuthenticateAsync(Basic(Email, Secret), scheme: "http");
 
@@ -292,7 +292,7 @@ public sealed class DavAuthenticationHandlerTests
         // Asserted on the store, not on the status: nothing is ever compared to a secret its own
         // transport already gave away.
         credentials.Verify(s => s.FindAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-        Assert.False(throttle.IsBlocked(Email, "203.0.113.7", out _));
+        Assert.False(throttle.IsBlocked("203.0.113.7", out _));
         AssertNoDelayWasRequested();
     }
 
@@ -309,7 +309,7 @@ public sealed class DavAuthenticationHandlerTests
     public async Task PastTheThreshold_Is429_ReadsNothingAndCostsNothing()
     {
         for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
-            throttle.RecordFailure(Email, "203.0.113.7");
+            throttle.RecordFailure("203.0.113.7");
         credentials.Invocations.Clear();
 
         var (_, context) = await AuthenticateAsync(Basic(Email, Secret));
@@ -317,7 +317,7 @@ public sealed class DavAuthenticationHandlerTests
         Assert.Equal(StatusCodes.Status429TooManyRequests, context.Response.StatusCode);
         var retryAfter = Assert.Single(context.Response.Headers.RetryAfter!);
         Assert.True(int.Parse(retryAfter!, CultureInfo.InvariantCulture) > 0);
-        // Never 401: during an attack on one identifier, every device of the victim would be told
+        // Never 401: every device behind a throttled address would otherwise be told
         // its secret went bad.
         Assert.Equal(0, context.Response.Headers.WWWAuthenticate.Count);
         credentials.Verify(s => s.FindAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -326,16 +326,14 @@ public sealed class DavAuthenticationHandlerTests
     }
 
     [Fact]
-    public async Task ASuccessClearsTheIdentifiersFailures()
+    public async Task FailuresSpreadOverOtherAddresses_DoNotLockTheOwnerOut()
     {
-        for (var i = 0; i < AuthAttemptThrottle.MaxFailures - 1; i++)
-            throttle.RecordFailure(Email, "203.0.113.7");
+        for (var i = 0; i < AuthAttemptThrottle.MaxFailures; i++)
+            throttle.RecordFailure($"203.0.113.{i}");
 
-        await AuthenticateAsync(Basic(Email, Secret));
-        for (var i = 0; i < AuthAttemptThrottle.MaxFailures - 1; i++)
-            throttle.RecordFailure(Email, "198.51.100.4");
+        var (result, _) = await AuthenticateAsync(Basic(Email, Secret), remoteIp: "198.51.100.4");
 
-        Assert.False(throttle.IsBlocked(Email, "198.51.100.4", out _));
+        Assert.True(result.Succeeded);
     }
 
     [Fact]
@@ -377,20 +375,20 @@ public sealed class DavAuthenticationHandlerTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
-        Assert.Equal(2, throttle.TrackedKeys);
+        Assert.Equal(1, throttle.TrackedKeys);
     }
 
     [Fact]
-    public async Task ARequestWithoutARemoteAddress_IsRefusedAndCountsOnTheIdentifierAlone()
+    public async Task ARequestWithoutARemoteAddress_IsRefusedAndCountsNothing()
     {
-        // Kestrel reports no peer for some connections, and the throttle then drops the address
-        // key entirely rather than keying every such caller onto one shared empty string.
+        // Kestrel reports no peer for some connections; keying every such caller onto one shared
+        // empty string would let one of them lock all the others out.
         var (result, context) = await AuthenticateAsync(
             Basic(Email, "WRONGWRONGWRONGWRONG"), remoteIp: null);
 
         Assert.False(result.Succeeded);
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
-        Assert.Equal(1, throttle.TrackedKeys);
+        Assert.Equal(0, throttle.TrackedKeys);
     }
 
     [Fact]
