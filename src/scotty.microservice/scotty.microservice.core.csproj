@@ -66,9 +66,11 @@
     <PackageReference Include="FolkerKinzel.VCards" Version="8.2.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.1.949-beta" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
-    <PackageReference Include="MailKit" Version="4.17.0" />
+    <PackageReference Include="MailKit" Version="4.18.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
     <PackageReference Include="MsgKit" Version="3.0.5" />
+    <!-- Pinned past Pomelo 9.0.0's 2.4.0: GHSA-473q-m89c-ghf8 is fixed in 2.6.1. -->
+    <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.148.0" />

@@ -14,8 +14,8 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock) : IAuthAttemptThro
 
     /// <summary>
     /// The keys are values the attacker chooses, so their number is capped. A soft ceiling: the
-    /// eviction runs at the start of <see cref="RecordFailure"/> and the call's two keys are added
-    /// after it, so the table can settle at <c>MaxTrackedKeys + 1</c> — never assert equality.
+    /// eviction runs at the start of <see cref="RecordFailure"/> and the call's key is added after
+    /// it, so the table can settle at <c>MaxTrackedKeys + 1</c> — never assert equality.
     /// </summary>
     internal const int MaxTrackedKeys = 10_000;
 
@@ -34,43 +34,38 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock) : IAuthAttemptThro
 
     internal int CountedKeys => Volatile.Read(ref keyCount);
 
-    public bool IsBlocked(string identifier, string? address, out TimeSpan retryAfter)
+    public bool IsBlocked(string? address, out TimeSpan retryAfter)
     {
         retryAfter = TimeSpan.Zero;
-        var blocked = false;
+        var key = AddressKey(address);
+        if (key is null || !failures.TryGetValue(key, out var stamps)) return false;
+
         var now = clock.GetUtcNow();
-
-        foreach (var key in Keys(identifier, address))
+        DateTimeOffset oldest;
+        int count;
+        lock (stamps)
         {
-            if (!failures.TryGetValue(key, out var stamps)) continue;
-
-            DateTimeOffset oldest;
-            int count;
-            lock (stamps)
-            {
-                Prune(stamps, now);
-                count = stamps.Count;
-                oldest = count == 0 ? now : stamps.Peek();
-            }
-
-            if (count < MaxFailures) continue;
-
-            blocked = true;
-            // What is left of the window on the oldest failure still counted: once it falls out,
-            // the key is under the threshold again.
-            var left = Window - (now - oldest);
-            if (left > retryAfter) retryAfter = left;
+            Prune(stamps, now);
+            count = stamps.Count;
+            oldest = count == 0 ? now : stamps.Peek();
         }
 
-        return blocked;
+        if (count < MaxFailures) return false;
+
+        // What is left of the window on the oldest failure still counted: once it falls out, the
+        // address is under the threshold again.
+        retryAfter = Window - (now - oldest);
+        return true;
     }
 
-    public void RecordFailure(string identifier, string? address)
+    public void RecordFailure(string? address)
     {
+        var key = AddressKey(address);
+        if (key is null) return;
+
         var now = clock.GetUtcNow();
         EvictIfFull(now);
-
-        foreach (var key in Keys(identifier, address)) RecordFailureForKey(key, now);
+        RecordFailureForKey(key, now);
     }
 
     /// <summary>
@@ -101,28 +96,6 @@ internal sealed class AuthAttemptThrottle(TimeProvider clock) : IAuthAttemptThro
             }
         }
     }
-
-    /// <summary>
-    /// Clears the identifier's count, and only it: the real phone retrying behind an attacker must
-    /// get back in, while the address the attack came from is not absolved by a success elsewhere.
-    /// </summary>
-    public void RecordSuccess(string identifier) => Remove(IdentifierKey(identifier));
-
-    /// <summary>
-    /// The regeneration seam. Same effect as <see cref="RecordSuccess"/> and a different reason:
-    /// no secret was compared, a JWT was — see <see cref="IAuthAttemptThrottle.ForgetIdentifier"/>
-    /// for why the address key is left standing.
-    /// </summary>
-    public void ForgetIdentifier(string identifier) => Remove(IdentifierKey(identifier));
-
-    private static IEnumerable<string> Keys(string identifier, string? address)
-    {
-        yield return IdentifierKey(identifier);
-        var addressKey = AddressKey(address);
-        if (addressKey is not null) yield return addressKey;
-    }
-
-    private static string IdentifierKey(string identifier) => $"id:{identifier.Trim().ToLowerInvariant()}";
 
     /// <summary>
     /// IPv6 addresses collapse to their /64. An IPv4-mapped IPv6 address (Kestrel's shape for an

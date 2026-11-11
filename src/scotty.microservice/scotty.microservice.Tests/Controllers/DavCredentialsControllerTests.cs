@@ -23,7 +23,6 @@ public sealed class DavCredentialsControllerTests
 
     private readonly Mock<IDavCredentialStore> store = new();
     private readonly Mock<IDavAuthenticationCache> cache = new();
-    private readonly Mock<IAuthAttemptThrottle> throttle = new();
     private readonly Mock<ICalendarStore> calendars = new();
 
     private DavCredentialsController CreateController(
@@ -31,7 +30,7 @@ public sealed class DavCredentialsControllerTests
         string domain = "weesky.be", ILogger<DavCredentialsController>? logger = null)
     {
         var controller = new DavCredentialsController(
-            store.Object, cache.Object, throttle.Object,
+            store.Object, cache.Object,
             Options.Create(new DavOptions { PublicUrl = publicUrl }),
             logger ?? NullLogger<DavCredentialsController>.Instance)
         {

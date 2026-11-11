@@ -192,6 +192,62 @@ public sealed class AliasesRepositoryTests
     }
 
     [Fact]
+    public async Task AddAlias_WhenAMailboxHoldsTheAddress_ReturnsFailureAndWritesNothing()
+    {
+        var (repo, context, _) = CreateSut();
+        context.Users.Add(new MailUser
+        {
+            Name = "alice",
+            Password = Crypter.MD5.Crypt("password"),
+            DomainId = "WKY",
+            Active = ActiveState.Y,
+            FullName = "Alice"
+        });
+        context.SaveChanges();
+
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "Alice", Domain = PrimaryDomain }, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(context.Aliases);
+    }
+
+    [Theory]
+    [InlineData("postmaster")]
+    [InlineData("Abuse")]
+    [InlineData("mailer-daemon")]
+    public async Task AddAlias_WithARoleAddressOnTheSharedPrimaryDomain_ReturnsFailure(string name)
+    {
+        var (repo, context, _) = CreateSut();
+
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = name, Domain = PrimaryDomain }, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(context.Aliases);
+    }
+
+    [Fact]
+    public async Task AddAlias_WithARoleAddressOnAnOwnedDomain_ReturnsSuccess()
+    {
+        var (repo, _, _) = CreateSut();
+
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "postmaster", Domain = OwnedDomain }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task AddAlias_WithARoleAddressOnAPrimaryDomainTheUserOwns_ReturnsSuccess()
+    {
+        var (repo, context, userId) = CreateSut();
+        context.DomainsOwnerships.Add(new MailDomainOwnership { DomainId = "WKY", UserId = userId });
+        context.SaveChanges();
+
+        var result = await repo.AddAliasAsync(AuthUser, new Alias { Name = "postmaster", Domain = PrimaryDomain }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
     public async Task AddAlias_WithNullAlias_ThrowsArgumentNullException()
     {
         var (repo, _, _) = CreateSut();

@@ -7,6 +7,13 @@ namespace weesky.Scotty.Providers.Weesky.Repositories;
 
 internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<AliasesRepository> logger) : IAliasesRepository
 {
+    /// <summary>RFC 2142 role mailboxes plus the usual system senders: on a domain every user shares, none of them is one user's to take.</summary>
+    private static readonly HashSet<string> RoleNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "postmaster", "abuse", "hostmaster", "webmaster", "admin", "administrator",
+        "root", "noreply", "no-reply", "mailer-daemon", "security",
+    };
+
     /// <summary>
     /// The account's live aliases. Case is folded on both sides here as it is everywhere else in
     /// this repository: what this returns is what decides whether a <c>fromAddress</c> may be sent
@@ -56,8 +63,15 @@ internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<Al
         // The unique key is (source_addr, source_domain) — destination_user is not part of it. A
         // predicate narrowed to this user therefore passes an address another user already holds
         // on a shared domain, and the insert below turns that into a 500 instead of a refusal.
-        if (await context.Aliases.AnyAsync(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase), cancellationToken))
+        if (await context.Aliases.AnyAsync(a => string.Equals(a.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && string.Equals(mailDomain.Id, a.Domain, StringComparison.InvariantCultureIgnoreCase), cancellationToken)
+            || await context.Users.AnyAsync(u => string.Equals(u.Name, alias.Name, StringComparison.InvariantCultureIgnoreCase) && u.DomainId == mailDomain.Id, cancellationToken))
             return AlreadyTaken();
+
+        if (RoleNames.Contains(alias.Name) && !await HoldsOwnershipAsync(mailUser, mailDomain, cancellationToken))
+        {
+            logger.LogInformation("Audit: add_alias user={User} alias={Alias} outcome=failure reason=reserved", user.Email, $"{alias.Name}@{alias.Domain}");
+            return Result.Failure($"Alias '{alias.Name}@{alias.Domain}' is reserved");
+        }
 
         var entry = context.Aliases.Add(new MailAlias
         {
@@ -146,10 +160,13 @@ internal sealed class AliasesRepository(ApplicationDbContext context, ILogger<Al
             return false;
         }
 
-        return await context.DomainsOwnerships.AnyAsync(ownership =>
-            ownership.UserId == mailUser.Id &&
-            string.Equals(ownership.DomainId, requestedDomain.Id, StringComparison.InvariantCultureIgnoreCase), cancellationToken);
+        return await HoldsOwnershipAsync(mailUser, requestedDomain, cancellationToken);
     }
+
+    private Task<bool> HoldsOwnershipAsync(MailUser mailUser, MailDomain domain, CancellationToken cancellationToken) =>
+        context.DomainsOwnerships.AnyAsync(ownership =>
+            ownership.UserId == mailUser.Id &&
+            string.Equals(ownership.DomainId, domain.Id, StringComparison.InvariantCultureIgnoreCase), cancellationToken);
 
     private async Task<MailUser?> GetMailUserByAsync(User user, CancellationToken cancellationToken)
     {

@@ -23,7 +23,6 @@ namespace weesky.Scotty.Microservice.Controllers;
 public sealed class DavCredentialsController(
     IDavCredentialStore store,
     IDavAuthenticationCache cache,
-    IAuthAttemptThrottle throttle,
     IOptions<DavOptions> davOptions,
     ILogger<DavCredentialsController> logger) : ApiBaseController
 {
@@ -81,9 +80,6 @@ public sealed class DavCredentialsController(
         {
             secret = await store.EnableAsync(
                 AuthenticatedUser.WebmailUid, DavProtocol.CardDav, alongside: null, cancellationToken);
-            // Same reason as the regeneration below: enabling for the first time mints a secret and
-            // lands every configured device in the failure loop that blocks the identifier.
-            throttle.ForgetIdentifier(Identifier);
         }
         else
         {
@@ -142,7 +138,6 @@ public sealed class DavCredentialsController(
                         AuthenticatedUser.WebmailUid, toggle.TimeZone, toggle.Language ?? BirthdayLanguages.En, cancellationToken);
                 },
                 cancellationToken);
-            throttle.ForgetIdentifier(Identifier);
         }
         else
         {
@@ -181,11 +176,6 @@ public sealed class DavCredentialsController(
         if (secret is null) return NotFoundEnveloppe("Synchronisation has never been enabled");
 
         cache.Forget(Identifier);
-        // The regeneration itself is what put every device in a failure loop, and ten failures on
-        // the identifier answer 429 to the correct new secret. The JWT this call carries is a
-        // factor the throttle does not guard; the address key stays, so a neighbour on the same
-        // /64 gains nothing.
-        throttle.ForgetIdentifier(Identifier);
         logger.LogInformation("Audit: carddav_regenerate user={UserId} outcome=success",
             AuthenticatedUser.WebmailUid);
 
