@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using weesky.Scotty.Microservice.Data.Preferences;
 using weesky.Scotty.Microservice.Models;
 using weesky.Scotty.Microservice.Models.WhatsNew;
@@ -11,6 +12,8 @@ public sealed class WhatsNewStoreTests
 {
     private readonly string _db = Guid.NewGuid().ToString();
     private readonly Guid _user = Guid.NewGuid();
+
+    private readonly UserPreferenceCache _cache = new(new MemoryCache(new MemoryCacheOptions()));
 
     private PreferencesTestDbContext Context() => new(_db);
 
@@ -27,7 +30,7 @@ public sealed class WhatsNewStoreTests
             if (baseline is not null) seed.UserPreferences.Add(Baseline(baseline));
             await seed.SaveChangesAsync();
         }
-        return new WhatsNewStore(Context());
+        return new WhatsNewStore(Context(), _cache);
     }
 
     [Fact]
@@ -105,9 +108,9 @@ public sealed class WhatsNewStoreTests
             await other.SaveChangesAsync();
         });
 
-        await new WhatsNewStore(racing).MarkAsync(_user, ["a"], WhatsNewMark.Seen, CancellationToken.None);
+        await new WhatsNewStore(racing, _cache).MarkAsync(_user, ["a"], WhatsNewMark.Seen, CancellationToken.None);
 
-        var row = Assert.Single((await new WhatsNewStore(Context()).GetAsync(_user, CancellationToken.None)).Items);
+        var row = Assert.Single((await new WhatsNewStore(Context(), _cache).GetAsync(_user, CancellationToken.None)).Items);
         Assert.Equal(winner, row.FirstShownAt);
         Assert.NotNull(row.SeenAt);
     }
@@ -123,6 +126,17 @@ public sealed class WhatsNewStoreTests
     }
 
     [Fact]
+    public async Task SetBaseline_ForgetsTheAccountsCachedPreferences()
+    {
+        var store = await StoreWithUserAsync();
+        _cache.Store(_user, [], _cache.Generation);
+
+        await store.SetBaselineAsync(_user, "2.4.0", CancellationToken.None);
+
+        Assert.False(_cache.TryGet(_user, out _));
+    }
+
+    [Fact]
     public async Task SetBaseline_LosesQuietlyToAnotherTab()
     {
         await StoreWithUserAsync();
@@ -133,7 +147,7 @@ public sealed class WhatsNewStoreTests
             await other.SaveChangesAsync();
         });
 
-        Assert.False(await new WhatsNewStore(racing).SetBaselineAsync(_user, "2.4.0-dev", CancellationToken.None));
-        Assert.Equal("2.4.0", (await new WhatsNewStore(Context()).GetAsync(_user, CancellationToken.None)).Baseline);
+        Assert.False(await new WhatsNewStore(racing, _cache).SetBaselineAsync(_user, "2.4.0-dev", CancellationToken.None));
+        Assert.Equal("2.4.0", (await new WhatsNewStore(Context(), _cache).GetAsync(_user, CancellationToken.None)).Baseline);
     }
 }

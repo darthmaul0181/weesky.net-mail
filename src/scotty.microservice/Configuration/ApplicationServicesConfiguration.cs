@@ -185,7 +185,10 @@ internal static class ApplicationServicesConfiguration
         services.AddScoped<IMailFolderRepository, MailFolderRepository>();
         services.AddScoped<IMailMessageRepository, MailMessageRepository>();
         services.AddScoped<IFolderRoleStore, FolderRoleStore>();
-        services.AddScoped<IUserPreferenceStore, UserPreferenceStore>();
+        services.AddSingleton<UserPreferenceCache>();
+        services.AddScoped<UserPreferenceStore>();
+        services.AddScoped<IUserPreferenceStore>(provider => new CachedUserPreferenceStore(
+            provider.GetRequiredService<UserPreferenceStore>(), provider.GetRequiredService<UserPreferenceCache>()));
         services.AddScoped<IWhatsNewStore, WhatsNewStore>();
         services.AddScoped<IAppSettingStore, AppSettingStore>();
         services.AddScoped<IAppLogoStore, AppLogoStore>();
