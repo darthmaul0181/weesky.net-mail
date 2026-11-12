@@ -20,6 +20,7 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
     // plus two serialisations over bodies ImapSession takes straight off the wire, and each
     // dimension alone reaches minutes of CPU per message. All four are far above real mail: the
     // densest newsletter measured here is 90 KB, ~1 100 elements, nested 8 deep, in 133 ms.
+    // Characters and stylesheets are held here, depth and nodes in HtmlStructureBound.
 
     // Characters. Left where it was found: halving it bought 1.85 s of worst case down to 1.04 s
     // and in exchange cut bodies between 1 and 2M that had always rendered whole. Truncating a
@@ -165,6 +166,8 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         // Unwrap pass first: a bpost mail wrapped its whole 62 KB body in one <center>, and the
         // sanitiser deletes a disallowed tag with its subtree, rendering the message empty.
         var pre = _parser.ParseDocument(bounded);
+        // An empty body is what the reader shows the text alternative for.
+        if (HtmlStructureBound.Exceeds(pre)) return new SanitizedHtml { Truncated = true };
         // Read before CullEscapedStyleSheets can remove a sheet: an unsafe escape does not undo
         // a design promise the sheet already made.
         var darkScheme = DeclaresDarkScheme(pre);
@@ -179,12 +182,17 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
         CullEscapedDeclarations(pre.Body);
         MarkBreakWord(pre.Body);
 
-        var cleaned = _sanitizer.Sanitize(pre.Body?.InnerHtml ?? string.Empty);
+        // Bounded again: a tree the unwrap reshaped (a paragraph inside a paragraph) multiplies
+        // its formatting once its text is parsed back, which the sanitiser does first.
+        var (reshaped, multiplied) = HtmlStructureBound.Apply(pre.Body.InnerHtml);
+        var cleaned = _sanitizer.Sanitize(reshaped);
 
         // Second pass on the already-sanitised markup, using the same parser the sanitiser
         // uses so the two cannot disagree about the tree. In body mode: a leading <style> parsed
         // as a whole document would be hoisted into the head, and only the body is serialised.
         var document = _parser.ParseDocument("<body>" + cleaned);
+        if (HtmlStructureBound.Exceeds(document)) return new SanitizedHtml { Truncated = true };
+        truncated |= multiplied;
         VetStyleSheets(document);
 
         var blocked = 0;
@@ -242,6 +250,16 @@ internal sealed class MailHtmlSanitizer : IMailHtmlSanitizer
 
         foreach (var link in document.QuerySelectorAll("a[href]"))
         {
+            // A relative link would resolve against the page showing the message: the webmail's.
+            var href = link.GetAttribute("href")!.Trim();
+            if (href.StartsWith("//", StringComparison.Ordinal)) href = "https:" + href;
+            if (!IsHttpUrl(href, out var site) && !(Uri.TryCreate(href, UriKind.Absolute, out site) && site.Scheme == Uri.UriSchemeMailto))
+            {
+                link.RemoveAttribute("href");
+                continue;
+            }
+
+            link.SetAttribute("href", href);
             link.SetAttribute("target", "_blank");
             link.SetAttribute("rel", "noopener noreferrer");
         }

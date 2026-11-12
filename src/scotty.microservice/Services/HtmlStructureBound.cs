@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using AngleSharp.Dom;
 using weesky.Scotty.Microservice.Models.Mail;
 
 namespace weesky.Scotty.Microservice.Services;
@@ -22,6 +23,17 @@ internal static class HtmlStructureBound
     // which is the margin a hard cut earns: past it the reader sees an amputated message.
     private const int MaxNodeCount = 20_000;
 
+    // Clones, which neither ceiling above bounds: the parser re-opens every unclosed <b>, <i>,
+    // <font>… in each block that follows — 500 of them ahead of 2 000 paragraphs made a million
+    // elements of 10 KB, in 25 s. Ten times the node ceiling, because a wrapper around a whole
+    // message is charged on every tag inside it and has cloned nothing.
+    private const int MaxFormattingClones = 10 * MaxNodeCount;
+
+    // The tree's own ceilings, for whatever the scan miscounts. Implied elements (a tbody, a row)
+    // and the uncounted peers put a real tree at up to four levels per level counted.
+    private const int MaxTreeNodes = 2 * MaxNodeCount;
+    private const int MaxTreeDepth = 5 * MaxNestingDepth;
+
     // Void elements open no level. Every other start tag does, `<div/>` included: HTML has no
     // self-closing syntax outside this list, so honouring a trailing slash would be a way past
     // the cap uncounted.
@@ -31,10 +43,20 @@ internal static class HtmlStructureBound
         "link", "meta", "param", "source", "track", "wbr"
     };
 
-    // Their content is text, not markup: `if (a<b)` inside a script must not read as nesting.
-    private static readonly HashSet<string> RawTextTags = new(StringComparer.OrdinalIgnoreCase)
+    // Deleted from the text with their content, up to their own end tag. All are dropped later
+    // anyway, and gone before the parse they are nothing the scan and the parser can read two
+    // ways: inside <svg>, <math> or <select> a <style> is markup to the parser, and a `<!--`
+    // moves the end of a script. <plaintext> has no end.
+    private static readonly HashSet<string> InertTags = new(StringComparer.OrdinalIgnoreCase)
     {
-        "script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"
+        "script", "textarea", "title", "xmp", "iframe", "noembed", "noframes",
+        "svg", "math", "select", "plaintext"
+    };
+
+    // What the parser keeps a list of, to re-open in the next block whatever was left unclosed.
+    private static readonly HashSet<string> FormattingTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"
     };
 
     // These close a peer instead of nesting under it, so a counter that has no tree cannot tell
@@ -46,10 +68,11 @@ internal static class HtmlStructureBound
     };
 
     /// <summary>
-    /// One pre-parse pass over the raw text bounding both dimensions the pipeline's cost rides on.
-    /// Tags nesting past <see cref="MaxNestingDepth"/> are elided and their content kept — rule
-    /// 6(b)'s unwrap applied to depth — and the text is cut at the <see cref="MaxNodeCount"/>th
-    /// node, degrading as the width ceiling does. Returns whether it cut, for
+    /// One pre-parse pass over the raw text bounding what the pipeline's cost rides on. Inert
+    /// elements are deleted, tags nesting past <see cref="MaxNestingDepth"/> are elided and their
+    /// content kept — rule 6(b)'s unwrap applied to depth — and the text is cut at the
+    /// <see cref="MaxNodeCount"/>th node or where unclosed formatting could clone past
+    /// <see cref="MaxFormattingClones"/>, degrading as the width ceiling does. Returns whether it cut, for
     /// <see cref="SanitizedHtml.Truncated"/>. What survives crosses the whole pipeline, so a
     /// miscount here costs layout, never safety.
     /// </summary>
@@ -59,6 +82,8 @@ internal static class HtmlStructureBound
         var copied = 0;
         var depth = 0;
         var nodes = 0;
+        var clones = 0;
+        var opened = new OpenTags();
         var cut = -1;
         var i = 0;
 
@@ -79,13 +104,16 @@ internal static class HtmlStructureBound
                 continue;
             }
 
+            var inert = !isEnd && InertTags.Contains(name);
+            if (inert) i = EndOfInert(html, name, end);
+
             var opensLevel = !VoidTags.Contains(name) && !PeerTags.Contains(name);
-            var elide = opensLevel
+            var elide = inert || opensLevel
                 && (isEnd ? depth > 0 && depth-- > MaxNestingDepth : ++depth > MaxNestingDepth);
 
-            // A raw-text element goes with its content or not at all: eliding only its start tag
-            // would spill a script's source as visible text, the leak DropWithContent prevents.
-            if (!isEnd && RawTextTags.Contains(name)) i = SkipRawText(html, name, end);
+            // A sheet's content is text, not markup, and goes with its tag or not at all: eliding
+            // only the start tag would spill the sheet as visible text.
+            if (!isEnd && name.Equals("style", StringComparison.OrdinalIgnoreCase)) i = SkipRawText(html, name, end);
 
             if (elide)
             {
@@ -97,7 +125,8 @@ internal static class HtmlStructureBound
 
             // Only what survives the depth cap reaches the parser, so only that is counted. An end
             // tag builds nothing of its own.
-            if (!isEnd && ++nodes > MaxNodeCount)
+            if (!isEnd && ++nodes > MaxNodeCount
+                || (clones += opened.CloneCost(name, isEnd)) > MaxFormattingClones)
             {
                 cut = open;
                 break;
@@ -107,6 +136,65 @@ internal static class HtmlStructureBound
         var stop = cut < 0 ? html.Length : cut;
         return (capped is null ? html[..stop] : capped.Append(html, copied, stop - copied).ToString(),
             cut >= 0);
+    }
+
+    /// <summary>
+    /// Whether the tree is past what <see cref="Apply"/> was meant to let through. Read off the
+    /// parser's own result, it is the one count no markup can talk its way around.
+    /// </summary>
+    internal static bool Exceeds(INode root)
+    {
+        var pending = new Stack<(INode Node, int Depth)>();
+        pending.Push((root, 0));
+        var nodes = 0;
+
+        while (pending.TryPop(out var item))
+        {
+            if (item.Depth > MaxTreeDepth || ++nodes > MaxTreeNodes) return true;
+
+            foreach (var child in item.Node.ChildNodes)
+                if (child.NodeType is NodeType.Element or NodeType.Comment) pending.Push((child, item.Depth + 1));
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The tags still open as the scan reads them. Only an end tag naming the innermost closes
+    /// one: the single case where the parser surely forgets a formatting element. Skipping an
+    /// unclosed paragraph to reach it is how a font closed over one left a clone behind uncounted.
+    /// </summary>
+    private sealed class OpenTags
+    {
+        private readonly List<string> names = [];
+        private int formatting;
+
+        // What the parser could clone on this tag: every formatting element still open, and the
+        // adoption agency's own clones (8 rounds of 4) on a formatting end tag out of turn.
+        public int CloneCost(string name, bool isEnd)
+        {
+            var isFormatting = FormattingTags.Contains(name);
+
+            if (!isEnd)
+            {
+                if (VoidTags.Contains(name)) return formatting;
+                names.Add(name);
+                return isFormatting ? ++formatting : formatting;
+            }
+
+            if (names.Count == 0 || !names[^1].Equals(name, StringComparison.OrdinalIgnoreCase))
+                return formatting + (isFormatting ? 32 : 0);
+
+            names.RemoveAt(names.Count - 1);
+            return isFormatting ? --formatting : formatting;
+        }
+    }
+
+    // Index just past the element's end tag, or the end of the text when it has none.
+    private static int EndOfInert(string html, string name, int from)
+    {
+        var close = name.Equals("plaintext", StringComparison.OrdinalIgnoreCase) ? html.Length : SkipRawText(html, name, from);
+        return close == html.Length ? close : EndOfTag(html, close + 2 + name.Length);
     }
 
     /// <summary>
