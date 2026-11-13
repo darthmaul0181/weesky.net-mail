@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useMatch } from 'react-router'
 import { useAuth } from '../../../contexts/AuthContext'
 import type { AddToast } from '../../../hooks/useToasts'
 import { useViewport } from '../../../hooks/useViewport'
@@ -161,10 +162,10 @@ export default function ComposeForm({
     || subject !== '' || bodyTouched || attachments.items.length > 0 || insertedInline.length > 0
   // A handed-over seed carries the window's own answer: its action says nothing about a save.
   const {
-    dirty, markDirty, markClean, leave, asking, keepEditing, leaveBehind, requestClose, blockerProps,
+    dirty, markDirty, markClean, leave, asking, keepEditing, leaveBehind, requestClose, blockerProps, setBusy,
   } = useLeaveGuard(
     handedOver ? handedOver.dirty : Boolean(seed) && seed?.action !== 'draft', hasContent,
-    { mode: windowed ? 'callback' : 'route', onLeave })
+    { mode: windowed ? 'callback' : 'route', onLeave, onRelease: attachments.discardAll })
   const changeFrom = useCallback((v: string | null) => { markDirty(); setFromAddress(v) }, [markDirty])
   const changeTo = useCallback((v: string[]) => { markDirty(); setTo(v) }, [markDirty])
   const changeCc = useCallback((v: string[]) => { markDirty(); setCc(v) }, [markDirty])
@@ -216,6 +217,7 @@ export default function ComposeForm({
   // leave a draft behind that the winner's cleanup never knew about.
   const busy = attachments.uploading || inlineUploads > 0
     || send.isPending || saveDraftMutation.isPending
+  useEffect(() => { setBusy(busy) }, [busy, setBusy])
   const canSend = to.length > 0 && allValid && !busy
   const canSaveDraft = allValid && !busy
 
@@ -293,7 +295,8 @@ export default function ComposeForm({
 
   function close() {
     // Clean still means staged: a save embedded the bytes in the IMAP message and a pristine
-    // draft open re-staged copies of them, so nothing here is the only copy of anything.
+    // draft open re-staged copies of them, so nothing here is the only copy of anything. Hence the
+    // ✕ locked while a send or a save of a clean form still reads them.
     if (!dirty) { attachments.discardAll(); leave(); return }
     // Dirty: the leave guard turns it into the save-or-discard question.
     requestClose()
@@ -307,7 +310,7 @@ export default function ComposeForm({
     return {
       action: seed?.action ?? 'editAsNew',
       to, cc, bcc, subject,
-      html: text === null ? (editor?.getHTML() ?? editorHtml ?? '') : '',
+      html: text !== null ? '' : editor ? (editor.isEmpty() ? '' : editor.getHTML()) : (editorHtml ?? ''),
       text, fromAddress, priority, draftRef,
       attachments: [...tray, ...(inlineAdopted ? [] : seedInline), ...insertedInline],
       inReplyTo: seed?.inReplyTo ?? null,
@@ -317,10 +320,18 @@ export default function ComposeForm({
   }
 
   // A phone is page-only: a window still open when the screen becomes one (rotation, split
-  // screen) hands itself over exactly as Expand does, once no upload is in flight.
+  // screen) hands itself over exactly as Expand does, once no upload is in flight. Once per phone
+  // spell: a page composer that refused it is asked again only after it has gone.
+  const pageOpen = useMatch('/mail/compose') !== null
   const handOver = useRef(() => {})
+  const handedOverTried = useRef(false)
   useEffect(() => { handOver.current = () => onExpand?.(snapshotSeed(), dirty) })
-  useEffect(() => { if (windowed && narrow && !busy) handOver.current() }, [windowed, narrow, busy])
+  useEffect(() => { if (!narrow || !pageOpen) handedOverTried.current = false }, [narrow, pageOpen])
+  useEffect(() => {
+    if (!windowed || !narrow || busy || handedOverTried.current) return
+    handedOverTried.current = true
+    handOver.current()
+  }, [windowed, narrow, busy, pageOpen])
 
   const title = composeTitle(seed?.action, t)
   const liveTitle = subject.trim() || title
@@ -337,7 +348,7 @@ export default function ComposeForm({
     </button>
   )
   const closeButton = (
-    <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} onClick={close}>✕</button>
+    <button className="modal-close" aria-label={t('actions.close', { ns: 'common' })} disabled={busy && !dirty} onClick={close}>✕</button>
   )
 
   return (
@@ -420,15 +431,9 @@ export default function ComposeForm({
 
       {asking && (
         <LeaveDialog busy={busy} canSaveDraft={canSaveDraft} allValid={allValid} onKeepEditing={keepEditing}
-          onDiscard={() => {
-            // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
-            attachments.discardAll()
-            leaveBehind()
-          }}
-          onSaveDraft={() => saveDraft(() => {
-            attachments.discardAll()
-            leaveBehind()
-          })} />
+          // The staged copies are scratch either way: a saved draft holds its own bytes in IMAP.
+          onDiscard={leaveBehind}
+          onSaveDraft={() => saveDraft(leaveBehind)} />
       )}
 
       {/* No ✕, like the leave guard: both of its answers are on its buttons. */}
