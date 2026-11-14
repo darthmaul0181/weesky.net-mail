@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router'
 import { useToasts, type AddToast } from '../../../../hooks/useToasts'
+import { hasOpenLayer } from '../../../../lib/layerStack'
 import Toasts from '../../../../components/Toasts'
 import LoadingBlock from '../../../../components/LoadingBlock'
 import ComposePreferencesGate from '../ComposePreferencesGate'
@@ -64,6 +65,15 @@ function OpenWindow({ state, focusRequest, actions, onNotify }: Props & { state:
     if (last?.isConnected && region.current?.contains(last)) last.focus()
     else focusEntry()
   }, [focusRequest, focusEntry])
+
+  // The window is no layer, yet an Escape typed in it is its own: spent here, so the screen
+  // behind (a reader's ←, a contact card's) never backs out. An open menu keeps the key.
+  useEffect(() => {
+    const spend = (event: KeyboardEvent) => { if (event.key === 'Escape' && !hasOpenLayer()) event.preventDefault() }
+    const el = region.current
+    el?.addEventListener('keydown', spend)
+    return () => el?.removeEventListener('keydown', spend)
+  }, [])
 
   // Minimising leaves the focus on the bar rather than on a field that just disappeared.
   useEffect(() => {

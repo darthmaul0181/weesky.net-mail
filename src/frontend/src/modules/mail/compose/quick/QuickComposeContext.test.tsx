@@ -116,7 +116,14 @@ describe('QuickComposeProvider', () => {
     const region = await openWindow()
 
     expect(within(region).getByLabelText('Subject')).toBeInTheDocument()
-    expect(quick.state).toMatchObject({ seed: null, accountId: 'primary', origin: '/mail?folder=INBOX', minimised: false })
+    expect(quick.state).toMatchObject({ seed: null, origin: '/mail?folder=INBOX', minimised: false })
+  })
+
+  it('spends an Escape typed in the window, so the screen behind does not back out', async () => {
+    renderShell()
+    await openWindow()
+
+    expect(fireEvent.keyDown(screen.getByLabelText('Subject'), { key: 'Escape' })).toBe(false)
   })
 
   it('names the region by the subject once one is typed', async () => {

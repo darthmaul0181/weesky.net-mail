@@ -1536,20 +1536,17 @@ describe('MessageReader', () => {
       expect(onBack).toHaveBeenCalled()
     })
 
-    // The window is not a layer: an Escape typed in its fields is the window's, not the reader's.
-    it('does not back out on an Escape typed inside the quick compose window', async () => {
+    // An Escape some surface already spent — the quick compose window's — is not the reader's.
+    it('does not back out on an Escape already spent', async () => {
       mocks.getMailMessage.mockResolvedValue(detail)
       const onBack = vi.fn()
 
-      render(
-        <>
-          <MessageReader folderPath="INBOX" uid={2} onBack={onBack} />
-          <div className="quick-compose"><input aria-label="Subject" /></div>
-        </>,
-        { wrapper })
+      render(<MessageReader folderPath="INBOX" uid={2} onBack={onBack} />, { wrapper })
       await screen.findByText('Re: facture')
 
-      fireEvent.keyDown(screen.getByLabelText('Subject'), { key: 'Escape' })
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      event.preventDefault()
+      window.dispatchEvent(event)
 
       expect(onBack).not.toHaveBeenCalled()
     })
@@ -1949,7 +1946,7 @@ describe('MessageReader', () => {
       }
 
       const fakeQuick = (open = false): QuickComposeApi => ({
-        state: open ? { seed: null, accountId: 'primary', origin: '/mail', minimised: false, instance: 1 } : null,
+        state: open ? { seed: null, origin: '/mail', minimised: false, instance: 1 } : null,
         open: vi.fn(), restore: vi.fn(), close: vi.fn(), showsDraft: vi.fn(() => false),
       })
 

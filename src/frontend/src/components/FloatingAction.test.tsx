@@ -23,7 +23,7 @@ describe('FloatingAction', () => {
 
   // Contacts' Add and Calendar's + exist only here below 1024px: the stylesheet lifts them instead.
   it('keeps its button while a quick compose window exists', () => {
-    renderWith({ ...inert, state: { seed: null, accountId: 'primary', origin: '/mail', minimised: true, instance: 1 } })
+    renderWith({ ...inert, state: { seed: null, origin: '/mail', minimised: true, instance: 1 } })
 
     expect(screen.getByRole('button', { name: 'Add contact' })).toBeInTheDocument()
   })

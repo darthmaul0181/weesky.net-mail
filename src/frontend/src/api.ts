@@ -1,3 +1,4 @@
+import { type RequestOptions, nullOn404, request, requestBlob } from './lib/http'
 import type { Account } from './lib/accountIdentity'
 import type { LoginResponse, Quota } from './types/account'
 import type { Capabilities } from './types/capabilities'
@@ -6,222 +7,22 @@ import type { AppSettings } from './hooks/useAppSettings'
 import type { DailyImageInfo } from './lib/dailyImage'
 import type { Locale } from './lib/locale'
 import type { Preferences } from './hooks/usePreferences'
-import type {
-  AliasInfo, ApplyReplyArgs, ApplyReplyResponse, FolderRoleEntry, IdentityListResponse,
-  IdentityWrite, InvitationResponse, MailFlagName, MailFolderNode, MailFolderPage,
-  MailExportFormat, MailMessageDetail, MailMessageSource, MailSearchPage, OpenedDraft, PreparedQuote, QuotePurpose,
-  RespondInvitationArgs, SaveDraftArgs, SavedDraft, SendMessageArgs, SendMessageResult,
-  StagedAttachmentInfo,
-} from './modules/mail/api/mailTypes'
-import type { SearchCriteria } from './modules/mail/list/searchCriteria'
+import type { AliasInfo, IdentityListResponse, IdentityWrite } from './modules/mail/api/mailTypes'
 import type { WhatsNewMark, WhatsNewState } from './modules/whatsnew/types'
-import type {
-  Contact, ContactDetail, ContactDraft, ContactImportReport, ContactListResponse,
-} from './modules/contacts/contactTypes'
-import type { ContactGroup, ContactGroupsResponse } from './modules/contacts/contactGroupTypes'
-import type {
-  CalendarImportOutcome, CalendarImportReport, CalendarListResponse, CalendarWrite, CreatedId,
-  EditScope, EventDetail, EventUpdateBody, EventUpdated, EventWrite, OccurrenceListResponse,
-} from './modules/calendar/calendarTypes'
-import type {
-  AdminDomain, AdminDomainPayload, AdminUser, AdminUserPayload, VirtualDomain,
-} from './modules/settings/admin/adminTypes'
-import type { ExternalDomain, ExternalDomainPayload } from './modules/settings/admin/useExternalDomains'
-import type {
-  SchedulingAccount, SchedulingAccountPayload, SchedulingAccountTestResult,
-} from './modules/settings/admin/useSchedulingAccount'
-import type {
-  DeliveryReplyKey, DeliveryReplyKeyGenerated,
-} from './modules/settings/admin/useDeliveryReplyKey'
 import type { ConnectableDomain, OAuthStart } from './modules/settings/accounts/useConnectedAccounts'
 import type { ConnectedAccount } from './types/connectedAccount'
-import type {
-  CompatibilityCheckResult, RuleProvider, SieveRawScript, SieveRuleSet, SieveRuleWrite,
-} from './modules/settings/rules/rulesTypes'
 import type { ServerVersion } from './modules/settings/about/aboutTypes'
 import { LOGO_SIZES, type LogoSize } from './lib/appLogo'
-import { readStored, removeStored, writeStored } from './lib/safeStorage'
-import { anySignal, withTimeout } from './lib/withTimeout'
-import { configuredApiBase } from './lib/runtimeConfig'
+import { mailApi } from './modules/mail/api/mailApi'
+import { contactsApi } from './modules/contacts/contactsApi'
+import { calendarApi } from './modules/calendar/calendarApi'
+import { adminApi } from './modules/settings/admin/adminApi'
+import { rulesApi } from './modules/settings/rules/rulesApi'
 
-const BASE: string = configuredApiBase
-const SESSION_KEY = 'sessionActive'
+export * from './lib/http'
 
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
-export interface RequestOptions {
-  /** A connected account's id; 'primary', null or absent all mean the session's own mailbox. */
-  accountId?: string | null
-  signal?: AbortSignal
-  /** A read's wait for the response headers; writes have no deadline, as one cut may have landed. */
-  timeoutMs?: number
-  /** Lets a write outlive the page: a move sent while the tab closes. */
-  keepalive?: boolean
-}
-
-/** A frozen backend otherwise spins forever. The body is not timed: a big download may be slow. */
-const READ_TIMEOUT_MS = 30_000
-/** The backend builds a whole file (an IMAP part, an export, a message source) before its first byte. */
-const LARGE_READ_TIMEOUT_MS = 120_000
-const largeRead = (options?: RequestOptions): RequestOptions =>
-  ({ ...options, timeoutMs: options?.timeoutMs ?? LARGE_READ_TIMEOUT_MS })
-
-export interface UploadOptions extends RequestOptions {
-  onProgress?: (fraction: number) => void
-  inline?: boolean
-}
-
-let unauthorizedHandler: (() => void) | null = null
-
-export function markLoggedIn(): void {
-  writeStored(SESSION_KEY, '1')
-}
-
-export function clearSession(): void {
-  removeStored(SESSION_KEY)
-}
-
-export function hasSession(): boolean {
-  return readStored(SESSION_KEY) === '1'
-}
-
-export function setUnauthorizedHandler(fn: (() => void) | null): void {
-  unauthorizedHandler = fn
-}
-
-/** An HTTP failure that keeps its status. The backend's stable ResultEnveloppe message
- * ("credentials_unavailable", "Message not found") is `code`, so callers branch without matching
- * prose. Extends Error, so `rejects.toThrow(message)` still holds. */
-export class ApiError extends Error {
-  status: number
-  code: string | null
-
-  constructor(message: string, status: number, code: string | null) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.code = code
-  }
-}
-
-/** A rejection handler turning a 404 into `null`: the resource has no image, which is an answer. */
-export function nullOn404(error: unknown): null {
-  if (error instanceof ApiError && error.status === 404) return null
-  throw error
-}
-
-interface ErrorEnvelope { message: string; code: string | null }
-
-/** Our envelope carries `message` (`Message` from an older writer); ASP.NET's ProblemDetails, `title`. */
-interface ErrorBody { message?: unknown; Message?: unknown; title?: unknown }
-
-// Shared by readError (fetch) and uploadAttachment (XHR) — same envelope shape, different
-// transport for the raw text.
-function parseErrorEnvelope(text: string, fallbackMessage: string): ErrorEnvelope {
-  if (!text) return { message: fallbackMessage, code: null }
-  try {
-    const parsed: unknown = JSON.parse(text)
-    const body: ErrorBody = typeof parsed === 'object' && parsed !== null ? parsed : {}
-    const message = body.message ?? body.Message
-    if (typeof message === 'string') return { message, code: message }
-
-    // A model-validation refusal answers ProblemDetails, not our envelope. Its title is the
-    // only readable line in it, and it carries no stable code — falling through to the raw
-    // text printed the whole JSON blob on screen.
-    return { message: typeof body.title === 'string' ? body.title : fallbackMessage, code: null }
-  } catch {
-    return { message: text, code: null }
-  }
-}
-
-async function readError(res: Response): Promise<ErrorEnvelope> {
-  // Defensive: some callers stub a response with no body reader at all.
-  if (typeof res.text !== 'function') return { message: res.statusText ?? '', code: null }
-
-  const text = await res.text().catch(() => '')
-  return parseErrorEnvelope(text, res.statusText ?? '')
-}
-
-// 'primary' means the same as no id at all — the backend defaults there — so only a genuinely
-// connected account changes what travels over the wire. The one place this is decided.
-function carriesAccount(accountId: string | null | undefined): accountId is string {
-  return Boolean(accountId) && accountId !== 'primary'
-}
-
-function send(path: string, init: RequestInit, { signal, timeoutMs, keepalive }: RequestOptions): Promise<Response> {
-  if (init.method !== 'GET') return fetch(`${BASE}${path}`, { ...init, signal, keepalive })
-  return withTimeout(deadline => fetch(`${BASE}${path}`, {
-    ...init, signal: signal ? anySignal([signal, deadline]) : deadline,
-  }), timeoutMs ?? READ_TIMEOUT_MS)
-}
-
-/** `T` is the DTO the route answers; a route that can answer 204 names `| null` in it. */
-export async function request<T>(
-  method: HttpMethod, path: string, body?: unknown, options: RequestOptions = {},
-): Promise<T> {
-  // FormData carries its own multipart boundary; naming a content type here breaks the parse on
-  // the server side.
-  const isForm = typeof FormData !== 'undefined' && body instanceof FormData
-  const headers: Record<string, string> = {}
-  if (body && !isForm) headers['Content-Type'] = 'application/json'
-  if (carriesAccount(options.accountId)) headers['X-Account-Id'] = options.accountId
-
-  const res = await send(path, {
-    method,
-    headers,
-    credentials: 'include',
-    body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
-  }, options)
-
-  if (res.status === 401) {
-    const { code } = await readError(res)
-    clearSession()
-    unauthorizedHandler?.()
-    throw new ApiError('Unauthorized', 401, code)
-  }
-
-  // A 204 has no body: the routes that answer one declare `| null` in T, which this stands for.
-  if (res.status === 204) return null as T
-
-  if (!res.ok) {
-    const { message, code } = await readError(res)
-    throw new ApiError(message || res.statusText, res.status, code)
-  }
-
-  // The wire contract: the body is the DTO the route declares, and nothing checks it here.
-  const payload: unknown = await res.json()
-  return payload as T
-}
-
-/** Fetches a binary response (attachments), since request() always parses JSON. */
-export async function requestBlob(
-  path: string, options: RequestOptions = {},
-): Promise<{ blob: Blob; fileName: string }> {
-  const headers: Record<string, string> = {}
-  if (carriesAccount(options.accountId)) headers['X-Account-Id'] = options.accountId
-
-  const res = await send(path, { method: 'GET', headers, credentials: 'include' }, largeRead(options))
-
-  if (res.status === 401) {
-    clearSession()
-    unauthorizedHandler?.()
-    throw new ApiError('Unauthorized', 401, null)
-  }
-
-  if (!res.ok) {
-    const { message, code } = await readError(res)
-    throw new ApiError(message || res.statusText, res.status, code)
-  }
-
-  const disposition = res.headers?.get?.('content-disposition') ?? ''
-  // filename* first: the plain one is ASP.NET's ASCII fallback, every accent an underscore. Only
-  // the starred one is percent-encoded; decoding the plain one throws on a literal "100%".
-  const star = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1]
-  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1]
-
-  return { blob: await res.blob(), fileName: star ? decodeURIComponent(star) : plain ?? 'attachment' }
-}
-
+/** Every backend call, one method each: the transport is lib/http.ts, and each module's calls sit
+    beside the module. */
 export const api = {
   login: (email: string, password: string) =>
     request<LoginResponse>('POST', '/api/Login', { email, password }),
@@ -252,143 +53,12 @@ export const api = {
   putIdentities: (identities: IdentityWrite[], options?: RequestOptions) =>
     request<null>('PUT', '/api/Identities', { identities }, options),
 
-  getContacts: () =>
-    request<ContactListResponse>('GET', '/api/Contacts'),
-
-  // The whole card, which the list does not carry: only the open contact pays for it.
-  getContact: (id: string) =>
-    request<ContactDetail>('GET', `/api/Contacts/${id}`),
-
-  // A blob, not a URL handed to <img>: the picture sits behind the session cookie on another
-  // origin, which an image element cannot send.
-  getContactPhoto: (id: string) =>
-    requestBlob(`/api/Contacts/${id}/Photo`).then(({ blob }) => blob),
-
   getAvatar: (address: string): Promise<Blob | null> =>
     requestBlob(`/api/Avatars?address=${encodeURIComponent(address)}`).then(({ blob }) => blob, nullOn404),
 
   getBimiLogo: (domain: string, selector?: string): Promise<Blob | null> =>
     requestBlob(`/api/Avatars/Bimi?domain=${encodeURIComponent(domain)}${selector ? `&selector=${encodeURIComponent(selector)}` : ''}`)
       .then(({ blob }) => blob, nullOn404),
-
-  createContact: (contact: ContactDraft) =>
-    request<Contact>('POST', '/api/Contacts', contact),
-
-  // Replaces the contact whole — names, favourite flag and the entire address list.
-  updateContact: (id: string, contact: ContactDraft) =>
-    request<null>('PUT', `/api/Contacts/${id}`, contact),
-
-  deleteContact: (id: string) =>
-    request<null>('DELETE', `/api/Contacts/${id}`),
-
-  // Its own route: the star is toggled from a tile holding a possibly stale copy, so a whole
-  // contact PUT from there would clobber a concurrent edit.
-  setContactFavorite: (id: string, isFavorite: boolean) =>
-    request<null>('PUT', `/api/Contacts/${id}/Favorite`, { isFavorite }),
-
-  // The batch travels in the body rather than the URL: a list of ids in a query string breaks past
-  // a few dozen and has no agreed shape. Capped at 200 server-side, the mail's own batch size.
-  deleteContacts: (ids: string[]) =>
-    request<null>('DELETE', '/api/Contacts', { ids }),
-
-  setContactsFavorite: (ids: string[], isFavorite: boolean) =>
-    request<null>('PUT', '/api/Contacts/Favorite', { ids, isFavorite }),
-
-  importContacts: (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return request<ContactImportReport>('POST', '/api/Contacts/Import', form)
-  },
-
-  exportContacts: () => requestBlob('/api/Contacts/Export'),
-
-  // tz is required: it is the zone the default calendar is created with the first time it is
-  // asked for, and the backend needs it on every call to answer that lazily. lang is the language
-  // the birthdays calendar is written in, should this read create it.
-  getCalendars: (tz: string, lang: string) =>
-    request<CalendarListResponse>('GET',
-      `/api/Calendars?tz=${encodeURIComponent(tz)}&lang=${encodeURIComponent(lang)}`),
-
-  // The birthdays switch: the preference and the calendar change together.
-  setBirthdays: (enabled: boolean, tz: string, lang: string) =>
-    request<null>('PUT',
-      `/api/Calendars/Birthdays?tz=${encodeURIComponent(tz)}&lang=${encodeURIComponent(lang)}`,
-      { enabled }),
-
-  // tz here is the new calendar's own zone, asked once at creation and never again.
-  createCalendar: (calendar: CalendarWrite, tz: string) =>
-    request<CreatedId>('POST', `/api/Calendars?tz=${encodeURIComponent(tz)}`, calendar),
-
-  updateCalendar: (id: string, calendar: CalendarWrite) =>
-    request<null>('PUT', `/api/Calendars/${id}`, calendar),
-
-  // Its own route: the sidebar checkbox is a display state, never projected through a whole-
-  // calendar PUT.
-  setCalendarVisible: (id: string, visible: boolean) =>
-    request<null>('PUT', `/api/Calendars/${id}/Visible`, { visible }),
-
-  deleteCalendar: (id: string) =>
-    request<null>('DELETE', `/api/Calendars/${id}`),
-
-  exportCalendar: (id: string) => requestBlob(`/api/Calendars/${id}/Export`),
-
-  importCalendar: (id: string, file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return request<CalendarImportReport>('POST', `/api/Calendars/${id}/Import`, form)
-  },
-
-  // One gesture rather than two: the calendar is created and the file poured into it. An empty
-  // colour is left out so the backend gives the palette's next one.
-  importCalendarAsNew: (file: File, displayName: string, color: string, tz: string) => {
-    const form = new FormData()
-    form.append('file', file)
-    form.append('displayName', displayName)
-    if (color) form.append('color', color)
-    return request<CalendarImportOutcome>(
-      'POST', `/api/Calendars/Import?tz=${encodeURIComponent(tz)}`, form)
-  },
-
-  // from/to are ISO instants (…Z); tz only decides which day a floating instance falls on.
-  getOccurrences: (from: string, to: string, tz: string) =>
-    request<OccurrenceListResponse>('GET',
-      `/api/Calendar/Events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&tz=${encodeURIComponent(tz)}`),
-
-  searchEvents: (q: string) =>
-    request<OccurrenceListResponse>('GET', `/api/Calendar/Events/Search?q=${encodeURIComponent(q)}`),
-
-  getEvent: (id: string) =>
-    request<EventDetail>('GET', `/api/Calendar/Events/${id}`),
-
-  createEvent: (event: EventWrite) =>
-    request<CreatedId>('POST', '/api/Calendar/Events', event),
-
-  updateEvent: (id: string, event: EventUpdateBody) =>
-    request<EventUpdated>('PUT', `/api/Calendar/Events/${id}`, event),
-
-  // scope/instanceId travel in the query string, the same rule the PUT of a narrow edit follows;
-  // language is the one the cancellations are written in.
-  deleteEvent: (id: string, scope: EditScope, instanceId?: string, language?: string) => {
-    const params = new URLSearchParams({ scope })
-    if (instanceId) params.set('instanceId', instanceId)
-    if (language) params.set('language', language)
-    return request<null>('DELETE', `/api/Calendar/Events/${id}?${params}`)
-  },
-
-  getContactGroups: () => request<ContactGroupsResponse>('GET', '/api/ContactGroups'),
-
-  createContactGroup: (name: string) => request<ContactGroup>('POST', '/api/ContactGroups', { name }),
-
-  renameContactGroup: (id: string, name: string) =>
-    request<null>('PUT', `/api/ContactGroups/${id}`, { name }),
-
-  deleteContactGroup: (id: string) => request<null>('DELETE', `/api/ContactGroups/${id}`),
-
-  addContactGroupMembers: (id: string, contactIds: string[]) =>
-    request<null>('POST', `/api/ContactGroups/${id}/Members`, { contactIds }),
-
-  removeContactGroupMembers: (id: string, contactIds: string[]) =>
-    request<null>('DELETE', `/api/ContactGroups/${id}/Members`, { contactIds }),
 
   // The address comes from the backend's configuration, never composed here: the URL this app
   // calls is not necessarily the one the proxy publishes.
@@ -431,151 +101,8 @@ export const api = {
   changeFullName: (fullName: string) =>
     request<null>('POST', '/api/Account/FullName', { fullName }),
 
-  adminGetUsers: () =>
-    request<AdminUser[]>('GET', '/api/Admin/users'),
-
-  adminCreateUser: (payload: AdminUserPayload) =>
-    request<AdminUser>('POST', '/api/Admin/users', payload),
-
-  adminUpdateUser: (id: number, payload: AdminUserPayload) =>
-    request<AdminUser>('PUT', `/api/Admin/users/${id}`, payload),
-
-  adminDeleteUser: (id: number) =>
-    request<null>('DELETE', `/api/Admin/users/${id}`),
-
-  adminGetDomains: () =>
-    request<AdminDomain[]>('GET', '/api/Admin/domains'),
-
-  adminCreateDomain: (payload: AdminDomainPayload) =>
-    request<AdminDomain>('POST', '/api/Admin/domains', payload),
-
-  adminUpdateDomain: (id: string, payload: AdminDomainPayload) =>
-    request<AdminDomain>('PUT', `/api/Admin/domains/${id}`, payload),
-
-  // deleteAliases acknowledges the cascade: the aliases anchored on the domain go with it. Sent
-  // only once the user has confirmed, so an unacknowledged call is refused server-side too.
-  adminDeleteDomain: (id: string, deleteAliases = false) =>
-    request<null>('DELETE', `/api/Admin/domains/${id}${deleteAliases ? '?deleteAliases=true' : ''}`),
-
-  adminGetUserQuota: (id: number) =>
-    request<Quota>('GET', `/api/Admin/users/${id}/quota`),
-
-  adminGetVirtualDomains: () =>
-    request<VirtualDomain[]>('GET', '/api/Admin/domains/virtuals'),
-
-  adminAddVirtualDomainOwner: (domainId: string, userId: number) =>
-    request<VirtualDomain>('PUT', `/api/Admin/domains/virtuals/${domainId}`, { userId }),
-
-  adminRemoveVirtualDomainOwner: (domainId: string, userId: number) =>
-    request<null>('DELETE', `/api/Admin/domains/virtuals/${domainId}/${userId}`),
-
-  getRuleProviders: (options?: RequestOptions) =>
-    request<RuleProvider[]>('GET', '/api/Rules/Providers', undefined, options),
-
-  getRules: (options?: RequestOptions) =>
-    request<SieveRuleSet>('GET', '/api/Rules', undefined, options),
-
-  saveRules: (
-    rules: SieveRuleWrite[], providerId: string | null | undefined, scriptName: string | null | undefined,
-    options?: RequestOptions,
-  ) =>
-    request<null>('PUT', '/api/Rules', { rules, providerId, scriptName }, options),
-
-  deleteRules: (options?: RequestOptions) =>
-    request<null>('DELETE', '/api/Rules', undefined, options),
-
-  checkCompatibility: (providerId: string, rules: SieveRuleWrite[], options?: RequestOptions) =>
-    request<CompatibilityCheckResult>('POST', '/api/Rules/CompatibilityCheck', { providerId, rules }, options),
-
-  getRawScript: (options?: RequestOptions) =>
-    request<SieveRawScript>('GET', '/api/Rules/Raw', undefined, options),
-
   saveRawScript: (content: string, scriptName: string | null | undefined, options?: RequestOptions) =>
     request<null>('PUT', '/api/Rules/Raw', { content, scriptName }, options),
-
-  // ── Mail ──────────────────────────────────────────────────────────────────
-  // Folder paths are encoded: they may contain '/', '&' or '#'.
-
-  getMailFolders: (options?: RequestOptions) =>
-    request<MailFolderNode[]>('GET', '/api/Mail/Folders', undefined, options),
-
-  /** Answers the new folder's full path. */
-  createMailFolder: (parentPath: string, name: string, options?: RequestOptions) =>
-    request<string>('POST', '/api/Mail/Folders', { parentPath, name }, options),
-
-  renameMailFolder: (path: string, newParentPath: string, newName: string, options?: RequestOptions) =>
-    request<string>('PUT', '/api/Mail/Folders', { path, newParentPath, newName }, options),
-
-  deleteMailFolder: (path: string, options?: RequestOptions) =>
-    request<null>('DELETE', '/api/Mail/Folders', { path }, options),
-
-  setMailFolderSubscription: (path: string, subscribed: boolean, options?: RequestOptions) =>
-    request<null>('PUT', '/api/Mail/Folders/Subscription', { path, subscribed }, options),
-
-  getMailMessages: (
-    folder: string, page: number, pageSize: number, options?: RequestOptions & { grouped?: boolean },
-  ) =>
-    request<MailFolderPage>('GET', `/api/Mail/Messages?folder=${encodeURIComponent(folder)}&page=${page}&pageSize=${pageSize}`
-      + (options?.grouped ? '&grouped=true' : ''), undefined, options),
-
-  getMailMessage: (folder: string, uid: number, options?: RequestOptions) =>
-    request<MailMessageDetail>('GET', `/api/Mail/Messages/Detail?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined, options),
-
-  // A calendar route reached from the reader: it answers the organiser and files the event, and
-  // it names the message the block was read from, so it lives beside the message calls.
-  respondInvitation: (body: RespondInvitationArgs, options?: RequestOptions) =>
-    request<InvitationResponse>('POST', '/api/Calendar/Invitations/Respond', body, options),
-  applyInvitationReply: (body: ApplyReplyArgs, options?: RequestOptions) =>
-    request<ApplyReplyResponse>('POST', '/api/Calendar/Invitations/ApplyReply', body, options),
-
-  exportMessage: (folder: string, uid: number, format: MailExportFormat, options?: RequestOptions) =>
-    requestBlob(`/api/Mail/Messages/Export?folder=${encodeURIComponent(folder)}&uid=${uid}&format=${format}`, options),
-
-  getMessageSource: (folder: string, uid: number, options?: RequestOptions) =>
-    request<MailMessageSource>('GET', `/api/Mail/Messages/Source?folder=${encodeURIComponent(folder)}&uid=${uid}`, undefined,
-      largeRead(options)),
-
-  setMessageFlags: (folder: string, uids: number[], flag: MailFlagName, value: boolean, options?: RequestOptions) =>
-    request<null>('PUT', '/api/Mail/Messages/Flags', { folderPath: folder, uids, flag, value }, options),
-
-  moveMessages: (folder: string, uids: number[], targetFolder: string, options?: RequestOptions) =>
-    request<null>('POST', '/api/Mail/Messages/Move', { folderPath: folder, uids, targetFolderPath: targetFolder }, options),
-
-  copyMessages: (folder: string, uids: number[], targetFolder: string, options?: RequestOptions) =>
-    request<null>('POST', '/api/Mail/Messages/Copy', { folderPath: folder, uids, targetFolderPath: targetFolder }, options),
-
-  deleteMessages: (folder: string, uids: number[], options?: RequestOptions) =>
-    request<null>('DELETE', '/api/Mail/Messages', { folderPath: folder, uids }, options),
-
-  emptyFolder: (folder: string, targetFolder?: string | null, options?: RequestOptions) =>
-    request<null>('POST', '/api/Mail/Folders/Empty', { folderPath: folder, targetFolderPath: targetFolder ?? null }, options),
-
-  searchMessages: (criteria: SearchCriteria, page: number, pageSize: number, options?: RequestOptions) =>
-    request<MailSearchPage>('POST', '/api/Mail/Messages/Search', { ...criteria, page, pageSize }, options),
-
-  getFolderRoles: (options?: RequestOptions) =>
-    request<FolderRoleEntry[]>('GET', '/api/Mail/FolderRoles', undefined, options),
-
-  setFolderRole: (role: string, folderPath: string, options?: RequestOptions) =>
-    request<null>('PUT', '/api/Mail/FolderRoles', { role, folderPath }, options),
-
-  clearFolderRole: (role: string, options?: RequestOptions) =>
-    request<null>('DELETE', `/api/Mail/FolderRoles?role=${encodeURIComponent(role)}`, undefined, options),
-
-  sendMessage: (payload: SendMessageArgs, options?: RequestOptions) =>
-    request<SendMessageResult>('POST', '/api/Mail/Send', payload, options),
-
-  deleteAttachment: (id: string, options?: RequestOptions) =>
-    request<null>('DELETE', `/api/Mail/Attachments/${id}`, undefined, options),
-
-  prepareQuote: (folder: string, uid: number, purpose: QuotePurpose, options?: RequestOptions) =>
-    request<PreparedQuote>('POST', '/api/Mail/Messages/PrepareQuote', { folder, uid, purpose }, options),
-
-  saveDraft: (payload: SaveDraftArgs, options?: RequestOptions) =>
-    request<SavedDraft>('POST', '/api/Mail/Drafts', payload, options),
-
-  openDraft: (folder: string, uid: number, options?: RequestOptions) =>
-    request<OpenedDraft>('POST', '/api/Mail/Drafts/Open', { folder, uid }, options),
 
   // ── Connected accounts ───────────────────────────────────────────────────
 
@@ -599,44 +126,6 @@ export const api = {
 
   completeOAuthConnect: (state: string) =>
     request<ConnectedAccount>('POST', '/api/ConnectedAccounts/OAuth/Complete', { state }),
-
-  adminGetExternalDomains: () =>
-    request<ExternalDomain[]>('GET', '/api/Admin/domains/external'),
-
-  adminCreateExternalDomain: (domain: ExternalDomainPayload) =>
-    request<ExternalDomain>('POST', '/api/Admin/domains/external', domain),
-
-  adminUpdateExternalDomain: (id: string, domain: ExternalDomainPayload) =>
-    request<null>('PUT', `/api/Admin/domains/external/${id}`, domain),
-
-  adminDeleteExternalDomain: (id: string) =>
-    request<null>('DELETE', `/api/Admin/domains/external/${id}`),
-
-  adminGetSchedulingAccount: () =>
-    request<SchedulingAccount>('GET', '/api/SchedulingAccount'),
-
-  adminSaveSchedulingAccount: (account: SchedulingAccountPayload, options?: RequestOptions) =>
-    request<null>('PUT', '/api/SchedulingAccount', account, options),
-
-  adminDeleteSchedulingAccount: () =>
-    request<null>('DELETE', '/api/SchedulingAccount'),
-
-  // `account` is optional: no body tests and records the stored one, a body tests those values
-  // without persisting anything — the same request shape either way.
-  adminTestSchedulingAccount: (account?: SchedulingAccountPayload) =>
-    request<SchedulingAccountTestResult>('POST', '/api/SchedulingAccount/Test', account),
-
-  adminGetDeliveryReplyKey: () =>
-    request<DeliveryReplyKey>('GET', '/api/DeliveryReplyKey'),
-
-  adminGenerateDeliveryReplyKey: () =>
-    request<DeliveryReplyKeyGenerated>('POST', '/api/DeliveryReplyKey'),
-
-  adminSetDeliveryReplies: (body: { enabled: boolean }) =>
-    request<null>('PUT', '/api/DeliveryReplyKey', body),
-
-  adminDeleteDeliveryReplyKey: () =>
-    request<null>('DELETE', '/api/DeliveryReplyKey'),
 
   // ── Preferences ───────────────────────────────────────────────────────────
   // The response covers every known key: defaults live on the backend, so there is no second
@@ -683,80 +172,10 @@ export const api = {
 
   setWhatsNewBaseline: (version: string) =>
     request<null>('PUT', '/api/WhatsNew/baseline', { version }),
-}
 
-/** The attachment download URL, encoded in one place. A subresource fetch cannot carry a header,
- * so a connected account rides along as `?account=`. */
-export function mailAttachmentUrl(folder: string, uid: number, part: string, accountId?: string | null): string {
-  const account = carriesAccount(accountId) ? `&account=${encodeURIComponent(accountId)}` : ''
-  return `/api/Mail/Messages/Attachment?folder=${encodeURIComponent(folder)}&uid=${uid}&part=${encodeURIComponent(part)}${account}`
-}
-
-/** The API origin. Exported so the composer can undo an absolute staged URL before sending. */
-export const API_BASE = BASE
-
-/** A staged attachment's content URL, the src of the composer's inline images. Absolute, unlike
- * mailAttachmentUrl, or an <img> resolves it against the SPA's origin. Staged files are namespaced
- * by account, so a connected account carries `?account=` or its inline images 404. */
-export function stagedAttachmentUrl(id: string, accountId?: string | null): string {
-  const account = carriesAccount(accountId) ? `?account=${encodeURIComponent(accountId)}` : ''
-  return `${BASE}/api/Mail/Attachments/${id}/content${account}`
-}
-
-/** Uploads one outgoing attachment. XHR, not fetch: only XHR exposes upload progress, and a
- * 25 MB file without a bar reads as a hang. */
-export function uploadAttachment(
-  file: File, { onProgress, signal, accountId, inline }: UploadOptions = {},
-): Promise<StagedAttachmentInfo> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', `${BASE}/api/Mail/Attachments`)
-    xhr.withCredentials = true
-    if (carriesAccount(accountId)) xhr.setRequestHeader('X-Account-Id', accountId)
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress?.(event.loaded / event.total)
-    }
-
-    const rejectAborted = () => { detachAbort(); reject(new ApiError('Aborted', 0, null)) }
-    const onAbort = () => { xhr.abort(); rejectAborted() }
-    const detachAbort = () => signal?.removeEventListener('abort', onAbort)
-
-    xhr.onload = () => {
-      detachAbort()
-      if (xhr.status === 401) {
-        const { code } = parseErrorEnvelope(xhr.responseText, xhr.statusText)
-        clearSession()
-        unauthorizedHandler?.()
-        reject(new ApiError('Unauthorized', 401, code))
-        return
-      }
-      if (xhr.status >= 200 && xhr.status < 300) {
-        // The wire contract: the upload route answers a StagedAttachmentInfo, unchecked here. A 2xx
-        // that is not JSON (a proxy's page) must still settle the promise.
-        try {
-          const staged: unknown = JSON.parse(xhr.responseText)
-          resolve(staged as StagedAttachmentInfo)
-        } catch {
-          reject(new ApiError('Invalid response', xhr.status, null))
-        }
-        return
-      }
-      const { message, code } = parseErrorEnvelope(xhr.responseText, xhr.statusText)
-      reject(new ApiError(message || xhr.statusText, xhr.status, code))
-    }
-    xhr.onerror = () => { detachAbort(); reject(new ApiError('Network error', 0, null)) }
-    xhr.onabort = rejectAborted
-
-    // fetch rejects synchronously for a pre-aborted signal; XHR needs the same check up front.
-    if (signal?.aborted) {
-      rejectAborted()
-      return
-    }
-
-    signal?.addEventListener('abort', onAbort)
-    const form = new FormData()
-    form.append('file', file)
-    if (inline) form.append('inline', 'true')
-    xhr.send(form)
-  })
+  ...mailApi,
+  ...contactsApi,
+  ...calendarApi,
+  ...adminApi,
+  ...rulesApi,
 }

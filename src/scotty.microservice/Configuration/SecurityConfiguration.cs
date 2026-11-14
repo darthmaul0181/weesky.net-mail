@@ -289,7 +289,7 @@ internal static class SecurityConfiguration
     /// <summary>
     /// This is an API: nothing it returns is meant to be rendered, framed or referred from. The
     /// Swagger UI is one exception, with the only policy that allows its own assets; the web pages
-    /// the Docker image serves are the other, and carry no policy, as under Apache.
+    /// the Docker image serves are the other, and carry their own, a meta the frontend build writes.
     /// </summary>
     public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app, FrontendSettings? frontend = null) =>
         app.Use(async (context, next) =>

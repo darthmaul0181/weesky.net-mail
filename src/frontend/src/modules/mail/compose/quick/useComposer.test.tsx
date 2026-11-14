@@ -10,7 +10,7 @@ import { useComposer, type Composer } from './useComposer'
 
 vi.mock('../../../../api.js', () => ({ api: { getPreferences: () => new Promise(() => {}) } }))
 
-const OPEN: QuickComposeState = { seed: null, accountId: 'primary', origin: '/mail', minimised: true, instance: 1 }
+const OPEN: QuickComposeState = { seed: null, origin: '/mail', minimised: true, instance: 1 }
 
 function fakeQuick(state: QuickComposeState | null = null): QuickComposeApi {
   return { state, open: vi.fn(), restore: vi.fn(), close: vi.fn(), showsDraft: vi.fn(() => false) }

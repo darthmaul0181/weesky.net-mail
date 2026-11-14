@@ -1024,7 +1024,7 @@ describe('compose entry points in window mode', () => {
   // A New message there would only restore the window it sits on.
   it('withholds the floating compose button while a window exists', async () => {
     mockViewport('tablet')
-    harness.quick!.state = { seed: null, accountId: 'primary', origin: '/mail', minimised: true, instance: 1 }
+    harness.quick!.state = { seed: null, origin: '/mail', minimised: true, instance: 1 }
     const { container } = renderAt('/mail?folder=INBOX')
     await treeLoaded()
 
@@ -1040,7 +1040,7 @@ describe('compose entry points in window mode', () => {
   })
 
   it("keeping the window's text cancels the draft open before anything is staged", async () => {
-    harness.quick!.state = { seed: null, accountId: 'primary', origin: '/mail', minimised: false, instance: 1 }
+    harness.quick!.state = { seed: null, origin: '/mail', minimised: false, instance: 1 }
     const guard = vi.fn(() => Promise.resolve(false))
     withdraw = registerLeaveGuard(guard)
     renderAt('/mail?folder=Drafts', draftFolders, 'right', [draftRow])

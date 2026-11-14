@@ -5,7 +5,6 @@ import QuickComposeWindow from './QuickComposeWindow'
 
 export interface QuickComposeState {
   seed: ComposeSeed | null
-  accountId: string
   origin: string          // '/mail?folder=…' or a contacts path
   minimised: boolean
   instance: number        // bumped on every open → key of ComposeForm
@@ -40,8 +39,8 @@ export function QuickComposeProvider({ children }: { children: ReactNode }) {
 
   const open = useCallback((seed: ComposeSeed | null, origin: string) => {
     draftRef.current = seed?.draftRef ?? null
-    setState({ seed, accountId, origin, minimised: false, instance: ++instances.current })
-  }, [accountId])
+    setState({ seed, origin, minimised: false, instance: ++instances.current })
+  }, [])
   const restore = useCallback(() => {
     setState(prev => prev && { ...prev, minimised: false })
     setFocusRequest(n => n + 1)
