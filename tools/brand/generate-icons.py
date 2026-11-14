@@ -55,6 +55,11 @@ def disc(source: Image.Image, size: int) -> Image.Image:
     return resized(out, (size, size))
 
 
+def save_png(image: Image.Image, path: pathlib.Path) -> None:
+    """256 colours, alpha included: a fifth of the weight, and no difference the eye can find."""
+    image.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(path, optimize=True)
+
+
 def main() -> None:
     source = Image.open(SOURCE).convert("RGBA")
     whole = source.crop(source.getchannel("A").getbbox())
@@ -64,10 +69,10 @@ def main() -> None:
         resized(whole, (width, height)).save(
             ASSETS / f"scotty-{width}.webp", "WEBP", quality=80, method=6)
 
-    disc(source, 192).save(ASSETS / "logo-192.png", optimize=True)
-    disc(source, 32).save(ASSETS / "favicon-32.png", optimize=True)
-    disc(source, 192).save(PUBLIC / "icon-192.png", optimize=True)
-    disc(source, 512).save(PUBLIC / "icon-512.png", optimize=True)
+    save_png(disc(source, 192), ASSETS / "logo-192.png")
+    save_png(disc(source, 32), ASSETS / "favicon-32.png")
+    save_png(disc(source, 192), PUBLIC / "icon-192.png")
+    save_png(disc(source, 512), PUBLIC / "icon-512.png")
     print("icons written")
 
 

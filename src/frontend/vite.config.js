@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react'
 import license from 'rollup-plugin-license'
 import { versionStamp } from './src/lib/versionStamp.ts'
 import { assertApiBase, runtimeConfigPlugin } from './src/lib/runtimeConfigPlugin.ts'
+import { scriptPolicyPlugin } from './src/lib/scriptPolicyPlugin.ts'
 
 // The web app's own version; the API keeps its own in src/scotty.microservice/VERSION.
 const WEB_VERSION = readFileSync(new URL('./VERSION', import.meta.url), 'utf8').trim()
@@ -161,7 +162,7 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     envDir,
-    plugins: [react(), runtimeConfigPlugin(mode, apiBase)],
+    plugins: [react(), runtimeConfigPlugin(mode, apiBase), scriptPolicyPlugin()],
     // Build-only plugins, so they belong to the output rather than to Vite's own list.
     build: { rolldownOptions: { plugins: [collectNotices, emitNotices] } },
     define: {

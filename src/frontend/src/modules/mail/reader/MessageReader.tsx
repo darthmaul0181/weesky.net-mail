@@ -130,15 +130,13 @@ export default function MessageReader(
 
   // Escape mirrors the ← button; both exist only in the no-split mode, where the reader has
   // replaced the list and needs a way back. Any open layer owns Escape — the reader's own
-  // dialogs and anything else on the screen alike — so the reader stays put under it. So does an
-  // Escape typed in the quick compose window, which is no layer and leaves the key to its menus.
+  // dialogs and anything else on the screen alike — so the reader stays put under it.
   const onEscape = onBack ?? (expanded ? onToggleExpand : undefined)
   useEffect(() => {
     if (!onEscape) return
 
     const onKey = (event: KeyboardEvent) => {
-      const inWindow = event.target instanceof Element && event.target.closest('.quick-compose') !== null
-      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer() && !inWindow) onEscape()
+      if (event.key === 'Escape' && !event.defaultPrevented && !hasOpenLayer()) onEscape()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
