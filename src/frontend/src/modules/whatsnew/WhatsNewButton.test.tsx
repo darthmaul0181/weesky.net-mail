@@ -6,7 +6,7 @@ import WhatsNewButton from './WhatsNewButton'
 
 const mocks = vi.hoisted(() => ({ markWhatsNew: vi.fn(), getWhatsNew: vi.fn() }))
 vi.mock('../../api.js', () => ({ api: mocks }))
-const STAMP = '2026-10-14T00:00:00Z'
+const STAMP = new Date().toISOString()
 
 function renderButton(state: { baseline: string; items: object[] } = { baseline: '0.0.0', items: [] }) {
   const client = createTestQueryClient()

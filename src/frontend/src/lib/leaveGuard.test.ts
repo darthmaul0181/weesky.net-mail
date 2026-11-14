@@ -67,6 +67,27 @@ describe('leaveGuard', () => {
     expect(second).toHaveBeenCalledOnce()
   })
 
+  it('commits nothing when a later guard refuses', async () => {
+    const commit = vi.fn()
+    registerLeaveGuard(() => Promise.resolve(true), commit)
+    withdrawals.push(registerLeaveGuard(() => Promise.resolve(false)))
+    withdrawals.push(registerLeaveGuard(() => Promise.resolve(true), () => {}))
+
+    await expect(confirmLeave()).resolves.toBe(false)
+    expect(commit).not.toHaveBeenCalled()
+  })
+
+  it('commits every guard once all of them agreed', async () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    withdrawals.push(registerLeaveGuard(() => Promise.resolve(true), first))
+    withdrawals.push(registerLeaveGuard(() => Promise.resolve(true), second))
+
+    await expect(confirmLeave()).resolves.toBe(true)
+    expect(first).toHaveBeenCalledOnce()
+    expect(second).toHaveBeenCalledOnce()
+  })
+
   it('skips a guard withdrawn during the round', async () => {
     const second = vi.fn(() => Promise.resolve(false))
     let offSecond = () => {}

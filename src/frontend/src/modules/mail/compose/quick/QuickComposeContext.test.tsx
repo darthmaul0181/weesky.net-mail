@@ -8,12 +8,14 @@ import { useIdentities } from '../../queries'
 import type { ComposeSeed } from '../composeSeed'
 import { QuickComposeProvider, useQuickCompose, type QuickComposeApi } from './QuickComposeContext'
 import ComposeView from '../ComposeView'
-import { confirmLeave } from '../../../../lib/leaveGuard'
+import { confirmLeave, registerLeaveGuard } from '../../../../lib/leaveGuard'
+import { editorState } from '../squireEditorStub'
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   saveDraft: vi.fn(),
   deleteAttachment: vi.fn(),
+  deleteMessages: vi.fn(),
   getContacts: vi.fn(),
   getContactGroups: vi.fn(),
   getPreferences: vi.fn(),
@@ -22,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../../api.js', () => ({
   api: {
     sendMessage: mocks.sendMessage, saveDraft: mocks.saveDraft, deleteAttachment: mocks.deleteAttachment,
+    deleteMessages: mocks.deleteMessages,
     getContacts: mocks.getContacts, getContactGroups: mocks.getContactGroups, getPreferences: mocks.getPreferences,
   },
   uploadAttachment: vi.fn(),
@@ -96,6 +99,10 @@ beforeEach(() => {
   mocks.getContactGroups.mockResolvedValue({ groups: [] })
   mocks.sendMessage.mockResolvedValue({ appendedToSent: true })
   mocks.saveDraft.mockResolvedValue({ uid: 7, folderPath: 'Drafts' })
+  mocks.deleteAttachment.mockResolvedValue(null)
+  mocks.deleteMessages.mockResolvedValue(null)
+  editorState.html = ''
+  editorState.empty = null
   vi.mocked(useIdentities).mockReturnValue({ data: undefined } as never)
 })
 
@@ -356,5 +363,122 @@ describe('QuickComposeProvider', () => {
     expect(quick.state!.instance).toBe(first + 1)
     expect(await screen.findByLabelText('Subject')).toHaveValue('')
     expect(quick.showsDraft({ folderPath: 'Drafts', uid: 7 })).toBe(false)
+  })
+  describe('leaving a window', () => {
+    const draft = (attachments: ComposeSeed['attachments'] = []): ComposeSeed => ({
+      action: 'draft', to: ['alice@x.be'], cc: [], bcc: [], subject: 'Filed', html: '<p>hi</p>', text: null,
+      fromAddress: null, attachments, inReplyTo: null, references: [], priority: 'normal',
+      draftRef: { folderPath: 'Drafts', uid: 9 }, nameHints: {},
+    })
+    const photo = { id: 's1', fileName: 'photo.jpg', size: 3, contentType: 'image/jpeg' }
+
+    async function openDraft(seed: ComposeSeed) {
+      act(() => { quick.open(seed, '/mail') })
+      return within(await screen.findByRole('region')).findByLabelText('Subject')
+    }
+
+    it('waits for a send in flight before letting a clean window be replaced', async () => {
+      let sent!: (v: unknown) => void
+      mocks.sendMessage.mockReturnValue(new Promise(r => { sent = r }))
+      renderShell()
+      await openDraft(draft())
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled())
+
+      let answer: boolean | undefined
+      act(() => { void confirmLeave().then(ok => { answer = ok }) })
+      await settle()
+      expect(answer).toBeUndefined()
+
+      await act(async () => { sent({ appendedToSent: true }) })
+
+      await waitFor(() => expect(answer).toBe(true))
+      expect(await screen.findByText('Message sent')).toBeInTheDocument()
+      expect(mocks.deleteMessages).toHaveBeenCalledWith('Drafts', [9], expect.anything())
+    })
+
+    it('releases the staged files of a clean window it lets go', async () => {
+      renderShell()
+      await openDraft(draft([photo]))
+
+      let answer: boolean | undefined
+      act(() => { void confirmLeave().then(ok => { answer = ok }) })
+
+      await waitFor(() => expect(answer).toBe(true))
+      expect(mocks.deleteAttachment).toHaveBeenCalledWith('s1', expect.anything())
+      expect(screen.queryByRole('region')).toBeNull()
+    })
+
+    it('keeps the staged files of a clean window a later guard holds back', async () => {
+      renderShell()
+      await openDraft(draft([photo]))
+      const withdraw = registerLeaveGuard(() => Promise.resolve(false))
+
+      await act(async () => { await expect(confirmLeave()).resolves.toBe(false) })
+      withdraw()
+
+      expect(mocks.deleteAttachment).not.toHaveBeenCalled()
+      expect(screen.getByLabelText('Subject')).toHaveValue('Filed')
+    })
+
+    // Window first, page second: the window's Discard must wait for the page's answer.
+    it('a Discard answered before a Keep editing loses no draft', async () => {
+      const { router } = renderShell('/calendar', <ComposeView onNotify={vi.fn()} />)
+      const region = await openWindow()
+      fireEvent.change(within(region).getByLabelText('Subject'), { target: { value: 'Window' } })
+      act(() => { void router.navigate('/mail/compose?mailto=' + encodeURIComponent('mailto:bob@x.be?subject=Page')) })
+      await screen.findByDisplayValue('Page')
+      const questions = () => document.querySelectorAll('[role="alertdialog"]')
+
+      let answer: boolean | undefined
+      act(() => { void confirmLeave().then(ok => { answer = ok }) })
+      fireEvent.click(within(region).getByText('Discard'))
+      await waitFor(() => expect(questions()).toHaveLength(1))
+      expect(region).not.toContainElement(questions()[0] as HTMLElement)
+      fireEvent.click(screen.getByText('Keep editing'))
+
+      await waitFor(() => expect(answer).toBe(false))
+      expect(within(region).getByLabelText('Subject')).toHaveValue('Window')
+      expect(screen.getByDisplayValue('Page')).toBeInTheDocument()
+    })
+
+    it('hands an empty body over as empty', async () => {
+      const { router } = renderShell('/calendar')
+      await openWindow()
+      editorState.html = '<div><br></div>'
+      editorState.empty = true
+      fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Bigger' } })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
+
+      await screen.findByTestId('compose-page')
+      expect((router.state.location.state as { seed: ComposeSeed }).seed.html).toBe('')
+    })
+
+    it('a phone hand-over refused once is not asked again until the page has gone', async () => {
+      mockViewport('desktop')
+      const { router } = renderShell('/mail/compose?mailto=' + encodeURIComponent('mailto:bob@x.be?subject=Page'),
+        <ComposeView onNotify={vi.fn()} />)
+      await screen.findByDisplayValue('Page')
+      const region = await openWindow()
+      fireEvent.change(within(region).getByLabelText('Subject'), { target: { value: 'Window' } })
+      const questions = () => document.querySelectorAll('[role="alertdialog"]')
+
+      await changeViewport('phone')
+      fireEvent.click(await screen.findByText('Keep editing'))
+      await waitFor(() => expect(questions()).toHaveLength(0))
+
+      fireEvent.click(within(region).getByRole('button', { name: 'Save draft' }))
+      await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledOnce())
+      await settle()
+      expect(questions()).toHaveLength(0)
+
+      act(() => { void router.navigate('/mail') })
+      fireEvent.click(await screen.findByText('Discard'))
+
+      await waitFor(() => expect(document.querySelector('.quick-compose')).toBeNull())
+      expect(router.state.location.pathname).toBe('/mail/compose')
+      expect(screen.getByLabelText('Subject')).toHaveValue('Window')
+    })
   })
 })
